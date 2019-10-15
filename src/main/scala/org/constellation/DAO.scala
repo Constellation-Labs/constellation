@@ -174,6 +174,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusManager,
       IO.contextShift(ConstellationExecutionContext.bounded),
       downloadProcess,
+      cluster,
       majorityStateChooser
     )
 

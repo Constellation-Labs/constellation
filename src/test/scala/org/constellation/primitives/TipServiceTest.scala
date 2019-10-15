@@ -10,7 +10,7 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
 import org.constellation.storage.SOEService
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSpecLike, Matchers}
@@ -22,19 +22,15 @@ class TipServiceTest
     with ArgumentMatchersSugar
     with Matchers {
 
-  implicit val dao: DAO = prepareDAO()
+  implicit val dao: DAO = TestHelpers.prepareRealDao(
+    nodeConfig =
+      NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
+  )
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   val facilitatorFilter: FacilitatorFilter[IO] = mock[FacilitatorFilter[IO]]
-
-  def prepareDAO(): DAO = {
-    val d = new DAO()
-    d.initialize(NodeConfig(primaryKeyPair = Fixtures.tempKey5))
-    d.metrics = new Metrics(200)(d)
-    d
-  }
 
   describe("TrieBasedTipService") {
 

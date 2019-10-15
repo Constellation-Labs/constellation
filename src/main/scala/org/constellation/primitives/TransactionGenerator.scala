@@ -43,7 +43,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
   def generate(): EitherT[F, TransactionGeneratorError, Unit] =
     for {
-      _ <- validateNodeState(requiredState = NodeState.Ready)
+      _ <- validateNodeState
       _ <- EitherT.fromEither[F](validateNodeIsPermitToGenerateRandomTransaction)
 
       addressData <- EitherT.liftF(getAddressData)
@@ -239,10 +239,10 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   ): Either[TransactionGeneratorError, Unit] =
     if (pendingCount < dao.processingConfig.maxMemPoolSize) Right(()) else Left(NodeHasToManyPendingTransactions)
 
-  private def validateNodeState(requiredState: NodeState): EitherT[F, TransactionGeneratorError, Unit] =
+  private def validateNodeState: EitherT[F, TransactionGeneratorError, Unit] =
     EitherT {
-      cluster.getNodeState.map { nodeState =>
-        if (nodeState == requiredState) {
+      cluster.getNodeState.map { currentState =>
+        if (NodeState.canGenerateTransactions(currentState)) {
           ().asRight[TransactionGeneratorError]
         } else {
           NodeIsNotInRequiredState.asLeft[Unit]

@@ -1,5 +1,6 @@
 package org.constellation.consensus
 
+import org.constellation.domain.exception.InvalidNodeState
 import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
@@ -10,7 +11,7 @@ import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointServ
 import org.constellation.consensus.Consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdgeCache}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType, SignedObservationEdgeCache}
 import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
@@ -142,7 +143,9 @@ class ConsensusManager[F[_]: Concurrent](
 
   def syncRoundInProgress(): F[RoundId] =
     for {
-      _ <- cluster.isNodeReady.ifM(Sync[F].unit, Sync[F].raiseError[Unit](NodeNotReady))
+      state <- cluster.getNodeState
+      _ <- if (NodeState.canStartOwnConsensus(state)) Sync[F].unit
+      else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForOwnConsensus, state))
       own <- ownConsensus.getUnsafe
       roundId <- if (own.isDefined) Sync[F].raiseError[RoundId](OwnRoundAlreadyInProgress)
       else
@@ -190,7 +193,9 @@ class ConsensusManager[F[_]: Concurrent](
 
   def participateInBlockCreationRound(roundData: RoundData): F[(ConsensusInfo[F], RoundData)] =
     for {
-      _ <- cluster.isNodeReady.ifM(Sync[F].unit, Sync[F].raiseError[Unit](NodeNotReady))
+      state <- cluster.getNodeState
+      _ <- if (NodeState.canParticipateConsensus(state)) Sync[F].unit
+      else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForConsensusParticipation, state))
       allFacilitators = roundData.peers.map(_.peerMetadata.id) ++ Set(dao.id)
       arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators)
       updatedRoundData <- adjustPeers(roundData)
@@ -399,7 +404,6 @@ object ConsensusManager {
     transactionsProposal: LightTransactionsProposal
   )
 
-  case object NodeNotReady extends ConsensusStartError("Node not ready to start consensus")
   case object OwnRoundAlreadyInProgress extends ConsensusStartError("Node has already start own consensus")
 
   class ConsensusStartError(message: String) extends Exception(message)

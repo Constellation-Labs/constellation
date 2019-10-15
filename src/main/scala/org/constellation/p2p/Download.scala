@@ -181,7 +181,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
   private def initDownloadingProcess: F[Unit] =
     Sync[F]
       .delay(logger.debug("Download started"))
-      .flatMap(_ => setNodeState(NodeState.DownloadInProgress))
       .flatMap(_ => requestForFaucet)
       .flatMap(_ => requestForFaucet)
       .flatMap(_ => requestForFaucet)
@@ -246,7 +245,8 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
     for {
       _ <- snapshotsProcessor.processSnapshots(snapshotHashes)
       _ <- dao.metrics.updateMetricAsync("downloadFirstPassComplete", "true")
-      _ <- setNodeState(NodeState.DownloadCompleteAwaitingFinalSync)
+      _ <- cluster.compareAndSet(NodeState.validForDownload, NodeState.DownloadCompleteAwaitingFinalSync)
+
     } yield snapshotHashes
 
   private def downloadAndProcessSnapshotsSecondPass(
@@ -261,7 +261,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
     for {
       _ <- setSnapshot(snapshot)
       _ <- acceptSnapshotCacheData(snapshot)
-      _ <- setNodeState(NodeState.Ready)
       _ <- clearSyncBuffer
       _ <- setDownloadFinishedTime()
     } yield ()
@@ -270,9 +269,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
     dao.transactionAcceptedAfterDownload = dao.metrics.getMetrics.get("transactionAccepted").map(_.toLong).getOrElse(0L)
     logger.debug("download process has been finished")
   }
-
-  def setNodeState(nodeState: NodeState): F[Unit] =
-    cluster.setNodeState(nodeState) >> cluster.broadcastNodeState()
 
   private def requestForFaucet: F[Iterable[Response[Unit]]] =
     for {
@@ -298,7 +294,8 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
       .liftIO(dao.snapshotService.syncBuffer.get)
       .flatMap(
         _.toList.map { h =>
-          if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache.contains(h)) {
+          if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
+                .contains(h)) { // TODO: wkoszycki make it distinct by baseHash
             Sync[F].delay(
               logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
             ) >> LiftIO[F].liftIO(dao.checkpointAcceptanceService.accept(h)).recoverWith {
@@ -324,7 +321,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
   }
 }
 
-object Download {
+object Download extends StrictLogging {
 
   // TODO: Remove Try/Future and make it properly chainable
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
@@ -336,7 +333,50 @@ object Download {
           val snapshotsProcessor =
             new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
           val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster)
-          process.download().unsafeRunAsync(_ => ())
+          val download = process.download().recoverWith {
+            case err =>
+              for {
+                _ <- IO.raiseError[Unit](err)
+              } yield ()
+          }
+          val wrappedDownload =
+            dao.cluster.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress).flatMap {
+              stateSetResult =>
+                if (stateSetResult.isNewSet) {
+                  download.recoverWith {
+                    case err =>
+                      IO.delay(logger.error(s"Download process error: ${err.getMessage}", err)) >>
+                        dao.cluster
+                          .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+                          .flatMap(
+                            recoverState =>
+                              IO.delay(
+                                logger.warn(
+                                  s"Download process error trying to set state back to ${stateSetResult.oldState} result: ${recoverState}"
+                                )
+                              )
+                          )
+                  }
+                  download.flatMap(
+                    _ =>
+                      dao.cluster
+                        .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+                        .flatMap(
+                          recoverState =>
+                            IO.delay(
+                              logger.warn(
+                                s"Download process finished trying to set state back to ${stateSetResult.oldState} result: ${recoverState}"
+                              )
+                            )
+                        )
+                  )
+                } else {
+                  IO.delay(
+                    logger.warn(s"Download process can't start due to invalid node state: ${stateSetResult.oldState}")
+                  )
+                }
+            }
+          wrappedDownload.unsafeRunAsync(_ => ())
         },
         "download"
       )
@@ -354,7 +394,7 @@ object Download {
         .traverse(cmd => dao.channelService.put(cmd.channelId, cmd))
         .unsafeRunSync()
 
-      dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
+      dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
 
     }
 }

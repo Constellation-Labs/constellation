@@ -122,7 +122,6 @@ class SnapshotService[F[_]: Concurrent](
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, Unit] =
     for {
       _ <- validateMaxAcceptedCBHashesInMemory()
-      _ <- validateNodeState(NodeState.Ready)
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
@@ -195,18 +194,6 @@ class SnapshotService[F[_]: Concurrent](
       } else Sync[F].unit
 
       tap.map(_ => e)
-    }
-  }
-
-  private def validateNodeState(
-    requiredState: NodeState
-  )(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, Unit] = EitherT {
-    cluster.getNodeState.map { state =>
-      if (state == requiredState) {
-        Right(())
-      } else {
-        Left(NodeNotReadyForSnapshots)
-      }
     }
   }
 
@@ -352,10 +339,7 @@ class SnapshotService[F[_]: Concurrent](
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s.checkpointBlocks.toList)
       _ <- cbs.traverse(applySnapshotMessages(s, _))
-
       _ <- applySnapshotTransactions(s, cbs)
-
-      _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
 
   private def getCheckpointBlocksFromSnapshot(blocks: List[String]): F[List[CheckpointBlockMetadata]] =

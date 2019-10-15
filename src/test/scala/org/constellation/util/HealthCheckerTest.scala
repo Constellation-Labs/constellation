@@ -4,7 +4,7 @@ import java.net.SocketException
 import cats.effect.IO
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
-import org.constellation.p2p.{Cluster, DownloadProcess}
+import org.constellation.p2p.{Cluster, DownloadProcess, SetStateResult}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id
@@ -29,6 +29,7 @@ class HealthCheckerTest
   val downloadProcess: DownloadProcess[IO] = mock[DownloadProcess[IO]]
   val consensusManager: ConsensusManager[IO] = mock[ConsensusManager[IO]]
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
+  val cluster: Cluster[IO] = mock[Cluster[IO]]
   val majorState: MajorityStateChooser[IO] = mock[MajorityStateChooser[IO]]
 
   val healthChecker =
@@ -38,6 +39,7 @@ class HealthCheckerTest
       consensusManager,
       IO.contextShift(ConstellationExecutionContext.bounded),
       downloadProcess,
+      cluster,
       majorState
     )(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
@@ -249,24 +251,29 @@ class HealthCheckerTest
 
   describe("startReDownload function") {
     it("should set node state in case of error") {
+      cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready) shouldReturnF SetStateResult(
+        NodeState.Ready,
+        isNewSet = true
+      )
+      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress) shouldReturnF SetStateResult(
+        NodeState.Ready,
+        isNewSet = true
+      )
       dao.keyPair shouldReturn Fixtures.kp
       consensusManager.terminateConsensuses() shouldReturnF Unit
-      dao.cluster shouldReturn mock[Cluster[IO]]
-      dao.cluster.getNodeState shouldReturnF NodeState.Ready
       val metrics = new Metrics(2)(dao)
       dao.metrics shouldReturn metrics
 
       dao.terminateConsensuses shouldReturnF Unit
 
       downloadProcess.reDownload(List.empty, Map.empty) shouldReturn IO.raiseError(new SocketException("timeout"))
-      downloadProcess.setNodeState(*) shouldReturnF Unit
 
       assertThrows[SocketException] {
         healthChecker.startReDownload(SnapshotDiff(List.empty, List.empty, List.empty), Map.empty).unsafeRunSync()
       }
 
-      downloadProcess.setNodeState(NodeState.DownloadInProgress).wasCalled(once)
-      downloadProcess.setNodeState(NodeState.Ready).wasCalled(once)
+      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).wasCalled(once)
+      cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready).wasCalled(once)
     }
   }
 

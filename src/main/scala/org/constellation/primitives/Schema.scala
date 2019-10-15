@@ -28,8 +28,44 @@ object Schema {
   object NodeState extends Enumeration {
     type NodeState = Value
 
-    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, Ready, Leaving, Offline =
+    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, SnapshotCreation, Ready, Leaving,
+      Offline =
       Value
+
+    val all: Set[Schema.NodeState.Value] = values.toSet
+
+    val initial: Set[NodeState] = Set(Offline, PendingDownload)
+
+    val broadcastStates: Set[Schema.NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
+
+    val validDuringDownload: Set[Schema.NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
+
+    val validForDownload: Set[Schema.NodeState.Value] = Set(PendingDownload, Ready)
+
+    val validForRedownload: Set[Schema.NodeState.Value] = Set(Ready)
+
+    val validForSnapshotCreation: Set[Schema.NodeState.Value] = Set(Ready, Leaving)
+
+    val validForTransactionGeneration: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+
+    val validForOwnConsensus: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+
+    val validForConsensusParticipation: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+
+    def canActAsDownloadSource(current: NodeState): Boolean = Set(Ready, SnapshotCreation, Leaving).contains(current)
+
+    def canRunClusterCheck(current: NodeState): Boolean = validForRedownload.contains(current)
+
+    def canVerifyRecentSnapshots(current: NodeState): Boolean = validForDownload.contains(current)
+
+    def canCreateSnapshot(current: NodeState): Boolean = validForSnapshotCreation.contains(current)
+
+    def canGenerateTransactions(current: NodeState): Boolean = validForTransactionGeneration.contains(current)
+
+    def canStartOwnConsensus(current: NodeState): Boolean = validForOwnConsensus.contains(current)
+
+    def canParticipateConsensus(current: NodeState): Boolean = validForConsensusParticipation.contains(current)
+
   }
 
   object NodeType extends Enumeration {
