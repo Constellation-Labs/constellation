@@ -27,7 +27,7 @@ class TransactionChainServiceTest
 
   "getNext" - {
     "should return (\"\", 1) if the address is unknown" in {
-      val next = service.getNext("unknown")
+      val next = service.incrementAndGet("unknown")
 
       next.unsafeRunSync shouldBe ("", 1)
     }
@@ -35,14 +35,14 @@ class TransactionChainServiceTest
     "should return stored count and previous hash if the address is known" in {
       service.lastTransactionCount.set(4).unsafeRunSync
       service.lastTxHash.set(Map("known" -> "previous")).unsafeRunSync
-      val next = service.getNext("known")
+      val next = service.incrementAndGet("known")
 
       next.unsafeRunSync shouldBe ("previous", 5)
     }
 
     "should increment generated count" in {
-      val next1 = service.getNext("unknown")
-      val next2 = service.getNext("unknown")
+      val next1 = service.incrementAndGet("unknown")
+      val next2 = service.incrementAndGet("unknown")
 
       next1.unsafeRunSync shouldBe ("", 1)
       next2.unsafeRunSync shouldBe ("", 2)

@@ -107,7 +107,6 @@ class CheckpointServiceTest
     "should accept cb resolving parents soeHashes and cb baseHashes recursively" in {
       val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
       Genesis.acceptGenesis(go, setAsTips = true)
-      println(dao.addressService.toMap.unsafeRunSync)
 
       val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
