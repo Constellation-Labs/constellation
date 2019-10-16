@@ -1,41 +1,31 @@
 package org.constellation.domain.transaction
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, Sync}
+import cats.effect.concurrent.Ref
 import cats.implicits._
-import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.primitives.Transaction
 
 class TransactionChainService[F[_]: Concurrent] {
   // TODO: Make sure to clean-up those properly
-  private[domain] val lastTransactionCount: SingleRef[F, Long] = SingleRef(0)
-  private[domain] val addressCount: SingleRef[F, Map[String, Long]] = SingleRef(Map.empty[String, Long])
-  private[domain] val lastTxHash: SingleRef[F, Map[String, String]] = SingleRef(Map.empty[String, String])
+  private[domain] val lastTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)
 
-  def incrementAndGet(address: String): F[(String, Long)] =
-    lastTransactionCount
-      .modify(count => (count + 1, count + 1))
-      .flatMap(count => lastTransactionHash(address).map(_.getOrElse("")).map(a => (a, count)))
+  def getLastTransactionRef(address: String): F[LastTransactionRef] =
+    lastTransactionRef.get.map(_.getOrElse(address, LastTransactionRef.empty))
 
-  def getLatest(address: String): F[Long] =
-    addressCount.get
-      .map(_.getOrElse(address, 0))
+  def setLastTransaction(tx: Transaction): F[LastTransactionRef] =
+    getLastTransactionRef(tx.src.address)
+      .map(tx.lastTxRef.ordinal == _.ordinal + 1)
+      .ifM(
+        {
+          val address = tx.src.address
+          val ref = LastTransactionRef(tx.hash, tx.lastTxRef.ordinal)
+          lastTransactionRef.modify { m =>
+            (m + (address -> ref), m + (address -> ref))
+          }.map(_.getOrElse(tx.src.address, LastTransactionRef.empty))
+        },
+        Sync[F].raiseError[LastTransactionRef](new RuntimeException("Created transaction has wrong ordinal number"))
+      )
 
-  def lastTransactionHash(address: String): F[Option[String]] =
-    lastTxHash.get
-      .map(_.get(address))
-
-  def observeTransaction(address: String, hash: String): F[(Long, String)] =
-    incrementAddress(address)
-      .flatMap(c => setLastTransactionHash(address, hash).map(h => (c, h)))
-
-  private def incrementAddress(address: String): F[Long] =
-    addressCount.unsafeModify { m =>
-      val a = m ++ Map(address -> (m.getOrElse(address, 0L) + 1L))
-      (a, a.getOrElse(address, 0))
-    }
-
-  private def setLastTransactionHash(address: String, hash: String): F[String] =
-    lastTxHash
-      .unsafeModify(m => (m ++ Map(address -> hash), hash))
 }
 
 object TransactionChainService {
