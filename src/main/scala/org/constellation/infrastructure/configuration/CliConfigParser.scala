@@ -57,22 +57,21 @@ object CliConfigParser {
       checkConfig(
         c =>
           for {
-            _ <- Either
-              .cond(
-                !(c.externalIp == null ^ c.externalPort == 0),
-                (),
-                "ip and port must either both be set, or neither."
-              )
-            _ <- Either
-              .cond(
-                !(c.keyStorePath != null && (c.storePassword == null || c.keyPassword == null || c.alias == null)),
-                (),
-                "you must provide storepass, keypass and alias when using keystore"
-              )
+            _ <- checkConfigOption(
+              c.externalIp == null ^ c.externalPort == 0,
+              "ip and port must either both be set, or neither."
+            )
+            _ <- checkConfigOption(
+              c.keyStorePath != null && (c.storePassword == null || c.keyPassword == null || c.alias == null),
+              "you must provide storepass, keypass and alias when using keystore"
+            )
           } yield ()
       )
     )
   }
+
+  private def checkConfigOption(test: Boolean, errorMsg: String): Either[String, Unit] =
+    Either.cond(!test, (), errorMsg)
 
   def parseCliConfig[F[_]: Sync](args: List[String]): F[CliConfig] =
     Sync[F].delay(OParser.parse(parser, args, CliConfig())).flatMap {
