@@ -5,17 +5,14 @@ import akka.util.ByteString
 import cats.effect.{Async, ContextShift, IO}
 import com.softwaremill.sttp._
 import com.softwaremill.sttp.json4s._
-import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
-import com.softwaremill.sttp.prometheus.PrometheusBackend
-import com.typesafe.config.ConfigFactory
-import com.typesafe.scalalogging.{CanLog, Logger}
+import com.typesafe.scalalogging.CanLog
 import org.constellation.ConstellationExecutionContext
 import org.json4s.native.Serialization
 import org.json4s.{Formats, native}
 import org.slf4j.MDC
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success}
 
 case class HostPort(host: String, port: Int)
@@ -59,9 +56,6 @@ class APIClientBase(
 
   implicit val hostPortForLogging = HostPort(host, port)
 
-//  implicit val backend: SttpBackend[Future, Nothing] = new LoggingSttpBackend[Future, Nothing](
-//    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
-//  )
   implicit val serialization = native.Serialization
 
   val hostName: String = host
@@ -81,8 +75,6 @@ class APIClientBase(
   def base(suffix: String) = s"$baseURI/$suffix"
 
   private def baseUri(suffix: String) = s"$baseURI/$suffix"
-
-  private val config = ConfigFactory.load()
 
   implicit class AddBlocking[T](req: Future[T]) {
 

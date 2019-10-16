@@ -12,10 +12,12 @@ import org.constellation.checkpoint.{
 }
 import org.constellation.consensus._
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
@@ -118,6 +120,7 @@ trait EdgeDAO {
   var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _
   var transactionService: TransactionService[IO] = _
+  var transactionChainService: TransactionChainService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
   var transactionGenerator: TransactionGenerator[IO] = _
   var observationService: ObservationService[IO] = _

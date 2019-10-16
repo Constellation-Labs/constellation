@@ -20,13 +20,15 @@ import org.constellation.checkpoint.{
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.schema.Id
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
+import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
@@ -108,7 +110,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     rateLimiting = new RateLimiting[IO]
 
-    transactionService = new TransactionService[IO](this)
+    transactionChainService = TransactionChainService[IO]
+    transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
     observationService = new ObservationService[IO](this)
@@ -172,7 +175,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
 
     val snapshotSelector =
-      new HeightIdBasedSnapshotSelector(this.id, processingConfig.snapshotHeightRedownloadDelayInterval)
+      new HeightIdBasedSnapshotSelector(
+        this.id,
+        ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+      )
     snapshotBroadcastService = {
 
       new SnapshotBroadcastService[IO](

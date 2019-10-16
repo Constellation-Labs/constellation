@@ -2,7 +2,7 @@ package org.constellation.util
 
 import java.security.KeyPair
 
-import constellation.{SHA256Ext, createTransaction}
+import constellation.SHA256Ext
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.constellation.Fixtures.{dummyTx, _}
 import Partitioner._

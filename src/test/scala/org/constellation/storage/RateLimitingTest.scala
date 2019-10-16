@@ -6,7 +6,6 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{FreeSpec, Matchers}
-import constellation.createTransaction
 import org.constellation.Fixtures
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.primitives.CheckpointBlock
@@ -22,9 +21,9 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
     "it should increment counter for all source addresses in provided txs" in {
       val rl = RateLimiting[IO]()
 
-      val tx1 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx2 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx3 = createTransaction("b", "z", 5L, Fixtures.tempKey)
+      val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx2 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx3 = Fixtures.makeTransaction("b", "z", 5L, Fixtures.tempKey)
 
       rl.update(List(tx1, tx2, tx3)).unsafeRunSync
 
@@ -34,7 +33,7 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
     "it should blacklist addresses which has no available transactions left" in {
       val rl = RateLimiting[IO]()
 
-      val txs = (1 to 50).toList.map(_ => createTransaction("a", "z", 5L, Fixtures.tempKey))
+      val txs = (1 to 50).toList.map(_ => Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey))
       rl.update(txs).unsafeRunSync
 
       rl.counter.get.unsafeRunSync shouldBe Map(Address("a") -> 50)
@@ -47,16 +46,16 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
       val rl = RateLimiting[IO]()
       val cs = mock[CheckpointService[IO]]
 
-      val tx1 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx2 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx3 = createTransaction("b", "z", 5L, Fixtures.tempKey)
+      val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx2 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx3 = Fixtures.makeTransaction("b", "z", 5L, Fixtures.tempKey)
 
       rl.update(List(tx1, tx2, tx3)).unsafeRunSync
 
-      val tx4 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx5 = createTransaction("b", "z", 5L, Fixtures.tempKey)
-      val tx6 = createTransaction("b", "z", 5L, Fixtures.tempKey)
-      val tx7 = createTransaction("c", "z", 5L, Fixtures.tempKey)
+      val tx4 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx5 = Fixtures.makeTransaction("b", "z", 5L, Fixtures.tempKey)
+      val tx6 = Fixtures.makeTransaction("b", "z", 5L, Fixtures.tempKey)
+      val tx7 = Fixtures.makeTransaction("c", "z", 5L, Fixtures.tempKey)
 
       val cb1 = mock[CheckpointCache]
       cb1.checkpointBlock shouldReturn mock[CheckpointBlock].some
@@ -74,7 +73,7 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
       val rl = RateLimiting[IO]()
       val cs = mock[CheckpointService[IO]]
 
-      val txs = (1 to 60).toList.map(_ => createTransaction("a", "z", 5L, Fixtures.tempKey))
+      val txs = (1 to 60).toList.map(_ => Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey))
       rl.update(txs).unsafeRunSync
 
       val cb1 = mock[CheckpointCache]
@@ -95,9 +94,9 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
     "it should return how many available transactions left for account" in {
       val rl = RateLimiting[IO]()
 
-      val tx1 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx2 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx3 = createTransaction("b", "z", 5L, Fixtures.tempKey)
+      val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx2 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx3 = Fixtures.makeTransaction("b", "z", 5L, Fixtures.tempKey)
 
       rl.update(List(tx1, tx2, tx3)).unsafeRunSync
 
@@ -117,9 +116,9 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
     "it should return full available limit if there are some counters but address is unknown" in {
       val rl = RateLimiting[IO]()
 
-      val tx1 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx2 = createTransaction("a", "z", 5L, Fixtures.tempKey)
-      val tx3 = createTransaction("b", "z", 5L, Fixtures.tempKey)
+      val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx2 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx3 = Fixtures.makeTransaction("b", "z", 5L, Fixtures.tempKey)
 
       rl.update(List(tx1, tx2, tx3)).unsafeRunSync
 

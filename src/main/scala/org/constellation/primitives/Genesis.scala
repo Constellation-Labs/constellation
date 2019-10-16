@@ -10,10 +10,10 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.crypto.KeyUtils
+import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage.ConsensusStatus
 import org.constellation.util.AccountBalance
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
@@ -31,11 +31,18 @@ object Genesis extends StrictLogging {
     TypedEdgeHash(CoinBaseHash, EdgeHashType.CheckpointHash)
   )
 
-  def createGenesisTransaction(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance]): Seq[Transaction] =
-    allocAccountBalances.map(t => createTransaction(DebtKey.address, t.accountHash, t.balance, DebtKey)) :+
-      createTransaction(DebtKey.address, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)
+  def createGenesisTransaction(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance])(
+    implicit dao: DAO
+  ): Seq[Transaction] =
+    (allocAccountBalances.map(
+      t => dao.transactionService.createTransaction(DebtKey.address, t.accountHash, t.balance, DebtKey)
+    ) :+
+      dao.transactionService
+        .createTransaction(DebtKey.address, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)).toList.sequence.unsafeRunSync
 
-  def createGenesisBlock(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance]): CheckpointBlock =
+  def createGenesisBlock(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance])(
+    implicit dao: DAO
+  ): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(createGenesisTransaction(keyPair, allocAccountBalances), GenesisTips)(keyPair)
 
   def start()(implicit dao: DAO): Unit = {
@@ -56,11 +63,11 @@ object Genesis extends StrictLogging {
     ids: Seq[Id],
     genesisSOE: SignedObservationEdge,
     keyPair: KeyPair
-  ): CheckpointBlock = {
+  )(implicit dao: DAO): CheckpointBlock = {
 
-    val distr = ids.map { id =>
-      createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
-    }
+    val distr = ids.toList.traverse { id =>
+      dao.transactionService.createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
+    }.unsafeRunSync
 
     CheckpointBlock.createCheckpointBlock(
       distr,
@@ -83,7 +90,7 @@ object Genesis extends StrictLogging {
     ids: Set[Id],
     keyPair: KeyPair,
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
-  ): GenesisObservation = {
+  )(implicit dao: DAO): GenesisObservation = {
 
     val genesisCBO = createGenesisBlock(keyPair, allocAccountBalances)
     val soe = genesisCBO.soe
@@ -94,7 +101,9 @@ object Genesis extends StrictLogging {
     GenesisObservation(genesisCBO, distr1CBO, distr2CBO)
   }
 
-  def createGenesisAndInitialDistribution(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair): GenesisObservation =
+  def createGenesisAndInitialDistribution(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair)(
+    implicit dao: DAO
+  ): GenesisObservation =
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
 
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = false)(implicit dao: DAO): Unit = {

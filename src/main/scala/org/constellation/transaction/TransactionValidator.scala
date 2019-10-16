@@ -4,8 +4,8 @@ import cats.data.ValidatedNel
 import cats.effect.Sync
 import cats.implicits._
 import constellation._
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.Transaction
-import org.constellation.storage.TransactionService
 
 object TransactionValidator {
   type ValidationResult[A] = ValidatedNel[TransactionValidationError, A]

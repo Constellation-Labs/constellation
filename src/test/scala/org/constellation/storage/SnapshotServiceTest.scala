@@ -8,6 +8,7 @@ import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
@@ -92,8 +93,9 @@ class SnapshotServiceTest
       val dao = TestHelpers.prepareRealDao()
       val snapshotService = dao.snapshotService
 
-      val cb1 = RandomData.randomBlock(RandomData.startingTips)
-      val cb2 = RandomData.randomBlock(RandomData.startingTips)
+      val go = RandomData.go()(dao)
+      val cb1 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
+      val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
       val cbs = Seq(CheckpointCache(cb1.some, 0, None), CheckpointCache(cb2.some, 0, None))
 
       val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))

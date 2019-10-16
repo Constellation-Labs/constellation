@@ -6,6 +6,7 @@ import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.DataResolver
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives.concurrency.SingleRef
@@ -143,7 +144,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           }
 
           validation <- checkpointBlockValidator.simpleValidation(cb)
-          _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception("CB to accept not valid"))
+          _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation"))
           else Sync[F].unit
           _ <- LiftIO[F].liftIO(cb.storeSOE()(dao))
           maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)

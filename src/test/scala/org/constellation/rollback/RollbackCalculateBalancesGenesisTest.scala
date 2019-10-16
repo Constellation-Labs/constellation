@@ -1,9 +1,10 @@
 package org.constellation.rollback
 
 import constellation._
+import org.constellation.{DAO, TestHelpers}
 import org.constellation.crypto.KeyUtils
 import org.constellation.primitives.Genesis
-import org.mockito.ArgumentMatchersSugar
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class RollbackCalculateBalancesGenesisTest
@@ -11,6 +12,8 @@ class RollbackCalculateBalancesGenesisTest
     with ArgumentMatchersSugar
     with BeforeAndAfter
     with Matchers {
+
+  implicit val dao: DAO = TestHelpers.prepareRealDao()
 
   private val rollbackAccountBalances: RollbackAccountBalances = new RollbackAccountBalances
   private val distributionTransactionAmount = 100000000000000L

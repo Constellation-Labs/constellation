@@ -119,7 +119,7 @@ class HealthCheckerTest
         )
       )
       healthChecker.clearStaleTips(cluster).unsafeRunSync()
-      concurrentTipService.clearStaleTips(6 + dao.processingConfig.snapshotHeightInterval).wasCalled(once)
+      concurrentTipService.clearStaleTips(6 + healthChecker.snapshotHeightInterval).wasCalled(once)
     }
     it("should not run tips removal when there is not enough data") {
 
@@ -206,7 +206,7 @@ class HealthCheckerTest
 
     val height = 2
     val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i))
-    val interval = dao.processingConfig.snapshotHeightRedownloadDelayInterval
+    val interval = healthChecker.snapshotHeightRedownloadDelayInterval
 
     it("should return true when there are snaps to delete and to download") {
       val diff =

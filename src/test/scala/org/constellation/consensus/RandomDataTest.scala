@@ -13,7 +13,8 @@ import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics
-import org.constellation.DAO
+import org.constellation.{DAO, Fixtures, TestHelpers}
+import org.mockito.{IdiomaticMockito, Mockito}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
@@ -26,7 +27,7 @@ object RandomData {
 
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
-  val go: GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
+  def go()(implicit dao: DAO): GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
     keyPairs.head.address,
     keyPairs.tail.map {
       _.getPublic.toId
@@ -34,7 +35,7 @@ object RandomData {
     keyPairs.head
   )
 
-  val startingTips: Seq[SignedObservationEdge] =
+  def startingTips(go: GenesisObservation)(implicit dao: DAO): Seq[SignedObservationEdge] =
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
   def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
@@ -46,7 +47,7 @@ object RandomData {
 
   def randomTransaction: Transaction = {
     val src = Random.shuffle(keyPairs).head
-    createTransaction(
+    Fixtures.makeTransaction(
       src.address,
       Random.shuffle(keyPairs).head.address,
       Random.nextInt(500).toLong,
@@ -59,7 +60,7 @@ object RandomData {
   def fill(balances: Map[String, Long])(implicit dao: DAO): Iterable[Transaction] = {
     val txs = balances.map {
       case (address, amount) =>
-        createTransaction(keyPairs.head.address, address, amount, keyPairs.head)
+        Fixtures.makeTransaction(keyPairs.head.address, address, amount, keyPairs.head)
     }
 
     txs.toList
@@ -102,10 +103,13 @@ class RandomDataTest extends FlatSpec {
 
   import RandomData._
 
+  implicit val dao: DAO = TestHelpers.prepareRealDao()
+
   "Signatures combiners" should "be unique" in {
 
-    val cb = randomBlock(startingTips, keyPairs.head)
-    val cb2SameSignature = randomBlock(startingTips, keyPairs.head)
+    val genesis = go()
+    val cb = randomBlock(startingTips(genesis), keyPairs.head)
+    val cb2SameSignature = randomBlock(startingTips(genesis), keyPairs.head)
 
     //    val bogus = cb.plus(keyPairs.head).signatures
     //    bogus.foreach{logger.debug}
@@ -131,8 +135,10 @@ class RandomDataTest extends FlatSpec {
     val maxNumBlocks = 1000
     var blockNum = 0
 
-    activeBlocks(startingTips.head) = 0
-    activeBlocks(startingTips.last) = 0
+    val genesis = RandomData.go()
+
+    activeBlocks(startingTips(genesis).head) = 0
+    activeBlocks(startingTips(genesis).last) = 0
 
     val cbIndex = TrieMap[SignedObservationEdge, CheckpointBlock]()
     //cbIndex(go.initialDistribution.soe) = go.initialDistribution
@@ -181,9 +187,9 @@ class RandomDataTest extends FlatSpec {
     logger.debug(cbIndex.size.toString)
 
     val genIdMap = Map(
-      go.genesis.soe.hash -> 0,
-      go.initialDistribution.soe.hash -> 1,
-      go.initialDistribution2.soe.hash -> 2
+      genesis.genesis.soe.hash -> 0,
+      genesis.initialDistribution.soe.hash -> 1,
+      genesis.initialDistribution2.soe.hash -> 2
     )
 
     val conv = convMap.toMap ++ genIdMap /*cbIndex.toSeq.zipWithIndex.map{
@@ -193,13 +199,15 @@ class RandomDataTest extends FlatSpec {
 
     val json = (cbIndex.toSeq.map {
       case (soe, cb) =>
+        logger.debug(s"${soe.hash}")
+        logger.debug(s"${cb.parentSOEHashes}")
         Map("id" -> conv(soe.hash), "parentIds" -> cb.parentSOEHashes.map {
           conv
         })
     } ++ Seq(
-      Map("id" -> conv(go.initialDistribution.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
-      Map("id" -> conv(go.initialDistribution2.soe.hash), "parentIds" -> Seq(conv(go.genesis.soe.hash))),
-      Map("id" -> conv(go.genesis.soe.hash), "parentIds" -> Seq[String]())
+      Map("id" -> conv(genesis.initialDistribution.soe.hash), "parentIds" -> Seq(conv(genesis.genesis.soe.hash))),
+      Map("id" -> conv(genesis.initialDistribution2.soe.hash), "parentIds" -> Seq(conv(genesis.genesis.soe.hash))),
+      Map("id" -> conv(genesis.genesis.soe.hash), "parentIds" -> Seq[String]())
     )).json
     logger.debug(json)
 
