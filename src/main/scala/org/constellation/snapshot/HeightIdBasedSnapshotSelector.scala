@@ -33,17 +33,21 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
       case (_, _) =>
         val highestSnapshot = ownSnapshots.maxBy(_.height)
         val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(highestSnapshot, peersSnapshots)
-        val clusterWithCorrectState = selectMostRecentCorrectSnapshot(peersSnapshots :+ (thisNodeId, ownSnapshots))
-        if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
-              highestSnapshot,
-              clusterWithCorrectState._1
-            ))
-          None
+        val nel = (peersSnapshots :+ (thisNodeId, ownSnapshots)).filter(_._2.nonEmpty)
+        if (nel.isEmpty) None
         else {
-          DownloadInfo(
-            createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
-            clusterWithCorrectState._1
-          ).some
+          val clusterWithCorrectState = selectMostRecentCorrectSnapshot(nel)
+          if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+                highestSnapshot,
+                clusterWithCorrectState._1
+              ))
+            None
+          else {
+            DownloadInfo(
+              createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
+              clusterWithCorrectState._1
+            ).some
+          }
         }
     }
 

@@ -4,6 +4,7 @@ import java.security.{KeyPair, PublicKey}
 
 import cats.kernel.Monoid
 import constellation._
+import org.constellation.DAO
 import org.constellation.crypto.KeyUtils
 import org.constellation.crypto.KeyUtils._
 import org.constellation.primitives.Schema._
@@ -95,42 +96,6 @@ trait SignHelpExt {
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge =
     SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
 
-  /**
-    * Transaction builder (for local use)
-    * @param src : Source address
-    * @param dst : Destination address
-    * @param amount : Quantity
-    * @param keyPair : Signing pair matching source
-    * @param normalized : Whether quantity is normalized by NormalizationFactor (1e-8)
-    * @return : Resolved transaction in edge format
-    */
-  def createTransaction(
-    src: String,
-    dst: String,
-    amount: Long,
-    keyPair: KeyPair,
-    normalized: Boolean = true,
-    dummy: Boolean = false
-  ): Transaction = {
-    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
-
-    val txData = TransactionEdgeData(amount = amountToUse)
-
-    val oe = ObservationEdge(
-      Seq(
-        TypedEdgeHash(src, EdgeHashType.AddressHash),
-        TypedEdgeHash(dst, EdgeHashType.AddressHash)
-      ),
-      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
-    )
-
-    val soe = signedObservationEdge(oe)(keyPair)
-
-    Transaction(Edge(oe, soe, txData), dummy)
-  }
-
-  def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): Transaction =
-    createTransaction(src, dst, 0L, keyPair, normalized = false, dummy = true)
 }
 
 object SignHelp extends SignHelpExt

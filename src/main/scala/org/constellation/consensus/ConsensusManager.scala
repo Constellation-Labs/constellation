@@ -8,9 +8,11 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.Consensus._
+import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeType, SignedObservationEdgeCache}
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.storage._
@@ -40,6 +42,7 @@ class ConsensusManager[F[_]: Concurrent](
   implicit val shadowDAO: DAO = dao
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  val maxCheckpointFormationThreshold = ConfigUtil.constellation.getInt("consensus.maxCheckpointFormationThreshold")
 
   val timeout: Long =
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
@@ -153,7 +156,7 @@ class ConsensusManager[F[_]: Concurrent](
   def createRoundData(roundId: RoundId): F[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] =
     for {
       transactions <- transactionService
-        .pullForConsensus(dao.processingConfig.maxCheckpointFormationThreshold)
+        .pullForConsensus(maxCheckpointFormationThreshold)
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty)

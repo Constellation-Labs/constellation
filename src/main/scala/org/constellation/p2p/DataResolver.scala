@@ -6,9 +6,10 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RoundId
+import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.domain.observation.Observation
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
-import org.constellation.primitives.{ChannelMessageMetadata, Observation, TransactionCacheData}
-import org.constellation.storage.ConsensusStatus
+import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.Logging._
 import org.constellation.util.{Distance, PeerApiClient}
 

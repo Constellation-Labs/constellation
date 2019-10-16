@@ -2,7 +2,7 @@ package org.constellation.datastore
 
 import cats.effect.IO
 import cats.implicits._
-import org.constellation.DAO
+import org.constellation.{ConfigUtil, DAO}
 import org.constellation.p2p.Cluster
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._
@@ -12,8 +12,10 @@ import scala.concurrent.duration._
 class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])
     extends PeriodicIO("SnapshotTrigger") {
 
+  val snapshotInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotInterval")
+
   private val preconditions = cluster.isNodeReady.map {
-    _ && executionNumber.get() % dao.processingConfig.snapshotInterval == 0
+    _ && executionNumber.get() % snapshotInterval == 0
   }
 
   private def triggerSnapshot(): IO[Unit] =

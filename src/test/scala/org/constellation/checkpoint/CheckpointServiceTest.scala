@@ -6,7 +6,7 @@ import better.files.File
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import constellation.{createDummyTransaction, createTransaction}
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
@@ -18,7 +18,10 @@ import org.constellation.primitives._
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -34,6 +37,7 @@ class CheckpointServiceTest
 
   implicit val kp: KeyPair = makeKeyPair()
   implicit var dao: DAO = _
+  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   before {
     soe.baseHash shouldReturn "abc"
@@ -108,16 +112,16 @@ class CheckpointServiceTest
 
       val cb1 = makeBlock(
         startingTips,
-        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+        transactions = Seq(Fixtures.makeTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
       )
 
       val cb2 = makeBlock(
         startingTips,
-        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+        transactions = Seq(Fixtures.makeTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
       )
       val cb3 = makeBlock(
         Seq(cb1.soe, cb2.soe),
-        transactions = Seq(createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
+        transactions = Seq(Fixtures.makeTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair))
       )
 
       val peer = readyFacilitators(Id("b")).client
@@ -177,7 +181,9 @@ class CheckpointServiceTest
 
   private def makeBlock(
     tips: Seq[SignedObservationEdge],
-    transactions: Seq[Transaction] = Seq(createDummyTransaction(dao.selfAddressStr, dao.dummyAddress, dao.keyPair))
+    transactions: Seq[Transaction] = Seq(
+      Fixtures.makeDummyTransaction(dao.selfAddressStr, dao.dummyAddress, dao.keyPair)
+    )
   ): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(
       transactions,
@@ -272,7 +278,8 @@ class CheckpointServiceTest
     }
     dao.messageService shouldReturn ms
 
-    val ts = new TransactionService[IO](dao)
+    val txChain = TransactionChainService[IO]
+    val ts = new TransactionService[IO](txChain, dao)
     dao.transactionService shouldReturn ts
 
     val cts = mock[ConcurrentTipService[IO]]

@@ -60,19 +60,21 @@ class TipServiceTest
       val concurrentTipService =
         new ConcurrentTipService[IO](6, 10, maxTipUsage, 2, 30, dao.checkpointParentService, dao, facilitatorFilter)
 
-      RandomData.go.initialDistribution
+      val go = RandomData.go
+
+      go.initialDistribution
         .storeSOE()
-        .flatMap(_ => RandomData.go.initialDistribution2.storeSOE())
+        .flatMap(_ => go.initialDistribution2.storeSOE())
         .unsafeRunSync()
 
-      List(RandomData.go.initialDistribution, RandomData.go.initialDistribution2)
+      List(go.initialDistribution, go.initialDistribution2)
         .map(concurrentTipService.update(_, Height(1, 1)))
         .sequence
         .unsafeRunSync()
 
       concurrentTipService
-        .remove(RandomData.go.initialDistribution.baseHash)(dao.metrics)
-        .flatMap(_ => concurrentTipService.remove(RandomData.go.initialDistribution2.baseHash)(dao.metrics))
+        .remove(go.initialDistribution.baseHash)(dao.metrics)
+        .flatMap(_ => concurrentTipService.remove(go.initialDistribution2.baseHash)(dao.metrics))
         .unsafeRunSync()
 
       concurrentTipService.toMap.unsafeRunSync() shouldBe Map()
@@ -83,17 +85,19 @@ class TipServiceTest
       val concurrentTipService =
         new ConcurrentTipService[IO](6, 4, maxTipUsage, 0, 30, dao.checkpointParentService, dao, facilitatorFilter)
 
-      RandomData.go.initialDistribution
+      val go = RandomData.go()
+
+      go.initialDistribution
         .storeSOE()
-        .flatMap(_ => RandomData.go.initialDistribution2.storeSOE())
+        .flatMap(_ => go.initialDistribution2.storeSOE())
         .unsafeRunSync()
 
-      List(RandomData.go.initialDistribution, RandomData.go.initialDistribution2)
+      List(go.initialDistribution, go.initialDistribution2)
         .map(concurrentTipService.update(_, Height(1, 1)))
         .sequence
         .unsafeRunSync()
 
-      val cb = CheckpointBlock.createCheckpointBlock(Seq(Fixtures.tx), RandomData.startingTips.map { s =>
+      val cb = CheckpointBlock.createCheckpointBlock(Seq(Fixtures.tx), RandomData.startingTips(go).map { s =>
         TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
       })(Fixtures.tempKey)
 
@@ -105,8 +109,8 @@ class TipServiceTest
       val tips = concurrentTipService.toMap
         .unsafeRunSync()
 //      tips shouldBe Map.empty
-      tips.get(RandomData.go.initialDistribution.baseHash) shouldBe None
-      tips.get(RandomData.go.initialDistribution2.baseHash) shouldBe None
+      tips.get(go.initialDistribution.baseHash) shouldBe None
+      tips.get(go.initialDistribution2.baseHash) shouldBe None
     }
 
   }

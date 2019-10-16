@@ -10,7 +10,7 @@ ssh-add
 
 pushd terraform
 
-DEPLOY_FOLDER=./custom-image-${JAR_TAG}
+DEPLOY_FOLDER=./${DEPLOY_DIR}-${JAR_TAG}
 echo "Starting $NODE_COUNT nodes with tag $JAR_TAG and deploy folder $DEPLOY_FOLDER"
 
 mkdir ${DEPLOY_FOLDER}
@@ -19,7 +19,7 @@ terraform destroy -auto-approve
 popd
 
 rm -r ${DEPLOY_FOLDER}
-cp -r ./custom-image ${DEPLOY_FOLDER}
+cp -r ./${DEPLOY_DIR} ${DEPLOY_FOLDER}
 
 pushd ${DEPLOY_FOLDER}
 

@@ -2,12 +2,12 @@ package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
-
 import org.constellation.consensus._
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives._
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.util.{HashSignature, SignatureBatch}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
@@ -48,6 +48,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])
     kryo.register(classOf[GenesisObservation])
+    kryo.register(classOf[LastTransactionRef])
 
     kryo.register(classOf[Set[String]])
 

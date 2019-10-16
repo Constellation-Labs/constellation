@@ -8,16 +8,18 @@ import cats.effect.{Async, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
 import org.constellation.domain.schema.Id
-import org.constellation.storage.ConsensusStatus.ConsensusStatus
+import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.storage.{AddressService, ConsensusStatus, TransactionService}
+import org.constellation.storage.AddressService
 import org.constellation.util.Distance
 import org.constellation.util.Logging._
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
 
@@ -30,8 +32,11 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 ) {
 
   private final val roundCounter = new AtomicInteger(0)
-  private final val emptyRounds = dao.processingConfig.emptyTransactionsRounds
-  private final val transactionsRounds = dao.processingConfig.amountTransactionsRounds
+  private final val emptyRounds = ConfigUtil.constellation.getInt("transaction.generator.emptyTransactionsRounds")
+  private final val maxTransactionsPerRound =
+    ConfigUtil.constellation.getInt("transaction.generator.maxTransactionsPerRound")
+  private final val transactionsRounds =
+    ConfigUtil.constellation.getInt("transaction.generator.amountTransactionsRounds")
 
   val multiAddressGenerationMode = false
   val requiredBalance = 10000000
@@ -103,18 +108,16 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     else generateSingleAddressTransaction(peers)
 
   private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
-    Sync[F].delay {
-      createTransaction(
-        dao.selfAddressStr,
-        randomAddressFromPeers(peers),
-        randomAmount(rangeAmount),
-        dao.keyPair,
-        normalized = false
-      )
-    }
+    transactionService.createTransaction(
+      dao.selfAddressStr,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      dao.keyPair,
+      normalized = false
+    )
 
   private def generateMultipleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
-    balancesForAddresses.map(
+    balancesForAddresses.flatMap(
       addresses =>
         if (checkAddressesHaveSufficient(addresses)) generateMultipleAddressTransactionWithSufficent(addresses, peers)
         else generateMultipleAddressTransactionWithoutSufficent(addresses, peers)
@@ -123,15 +126,16 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private def generateMultipleAddressTransactionWithSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
-  ): Transaction =
-    createTransaction(dao.selfAddressStr, randomAddressFrom(addresses), randomAmount(rangeAmount), dao.keyPair)
+  ): F[Transaction] =
+    transactionService
+      .createTransaction(dao.selfAddressStr, randomAddressFrom(addresses), randomAmount(rangeAmount), dao.keyPair)
 
   private def generateMultipleAddressTransactionWithoutSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
-  ): Transaction = {
+  ): F[Transaction] = {
     val source = getSourceAddressForTxWithoutSufficient(addresses)
-    createTransaction(
+    transactionService.createTransaction(
       source,
       randomAddressFromPeers(peers),
       randomAmount(rangeAmount),
@@ -162,7 +166,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
   private def numberOfTransaction(peers: Seq[(Id, PeerData)]): F[Int] =
     roundCounter.getAndIncrement() match {
-      case x if x < transactionsRounds                 => dao.processingConfig.maxTransactionsPerRound.pure[F]
+      case x if x < transactionsRounds                 => maxTransactionsPerRound.pure[F]
       case y if y < (transactionsRounds + emptyRounds) => 0.pure[F]
       case _ =>
         roundCounter.set(0)
