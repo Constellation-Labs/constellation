@@ -80,7 +80,7 @@ object KeyStoreUtils {
                       keyStore.store(stream, storePassword)
                       keyStore
                   })
-          )
+            )
       )
 
   def getKeyPairFromKeyStore[F[_]: Sync](
