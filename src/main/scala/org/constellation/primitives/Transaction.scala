@@ -10,6 +10,7 @@ import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusObject
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.domain.schema.Id
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.util.HashSignature
 
 case class TransactionCacheData(
@@ -41,7 +42,7 @@ object TransactionCacheData {
   def apply(tx: Transaction): TransactionCacheData = TransactionCacheData(transaction = tx)
 }
 
-case class Transaction(edge: Edge[TransactionEdgeData], previousHash: String, count: Long, isDummy: Boolean = false) {
+case class Transaction(edge: Edge[TransactionEdgeData], lastTxRef: LastTransactionRef, isDummy: Boolean = false) {
 
   def src: Address = Address(edge.parents.head.hash)
 

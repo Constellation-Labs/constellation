@@ -1,10 +1,15 @@
 package org.constellation.domain.transaction
 
-import cats.effect.IO
+import java.security.KeyPair
+
+import cats.effect.{Concurrent, IO}
 import cats.implicits._
+import constellation.signedObservationEdge
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConstellationExecutionContext
+import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
+import org.constellation.primitives.{Edge, Schema, Transaction}
+import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -25,109 +30,51 @@ class TransactionChainServiceTest
     service = TransactionChainService[IO]
   }
 
-  "getNext" - {
-    "should return (\"\", 1) if the address is unknown" in {
-      val next = service.incrementAndGet("unknown")
+  "getLastTransactionRef" - {
+    "should return empty string and 0 ordinal if address is unknown" in {
+      val last = service.getLastTransactionRef("unknown")
 
-      next.unsafeRunSync shouldBe ("", 1)
+      last.unsafeRunSync shouldBe LastTransactionRef("", 0L)
     }
 
-    "should return stored count and previous hash if the address is known" in {
-      service.lastTransactionCount.set(4).unsafeRunSync
-      service.lastTxHash.set(Map("known" -> "previous")).unsafeRunSync
-      val next = service.incrementAndGet("known")
+    "should return last transaction ref if address is known" in {}
+  }
 
-      next.unsafeRunSync shouldBe ("previous", 5)
+  "setLastTransaction" - {
+    "should return new transaction ref" in {
+      val tx = createTransaction("unknown", "bb")
+      val ref = (tx >>= service.setLastTransaction).unsafeRunSync
+
+      service.getLastTransactionRef("unknown").unsafeRunSync shouldBe LastTransactionRef(ref.hash, ref.ordinal)
     }
 
-    "should increment generated count" in {
-      val next1 = service.incrementAndGet("unknown")
-      val next2 = service.incrementAndGet("unknown")
+    "should raise an error if transaction to be has wrong ordinal number" in {
+      val tx = createTransaction("unknown", "bb")
+      val wrongTx = tx.map(t => t.copy(lastTxRef = LastTransactionRef(t.lastTxRef.hash, t.lastTxRef.ordinal + 1)))
 
-      next1.unsafeRunSync shouldBe ("", 1)
-      next2.unsafeRunSync shouldBe ("", 2)
+      assertThrows[RuntimeException] {
+        (wrongTx >>= service.setLastTransaction).unsafeRunSync
+      }
     }
   }
 
-  "getLatest" - {
-    "should return 0 if the address is unknown" in {
-      val count = service.getLatest("unknown")
+  def createTransaction(
+    src: String,
+    dst: String
+  ): IO[Transaction] = {
+    val txData = TransactionEdgeData(1L)
 
-      count.unsafeRunSync shouldBe 0
-    }
+    val oe = ObservationEdge(
+      Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash(dst, EdgeHashType.AddressHash)),
+      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
+    )
 
-    "should return stored count if the address is known" in {
-      service.addressCount.set(Map("known" -> 10)).unsafeRunSync
+    val soe = signedObservationEdge(oe)(Fixtures.tempKey)
 
-      val count = service.getLatest("known")
-
-      count.unsafeRunSync shouldBe 10
-    }
-
-    "lastTransactionHash" - {
-      "should return None if the address is unknown" in {
-        val hash = service.lastTransactionHash("unknown")
-
-        hash.unsafeRunSync shouldBe none
-      }
-
-      "should return the last transaction hash if the address is known" in {
-        service.lastTxHash.set(Map("known" -> "last")).unsafeRunSync
-
-        val hash = service.lastTransactionHash("known")
-
-        hash.unsafeRunSync shouldBe "last".some
-      }
-    }
-
-    "observeTransaction" - {
-      "should increment the address by 1 if the address is unknown" in {
-        val observe = service.observeTransaction("unknown", "foo")
-        val count = service.getLatest("unknown")
-
-        (observe *> count).unsafeRunSync shouldBe 1
-      }
-
-      "should increment the address by 1 if the address is known" in {
-        service.addressCount.set(Map("known" -> 15)).unsafeRunSync
-
-        val observe = service.observeTransaction("known", "foo")
-        val count = service.getLatest("known")
-
-        (observe *> count).unsafeRunSync shouldBe 16
-      }
-
-      "should return 1 if the address is unknown" in {
-        val observe = service.observeTransaction("unknown", "foo")
-
-        observe.unsafeRunSync shouldBe (1, "foo")
-      }
-
-      "should return incremented value if the address is known" in {
-        service.addressCount.set(Map("known" -> 15)).unsafeRunSync
-
-        val observe = service.observeTransaction("known", "foo")
-
-        observe.unsafeRunSync shouldBe (16, "foo")
-      }
-
-      "should set the last transaction hash if the address is unknown" in {
-        val observe = service.observeTransaction("unknown", "bar")
-        val hash = service.lastTransactionHash("unknown")
-
-        (observe *> hash).unsafeRunSync shouldBe "bar".some
-      }
-
-      "should update the last transaction hash if the address is known" in {
-        service.addressCount.set(Map("known" -> 15)).unsafeRunSync
-        service.lastTxHash.set(Map("known" -> "foo")).unsafeRunSync
-
-        val observe = service.observeTransaction("known", "bar")
-        val hash = service.lastTransactionHash("known")
-
-        (observe *> hash).unsafeRunSync shouldBe "bar".some
-      }
-    }
+    for {
+      last <- service.getLastTransactionRef(src)
+      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal + 1))
+    } yield tx
   }
 
 }

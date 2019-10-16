@@ -28,7 +28,7 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
   override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(tx, cpc)
-      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash))
+//      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash))
       .void
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
       .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
@@ -99,8 +99,9 @@ object TransactionService {
     val soe = signedObservationEdge(oe)(keyPair)
 
     for {
-      next <- transactionChainService.incrementAndGet(src)
-      tx = Transaction(Edge(oe, soe, txData), next._1, next._2, dummy)
+      last <- transactionChainService.getLastTransactionRef(src)
+      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal + 1), dummy)
+      _ <- transactionChainService.setLastTransaction(tx)
     } yield tx
   }
 
