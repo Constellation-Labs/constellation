@@ -1,6 +1,7 @@
 package org.constellation
 
 import java.net.InetSocketAddress
+import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -17,7 +18,7 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.crypto.KeyUtils
+import org.constellation.crypto.{KeyStoreUtils, KeyUtils}
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
@@ -81,6 +82,19 @@ object ConstellationNode extends IOApp {
       fromArg.getOrElse(Option(System.getenv(env)).map(_.toInt).getOrElse(config.getInt(configPath)))
     }
 
+  private def getKeyPair[F[_]: Sync](cliConfig: CliConfig): F[KeyPair] =
+    if (cliConfig.keyStorePath != null) {
+      KeyStoreUtils
+        .fromPath(
+          cliConfig.keyStorePath,
+          cliConfig.alias,
+          cliConfig.storePassword.toCharArray,
+          cliConfig.keyPassword.toCharArray
+        )
+        .use(_.pure[F])
+      // TODO: kpudlik: Fallback. Remove after forcing node operators to use keystore only.
+    } else Sync[F].delay(KeyUtils.makeKeyPair())
+
   private def getNodeConfig[F[_]: Sync](cliConfig: CliConfig, config: Config): F[NodeConfig] =
     for {
       seeds <- CliConfigParser.loadSeedsFromConfig(config)
@@ -88,7 +102,8 @@ object ConstellationNode extends IOApp {
 
       _ <- logger.debug(s"Seeds: $seeds")
 
-      keyPair <- Sync[F].delay(KeyUtils.loadDefaultKeyPair())
+      keyPair <- getKeyPair(cliConfig)
+
       hostName <- getHostName(cliConfig)
 
       portOffset = Option(cliConfig.externalPort).filter(_ != 0)
@@ -154,7 +169,8 @@ class ConstellationNode(
     ConfigUtil.constellation.getInt("transaction.generator.randomTransactionLoopTimeSeconds")
   )
 
-  val ipManager = IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
+  val ipManager: IPManager[IO] =
+    IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
 
   nodeConfig.seeds.foreach { peer =>
     dao.ipManager.addKnownIP(peer.host)
