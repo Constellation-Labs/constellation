@@ -11,14 +11,22 @@ class PendingTransactionsMemPool[F[_]: Concurrent](semaphore: Semaphore[F])
 
   // TODO: Rethink - use queue
   def pull(maxCount: Int): F[Option[List[TransactionCacheData]]] =
-    ref.modify { txs =>
-      if (txs.size < 1) {
+    ref.modify {
+      case txs if txs.isEmpty =>
         (txs, none[List[TransactionCacheData]])
-      } else {
-        val sorted = txs.toList.sortWith(_._2.transaction.edge.data.fee > _._2.transaction.edge.data.fee)
+      case txs =>
+        val sorted = sortForPull(txs.values.toList)
         val (left, right) = sorted.splitAt(maxCount)
-        (right.toMap, left.map(_._2).some)
-      }
+        (right.map(tx => tx.hash -> tx).toMap, left.some)
     }
 
+  private def sortForPull(txs: List[TransactionCacheData]): List[TransactionCacheData] =
+    txs
+      .groupBy(_.transaction.src.address)
+      .mapValues(_.sortBy(_.transaction.lastTxRef.ordinal))
+      .values
+      .toSeq
+      .sortBy(_.map(-_.transaction.fee.getOrElse(0L)).sum)
+      .toList
+      .flatten
 }
