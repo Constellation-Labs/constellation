@@ -4,6 +4,7 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
+import org.constellation.domain.transaction.PendingTransactionsMemPool
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.mockito.IdiomaticMockito

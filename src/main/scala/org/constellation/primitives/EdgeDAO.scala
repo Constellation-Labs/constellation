@@ -17,13 +17,16 @@ import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
-import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
