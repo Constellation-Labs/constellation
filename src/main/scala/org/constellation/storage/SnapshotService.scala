@@ -110,6 +110,7 @@ class SnapshotService[F[_]: Concurrent](
         "acceptedCBCacheMatchesAcceptedSize",
         (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
       )
+      _ <- updateMetricsAfterSnapshot()
     } yield ()
 
   def syncBufferAccept(cb: CheckpointCache): F[Unit] =
