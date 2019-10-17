@@ -18,7 +18,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   val semaphores: Map[String, Semaphore[F]] = Map(
-    "arbitraryUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "acceptedUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "unknownUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
@@ -30,12 +29,9 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       .use(thunk)
 
   protected[domain] val pending: PendingMemPool[F, String, A]
-  protected[domain] val arbitrary = new StorageService[F, A](Some(240))
   protected[domain] val inConsensus = new StorageService[F, A](Some(240))
   protected[domain] val accepted = new StorageService[F, A](Some(240))
   protected[domain] val unknown = new StorageService[F, A](Some(240))
-
-  def getArbitrary: F[Map[String, A]] = arbitrary.toMap()
 
   def put(a: A): F[A] = put(a, ConsensusStatus.Pending)
 
@@ -46,13 +42,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
         .flatTap(
           _ =>
             Logger[F].debug(s"ConsensusService pendingPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(c => c.checkpointBlock.map(_.baseHash))}")
-        )
-    case ConsensusStatus.Arbitrary =>
-      withLock("arbitraryUpdate", arbitrary.put(a.hash, a))
-        .flatTap(
-          _ =>
-            Logger[F].debug(s"ConsensusService arbitraryPut with hash=${a.hash} - with checkpoint hash=${cpc
               .map(c => c.checkpointBlock.map(_.baseHash))}")
         )
     case ConsensusStatus.Accepted =>
@@ -78,9 +67,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     case ConsensusStatus.InConsensus =>
       withLock("inConsensusUpdate", inConsensus.update(key, fn, empty))
         .flatTap(_ => Logger[F].debug(s"ConsensusService inConsensusUpdate with hash=${key}"))
-    case ConsensusStatus.Arbitrary =>
-      withLock("arbitraryUpdate", arbitrary.update(key, fn, empty))
-        .flatTap(_ => Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}"))
     case ConsensusStatus.Accepted =>
       withLock("acceptedUpdate", accepted.update(key, fn, empty))
         .flatTap(_ => Logger[F].debug(s"ConsensusService acceptedUpdate with hash=${key}"))
@@ -108,14 +94,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
             accepted.update(key, fn)
           )
         )(curr => Sync[F].pure(Some(curr)))
-      a <- ac
-        .fold(
-          Logger[F].debug(s"ConsensusService arbitraryUpdate with hash=${key}") >> withLock(
-            "arbitraryUpdate",
-            arbitrary.update(key, fn)
-          )
-        )(curr => Sync[F].pure(Some(curr)))
-      result <- a
+      result <- ac
         .fold(
           Logger[F].debug(s"ConsensusService unknownUpdate with hash=${key}") >> withLock(
             "unknownUpdate",
@@ -127,8 +106,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   def accept(a: A, cpc: Option[CheckpointCache] = None): F[Unit] =
     put(a, ConsensusStatus.Accepted, cpc) >>
       withLock("inConsensusUpdate", inConsensus.remove(a.hash)) >>
-      withLock("unknownUpdate", unknown.remove(a.hash)) >>
-      withLock("arbitraryUpdate", arbitrary.remove(a.hash))
+      withLock("unknownUpdate", unknown.remove(a.hash))
         .flatTap(
           _ =>
             Logger[F].debug(s"ConsensusService remove with hash=${a.hash} - with checkpoint hash=${cpc
@@ -150,14 +128,13 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       )
 
   def lookup(key: String): F[Option[A]] =
-    Lookup.extendedLookup[F, String, A](List(accepted, arbitrary, inConsensus, pending, unknown))(
+    Lookup.extendedLookup[F, String, A](List(accepted, inConsensus, pending, unknown))(
       key
     )
 
   def lookup(hash: String, status: ConsensusStatus): F[Option[A]] =
     status match {
       case ConsensusStatus.Pending     => pending.lookup(hash)
-      case ConsensusStatus.Arbitrary   => arbitrary.lookup(hash)
       case ConsensusStatus.InConsensus => inConsensus.lookup(hash)
       case ConsensusStatus.Accepted    => accepted.lookup(hash)
       case ConsensusStatus.Unknown     => unknown.lookup(hash)
@@ -165,7 +142,7 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     }
 
   def contains(key: String): F[Boolean] =
-    Lookup.extendedContains[F, String, A](List(accepted, arbitrary, inConsensus, pending, unknown))(
+    Lookup.extendedContains[F, String, A](List(accepted, inConsensus, pending, unknown))(
       key
     )
 
@@ -198,7 +175,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   def count: F[Long] =
     List(
       count(ConsensusStatus.Pending),
-      count(ConsensusStatus.Arbitrary),
       count(ConsensusStatus.InConsensus),
       count(ConsensusStatus.Accepted),
       count(ConsensusStatus.Unknown)
@@ -206,7 +182,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
 
   def count(status: ConsensusStatus): F[Long] = status match {
     case ConsensusStatus.Pending     => pending.size()
-    case ConsensusStatus.Arbitrary   => arbitrary.size()
     case ConsensusStatus.InConsensus => inConsensus.size()
     case ConsensusStatus.Accepted    => accepted.size()
     case ConsensusStatus.Unknown     => unknown.size()
@@ -215,7 +190,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   def getMetricsMap: F[Map[String, Long]] =
     List(
       count(ConsensusStatus.Pending),
-      count(ConsensusStatus.Arbitrary),
       count(ConsensusStatus.InConsensus),
       count(ConsensusStatus.Accepted),
       count(ConsensusStatus.Unknown)
@@ -224,7 +198,6 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
         counts => {
           Map(
             "pending" -> counts.get(0).getOrElse(0),
-            "arbitrary" -> counts.get(1).getOrElse(0),
             "inConsensus" -> counts.get(2).getOrElse(0),
             "accepted" -> counts.get(3).getOrElse(0),
             "unknown" -> counts.get(4).getOrElse(0)
