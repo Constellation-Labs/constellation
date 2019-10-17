@@ -1,7 +1,7 @@
-package org.constellation.storage.transactions
+package org.constellation.domain.transaction
 
+import cats.effect.Concurrent
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.PendingMemPool

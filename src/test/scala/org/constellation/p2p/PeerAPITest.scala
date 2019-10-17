@@ -19,11 +19,10 @@ import org.constellation.crypto.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
 import org.constellation.primitives.{IPManager, Transaction, TransactionCacheData, TransactionGossip}
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
 import org.constellation.storage._
-import org.constellation.storage.transactions.TransactionGossiping
 import org.constellation.util.{APIClient, Metrics}
 import org.constellation.{DAO, Fixtures, ProcessingConfig}
 import org.json4s.native
