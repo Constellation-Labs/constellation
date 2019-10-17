@@ -85,13 +85,12 @@ object ConstellationNode extends IOApp {
   private def getKeyPair[F[_]: Sync](cliConfig: CliConfig): F[KeyPair] =
     if (cliConfig.keyStorePath != null) {
       KeyStoreUtils
-        .fromPath(
+        .getKeyPairFromKeyStore(
           cliConfig.keyStorePath,
           cliConfig.alias,
           cliConfig.storePassword.toCharArray,
           cliConfig.keyPassword.toCharArray
         )
-        .use(_.pure[F])
       // TODO: kpudlik: Fallback. Remove after forcing node operators to use keystore only.
     } else Sync[F].delay(KeyUtils.makeKeyPair())
 
