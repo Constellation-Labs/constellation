@@ -260,19 +260,20 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType
-  private def eqNodeState(nodeState: NodeState)(m: (Id, PeerData)) = m._2.peerMetadata.nodeState == nodeState
+  private def eqNodeState(nodeStates: Set[NodeState])(m: (Id, PeerData)) =
+    nodeStates.contains(m._2.peerMetadata.nodeState)
 
   def peerInfo(nodeType: NodeType): IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeType(nodeType)))
 
   def readyPeers: IO[Map[Id, PeerData]] =
-    peerInfo.map(_.filter(eqNodeState(NodeState.Ready)))
+    peerInfo.map(_.filter(eqNodeState(NodeState.readyStates)))
 
   def readyPeers(nodeType: NodeType): IO[Map[Id, PeerData]] =
     readyPeers.map(_.filter(eqNodeType(nodeType)))
 
   def leavingPeers: IO[Map[Id, PeerData]] =
-    peerInfo.map(_.filter(eqNodeState(NodeState.Leaving)))
+    peerInfo.map(_.filter(eqNodeState(Set(NodeState.Leaving))))
 
   def terminateConsensuses(): IO[Unit] =
     consensusManager.terminateConsensuses() // TODO: wkoszycki temporary fix to check cluster stability
