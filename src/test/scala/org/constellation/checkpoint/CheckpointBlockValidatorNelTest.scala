@@ -15,11 +15,10 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.storage._
-import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
