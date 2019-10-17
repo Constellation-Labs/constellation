@@ -3,19 +3,26 @@ package org.constellation.storage.transactions
 import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.ConstellationExecutionContext
-import org.constellation.domain.transaction.PendingTransactionsMemPool
-import org.constellation.primitives.Schema.TransactionEdgeData
+import org.constellation.{ConstellationExecutionContext, Fixtures}
+import org.constellation.domain.transaction.{LastTransactionRef, PendingTransactionsMemPool, TransactionChainService}
+import org.constellation.primitives.Schema.{Address, EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.mockito.IdiomaticMockito
-import org.scalatest.{FreeSpec, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, FreeSpec, FunSuite, Matchers}
 
-class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers {
+class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers with BeforeAndAfter {
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+
+  var txChainService: TransactionChainService[IO] = _
+  var semaphore: Semaphore[IO] = _
+
+  before {
+    txChainService = TransactionChainService[IO]
+    semaphore = Semaphore[IO](1).unsafeRunSync()
+  }
 
   "update" - {
     "it should update existing transaction" in {
-      val semaphore = Semaphore[IO](1).unsafeRunSync()
       val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx = mock[Transaction]
@@ -39,7 +46,6 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should not update transaction if it does not exist" in {
-      val semaphore = Semaphore[IO](1).unsafeRunSync()
       val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx = mock[Transaction]
@@ -61,14 +67,12 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
   "pull" - {
     "it should return None if there are less txs than min required count" in {
-      val semaphore = Semaphore[IO](1).unsafeRunSync()
       val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       memPool.pull(10).unsafeRunSync shouldBe none
     }
 
     "it should return min required count of txs" in {
-      val semaphore = Semaphore[IO](1).unsafeRunSync()
       val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx1 = createTransaction("a")
@@ -79,11 +83,10 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         memPool.put("b", tx2) >>
         memPool.put("c", tx3)).unsafeRunSync
 
-      memPool.pull(2).unsafeRunSync shouldBe List(tx1, tx2).some
+      memPool.pull(2).unsafeRunSync shouldBe List(tx2, tx1).some
     }
 
     "it should return transactions sorted by the fee" in {
-      val semaphore = Semaphore[IO](1).unsafeRunSync()
       val memPool = new PendingTransactionsMemPool[IO](semaphore)
 
       val tx1 = createTransaction("a", fee = 3L.some)
@@ -96,18 +99,63 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
       memPool.pull(2).unsafeRunSync shouldBe List(tx3, tx1).some
     }
+
+    "it should return transactions sorted by the address and the fee" in {
+      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+
+      val txs = List(
+        createTransaction("a", fee = 3L.some),
+        createTransaction("a", fee = 3L.some),
+        createTransaction("a", fee = 4L.some),
+        createTransaction("a", fee = 2L.some),
+        createTransaction("b", fee = 3L.some),
+        createTransaction("b", fee = 2L.some),
+        createTransaction("b", fee = 1L.some),
+        createTransaction("c", fee = 10L.some),
+        createTransaction("c", fee = 3L.some)
+      )
+
+      txs.traverse(tx => memPool.put(tx.hash, tx)).unsafeRunSync()
+
+      memPool
+        .pull(10)
+        .map(_.get.map(t => (t.transaction.src.address, t.transaction.lastTxRef.ordinal)))
+        .unsafeRunSync shouldBe List(
+        ("c", 1),
+        ("c", 2),
+        ("a", 1),
+        ("a", 2),
+        ("a", 3),
+        ("a", 4),
+        ("b", 1),
+        ("b", 2),
+        ("b", 3)
+      )
+    }
   }
 
-  private def createTransaction(hash: String, fee: Option[Long] = None): TransactionCacheData = {
-    val tx = mock[TransactionCacheData]
+  def createTransaction(
+    src: String,
+    fee: Option[Long] = None
+  ): TransactionCacheData = {
+    import constellation._
 
-    tx.transaction shouldReturn mock[Transaction]
-    tx.transaction.hash shouldReturn hash
-    tx.transaction.edge shouldReturn mock[Edge[TransactionEdgeData]]
-    tx.transaction.edge.data shouldReturn mock[TransactionEdgeData]
-    tx.transaction.edge.data.fee shouldReturn fee
+    val txData = TransactionEdgeData(1L, fee = fee)
 
-    tx
+    val oe = ObservationEdge(
+      Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash("dst", EdgeHashType.AddressHash)),
+      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
+    )
+
+    val soe = signedObservationEdge(oe)(Fixtures.tempKey)
+
+    val transaction = for {
+      last <- txChainService.getLastTransactionRef(src)
+      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal + 1))
+      _ <- txChainService.setLastTransaction(tx)
+    } yield tx
+
+    transaction.map(TransactionCacheData(_)).unsafeRunSync
   }
 
 }
