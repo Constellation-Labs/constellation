@@ -1,10 +1,9 @@
-package org.constellation.transaction
+package org.constellation.domain.transaction
 
 import cats.data.ValidatedNel
 import cats.effect.Sync
 import cats.implicits._
 import constellation._
-import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.Transaction
 
 object TransactionValidator {

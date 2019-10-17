@@ -1,13 +1,12 @@
-package org.constellation.storage.transactions
+package org.constellation.domain.transaction
 
 import cats.effect.{Clock, Concurrent, LiftIO, Sync}
 import cats.implicits._
-import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.util.Logging._
 

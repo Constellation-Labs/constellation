@@ -18,7 +18,6 @@ import org.constellation.primitives.Schema.{
   TypedEdgeHash
 }
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
-import org.constellation.storage.transactions.PendingTransactionsMemPool
 
 class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {

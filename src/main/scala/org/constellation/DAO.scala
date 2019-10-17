@@ -28,14 +28,17 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
-import org.constellation.storage.transactions.TransactionGossiping
-import org.constellation.transaction.TransactionValidator
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
 import scala.concurrent.Future
