@@ -30,7 +30,6 @@ import scala.concurrent.duration._
 
 class Consensus[F[_]: Concurrent](
   roundData: RoundData,
-  arbitraryTransactions: Seq[(Transaction, Int)],
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   dataResolver: DataResolver,
   transactionService: TransactionService[F],
@@ -72,8 +71,7 @@ class Consensus[F[_]: Concurrent](
       proposal = LightTransactionsProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
-        transactions
-          .map(_.hash) ++ arbitraryTransactions.filter(_._2 == 0).map(_._1.hash),
+        transactions.map(_.hash),
         messages
           .map(_.map(_.signedMessageData.hash))
           .getOrElse(Seq()) ++ arbitraryMessages
@@ -583,7 +581,6 @@ object Consensus {
   case class RoundId(id: String) extends AnyVal
 
   case class UnionProposals(state: StageState)
-  case class ArbitraryDataProposals(distance: Int)
 
   case class ResolveMajorityCheckpointBlock(roundId: RoundId, stageState: StageState)
 

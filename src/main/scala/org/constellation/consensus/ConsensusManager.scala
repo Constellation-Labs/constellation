@@ -84,7 +84,6 @@ class ConsensusManager[F[_]: Concurrent](
         new Consensus[F](
           roundData._1,
           roundData._2,
-          roundData._3,
           new DataResolver,
           transactionService,
           checkpointAcceptanceService,
@@ -113,7 +112,7 @@ class ConsensusManager[F[_]: Concurrent](
         LightTransactionsProposal(
           roundData._1.roundId,
           FacilitatorId(dao.id),
-          roundData._1.transactions.map(_.hash) ++ roundData._2.filter(_._2 == 0).map(_._1.hash),
+          roundData._1.transactions.map(_.hash),
           roundData._1.messages.map(_.signedMessageData.hash),
           roundData._1.peers.flatMap(_.notification).toSeq,
           roundData._1.observations.map(_.hash).toSeq
@@ -153,7 +152,7 @@ class ConsensusManager[F[_]: Concurrent](
         }
     } yield roundId
 
-  def createRoundData(roundId: RoundId): F[(RoundData, Seq[(Transaction, Int)], Seq[(ChannelMessage, Int)])] =
+  def createRoundData(roundId: RoundId): F[(RoundData, Seq[(ChannelMessage, Int)])] =
     for {
       transactions <- transactionService
         .pullForConsensus(maxCheckpointFormationThreshold)
@@ -172,7 +171,6 @@ class ConsensusManager[F[_]: Concurrent](
       else
         Set(lightNodes.minBy(p => Distance.calculate(transactions.head.transaction.baseHash, p._1))._2) // TODO: Choose more than one tx and light peers
       allFacilitators = tips.get.peers.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
-      arbitraryTx <- getArbitraryTransactionsWithDistance(allFacilitators).map(_.filter(t => t._2 == 1))
       arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators).map(_.filter(t => t._2 == 1))
       roundData = (
         RoundData(
@@ -185,7 +183,6 @@ class ConsensusManager[F[_]: Concurrent](
           messages,
           observations
         ),
-        arbitraryTx,
         arbitraryMsgs
       )
 
@@ -195,13 +192,11 @@ class ConsensusManager[F[_]: Concurrent](
     for {
       _ <- cluster.isNodeReady.ifM(Sync[F].unit, Sync[F].raiseError[Unit](NodeNotReady))
       allFacilitators = roundData.peers.map(_.peerMetadata.id) ++ Set(dao.id)
-      arbitraryTxs <- getArbitraryTransactionsWithDistance(allFacilitators)
       arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators)
       updatedRoundData <- adjustPeers(roundData)
       roundInfo = ConsensusInfo(
         new Consensus[F](
           updatedRoundData,
-          arbitraryTxs,
           arbitraryMsgs,
           new DataResolver,
           transactionService,
@@ -360,35 +355,6 @@ class ConsensusManager[F[_]: Concurrent](
         s"[${dao.id.short}] Resolved missing parents size: ${resolved.size} for round ${roundData.roundId}"
       )
     } yield resolved
-  }
-
-  def getArbitraryTransactionsWithDistance(facilitators: Set[Id]): F[Seq[(Transaction, Int)]] = {
-
-    val measureDistance =
-      Try(
-        ConfigUtil.config.getString("constellation.consensus.arbitrary-tx-distance-base")
-      ).getOrElse("hash") match {
-        case "id" =>
-          (id: Id, tx: Transaction) => Distance.calculate(tx.src.address, id)
-        case "hash" =>
-          (id: Id, tx: Transaction) =>
-            val xorIdTx = Distance.calculate(tx.hash, id)
-            val xorIdSrc = Distance.calculate(tx.src.address, id)
-            xorIdTx + xorIdSrc
-      }
-
-    transactionService.getArbitrary
-      .map(_.map { t =>
-        (
-          t._2.transaction,
-          facilitators
-            .map(f => (f, measureDistance(f, t._2.transaction)))
-            .toSeq
-            .sortBy(_._2)
-            .map(_._1)
-            .indexOf(dao.id)
-        )
-      }.toSeq)
   }
 
   def getArbitraryMessagesWithDistance(facilitators: Set[Id]): F[Seq[(ChannelMessage, Int)]] = {
