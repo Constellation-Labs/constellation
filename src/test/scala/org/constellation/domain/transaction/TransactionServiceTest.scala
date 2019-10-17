@@ -43,6 +43,7 @@ class TransactionServiceTest
   tx.transaction.edge shouldReturn mock[Edge[TransactionEdgeData]]
   tx.transaction.edge.data shouldReturn mock[TransactionEdgeData]
   tx.transaction.edge.data.fee shouldReturn Some(1L)
+  tx.transaction.fee shouldReturn Some(1L)
 
   before {
     dao = mockDAO
