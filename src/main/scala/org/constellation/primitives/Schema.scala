@@ -34,6 +34,8 @@ object Schema {
 
     val all: Set[Schema.NodeState.Value] = values.toSet
 
+    val readyStates: Set[Schema.NodeState.Value] = Set(NodeState.Ready, NodeState.SnapshotCreation)
+
     val initial: Set[NodeState] = Set(Offline, PendingDownload)
 
     val broadcastStates: Set[Schema.NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
