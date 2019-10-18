@@ -93,7 +93,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
     lastTXCount = countAll
     lastCheckTime = System.currentTimeMillis()
     Map(
-      "TPS_last_" + dao.nodeConfig.metricIntervalSeconds + "_seconds" -> tps,
+      "TPS_last_" + dao.nodeConfig.processingConfig.metricCheckInterval + "_seconds" -> tps,
       "TPS_all" -> tpsAll
     )
   }
