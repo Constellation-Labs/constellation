@@ -522,12 +522,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
   }
 
-  @deprecated(message = "Use compareAndSet instead", since = "1.0.12")
-  def setNodeState(state: NodeState): F[Unit] =
-    nodeState.modify(oldState => (state, oldState)).flatMap { oldState =>
-      Logger[F].debug(s"Changing node state from $oldState to $state")
-    } >> dao.metrics.updateMetricAsync[F]("nodeState", state.toString)
-
   private def validWithLoopbackGuard(host: String): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer
 

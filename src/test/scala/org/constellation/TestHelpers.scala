@@ -42,7 +42,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao.metrics = new Metrics(nodeConfig.processingConfig.metricCheckInterval)(dao)
     dao.initialize(nodeConfig)
 
-    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
     dao
   }
 
