@@ -295,7 +295,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
       .flatMap(
         _.toList.map { h =>
           if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
-                .contains(h)) { // TODO: wkoszycki make it distinct by baseHash
+                .contains(h)) { // TODO: #640 make it distinct by baseHash as there is a lot of duplicates
             Sync[F].delay(
               logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
             ) >> LiftIO[F].liftIO(dao.checkpointAcceptanceService.accept(h)).recoverWith {
@@ -333,51 +333,43 @@ object Download extends StrictLogging {
           val snapshotsProcessor =
             new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
           val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster)
-          val download = process.download().recoverWith {
-            case err =>
-              for {
-                _ <- IO.raiseError[Unit](err)
-              } yield ()
-          }
+          val download = process.download()
           val wrappedDownload =
             dao.cluster.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress).flatMap {
-              stateSetResult =>
-                if (stateSetResult.isNewSet) {
-                  download.recoverWith {
-                    case err =>
-                      IO.delay(logger.error(s"Download process error: ${err.getMessage}", err))
-                        .flatMap(
-                          _ =>
-                            dao.cluster
-                              .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+              case SetStateResult(oldState, true) =>
+                download.handleErrorWith { err =>
+                  IO.delay(logger.error(s"Download process error: ${err.getMessage}", err))
+                    .flatMap(
+                      _ =>
+                        dao.cluster
+                          .compareAndSet(NodeState.validDuringDownload, oldState)
+                    )
+                    .flatMap(
+                      recoverState =>
+                        IO.delay(
+                          logger.warn(
+                            s"Download process error trying to set state back to ${oldState} result: ${recoverState}"
+                          )
                         )
-                        .flatMap(
-                          recoverState =>
-                            IO.delay(
-                              logger.warn(
-                                s"Download process error trying to set state back to ${stateSetResult.oldState} result: ${recoverState}"
-                              )
-                            )
-                        )
-                  }
-                  download.flatMap(
-                    _ =>
-                      dao.cluster
-                        .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-                        .flatMap(
-                          recoverState =>
-                            IO.delay(
-                              logger.warn(
-                                s"Download process finished trying to set state back to ${stateSetResult.oldState} result: ${recoverState}"
-                              )
-                            )
-                        )
-                  )
-                } else {
-                  IO.delay(
-                    logger.warn(s"Download process can't start due to invalid node state: ${stateSetResult.oldState}")
-                  )
+                    )
                 }
+                download.flatMap(
+                  _ =>
+                    dao.cluster
+                      .compareAndSet(NodeState.validDuringDownload, oldState)
+                      .flatMap(
+                        recoverState =>
+                          IO.delay(
+                            logger.warn(
+                              s"Download process finished trying to set state back to ${oldState} result: ${recoverState}"
+                            )
+                          )
+                      )
+                )
+              case SetStateResult(oldState, _) =>
+                IO.delay(
+                  logger.warn(s"Download process can't start due to invalid node state: ${oldState}")
+                )
             }
           wrappedDownload.unsafeRunAsync(_ => ())
         },
