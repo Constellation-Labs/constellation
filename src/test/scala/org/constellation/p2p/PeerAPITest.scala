@@ -308,7 +308,7 @@ class PeerAPITest
     val ipManager = IPManager[IO]()
     val cluster = Cluster[IO](() => metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
-    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
     dao.peerInfo shouldReturnF Map()
 
     dao.snapshotService shouldReturn mock[SnapshotService[IO]]
