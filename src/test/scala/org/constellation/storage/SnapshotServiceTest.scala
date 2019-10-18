@@ -38,7 +38,6 @@ class SnapshotServiceTest
     val messageService = mock[MessageService[IO]]
     val transactionService = mock[TransactionService[IO]]
     val rateLimiting = mock[RateLimiting[IO]]
-    val broadcastService = mock[SnapshotBroadcastService[IO]]
     val consensusManager = mock[ConsensusManager[IO]]
 
     snapshotService = new SnapshotService[IO](
@@ -48,7 +47,6 @@ class SnapshotServiceTest
       messageService,
       transactionService,
       rateLimiting,
-      broadcastService,
       consensusManager,
       dao
     )

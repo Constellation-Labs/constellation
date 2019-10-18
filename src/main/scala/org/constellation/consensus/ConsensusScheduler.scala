@@ -37,11 +37,11 @@ class ConsensusScheduler(
       case (false, _) => skip
       case (true, true) =>
         cluster.getNodeState
-          .map(state => NodeState.canStartOwnConsensus(state))
+          .map(NodeState.canStartOwnConsensus)
           .ifM(edgeConsensus, skip)
       case (true, false) =>
         cluster.getNodeState
-          .map(state => NodeState.canStartOwnConsensus(state))
+          .map(NodeState.canStartOwnConsensus)
           .ifM(crossTalkConsensus, skip)
     }
 
