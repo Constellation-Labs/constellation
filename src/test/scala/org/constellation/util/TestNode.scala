@@ -37,7 +37,6 @@ object TestNode {
     val config = NodeConfig(
       seeds = seedHosts,
       primaryKeyPair = keyPair,
-      metricIntervalSeconds = 10, // TODO: wkoszycki duplicate from processingConfig
       isGenesisNode = isGenesisNode,
       isLightNode = isLightNode,
       httpPort = randomPort,
