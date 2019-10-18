@@ -11,7 +11,7 @@ import org.constellation.domain.schema.Id
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -445,7 +445,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- broadcastLeaveRequest()
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
-        // TODO: use wkoszycki changes for waiting for last n snapshots
+        // TODO: make interval check to wait for last n snapshots, set Offline state only in Leaving see #641 for details
         _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds)
 
         _ <- compareAndSet(NodeState.all, NodeState.Offline)
@@ -461,7 +461,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_leave"
     )
 
-  def broadcastNodeState(nodeState: NodeState): F[Unit] =
+  private def broadcastNodeState(nodeState: NodeState): F[Unit] =
     logThread(
       broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
@@ -471,10 +471,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_broadcastNodeState"
     )
 
-  def compareAndSet(expected: NodeState, newState: NodeState): F[SetStateResult] =
-    compareAndSet(Set(expected), newState)
-
-  def compareAndSet(expected: Set[NodeState], newState: NodeState): F[SetStateResult] =
+  def compareAndSet(expected: Set[NodeState], newState: NodeState, skipBroadcast: Boolean = false): F[SetStateResult] =
     nodeState.modify { current =>
       if (expected.contains(current)) (newState, SetStateResult(current, isNewSet = true))
       else (current, SetStateResult(current, isNewSet = false))
@@ -483,12 +480,11 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           if (res.isNewSet) LiftIO[F].liftIO(dao.metrics.updateMetricAsync[IO]("nodeState", newState.toString))
           else Sync[F].unit
       )
-      .flatTap(
-        res =>
-          if (res.isNewSet && NodeState.broadcastStates.contains(newState) && NodeState.broadcastStates
-                .contains(res.oldState)) broadcastNodeState(newState)
-          else Sync[F].unit
-      )
+      .flatTap {
+        case SetStateResult(_, false)                                      => Sync[F].unit
+        case SetStateResult(_, true) if skipBroadcast                      => Sync[F].unit
+        case SetStateResult(_, true) if broadcastStates.contains(newState) => broadcastNodeState(newState)
+      }
 
   def getNodeState: F[NodeState] = nodeState.get
 

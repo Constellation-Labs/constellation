@@ -25,7 +25,8 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
   private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
-        stateSet <- dao.cluster.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation)
+        stateSet <- dao.cluster
+          .compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation, skipBroadcast = true)
         _ <- if (!stateSet.isNewSet)
           IO.raiseError(InvalidNodeState(NodeState.validForSnapshotCreation, stateSet.oldState))
         else IO.unit
@@ -35,12 +36,12 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
         _ = logger.debug(s"Attempt snapshot took: $elapsed millis")
         _ <- snapshotResult match {
           case Left(err) =>
-            dao.cluster.compareAndSet(NodeState.SnapshotCreation, stateSet.oldState) >>
+            dao.cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true) >>
               IO(logger.debug(s"Snapshot attempt error: $err"))
                 .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
           case Right(created) =>
             dao.cluster
-              .compareAndSet(NodeState.SnapshotCreation, stateSet.oldState)
+              .compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
               .flatMap(_ => dao.snapshotBroadcastService.broadcastSnapshot(created.hash, created.height))
         }

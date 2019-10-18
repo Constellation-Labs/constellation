@@ -200,16 +200,15 @@ class HealthChecker[F[_]: Concurrent: Logger](
     val wrappedDownload =
       cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { stateSetResult =>
         if (stateSetResult.isNewSet) {
-          val recover = reDownload.recoverWith {
-            case err =>
-              for {
-                _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
-                recoverSet <- cluster.compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-                _ <- Logger[F]
-                  .info(s"[${dao.id.short}] trying set state back to: ${stateSetResult.oldState} result: ${recoverSet}")
-                _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
-                _ <- Sync[F].raiseError[Unit](err)
-              } yield ()
+          val recover = reDownload.handleErrorWith { err =>
+            for {
+              _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
+              recoverSet <- cluster.compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+              _ <- Logger[F]
+                .info(s"[${dao.id.short}] trying set state back to: ${stateSetResult.oldState} result: ${recoverSet}")
+              _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
+              _ <- Sync[F].raiseError[Unit](err)
+            } yield ()
           }
 
           recover.flatMap(
