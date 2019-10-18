@@ -85,7 +85,7 @@ object ConstellationNode extends IOApp {
   private def getKeyPair[F[_]: Sync](cliConfig: CliConfig): F[KeyPair] =
     if (cliConfig.keyStorePath != null) {
       KeyStoreUtils
-        .getKeyPairFromKeyStore(
+        .keyPairFromStorePath(
           cliConfig.keyStorePath,
           cliConfig.alias,
           cliConfig.storePassword.toCharArray,

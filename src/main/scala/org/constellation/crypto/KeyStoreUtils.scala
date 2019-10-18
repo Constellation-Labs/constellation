@@ -9,7 +9,6 @@ import cats.implicits._
 import org.constellation.crypto.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
-  // TODO: kpudlik: Consider using platform-agnostic PKCS12 because JKS works only with Java. Or maybe make configurable.
   val storeType = "JKS"
 
   private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
@@ -24,7 +23,7 @@ object KeyStoreUtils {
       new FileOutputStream(file)
     })
 
-  private def generateKeyWithCertificate[F[_]: Sync]: F[(PrivateKey, Array[Certificate])] =
+  private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {
       val keyPair = KeyUtils.makeKeyPair()
       // TODO: Maybe move to config
@@ -37,7 +36,7 @@ object KeyStoreUtils {
 
       val certificate = SelfSignedCertificate.generate(dn.toString, keyPair, validity, KeyUtils.DefaultSignFunc)
 
-      (keyPair.getPrivate, Array(certificate))
+      Array(certificate)
     }
 
   private def unlockKeyStore[F[_]: Sync](
@@ -61,7 +60,25 @@ object KeyStoreUtils {
       new KeyPair(publicKey, privateKey)
     }
 
-  def createKeyStorageWithKeyPair[F[_]: Sync](
+  private def setKeyEntry[F[_]: Sync](
+    alias: String,
+    keyPair: KeyPair,
+    keyPassword: Array[Char],
+    chain: Array[Certificate]
+  )(keyStore: KeyStore): F[KeyStore] =
+    Sync[F].delay {
+      keyStore.setKeyEntry(alias, keyPair.getPrivate, keyPassword, chain)
+      keyStore
+    }
+
+  private def store[F[_]: Sync](stream: FileOutputStream, storePassword: Array[Char])(
+    keyStore: KeyStore
+  ): F[KeyStore] = Sync[F].delay {
+    keyStore.store(stream, storePassword)
+    keyStore
+  }
+
+  def keyPairToStorePath[F[_]: Sync](
     path: String,
     alias: String,
     storePassword: Array[Char],
@@ -70,20 +87,16 @@ object KeyStoreUtils {
     writer(path)
       .use(
         stream =>
-          createEmptyKeyStore(storePassword)
-            .flatMap(
-              keyStore =>
-                generateKeyWithCertificate
-                  .map({
-                    case (privateKey, chain) =>
-                      keyStore.setKeyEntry(alias, privateKey, keyPassword, chain)
-                      keyStore.store(stream, storePassword)
-                      keyStore
-                  })
-            )
+          for {
+            keyStore <- createEmptyKeyStore(storePassword)
+            keyPair <- KeyUtils.makeKeyPair().pure[F]
+            chain <- generateCertificateChain(keyPair)
+            _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
+            _ <- store(stream, storePassword)(keyStore)
+          } yield keyStore
       )
 
-  def getKeyPairFromKeyStore[F[_]: Sync](
+  def keyPairFromStorePath[F[_]: Sync](
     path: String,
     alias: String,
     storePassword: Array[Char],
