@@ -345,17 +345,20 @@ object Download extends StrictLogging {
                 if (stateSetResult.isNewSet) {
                   download.recoverWith {
                     case err =>
-                      IO.delay(logger.error(s"Download process error: ${err.getMessage}", err)) >>
-                        dao.cluster
-                          .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-                          .flatMap(
-                            recoverState =>
-                              IO.delay(
-                                logger.warn(
-                                  s"Download process error trying to set state back to ${stateSetResult.oldState} result: ${recoverState}"
-                                )
+                      IO.delay(logger.error(s"Download process error: ${err.getMessage}", err))
+                        .flatMap(
+                          _ =>
+                            dao.cluster
+                              .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+                        )
+                        .flatMap(
+                          recoverState =>
+                            IO.delay(
+                              logger.warn(
+                                s"Download process error trying to set state back to ${stateSetResult.oldState} result: ${recoverState}"
                               )
-                          )
+                            )
+                        )
                   }
                   download.flatMap(
                     _ =>

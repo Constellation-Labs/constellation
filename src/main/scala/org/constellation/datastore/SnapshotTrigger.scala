@@ -2,6 +2,7 @@ package org.constellation.datastore
 
 import cats.effect.IO
 import cats.implicits._
+import org.constellation.domain.exception.InvalidNodeState
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
@@ -25,7 +26,9 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
     preconditions.ifM(
       for {
         stateSet <- dao.cluster.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation)
-        _ <- if (!stateSet.isNewSet) IO.raiseError(new Throwable("Node is not ready")) else IO.unit
+        _ <- if (!stateSet.isNewSet)
+          IO.raiseError(InvalidNodeState(NodeState.validForSnapshotCreation, stateSet.oldState))
+        else IO.unit
         startTime <- IO(System.currentTimeMillis())
         snapshotResult <- dao.snapshotService.attemptSnapshot().value
         elapsed <- IO(System.currentTimeMillis() - startTime)
@@ -35,9 +38,11 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
             dao.cluster.compareAndSet(NodeState.SnapshotCreation, stateSet.oldState) >>
               IO(logger.debug(s"Snapshot attempt error: $err"))
                 .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
-          case Right(_) =>
-            dao.cluster.compareAndSet(NodeState.SnapshotCreation, stateSet.oldState) >>
-              dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success)
+          case Right(created) =>
+            dao.cluster
+              .compareAndSet(NodeState.SnapshotCreation, stateSet.oldState)
+              .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
+              .flatMap(_ => dao.snapshotBroadcastService.broadcastSnapshot(created.hash, created.height))
         }
       } yield (),
       IO.unit

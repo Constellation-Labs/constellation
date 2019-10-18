@@ -1,5 +1,7 @@
 package org.constellation.storage
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -24,6 +26,8 @@ class SnapshotBroadcastService[F[_]: Concurrent](
 
   private val recentSnapshots: SingleRef[F, List[RecentSnapshot]] = SingleRef(List.empty[RecentSnapshot])
 
+  val clusterCheckPending = new AtomicBoolean(false)
+
   def broadcastSnapshot(hash: String, height: Long): F[Unit] =
     for {
       ownRecent <- updateRecentSnapshots(hash, height)
@@ -45,8 +49,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       maybeDownload = snapshotSelector.selectSnapshotFromBroadcastResponses(responses, ownRecent)
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
-          healthChecker.startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1))) >> recentSnapshots
-            .set(d.recentStateToSet)
+          healthChecker
+            .startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1)))
+            .flatMap(
+              _ => recentSnapshots.set(d.recentStateToSet)
+            )
       )
     } yield ()
 
@@ -58,12 +65,27 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
-          healthChecker.startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1))) >> recentSnapshots
-            .set(d.recentStateToSet)
+          healthChecker
+            .startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1)))
+            .flatMap(
+              _ =>
+                recentSnapshots
+                  .set(d.recentStateToSet)
+            )
       )
     } yield ()
 
-    cluster.getNodeState.map(NodeState.canVerifyRecentSnapshots).ifM(verify, Sync[F].unit)
+    if (clusterCheckPending.compareAndSet(false, true)) {
+      cluster.getNodeState
+        .map(NodeState.canVerifyRecentSnapshots)
+        .ifM(verify, Sync[F].unit)
+        .flatMap(_ => Sync[F].delay(clusterCheckPending.set(false)))
+        .recover {
+          case _ => clusterCheckPending.set(false)
+        }
+    } else {
+      Sync[F].unit
+    }
   }
 
   def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.getUnsafe
@@ -74,7 +96,9 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       .ifM(
         getRecentSnapshots
           .flatMap(healthChecker.checkClusterConsistency)
-          .flatMap(maybeUpdate => maybeUpdate.fold(Sync[F].unit)(recent => recentSnapshots.set(recent))),
+          .flatMap(
+            maybeUpdate => maybeUpdate.fold(Sync[F].unit)(recentSnapshots.set)
+          ),
         Sync[F].unit
       )
 
@@ -95,7 +119,6 @@ class SnapshotBroadcastService[F[_]: Concurrent](
 
 case class RecentSnapshot(hash: String, height: Long)
 
-case class SnapshotCreated(snapshot: String, height: Long)
 case class SnapshotVerification(id: Id, status: VerificationStatus, recentSnapshot: List[RecentSnapshot])
 
 object VerificationStatus extends Enumeration {

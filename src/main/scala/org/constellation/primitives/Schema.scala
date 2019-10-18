@@ -54,7 +54,9 @@ object Schema {
 
     val validForConsensusParticipation: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    def canActAsDownloadSource(current: NodeState): Boolean = Set(Ready, SnapshotCreation, Leaving).contains(current)
+    val validForLettingOthersDownload: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
+
+    def canActAsDownloadSource(current: NodeState): Boolean = validForLettingOthersDownload.contains(current)
 
     def canRunClusterCheck(current: NodeState): Boolean = validForRedownload.contains(current)
 

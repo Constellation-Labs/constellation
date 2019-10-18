@@ -1,7 +1,8 @@
 package org.constellation.util
 import java.net.SocketException
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
+import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
 import org.constellation.p2p.{Cluster, DownloadProcess, SetStateResult}
@@ -13,6 +14,8 @@ import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, Processi
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
+
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class HealthCheckerTest
     extends FunSpecLike
