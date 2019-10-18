@@ -43,7 +43,7 @@ object KeyUtils extends StrictLogging {
   private val ECDSA = "ECDsA"
   private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
   private val secp256k = "secp256k1"
-  private val DefaultSignFunc = "SHA512withECDSA"
+  val DefaultSignFunc = "SHA512withECDSA"
   private val PublicKeyHexPrefix: String = "3056301006072a8648ce3d020106052b8104000a03420004"
   private val PublicKeyHexPrefixLength: Int = PublicKeyHexPrefix.length
   private val PrivateKeyHexPrefix: String =
