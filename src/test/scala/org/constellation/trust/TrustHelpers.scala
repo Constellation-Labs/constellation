@@ -1,5 +1,9 @@
 package org.constellation.trust
 
+import java.io.FileOutputStream
+
+import better.files.File
+
 import scala.annotation.tailrec
 import scala.util.Random
 
@@ -57,5 +61,16 @@ object TrustHelpers {
     val selfAvoidingWalks: Map[Int, TrustNode] = nodesWithEdges.map(tn => (tn.id, tn)).toMap
     val nodeViews: Iterable[(Int, Map[String, Double])] = selfAvoidingWalks.values.map(getNodeView(_, selfAvoidingWalks, nodeProposals))
     nodeViews.map { case (id, scoredHashes) => (id, scoredHashes.maxBy(_._2)) }
+  }
+
+  def saveOutput(output: Array[Double], fileName: String = "raw_output") = {
+    val dagDir = System.getProperty("user.home") +s"/constellation/${fileName}"
+    val outputFile = File(dagDir + "/decrypted").toJava
+      if (!outputFile.exists()) {
+        outputFile.createNewFile()
+      }
+      val outStream = new FileOutputStream(outputFile)
+      outStream.write(output.mkString("\n"))
+    outStream.close()
   }
 }

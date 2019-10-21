@@ -246,14 +246,14 @@ class TrustTest extends FlatSpec {
 
   "plot" should "plot" in {
 
-    val dv = DenseVector(10.5, 9.1, 4.4, 2.6)
-    val f = Figure()
-    val p = f.subplot(0)
-    val x = linspace(0.0, 30.0, 4)//length = dv.length
-    p += plot(x, dv)
-    p.xlabel = "Seed nodes (out of 100)"
-    p.ylabel = "Unique proposal count avg"
-    f.saveas("subplots.png")
+//    val dv = DenseVector(10.5, 9.1, 4.4, 2.6)
+//    val f = Figure()
+//    val p = f.subplot(0)
+//    val x = linspace(0.0, 30.0, 4)//length = dv.length
+//    p += plot(x, dv)
+//    p.xlabel = "Seed nodes (out of 100)"
+//    p.ylabel = "Unique proposal count avg"
+//    f.saveas("subplots.png")
     assert(true)
   }
 
