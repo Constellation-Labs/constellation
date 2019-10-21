@@ -481,9 +481,9 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           else Sync[F].unit
       )
       .flatTap {
-        case SetStateResult(_, false)                                      => Sync[F].unit
-        case SetStateResult(_, true) if skipBroadcast                      => Sync[F].unit
-        case SetStateResult(_, true) if broadcastStates.contains(newState) => broadcastNodeState(newState)
+        case SetStateResult(_, true) if !skipBroadcast && broadcastStates.contains(newState) =>
+          broadcastNodeState(newState)
+        case _ => Sync[F].unit
       }
 
   def getNodeState: F[NodeState] = nodeState.get

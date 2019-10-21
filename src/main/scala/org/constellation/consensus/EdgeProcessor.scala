@@ -241,12 +241,14 @@ import java.nio.file.{Files, Paths}
 
 object Snapshot extends StrictLogging {
 
-  def writeSnapshot[F[_]: Concurrent](storedSnapshot: StoredSnapshot)(implicit dao: DAO, C: ContextShift[F]): F[Path] =
+  def writeSnapshot[F[_]: Concurrent](
+    storedSnapshot: StoredSnapshot
+  )(implicit dao: DAO, C: ContextShift[F]): F[Either[Throwable, Path]] =
     for {
       serialized <- Sync[F].delay { KryoSerializer.serializeAnyRef(storedSnapshot) }
       write <- C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized))
       _ <- Sync[F].delay {
-        logger.debug(s"[${dao.id.short}] written snapshot at path ${write.toAbsolutePath.toString}")
+        logger.debug(s"[${dao.id.short}] written snapshot at path ${write.map(_.toAbsolutePath).toString}")
       }
     } yield write
 
@@ -257,15 +259,15 @@ object Snapshot extends StrictLogging {
   )(
     implicit dao: DAO,
     C: ContextShift[F]
-  ): F[Path] =
+  ): F[Either[Throwable, Path]] =
     trialNumber match {
-      case x if x >= 3 => Sync[F].raiseError[Path](new IOException(s"Unable to write snapshot"))
+      case x if x >= 3 => Sync[F].pure(Left(new IOException(s"Unable to write snapshot")))
       case _ if isOverDiskCapacity(serialized.length) =>
         removeOldSnapshots() >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
       case _ =>
         withMetric(
           Sync[F].delay {
-            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+            Try(Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)).toEither
           },
           "writeSnapshot"
         )
