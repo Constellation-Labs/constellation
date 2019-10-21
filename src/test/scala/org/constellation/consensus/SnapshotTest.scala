@@ -15,10 +15,11 @@ import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
 class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
 
-  implicit val dao: DAO = new DAO
+  implicit val dao: DAO = TestHelpers.prepareRealDao(
+    nodeConfig =
+      NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
+  )
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  dao.initialize(NodeConfig(primaryKeyPair = Fixtures.tempKey5))
-  dao.metrics = new Metrics(200)
 
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =

@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
-import cats.effect.{Concurrent, ContextShift, Sync, Timer}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
@@ -11,7 +11,7 @@ import org.constellation.domain.schema.Id
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
-
+case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
   client: APIClient,
@@ -55,7 +55,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
   implicit val shadedDao: DAO = dao
 
-  def isNodeReady: F[Boolean] = nodeState.get.map(_ == NodeState.Ready)
+  dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
 
   def getPeerInfo: F[Map[Id, PeerData]] = peers.get
 
@@ -443,14 +443,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
         _ <- broadcastLeaveRequest()
-        _ <- setNodeState(NodeState.Leaving)
-        _ <- broadcastNodeState()
+        _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
-        // TODO: use wkoszycki changes for waiting for last n snapshots
+        // TODO: make interval check to wait for last n snapshots, set Offline state only in Leaving see #641 for details
         _ <- Timer[F].sleep(dao.processingConfig.leavingStandbyTimeout.seconds)
 
-        _ <- setNodeState(NodeState.Offline)
-        _ <- broadcastNodeState()
+        _ <- compareAndSet(NodeState.all, NodeState.Offline)
 
         ips <- ipManager.listKnownIPs
         _ <- ips.toList.traverse(ipManager.removeKnownIP)
@@ -463,17 +461,30 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_leave"
     )
 
-  def broadcastNodeState(): F[Unit] =
+  private def broadcastNodeState(nodeState: NodeState): F[Unit] =
     logThread(
-      getNodeState.flatMap { nodeState =>
-        broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C))
-      }.flatTap {
+      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => Logger[F].warn(s"Unable to propagate status to node ID: $id")
         }
       }.void,
       "cluster_broadcastNodeState"
     )
+
+  def compareAndSet(expected: Set[NodeState], newState: NodeState, skipBroadcast: Boolean = false): F[SetStateResult] =
+    nodeState.modify { current =>
+      if (expected.contains(current)) (newState, SetStateResult(current, isNewSet = true))
+      else (current, SetStateResult(current, isNewSet = false))
+    }.flatTap(
+        res =>
+          if (res.isNewSet) LiftIO[F].liftIO(dao.metrics.updateMetricAsync[IO]("nodeState", newState.toString))
+          else Sync[F].unit
+      )
+      .flatTap {
+        case SetStateResult(_, false)                                      => Sync[F].unit
+        case SetStateResult(_, true) if skipBroadcast                      => Sync[F].unit
+        case SetStateResult(_, true) if broadcastStates.contains(newState) => broadcastNodeState(newState)
+      }
 
   def getNodeState: F[NodeState] = nodeState.get
 
@@ -506,11 +517,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     def peerUnregister(c: APIClient) = PeerUnregister(c.hostName, c.apiPort, c.id)
     broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
   }
-
-  def setNodeState(state: NodeState): F[Unit] =
-    nodeState.modify(oldState => (state, oldState)).flatMap { oldState =>
-      Logger[F].debug(s"Changing node state from $oldState to $state")
-    } >> dao.metrics.updateMetricAsync[F]("nodeState", state.toString)
 
   private def validWithLoopbackGuard(host: String): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer

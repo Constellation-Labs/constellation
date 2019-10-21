@@ -102,7 +102,7 @@ class CheckpointServiceTest
   }
 
   "with real dao" - {
-    dao = prepareRealDao()
+    dao = TestHelpers.prepareRealDao(readyFacilitators)
 
     "should accept cb resolving parents soeHashes and cb baseHashes recursively" in {
       val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
@@ -303,36 +303,12 @@ class CheckpointServiceTest
     val ipManager = IPManager[IO]()
     val cluster = Cluster[IO](() => metrics, ipManager, dao)
     dao.cluster shouldReturn cluster
-    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
 
     dao.miscLogger shouldReturn Logger("miscLogger")
 
     dao.readyPeers shouldReturn IO.pure(readyFacilitators)
 
-    dao
-  }
-
-  private def prepareRealDao(): DAO = {
-    val dao: DAO = new DAO {
-      override def readyPeers: IO[
-        Map[Id, PeerData]
-      ] = IO.pure(readyFacilitators)
-
-      override def peerInfo: IO[
-        Map[Id, PeerData]
-      ] = IO.pure(readyFacilitators)
-    }
-    dao.initialize()
-    dao.metrics = new Metrics()(dao)
-
-    implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
-    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
-    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
-
-    dao.ipManager = IPManager[IO]()
-
-    dao.cluster = Cluster[IO](() => dao.metrics, dao.ipManager, dao)
-    dao.cluster.setNodeState(NodeState.Ready).unsafeRunSync
     dao
   }
 

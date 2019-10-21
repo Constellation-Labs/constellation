@@ -7,17 +7,14 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.util.Metrics
-
-import scala.util.Try
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
@@ -26,7 +23,6 @@ class SnapshotService[F[_]: Concurrent](
   messageService: MessageService[F],
   transactionService: TransactionService[F],
   rateLimiting: RateLimiting[F],
-  broadcastService: SnapshotBroadcastService[F],
   consensusManager: ConsensusManager[F],
   dao: DAO
 )(implicit C: ContextShift[F])
@@ -110,6 +106,7 @@ class SnapshotService[F[_]: Concurrent](
         "acceptedCBCacheMatchesAcceptedSize",
         (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
       )
+      _ <- updateMetricsAfterSnapshot()
     } yield ()
 
   def syncBufferAccept(cb: CheckpointCache): F[Unit] =
@@ -119,10 +116,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", buffer.size.toString)
     } yield ()
 
-  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, Unit] =
+  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- validateMaxAcceptedCBHashesInMemory()
-      _ <- validateNodeState(NodeState.Ready)
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
@@ -154,13 +150,10 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
-      _ <- EitherT.liftF(
-        broadcastService.broadcastSnapshot(
-          nextSnapshot.lastSnapshot,
-          nextHeightInterval - snapshotHeightInterval
-        )
+      created <- EitherT.liftF(
+        Sync[F].pure(SnapshotCreated(nextSnapshot.lastSnapshot, nextHeightInterval - snapshotHeightInterval))
       )
-    } yield ()
+    } yield created
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
     acceptedCBSinceSnapshot.get.flatMap { accepted =>
@@ -195,18 +188,6 @@ class SnapshotService[F[_]: Concurrent](
       } else Sync[F].unit
 
       tap.map(_ => e)
-    }
-  }
-
-  private def validateNodeState(
-    requiredState: NodeState
-  )(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, Unit] = EitherT {
-    cluster.getNodeState.map { state =>
-      if (state == requiredState) {
-        Right(())
-      } else {
-        Left(NodeNotReadyForSnapshots)
-      }
     }
   }
 
@@ -352,10 +333,7 @@ class SnapshotService[F[_]: Concurrent](
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s.checkpointBlocks.toList)
       _ <- cbs.traverse(applySnapshotMessages(s, _))
-
       _ <- applySnapshotTransactions(s, cbs)
-
-      _ <- checkpointService.applySnapshot(cbs.map(_.baseHash))
     } yield ()
 
   private def getCheckpointBlocksFromSnapshot(blocks: List[String]): F[List[CheckpointBlockMetadata]] =
@@ -426,7 +404,6 @@ object SnapshotService {
     messageService: MessageService[F],
     transactionService: TransactionService[F],
     rateLimiting: RateLimiting[F],
-    broadcastService: SnapshotBroadcastService[F],
     consensusManager: ConsensusManager[F],
     dao: DAO
   )(implicit C: ContextShift[F]) =
@@ -437,7 +414,6 @@ object SnapshotService {
       messageService,
       transactionService,
       rateLimiting,
-      broadcastService,
       consensusManager,
       dao
     )
@@ -450,3 +426,5 @@ object NodeNotReadyForSnapshots extends SnapshotError
 object NoAcceptedCBsSinceSnapshot extends SnapshotError
 object HeightIntervalConditionNotMet extends SnapshotError
 object NoBlocksWithinHeightInterval extends SnapshotError
+
+case class SnapshotCreated(hash: String, height: Long)

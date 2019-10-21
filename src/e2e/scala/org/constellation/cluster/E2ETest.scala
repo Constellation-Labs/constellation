@@ -171,7 +171,7 @@ class E2ETest extends E2E {
     val snaps = storedSnapshots.toSet.map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
       x.map {
         _.checkpointCache.flatMap {
-          _.checkpointBlock.map(_.baseHash) // TODO: wkoszycki explain the reason behind CheckpointblockCache data distinct doesn't work
+          _.checkpointBlock.map(_.baseHash) // TODO: wkoszycki explain the reason behind CheckpointCache data distinct doesn't work, related to #640
         }
       }.toSet
     }

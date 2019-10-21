@@ -5,6 +5,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
+import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.PeriodicIO
 import org.constellation.util.Logging._
 
@@ -17,11 +18,11 @@ class TransactionGeneratorTrigger(periodSeconds: Int = 10)(implicit dao: DAO)
 
   override def trigger(): IO[Unit] =
     logThread(
-      nodeIsReady.flatMap(isReady => if (isReady) dao.transactionGenerator.generate().value.void else IO.unit),
+      dao.cluster.getNodeState
+        .map(NodeState.canGenerateTransactions)
+        .ifM(dao.transactionGenerator.generate().value.void, IO.unit),
       "transactionGenerator_trigger"
     )
-
-  private def nodeIsReady: IO[Boolean] = dao.cluster.isNodeReady
 
   schedule(periodSeconds seconds)
 }

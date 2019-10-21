@@ -5,10 +5,11 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.consensus.{ConsensusManager, Snapshot}
-import org.constellation.p2p.{DownloadProcess, PeerData}
+import org.constellation.p2p.{Cluster, DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.domain.schema.Id
+import org.constellation.p2p.Download.logger
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.maxOrZero
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -71,6 +72,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
   consensusManager: ConsensusManager[F],
   calculationContext: ContextShift[F],
   downloader: DownloadProcess[F],
+  cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser[F]
 )(implicit C: ContextShift[F])
     extends StrictLogging {
@@ -176,7 +178,6 @@ class HealthChecker[F[_]: Concurrent: Logger](
     val reDownload = for {
       _ <- Logger[F].info(s"[${dao.id.short}] Starting re-download process ${diff.snapshotsToDownload.size}")
 
-      _ <- downloader.setNodeState(NodeState.DownloadInProgress)
       _ <- Logger[F].debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
 
       _ <- LiftIO[F].liftIO(dao.terminateConsensuses())
@@ -196,15 +197,32 @@ class HealthChecker[F[_]: Concurrent: Logger](
       _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
     } yield ()
 
-    reDownload.recoverWith {
-      case err =>
-        for {
-          _ <- downloader.setNodeState(NodeState.Ready)
-          _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
-          _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
-          _ <- Sync[F].raiseError[Unit](err)
-        } yield ()
-    }
+    val wrappedDownload =
+      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { stateSetResult =>
+        if (stateSetResult.isNewSet) {
+          val recover = reDownload.handleErrorWith { err =>
+            for {
+              _ <- Logger[F].error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
+              recoverSet <- cluster.compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+              _ <- Logger[F]
+                .info(s"[${dao.id.short}] trying set state back to: ${stateSetResult.oldState} result: ${recoverSet}")
+              _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
+              _ <- Sync[F].raiseError[Unit](err)
+            } yield ()
+          }
+
+          recover.flatMap(
+            _ =>
+              cluster
+                .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
+                .void
+          )
+        } else {
+          Logger[F].warn(s"Download process can't start due to invalid node state: ${stateSetResult.oldState}")
+        }
+      }
+
+    wrappedDownload
   }
 
   private def collectSnapshot(peers: Map[Id, PeerData]): F[List[(Id, List[RecentSnapshot])]] =

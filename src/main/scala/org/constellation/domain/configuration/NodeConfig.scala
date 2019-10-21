@@ -11,7 +11,6 @@ case class NodeConfig(
   primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
   isGenesisNode: Boolean = false,
   isLightNode: Boolean = false,
-  metricIntervalSeconds: Int = 60,
   hostName: String = "127.0.0.1",
   httpInterface: String = "0.0.0.0",
   httpPort: Int = 9000,
