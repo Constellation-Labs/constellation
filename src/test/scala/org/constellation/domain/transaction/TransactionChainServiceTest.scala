@@ -41,20 +41,11 @@ class TransactionChainServiceTest
   }
 
   "setLastTransaction" - {
-    "should return new transaction ref" in {
-      val tx = createTransaction("unknown", "bb")
-      val ref = (tx >>= service.setLastTransaction).unsafeRunSync
+    "should return new transaction" in {
+      val tx = createTransaction("unknown", "bb").unsafeRunSync
+      val createdTx = service.setLastTransaction(tx.edge, false).unsafeRunSync
 
-      service.getLastTransactionRef("unknown").unsafeRunSync shouldBe LastTransactionRef(ref.hash, ref.ordinal)
-    }
-
-    "should raise an error if transaction to be has wrong ordinal number" in {
-      val tx = createTransaction("unknown", "bb")
-      val wrongTx = tx.map(t => t.copy(lastTxRef = LastTransactionRef(t.lastTxRef.hash, t.lastTxRef.ordinal + 1)))
-
-      assertThrows[RuntimeException] {
-        (wrongTx >>= service.setLastTransaction).unsafeRunSync
-      }
+      createdTx shouldBe tx
     }
   }
 
@@ -73,7 +64,7 @@ class TransactionChainServiceTest
 
     for {
       last <- service.getLastTransactionRef(src)
-      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal + 1))
+      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal))
     } yield tx
   }
 
