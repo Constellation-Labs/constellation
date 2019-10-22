@@ -121,15 +121,15 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         .pull(10)
         .map(_.get.map(t => (t.transaction.src.address, t.transaction.lastTxRef.ordinal)))
         .unsafeRunSync shouldBe List(
+        ("c", 0),
         ("c", 1),
-        ("c", 2),
+        ("a", 0),
         ("a", 1),
         ("a", 2),
         ("a", 3),
-        ("a", 4),
+        ("b", 0),
         ("b", 1),
-        ("b", 2),
-        ("b", 3)
+        ("b", 2)
       )
     }
   }
@@ -149,13 +149,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
     val soe = signedObservationEdge(oe)(Fixtures.tempKey)
 
-    val transaction = for {
-      last <- txChainService.getLastTransactionRef(src)
-      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal + 1))
-      _ <- txChainService.setLastTransaction(tx)
-    } yield tx
-
-    transaction.map(TransactionCacheData(_)).unsafeRunSync
+    txChainService.setLastTransaction(Edge(oe, soe, txData), false).map(TransactionCacheData(_)).unsafeRunSync
   }
 
 }

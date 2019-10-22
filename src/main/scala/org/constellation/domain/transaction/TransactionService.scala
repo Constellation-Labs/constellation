@@ -97,11 +97,7 @@ object TransactionService {
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    for {
-      last <- transactionChainService.getLastTransactionRef(src)
-      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal + 1), dummy)
-      _ <- transactionChainService.setLastTransaction(tx)
-    } yield tx
+    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
   }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
