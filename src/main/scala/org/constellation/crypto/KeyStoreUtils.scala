@@ -83,7 +83,7 @@ object KeyStoreUtils {
     alias: String,
     storePassword: Array[Char],
     keyPassword: Array[Char]
-  ): F[KeyStore] =
+  ): F[Either[Throwable, KeyStore]] =
     writer(path)
       .use(
         stream =>
@@ -95,6 +95,7 @@ object KeyStoreUtils {
             _ <- store(stream, storePassword)(keyStore)
           } yield keyStore
       )
+      .attempt
 
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
