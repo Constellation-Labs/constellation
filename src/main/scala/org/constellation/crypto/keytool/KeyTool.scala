@@ -30,9 +30,9 @@ object KeyTool {
       OParser.sequence(
         programName("cl-keytool"),
         head("cl-keytool", BuildInfo.version),
-        opt[String]("path")
+        opt[String]("path").required
           .action((x, c) => c.copy(path = x)),
-        opt[String]("alias")
+        opt[String]("alias").required
           .action((x, c) => c.copy(alias = x))
       )
     }
