@@ -7,15 +7,25 @@
         </encoder>
     </appender>
 
+    <appender name="json" class="ch.qos.logback.core.FileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>DEBUG</level>
+        </filter>
+        <file>logs/json_logs/dag.log</file>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeCallerData>true</includeCallerData>
+        </encoder>
+    </appender>
+
     <logger level="debug" name="akka.monitor.instrumentation" />
     <logger level="debug" name="io.kontainers.micrometer" />
 
-    <logger level="debug" name="APIClient" additivity="false">
-        <appender-ref ref="apiclient"/>
+    <logger name="org.constellation" level="info">
+        <appender-ref ref="console" />
     </logger>
 
     <logger name="org.constellation" level="info">
-        <appender-ref ref="console" />
+        <appender-ref ref="json" />
     </logger>
 
 </configuration>
