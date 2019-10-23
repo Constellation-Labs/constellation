@@ -11,14 +11,13 @@ object KeyTool {
     for {
       cliParams <- loadCliParams[IO](args)
       envParams <- loadEnvParams[IO]
-      keyStore <- EitherT(
-        KeyStoreUtils.keyPairToStorePath[IO](
-          path = cliParams.path,
-          alias = cliParams.alias,
-          storePassword = envParams.storepass,
-          keyPassword = envParams.keypass
-        )
+      keyStore <- KeyStoreUtils.keyPairToStorePath[IO](
+        path = cliParams.path,
+        alias = cliParams.alias,
+        storePassword = envParams.storepass,
+        keyPassword = envParams.keypass
       )
+
     } yield keyStore
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 

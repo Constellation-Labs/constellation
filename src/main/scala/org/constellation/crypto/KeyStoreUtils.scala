@@ -4,6 +4,7 @@ import java.io.{File, FileInputStream, FileOutputStream}
 import java.security.cert.Certificate
 import java.security.{KeyPair, KeyStore, PrivateKey}
 
+import cats.data.EitherT
 import cats.effect._
 import cats.implicits._
 import org.constellation.crypto.cert.{DistinguishedName, SelfSignedCertificate}
@@ -83,7 +84,7 @@ object KeyStoreUtils {
     alias: String,
     storePassword: Array[Char],
     keyPassword: Array[Char]
-  ): F[Either[Throwable, KeyStore]] =
+  ): EitherT[F, Throwable, KeyStore] = EitherT {
     writer(path)
       .use(
         stream =>
@@ -96,6 +97,7 @@ object KeyStoreUtils {
           } yield keyStore
       )
       .attempt
+  }
 
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
