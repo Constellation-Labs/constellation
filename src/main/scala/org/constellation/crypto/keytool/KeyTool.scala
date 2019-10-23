@@ -1,7 +1,7 @@
 package org.constellation.crypto.keytool
 
 import cats.data.EitherT
-import cats.effect.{ExitCode, IO}
+import cats.effect.{ExitCode, IO, Sync}
 import org.constellation.BuildInfo
 import org.constellation.crypto.KeyStoreUtils
 
@@ -9,8 +9,8 @@ object KeyTool {
 
   def run(args: List[String]): IO[ExitCode] = {
     for {
-      cliParams <- loadCliParams(args)
-      envParams <- loadEnvParams
+      cliParams <- loadCliParams[IO](args)
+      envParams <- loadEnvParams[IO]
       keyStore <- EitherT(
         KeyStoreUtils.keyPairToStorePath[IO](
           path = cliParams.path,
@@ -22,7 +22,7 @@ object KeyTool {
     } yield keyStore
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  def loadCliParams(args: Seq[String]): EitherT[IO, Throwable, CliConfig] = {
+  def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
     import scopt.OParser
     val builder = OParser.builder[CliConfig]
 
@@ -37,13 +37,13 @@ object KeyTool {
           .action((x, c) => c.copy(alias = x))
       )
     }
-    EitherT.fromEither[IO] {
+    EitherT.fromEither[F] {
       OParser.parse(cliParser, args, CliConfig()).toRight(new RuntimeException("CLI params are missing"))
     }
   }
 
-  def loadEnvParams: EitherT[IO, Throwable, EnvConfig] =
-    EitherT.fromEither[IO] {
+  def loadEnvParams[F[_]: Sync]: EitherT[F, Throwable, EnvConfig] =
+    EitherT.fromEither[F] {
       for {
         storepass <- sys.env.get("CL_STOREPASS").toRight(new RuntimeException("CL_STOREPASS is missing in environment"))
         keypass <- sys.env.get("CL_KEYPASS").toRight(new RuntimeException("CL_KEYPASS is missing in environment"))
