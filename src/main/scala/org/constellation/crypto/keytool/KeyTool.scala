@@ -1,11 +1,11 @@
 package org.constellation.crypto.keytool
 
 import cats.data.EitherT
-import cats.effect.{ExitCode, IO, Sync}
+import cats.effect.{ExitCode, IO, IOApp, Sync}
 import org.constellation.BuildInfo
 import org.constellation.crypto.KeyStoreUtils
 
-object KeyTool {
+object KeyTool extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] = {
     for {
