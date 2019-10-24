@@ -1,10 +1,12 @@
 package org.constellation.trust
+import better.files.File
 import org.constellation.trust.SelfAvoidingWalk.runWalk
 import org.scalatest.FlatSpec
 import breeze.stats.distributions._
 
 import scala.annotation.tailrec
 import scala.collection.immutable
+import scala.io.Source
 //import breeze.linalg._
 import breeze.plot._
 import breeze.linalg._
@@ -230,6 +232,7 @@ class TrustTest extends FlatSpec {
 
 
   "Convergence test" should "run and plot convergence" in {
+    val seedRatios = -1 //todo iterate across
     val testObj = TrustHelpers
     val numTestRounds = 10
     val finalViews: Seq[Iterable[(Int, (String, Double))]] = (0 until numTestRounds).toList.map(i => testObj.generateRun)
@@ -242,8 +245,8 @@ class TrustTest extends FlatSpec {
       .map{ case (s, ss) => s + "|" + ss.size.toString}
       res
     }
-    snapshotVoteRounds.zipWithIndex.foreach { case (votes, roundNum) =>
-      TrustHelpers.saveOutput(votes, roundNum)
+    snapshotVoteRounds.zipWithIndex.foreach { case (votes, voteNum) =>
+      TrustHelpers.saveOutput(votes, voteNum)
 
     }
     println("hashes: " + testObj.hashes.distinct.length.toString)
@@ -252,7 +255,15 @@ class TrustTest extends FlatSpec {
 
   "plot" should "plot" in {
 
-//    val dv = DenseVector(10.5, 9.1, 4.4, 2.6)
+    def testRunFiles(fileName: String, testRunNum: Int) =
+      Source.fromFile(System.getProperty("user.home") + s"/constellation_test-data/${fileName + testRunNum.toString}")
+    val lines = testRunFiles("raw_output", 0)
+    for (line <- lines.getLines) {
+      println(line)
+      val Array(snapshotHash, numVotes) = line.split('|').map(_.trim)
+      println(s"$snapshotHash $numVotes")
+    }
+//    val dv = DenseVector(10.5, 9.1, 4.4, 2.6)//todo fill by step in seedRatios
 //    val f = Figure()
 //    val p = f.subplot(0)
 //    val x = linspace(0.0, 30.0, 4)//length = dv.length
