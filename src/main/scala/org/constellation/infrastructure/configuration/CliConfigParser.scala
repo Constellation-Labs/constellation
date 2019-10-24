@@ -45,13 +45,11 @@ object CliConfigParser {
         .action((x, c) => c.copy(testMode = true))
         .text("Run with test settings"),
       opt[String]('k', "keystore")
-        .action((x, c) => c.copy(keyStorePath = x)),
-      opt[String]("storepass")
-        .action((x, c) => c.copy(storePassword = x)),
-      opt[String]("keypass")
-        .action((x, c) => c.copy(keyPassword = x)),
+        .action((x, c) => c.copy(keyStorePath = x))
+        .text("Path to keystore file"),
       opt[String]("alias")
-        .action((x, c) => c.copy(alias = x)),
+        .action((x, c) => c.copy(alias = x))
+        .text("Alias for keypair in provided keystore file"),
       help("help").text("prints this usage text"),
       version("version").text(s"Constellation v${BuildInfo.version}"),
       checkConfig(
@@ -62,8 +60,8 @@ object CliConfigParser {
               "ip and port must either both be set, or neither."
             )
             _ <- checkConfigOption(
-              c.keyStorePath != null && (c.storePassword == null || c.keyPassword == null || c.alias == null),
-              "you must provide storepass, keypass and alias when using keystore"
+              c.keyStorePath != null && c.alias == null,
+              "you must provide --alias when using keystore"
             )
           } yield ()
       )
