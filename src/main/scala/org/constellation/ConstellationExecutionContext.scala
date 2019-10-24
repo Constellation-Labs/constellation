@@ -11,6 +11,9 @@ import java.util.concurrent.{
   TimeUnit
 }
 
+import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.concurrent.Semaphore
+
 import scala.concurrent.ExecutionContext
 
 sealed class DefaultThreadFactory(prefix: String) extends ThreadFactory {
@@ -66,4 +69,10 @@ object ConstellationExecutionContext {
       new DefaultThreadFactory("callbacks")
     )
   )
+
+  def createSemaphore[F[_]: Concurrent](permits: Long = 1): Semaphore[F] = {
+    implicit val cs: ContextShift[IO] = IO.contextShift(bounded)
+    Semaphore.in[IO, F](permits).unsafeRunSync()
+  }
+
 }

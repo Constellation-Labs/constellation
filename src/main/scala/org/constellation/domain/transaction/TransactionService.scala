@@ -22,6 +22,8 @@ import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCache
 class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
 
+  override def metricRecordPrefix: Option[String] = "Transaction".some
+
   protected[domain] val pending = new PendingTransactionsMemPool[F](Semaphore.in[IO, F](1).unsafeRunSync())
 
   override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =

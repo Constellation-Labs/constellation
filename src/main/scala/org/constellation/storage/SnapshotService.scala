@@ -53,7 +53,7 @@ class SnapshotService[F[_]: Concurrent](
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
       hashes = dao.snapshotHashes
-      addressCacheData <- addressService.toMap()
+      addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
       snapshotCache <- s.checkpointBlocks.toList
         .map(checkpointService.fullData)
@@ -87,7 +87,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
-      _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.put(k, v) }.toList.sequence
+      _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
           checkpointService.put(h) >>

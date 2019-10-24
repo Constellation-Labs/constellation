@@ -11,7 +11,7 @@ import scala.math.ceil
 
 class RateLimiting[F[_]: Concurrent: Logger]() {
   private[storage] val counter: SingleRef[F, Map[Schema.Address, Int]] = SingleRef[F, Map[Schema.Address, Int]](Map())
-  private[storage] val blacklisted: StorageService[F, Int] = new StorageService()
+  private[storage] val blacklisted: StorageService[F, Int] = new StorageService("rate_limiting_blacklist".some)
 
   def update(txs: List[Transaction]): F[Unit] =
     for {

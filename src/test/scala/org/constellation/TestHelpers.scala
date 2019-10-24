@@ -6,6 +6,7 @@ import better.files.File
 import cats.effect.IO
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.crypto.KeyUtils
@@ -13,9 +14,9 @@ import org.constellation.crypto.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.schema.Id
-import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.ConcurrentTipService
+import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
@@ -122,6 +123,69 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     val cluster = mock[Cluster[IO]]
     cluster.getNodeState shouldReturnF NodeState.Ready
     dao.cluster shouldReturn cluster
+
+    dao.miscLogger shouldReturn Logger("miscLogger")
+
+    dao.readyPeers shouldReturn IO.pure(facilitators)
+
+    dao
+  }
+
+  private def prepareMockedDao(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO = {
+    import constellation._
+
+    implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
+    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
+    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+
+    val dao: DAO = mock[DAO]
+    val kp: KeyPair = makeKeyPair()
+    dao.nodeConfig shouldReturn NodeConfig()
+    dao.keyPair shouldReturn kp
+
+    val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
+    f.createDirectoryIfNotExists()
+    dao.dbPath shouldReturn f
+
+    dao.id shouldReturn Fixtures.id
+
+    val ss = new SOEService[IO]()
+    dao.soeService shouldReturn ss
+
+    val ns = new NotificationService[IO]()
+    dao.notificationService shouldReturn ns
+
+    val ms = {
+      implicit val shadedDao = dao
+      new MessageService[IO]()
+    }
+    dao.messageService shouldReturn ms
+
+    val txChain = TransactionChainService[IO]
+    val ts = new TransactionService[IO](txChain, dao)
+    dao.transactionService shouldReturn ts
+
+    val cts = mock[ConcurrentTipService[IO]]
+
+    val os = new ObservationService[IO](dao)
+    dao.observationService shouldReturn os
+
+    val rl = mock[RateLimiting[IO]]
+    dao.checkpointService shouldReturn mock[CheckpointService[IO]]
+
+    val keyPair = KeyUtils.makeKeyPair()
+    dao.keyPair shouldReturn keyPair
+
+    dao.cluster shouldReturn mock[Cluster[IO]]
+    dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
+
+    val metrics = new Metrics(1)(dao)
+    dao.metrics shouldReturn metrics
+
+    val ipManager = IPManager[IO]()
+    val cluster = Cluster[IO](() => metrics, ipManager, dao)
+    dao.cluster shouldReturn cluster
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
 
     dao.miscLogger shouldReturn Logger("miscLogger")
 

@@ -85,6 +85,7 @@ class ConsensusRoute(
             case Failure(err: SnapshotHeightAboveTip) =>
               complete(StatusCodes.custom(400, err.getMessage))
             case Failure(e) =>
+              logger.error(s"Error when participating in new round: ${cmd.roundId} cause: ${e.getMessage}", e)
               complete(StatusCodes.InternalServerError, e.getMessage)
             case Success(res) =>
               (IO.contextShift(ConstellationExecutionContext.bounded).shift >> consensusManager
