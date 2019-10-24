@@ -1,6 +1,6 @@
+import E2E._
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
-import E2E._
 
 enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
@@ -84,11 +84,24 @@ lazy val coreSettings = Seq(
   resolvers += "jitpack".at("https://jitpack.io")
 )
 
+lazy val sharedDependencies = Seq(
+  ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
+  "com.github.scopt" %% "scopt" % "4.0.0-RC2",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  "com.google.cloud" % "google-cloud-storage" % "1.91.0",
+  "com.madgag.spongycastle" % "core" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.63",
+  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
+  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc()
+)
+
 lazy val coreDependencies = Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
-  ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
@@ -100,17 +113,9 @@ lazy val coreDependencies = Seq(
   "org.json4s" %% "json4s-ext" % versions.json4s,
   "org.json4s" %% "json4s-jackson" % versions.json4s,
   "org.json4s" %% "json4s-ast" % versions.json4s,
-  "com.madgag.spongycastle" % "core" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.63",
   "com.twitter" %% "chill" % "0.9.3",
   "com.twitter" %% "algebird-core" % "0.13.5",
-  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
   //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
-  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
   //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
@@ -124,14 +129,12 @@ lazy val coreDependencies = Seq(
   "com.github.java-json-tools" % "json-schema-validator" % "2.2.11",
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
   "com.github.djelenc" % "alpha-testbed" % "1.0.3",
-  "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   ("com.github.blemale" %% "scaffeine" % "3.1.0").withSources().withJavadoc(),
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199",
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
-  "com.google.cloud" % "google-cloud-storage" % "1.91.0",
   "com.amazonaws" % "aws-java-sdk" % "1.11.648"
-) ++ sttpDependencies
+) ++ sttpDependencies ++ sharedDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
@@ -171,7 +174,7 @@ lazy val protobuf = (project in file("proto"))
   )
 
 lazy val root = (project in file("."))
-  .dependsOn(protobuf)
+  .dependsOn(protobuf, keytool)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .configs(E2ETest)
@@ -194,4 +197,17 @@ lazy val root = (project in file("."))
     libraryDependencies ++= (coreDependencies ++ testDependencies),
     mainClass := Some("org.constellation.ConstellationNode")
     // other settings here
+  )
+
+lazy val keytool = (project in file("keytool"))
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    Defaults.itSettings,
+    mainClass := Some("org.constellation.crypto.keytool.KeyTool"),
+    libraryDependencies ++= sharedDependencies
   )

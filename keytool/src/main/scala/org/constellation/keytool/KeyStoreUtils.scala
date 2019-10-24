@@ -1,4 +1,4 @@
-package org.constellation.crypto
+package org.constellation.keytool
 
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.security.cert.Certificate
@@ -7,10 +7,10 @@ import java.security.{KeyPair, KeyStore, PrivateKey}
 import cats.data.EitherT
 import cats.effect._
 import cats.implicits._
-import org.constellation.crypto.cert.{DistinguishedName, SelfSignedCertificate}
+import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
-  val storeType = "JKS"
+  val storeType = "PKCS12"
 
   private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
@@ -119,8 +119,3 @@ object KeyStoreUtils {
         .attemptT
     } yield keyPair
 }
-
-case class EnvPasswords(
-  storepass: Array[Char],
-  keypass: Array[Char]
-)

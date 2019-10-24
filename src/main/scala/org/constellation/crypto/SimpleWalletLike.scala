@@ -3,6 +3,7 @@ package org.constellation.crypto
 import java.security.KeyPair
 
 import constellation._
+import org.constellation.keytool.KeyUtils
 
 trait SimpleWalletLike {
 

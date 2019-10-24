@@ -8,15 +8,9 @@ import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.DAO
-import org.constellation.crypto.KeyUtils
 import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
-import org.constellation.primitives.Schema.{
-  CheckpointCache,
-  EdgeHashType,
-  ObservationEdge,
-  TransactionEdgeData,
-  TypedEdgeHash
-}
+import org.constellation.keytool.KeyUtils
+import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
 
 class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)

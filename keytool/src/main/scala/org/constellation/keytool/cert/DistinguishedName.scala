@@ -1,4 +1,4 @@
-package org.constellation.crypto.cert
+package org.constellation.keytool.cert
 
 case class DistinguishedName(
   commonName: Option[String],

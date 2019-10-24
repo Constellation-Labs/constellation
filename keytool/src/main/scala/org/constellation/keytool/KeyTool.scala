@@ -1,9 +1,9 @@
-package org.constellation.crypto.keytool
+package org.constellation.keytool
 
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import org.constellation.BuildInfo
-import org.constellation.crypto.KeyStoreUtils
+import scopt.OParser
 
 object KeyTool extends IOApp {
 
@@ -20,14 +20,13 @@ object KeyTool extends IOApp {
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
-    import scopt.OParser
     val builder = OParser.builder[CliConfig]
+    import builder._
 
     /**
       * Follows API parts of https://docs.oracle.com/javase/6/docs/technotes/tools/solaris/keytool.html
       */
     val cliParser = {
-      import builder._
       OParser.sequence(
         programName("cl-keytool"),
         head("cl-keytool", BuildInfo.version),
@@ -46,10 +45,3 @@ object KeyTool extends IOApp {
     }
   }
 }
-
-case class CliConfig(
-  keystore: String = null,
-  alias: String = null,
-  storepass: Array[Char] = null,
-  keypass: Array[Char] = null
-)
