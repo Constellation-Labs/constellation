@@ -4,6 +4,7 @@ import org.scalatest.FlatSpec
 import breeze.stats.distributions._
 
 import scala.annotation.tailrec
+import scala.collection.immutable
 //import breeze.linalg._
 import breeze.plot._
 import breeze.linalg._
@@ -232,14 +233,19 @@ class TrustTest extends FlatSpec {
     val testObj = TrustHelpers
     val numTestRounds = 10
     val finalViews: Seq[Iterable[(Int, (String, Double))]] = (0 until numTestRounds).toList.map(i => testObj.generateRun)
-
     val proposalDist = finalViews.map((fv: Iterable[(Int, (String, Double))]) => fv.map(t => t._2._1).groupBy(k => k).map{ case (s, ss) => (s, ss.size)})
     proposalDist.foreach(println)
-    finalViews.map { iter => iter
+    val snapshotVoteRounds = finalViews.map { iter =>
+      val res = iter
       .map( t => t._2._1)
       .groupBy(k => k)
-      .map{ case (s, ss) => (s, ss.size)}
-    }.foreach(println)
+      .map{ case (s, ss) => s + "|" + ss.size.toString}
+      res
+    }
+    snapshotVoteRounds.zipWithIndex.foreach { case (votes, roundNum) =>
+      TrustHelpers.saveOutput(votes, roundNum)
+
+    }
     println("hashes: " + testObj.hashes.distinct.length.toString)
     assert(true)
   }

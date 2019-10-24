@@ -1,6 +1,8 @@
 package org.constellation.trust
 
-import java.io.FileOutputStream
+//import java.io.FileOutputStream
+
+import java.io.{BufferedWriter, FileOutputStream, FileWriter}
 
 import better.files.File
 
@@ -63,14 +65,15 @@ object TrustHelpers {
     nodeViews.map { case (id, scoredHashes) => (id, scoredHashes.maxBy(_._2)) }
   }
 
-  def saveOutput(output: Array[Double], fileName: String = "raw_output") = {
-    val dagDir = System.getProperty("user.home") +s"/constellation/${fileName}"
-    val outputFile = File(dagDir + "/decrypted").toJava
+  def saveOutput(output: Iterable[String], testRun: Int = 0, fileName: String = "raw_output") = {
+    val dagDir = System.getProperty("user.home")
+    val outputFile = File(dagDir + s"/constellation_test-data/${fileName + testRun.toString}").toJava
       if (!outputFile.exists()) {
         outputFile.createNewFile()
       }
-      val outStream = new FileOutputStream(outputFile)
-      outStream.write(output.mkString("\n"))
-    outStream.close()
+      val bw = new BufferedWriter(new FileWriter(outputFile))
+      val data: String = output.mkString("\n")
+    bw.write(data)
+    bw.close()
   }
 }
