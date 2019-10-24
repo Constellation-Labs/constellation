@@ -42,8 +42,9 @@ class ConsensusManager[F[_]: Concurrent](
 
   implicit val shadowDAO: DAO = dao
 
-  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
-  val maxCheckpointFormationThreshold = ConfigUtil.constellation.getInt("consensus.maxCheckpointFormationThreshold")
+  private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  private val maxCheckpointFormationThreshold: Int =
+    ConfigUtil.constellation.getInt("consensus.maxCheckpointFormationThreshold")
 
   val timeout: Long =
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
@@ -52,14 +53,14 @@ class ConsensusManager[F[_]: Concurrent](
     implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
     Semaphore.in[IO, F](1).unsafeRunSync()
   }
-
-  private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
-
   private[consensus] val consensuses: SingleRef[F, Map[RoundId, ConsensusInfo[F]]] = SingleRef(
     Map.empty[RoundId, ConsensusInfo[F]]
   )
   private[consensus] val ownConsensus: SingleRef[F, Option[OwnConsensus[F]]] = SingleRef(None)
-  private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] = new StorageService(Some(2))
+  private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] =
+    new StorageService("ConsensusProposal".some, 2.some)
+
+  private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
 
   def getRound(roundId: RoundId): F[Option[Consensus[F]]] =
     for {

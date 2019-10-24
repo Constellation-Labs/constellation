@@ -121,7 +121,7 @@ object Genesis extends StrictLogging {
     go.genesis.transactions.find(_.dst.address == dao.selfAddressStr).foreach { rtx =>
       val bal = rtx.amount - (go.initialDistribution.transactions.map { _.amount }.sum * 2)
       dao.addressService
-        .put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .putUnsafe(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
         .unsafeRunSync()
     }
 
@@ -129,7 +129,7 @@ object Genesis extends StrictLogging {
     go.initialDistribution.transactions.foreach { t =>
       val bal = t.amount * 2
       dao.addressService
-        .put(t.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .putUnsafe(t.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
         .unsafeRunSync()
     }
 
@@ -137,7 +137,7 @@ object Genesis extends StrictLogging {
     go.genesis.transactions.filter(_.dst.address != dao.selfAddressStr).foreach { rtx =>
       val bal = rtx.amount
       dao.addressService
-        .put(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .putUnsafe(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
         .unsafeRunSync()
     }
 

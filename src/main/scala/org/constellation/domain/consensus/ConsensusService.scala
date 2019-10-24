@@ -9,13 +9,20 @@ import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.concurrency.SingleLock
 import ConsensusStatus.ConsensusStatus
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.storage.{PendingMemPool, StorageService}
+import org.constellation.storage.{ConcurrentStorageService, PendingMemPool, StorageService}
 
 abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
     extends MerkleStorageAlgebra[F, String, A] {
-  val merklePool = new StorageService[F, Seq[String]]()
+
+  def metricRecordPrefix: Option[String]
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+
+  protected[domain] val merklePool =
+    new ConcurrentStorageService[F, Seq[String]](
+      ConstellationExecutionContext.createSemaphore(),
+      metricRecordPrefix.map(_ + "_merklePool")
+    )
 
   val semaphores: Map[String, Semaphore[F]] = Map(
     "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
@@ -29,9 +36,9 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
       .use(thunk)
 
   protected[domain] val pending: PendingMemPool[F, String, A]
-  protected[domain] val inConsensus = new StorageService[F, A](Some(240))
-  protected[domain] val accepted = new StorageService[F, A](Some(240))
-  protected[domain] val unknown = new StorageService[F, A](Some(240))
+  protected[domain] val inConsensus = new StorageService[F, A](metricRecordPrefix.map(_ + "_inConsensus"), Some(240))
+  protected[domain] val accepted = new StorageService[F, A](metricRecordPrefix.map(_ + "_accepted"), Some(240))
+  protected[domain] val unknown = new StorageService[F, A](metricRecordPrefix.map(_ + "_unknown"), Some(240))
 
   def put(a: A): F[A] = put(a, ConsensusStatus.Pending)
 
@@ -169,8 +176,10 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   def getLast20Accepted: F[List[A]] =
     accepted.getLast20()
 
-  def findHashesByMerkleRoot(merkleRoot: String): F[Option[Seq[String]]] =
+  override def findHashesByMerkleRoot(merkleRoot: String): F[Option[Seq[String]]] =
     merklePool.lookup(merkleRoot)
+
+  override def addMerkle(merkleRoot: String, keys: Seq[String]): F[Seq[String]] = merklePool.put(merkleRoot, keys)
 
   def count: F[Long] =
     List(

@@ -5,33 +5,41 @@ import cats.implicits._
 import org.constellation.primitives.Schema.{Address, AddressCacheData}
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
-import org.constellation.util.Metrics
 
-class AddressService[F[_]: Concurrent]()(implicit metrics: () => Metrics)
-    extends StorageService[F, AddressCacheData]() {
+class AddressService[F[_]: Concurrent]() {
+
   private val locks = new MultiLock[F, String]()
 
-  override def lookup(key: String): F[Option[AddressCacheData]] =
-    super.lookup(key)
+  private val memPool = new StorageService[F, AddressCacheData]("address_mem_pool".some)
+
+  def toMap: F[Map[String, AddressCacheData]] = memPool.toMap()
+
+  def putUnsafe(key: String, value: AddressCacheData): F[AddressCacheData] = memPool.put(key, value)
+
+  def size: F[Long] = memPool.size()
+
+  def lookup(key: String): F[Option[AddressCacheData]] =
+    memPool.lookup(key)
 
   def transfer(tx: Transaction): F[AddressCacheData] =
     locks.acquire(List(tx.src.hash, tx.dst.hash)) {
-      update(tx.src.hash, { a =>
-        a.copy(balance = a.balance - tx.amount)
-      }, AddressCacheData(0L, 0L))
+      memPool
+        .update(tx.src.hash, { a =>
+          a.copy(balance = a.balance - tx.amount)
+        }, AddressCacheData(0L, 0L))
         .flatMap(
           _ =>
-            update(tx.dst.hash, { a =>
+            memPool.update(tx.dst.hash, { a =>
               a.copy(balance = a.balance + tx.amount)
             }, AddressCacheData(tx.amount, 0L))
         )
     }
 
   def transferSnapshot(tx: Transaction): F[AddressCacheData] =
-    update(tx.src.hash, { a =>
+    memPool.update(tx.src.hash, { a =>
       a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount)
     }, AddressCacheData(0L, 0L)) >>
-      update(tx.dst.hash, { a =>
+      memPool.update(tx.dst.hash, { a =>
         a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
       }, AddressCacheData(tx.amount, 0L))
 

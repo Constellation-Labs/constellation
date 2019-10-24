@@ -10,6 +10,8 @@ import org.constellation.primitives.Schema.CheckpointCache
 class ObservationService[F[_]: Concurrent: Logger](dao: DAO) extends ConsensusService[F, Observation] {
   protected[domain] val pending = new PendingObservationsMemPool[F]()
 
+  override def metricRecordPrefix: Option[String] = "Observation".some
+
   override def accept(o: Observation, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(o)

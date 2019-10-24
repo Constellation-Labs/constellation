@@ -3,6 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
+import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, Timer}
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
@@ -14,6 +15,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{
   CheckpointAcceptanceService,
   CheckpointBlockValidator,
+  CheckpointMerkleService,
   CheckpointParentService,
   CheckpointService
 }
@@ -118,12 +120,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
     observationService = new ObservationService[IO](this)
+
+    val merkleService =
+      new CheckpointMerkleService[IO](this, transactionService, messageService, notificationService, observationService)
+
     checkpointService = new CheckpointService[IO](
       this,
-      transactionService,
-      messageService,
-      notificationService,
-      observationService
+      merkleService
     )
     checkpointParentService = new CheckpointParentService(soeService, checkpointService, this)
     concurrentTipService = new ConcurrentTipService[IO](
@@ -139,7 +142,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         this
       )
     )
-    addressService = new AddressService[IO]()(Concurrent(IO.ioConcurrentEffect), () => metrics)
+    addressService = new AddressService[IO]()
 
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, this)
