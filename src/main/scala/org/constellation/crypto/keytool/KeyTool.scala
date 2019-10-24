@@ -10,14 +10,12 @@ object KeyTool extends IOApp {
   def run(args: List[String]): IO[ExitCode] = {
     for {
       cliParams <- loadCliParams[IO](args)
-      envParams <- loadEnvParams[IO]
       keyStore <- KeyStoreUtils.keyPairToStorePath[IO](
-        path = cliParams.path,
+        path = cliParams.keystore,
         alias = cliParams.alias,
-        storePassword = envParams.storepass,
-        keyPassword = envParams.keypass
+        storePassword = cliParams.storepass,
+        keyPassword = cliParams.keypass
       )
-
     } yield keyStore
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
@@ -25,37 +23,33 @@ object KeyTool extends IOApp {
     import scopt.OParser
     val builder = OParser.builder[CliConfig]
 
+    /**
+      * Follows API parts of https://docs.oracle.com/javase/6/docs/technotes/tools/solaris/keytool.html
+      */
     val cliParser = {
       import builder._
       OParser.sequence(
         programName("cl-keytool"),
         head("cl-keytool", BuildInfo.version),
-        opt[String]("path").required
-          .action((x, c) => c.copy(path = x)),
+        opt[String]("keystore").required
+          .action((x, c) => c.copy(keystore = x)),
         opt[String]("alias").required
-          .action((x, c) => c.copy(alias = x))
+          .action((x, c) => c.copy(alias = x)),
+        opt[String]("storepass").required
+          .action((x, c) => c.copy(storepass = x.toCharArray)),
+        opt[String]("keypass").required
+          .action((x, c) => c.copy(keypass = x.toCharArray))
       )
     }
     EitherT.fromEither[F] {
       OParser.parse(cliParser, args, CliConfig()).toRight(new RuntimeException("CLI params are missing"))
     }
   }
-
-  def loadEnvParams[F[_]: Sync]: EitherT[F, Throwable, EnvConfig] =
-    EitherT.fromEither[F] {
-      for {
-        storepass <- sys.env.get("CL_STOREPASS").toRight(new RuntimeException("CL_STOREPASS is missing in environment"))
-        keypass <- sys.env.get("CL_KEYPASS").toRight(new RuntimeException("CL_KEYPASS is missing in environment"))
-      } yield EnvConfig(storepass = storepass.toCharArray, keypass = keypass.toCharArray)
-    }
 }
 
 case class CliConfig(
-  path: String = null,
-  alias: String = null
-)
-
-case class EnvConfig(
-  storepass: Array[Char],
-  keypass: Array[Char]
+  keystore: String = null,
+  alias: String = null,
+  storepass: Array[Char] = null,
+  keypass: Array[Char] = null
 )

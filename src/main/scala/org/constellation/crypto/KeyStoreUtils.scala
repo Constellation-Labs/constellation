@@ -79,6 +79,14 @@ object KeyStoreUtils {
     keyStore
   }
 
+  private def loadEnvPasswords[F[_]: Sync]: EitherT[F, Throwable, EnvPasswords] =
+    EitherT.fromEither[F] {
+      for {
+        storepass <- sys.env.get("CL_STOREPASS").toRight(new RuntimeException("CL_STOREPASS is missing in environment"))
+        keypass <- sys.env.get("CL_KEYPASS").toRight(new RuntimeException("CL_KEYPASS is missing in environment"))
+      } yield EnvPasswords(storepass = storepass.toCharArray, keypass = keypass.toCharArray)
+    }
+
   def keyPairToStorePath[F[_]: Sync](
     path: String,
     alias: String,
@@ -100,12 +108,19 @@ object KeyStoreUtils {
 
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
-    alias: String,
-    storePassword: Array[Char],
-    keyPassword: Array[Char]
-  ): F[KeyPair] =
-    reader(path)
-      .evalMap(unlockKeyStore[F](storePassword))
-      .evalMap(unlockKeyPair[F](alias, keyPassword))
-      .use(_.pure[F])
+    alias: String
+  ): EitherT[F, Throwable, KeyPair] =
+    for {
+      env <- loadEnvPasswords
+      keyPair <- reader(path)
+        .evalMap(unlockKeyStore[F](env.storepass))
+        .evalMap(unlockKeyPair[F](alias, env.keypass))
+        .use(_.pure[F])
+        .attemptT
+    } yield keyPair
 }
+
+case class EnvPasswords(
+  storepass: Array[Char],
+  keypass: Array[Char]
+)
