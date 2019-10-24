@@ -27,7 +27,6 @@ class SnapshotService[F[_]: Concurrent](
   dao: DAO
 )(implicit C: ContextShift[F])
     extends StrictLogging {
-  import constellation._
 
   implicit val shadowDao: DAO = dao
 
@@ -139,8 +138,7 @@ class SnapshotService[F[_]: Concurrent](
           )
         )
       )
-      _ <- EitherT.liftF(applySnapshot())
-
+      _ <- applySnapshot()
       _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
       _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
       _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
@@ -273,40 +271,63 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot))
 
-  private[storage] def applySnapshot()(implicit C: ContextShift[F]): F[Unit] =
-    snapshot.get.flatMap { currentSnapshot =>
-      if (currentSnapshot == Snapshot.snapshotZero) {
-        Sync[F].unit
-      } else {
-        writeSnapshotToDisk(currentSnapshot) >>
-          applyAfterSnapshot(currentSnapshot) >>
-          dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
-      }
-    }
+  private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
+    val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
+      writeSnapshotToDisk(currentSnapshot)
+        .flatMap(
+          _ => applyAfterSnapshot(currentSnapshot)
+        )
 
-  def addSnapshotToDisk(snapshot: StoredSnapshot): F[Path] =
+    snapshot.get.attemptT
+      .leftMap(SnapshotUnexpectedError)
+      .flatMap { currentSnapshot =>
+        if (currentSnapshot == Snapshot.snapshotZero) EitherT.rightT[F, SnapshotError](())
+        else write(currentSnapshot)
+      }
+  }
+
+  def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Path] =
     Snapshot.writeSnapshot[F](snapshot)
 
-  private def writeSnapshotToDisk(currentSnapshot: Snapshot)(implicit C: ContextShift[F]): F[Unit] =
+  private def writeSnapshotToDisk(
+    currentSnapshot: Snapshot
+  )(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] =
     currentSnapshot.checkpointBlocks.toList
-      .traverse(checkpointService.fullData)
+      .traverse(h => checkpointService.fullData(h).map(d => (h, d)))
+      .attemptT
+      .leftMap(SnapshotUnexpectedError)
       .flatMap {
         case maybeBlocks
-            if maybeBlocks.exists(maybeCache => maybeCache.isEmpty || maybeCache.exists(_.checkpointBlock.isEmpty)) =>
-          // TODO : This should never happen, if it does we need to reset the node state and redownload
-          dao.metrics
-            .incrementMetricAsync("snapshotWriteToDiskMissingData")
-            .flatMap(_ => Sync[F].raiseError[Unit](new IllegalStateException("Snapshot data is missing")))
+            if maybeBlocks.exists(
+              maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty)
+            ) =>
+          EitherT {
+            Sync[F].delay {
+              val maybeEmpty =
+                maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty))
+              logger.error(s"Snapshot data is missing for block: ${maybeEmpty}")
+            }.flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))
+              .map(_ => Left(SnapshotIllegalState))
+          }
+
         case maybeBlocks =>
-          val flatten = maybeBlocks.flatten.sortBy(_.checkpointBlock.map(_.baseHash))
-          withMetric[F, Unit](
-            Snapshot.writeSnapshot(StoredSnapshot(currentSnapshot, flatten)).void,
-            Metrics.snapshotWriteToDisk
-          )
+          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.map(_.baseHash))
+          Snapshot
+            .writeSnapshot(StoredSnapshot(currentSnapshot, flatten))
+            .biSemiflatMap(
+              t =>
+                dao.metrics
+                  .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
+                  .map(_ => SnapshotIOError(t)),
+              p =>
+                Sync[F]
+                  .delay(logger.debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}"))
+                  .flatMap(_ => dao.metrics.incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.success))
+            )
       }
 
-  private def applyAfterSnapshot(currentSnapshot: Snapshot): F[Unit] =
-    for {
+  private def applyAfterSnapshot(currentSnapshot: Snapshot): EitherT[F, SnapshotError, Unit] = {
+    val applyAfter = for {
       _ <- acceptSnapshot(currentSnapshot)
 
       _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
@@ -316,7 +337,12 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
+      _ <- dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
     } yield ()
+
+    applyAfter.attemptT
+      .leftMap(SnapshotUnexpectedError)
+  }
 
   private def updateMetricsAfterSnapshot(): F[Unit] =
     for {
@@ -426,5 +452,8 @@ object NodeNotReadyForSnapshots extends SnapshotError
 object NoAcceptedCBsSinceSnapshot extends SnapshotError
 object HeightIntervalConditionNotMet extends SnapshotError
 object NoBlocksWithinHeightInterval extends SnapshotError
+object SnapshotIllegalState extends SnapshotError
+case class SnapshotIOError(cause: Throwable) extends SnapshotError
+case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError
 
 case class SnapshotCreated(hash: String, height: Long)

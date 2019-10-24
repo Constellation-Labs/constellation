@@ -4,7 +4,7 @@ import java.io.IOException
 import java.nio.file.{NoSuchFileException, Path}
 
 import better.files.File
-import cats.data.NonEmptyList
+import cats.data.{EitherT, NonEmptyList}
 import cats.data.Validated.{Invalid, Valid}
 import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
@@ -241,13 +241,14 @@ import java.nio.file.{Files, Paths}
 
 object Snapshot extends StrictLogging {
 
-  def writeSnapshot[F[_]: Concurrent](storedSnapshot: StoredSnapshot)(implicit dao: DAO, C: ContextShift[F]): F[Path] =
+  def writeSnapshot[F[_]: Concurrent](
+    storedSnapshot: StoredSnapshot
+  )(implicit dao: DAO, C: ContextShift[F]): EitherT[F, Throwable, Path] =
     for {
-      serialized <- Sync[F].delay { KryoSerializer.serializeAnyRef(storedSnapshot) }
-      write <- C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized))
-      _ <- Sync[F].delay {
-        logger.debug(s"[${dao.id.short}] written snapshot at path ${write.toAbsolutePath.toString}")
-      }
+      serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(storedSnapshot)).attempt)
+      write <- EitherT(
+        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized).value)
+      )
     } yield write
 
   private def writeSnapshot[F[_]: Concurrent](
@@ -257,17 +258,19 @@ object Snapshot extends StrictLogging {
   )(
     implicit dao: DAO,
     C: ContextShift[F]
-  ): F[Path] =
+  ): EitherT[F, Throwable, Path] =
     trialNumber match {
-      case x if x >= 3 => Sync[F].raiseError[Path](new IOException(s"Unable to write snapshot"))
+      case x if x >= 3 => EitherT.leftT[F, Path](new IOException(s"Unable to write snapshot"))
       case _ if isOverDiskCapacity(serialized.length) =>
-        removeOldSnapshots() >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
+        EitherT(removeOldSnapshots().attempt) >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
       case _ =>
-        withMetric(
-          Sync[F].delay {
-            Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
-          },
-          "writeSnapshot"
+        EitherT(
+          withMetric(
+            Sync[F].delay(
+              Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+            ),
+            "writeSnapshot"
+          ).attempt
         )
     }
 

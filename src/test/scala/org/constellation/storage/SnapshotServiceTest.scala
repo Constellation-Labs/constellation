@@ -2,14 +2,14 @@ package org.constellation.storage
 
 import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
-import org.constellation._
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
+import org.constellation._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -99,7 +99,7 @@ class SnapshotServiceTest
       val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))
       val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
       snapshotService.setSnapshot(info).unsafeRunSync()
-      snapshotService.applySnapshot().unsafeRunSync()
+      snapshotService.applySnapshot().value.unsafeRunSync()
 
       dao.metrics.getCountMetric(Metrics.snapshotCount) shouldBe 1.some
       dao.metrics.getCountMetric(Metrics.snapshotWriteToDisk + Metrics.success) shouldBe 1.some

@@ -178,6 +178,12 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
   def updateMetricAsync[F[_]: Sync](key: String, value: Long): F[Unit] = Sync[F].delay(updateMetric(key, value))
   def incrementMetricAsync[F[_]: Sync](key: String): F[Unit] = Sync[F].delay(incrementMetric(key))
 
+  def incrementMetricAsync[F[_]: Sync](key: String, either: Either[Any, Any]): F[Unit] =
+    Sync[F].delay(either match {
+      case Left(_)  => incrementMetric(key + Metrics.failure)
+      case Right(_) => incrementMetric(key + Metrics.success)
+    })
+
   /**
     * Converts counter metrics to string for export / display
     * @return : Key value map of all metrics

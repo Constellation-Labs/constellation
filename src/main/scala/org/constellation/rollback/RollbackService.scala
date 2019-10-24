@@ -63,12 +63,10 @@ class RollbackService[F[_]: Concurrent: Logger](
 
   private def acceptSnapshots(
     snapshots: Seq[StoredSnapshot]
-  )(implicit C: ContextShift[F]): EitherT[F, RollbackException, Unit] = EitherT {
+  )(implicit C: ContextShift[F]): EitherT[F, RollbackException, Unit] =
     snapshots.toList
       .traverse(snapshotService.addSnapshotToDisk)
-      .map(_ => ().asRight[RollbackException])
-      .handleErrorWith(_ => CannotWriteToDisk.asInstanceOf[RollbackException].asLeft[Unit].pure[F])
-  }
+      .bimap(_ => CannotWriteToDisk, _ => ())
 
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {
