@@ -27,7 +27,6 @@ class SnapshotService[F[_]: Concurrent](
   dao: DAO
 )(implicit C: ContextShift[F])
     extends StrictLogging {
-  import constellation._
 
   implicit val shadowDao: DAO = dao
 
@@ -274,46 +273,57 @@ class SnapshotService[F[_]: Concurrent](
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
-      EitherT(writeSnapshotToDisk(currentSnapshot))
+      writeSnapshotToDisk(currentSnapshot)
         .flatMap(
           _ => applyAfterSnapshot(currentSnapshot)
         )
 
-    EitherT(snapshot.get.attempt)
-      .leftMap(e => SnapshotUnexpectedError(e))
+    snapshot.get.attemptT
+      .leftMap(SnapshotUnexpectedError)
       .flatMap { currentSnapshot =>
         if (currentSnapshot == Snapshot.snapshotZero) EitherT.rightT[F, SnapshotError](())
         else write(currentSnapshot)
       }
   }
 
-  def addSnapshotToDisk(snapshot: StoredSnapshot): F[Either[Throwable, Path]] =
+  def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Path] =
     Snapshot.writeSnapshot[F](snapshot)
 
   private def writeSnapshotToDisk(
     currentSnapshot: Snapshot
-  )(implicit C: ContextShift[F]): F[Either[SnapshotError, Unit]] =
+  )(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] =
     currentSnapshot.checkpointBlocks.toList
       .traverse(h => checkpointService.fullData(h).map(d => (h, d)))
+      .attemptT
+      .leftMap(SnapshotUnexpectedError)
       .flatMap {
         case maybeBlocks
             if maybeBlocks.exists(
               maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty)
             ) =>
-          Sync[F]
-            .pure[Either[SnapshotError, Unit]] {
+          EitherT {
+            Sync[F].delay {
               val maybeEmpty =
                 maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty))
               logger.error(s"Snapshot data is missing for block: ${maybeEmpty}")
-              Left(SnapshotIllegalState)
-            }
-            .flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))
+            }.flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))
+              .map(_ => Left(SnapshotIllegalState))
+          }
+
         case maybeBlocks =>
           val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.map(_.baseHash))
           Snapshot
             .writeSnapshot(StoredSnapshot(currentSnapshot, flatten))
-            .flatTap(e => dao.metrics.incrementMetricAsync(Metrics.snapshotWriteToDisk, e))
-            .map(e => e.leftMap(ex => SnapshotIOError(ex)).map(p => logger.debug(s"Snapshot written at $p")))
+            .biSemiflatMap(
+              t =>
+                dao.metrics
+                  .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
+                  .map(_ => SnapshotIOError(t)),
+              p =>
+                Sync[F]
+                  .delay(logger.debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}"))
+                  .flatMap(_ => dao.metrics.incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.success))
+            )
       }
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): EitherT[F, SnapshotError, Unit] = {
@@ -331,7 +341,7 @@ class SnapshotService[F[_]: Concurrent](
     } yield ()
 
     applyAfter.attemptT
-      .leftMap(e => SnapshotUnexpectedError(e))
+      .leftMap(SnapshotUnexpectedError)
   }
 
   private def updateMetricsAfterSnapshot(): F[Unit] =

@@ -24,7 +24,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =
       StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash)), Seq.fill(50)(CheckpointCache(Some(randomCB))))
-    Snapshot.writeSnapshot[IO](ss).unsafeRunSync()
+    Snapshot.writeSnapshot[IO](ss).value.unsafeRunSync()
     Snapshot
       .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash), dao.snapshotPath.pathAsString)
       .unsafeRunSync()
@@ -41,7 +41,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
 
     Snapshot.isOverDiskCapacity(ConfigUtil.snapshotSizeDiskLimit - 4096) shouldBe false
 
-    snaps.traverse(Snapshot.writeSnapshot[IO]).unsafeRunSync
+    snaps.traverse(Snapshot.writeSnapshot[IO]).value.unsafeRunSync
 
     File(dao.snapshotPath.path, snaps.head.snapshot.hash).exists shouldBe true
     File(dao.snapshotPath.path, snaps.last.snapshot.hash).exists shouldBe true

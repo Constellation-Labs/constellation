@@ -54,8 +54,8 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
       IO.unit
     )
 
-  def handleError(err: SnapshotError, stateSet: SetStateResult) =
-    dao.cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true) >>
+  def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] =
+    cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true) >>
       IO(logger.debug(s"Snapshot attempt error: $err"))
         .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
 
