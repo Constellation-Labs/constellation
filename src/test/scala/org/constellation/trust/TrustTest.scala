@@ -229,48 +229,66 @@ class TrustTest extends FlatSpec {
 
   }
 
-
-
-  "Convergence test" should "run and plot convergence" in {
-    val seedRatios = -1 //todo iterate across
-    val testObj = TrustHelpers
-    val numTestRounds = 10
-    val finalViews: Seq[Iterable[(Int, (String, Double))]] = (0 until numTestRounds).toList.map(i => testObj.generateRun)
-    val proposalDist = finalViews.map((fv: Iterable[(Int, (String, Double))]) => fv.map(t => t._2._1).groupBy(k => k).map{ case (s, ss) => (s, ss.size)})
-    proposalDist.foreach(println)
-    val snapshotVoteRounds = finalViews.map { iter =>
-      val res = iter
+def generateAndSaveConvergenceData(seedRatios: Int) = {
+  val testObj = TrustHelpers
+  val numTestRounds = 3//todo make global somewhere
+  val finalViews: Seq[Iterable[(Int, (String, Double))]] = (0 until numTestRounds).toList.map(i => testObj.generateRun(seedRatios))
+  val proposalDist = finalViews.map((fv: Iterable[(Int, (String, Double))]) => fv.map(t => t._2._1).groupBy(k => k).map{ case (s, ss) => (s, ss.size)})
+  proposalDist.foreach(println)
+  val snapshotVoteRounds = finalViews.map { iter =>
+    val res = iter
       .map( t => t._2._1)
       .groupBy(k => k)
       .map{ case (s, ss) => s + "|" + ss.size.toString}
-      res
-    }
-    snapshotVoteRounds.zipWithIndex.foreach { case (votes, voteNum) =>
-      TrustHelpers.saveOutput(votes, voteNum)
+    res
+  }
+  snapshotVoteRounds.zipWithIndex.foreach { case (votes, voteNum) =>
+    TrustHelpers.saveOutput(votes, seedRatios, voteNum)
+//    println("hashes: " + testObj.hashes.distinct.length.toString)
+  }
+}
+  def loadTestRunFiles(testRunNum: Int, ratio: Int, fileName: String = "raw_output") =
+    Source.fromFile(System.getProperty("user.home") + s"/constellation_test-data/${fileName + "_ratio_" + ratio}_${testRunNum.toString}")
 
+  def getAvgDistinctProposals(totalRuns: Int, ratio: Int): Double = {
+    val proposalsPerRun = (0 until totalRuns).map { runNum =>
+      val sumDistinctProposals = loadTestRunFiles(runNum, ratio).getLines().map { row =>
+        val Array(snapshotHash, numVotes) = row.split('|').map(_.trim)
+        snapshotHash
+      }.length
+      sumDistinctProposals
     }
-    println("hashes: " + testObj.hashes.distinct.length.toString)
+    proposalsPerRun.sum/totalRuns.toDouble
+  }
+
+
+  def getAvgConvergencePerSeedRatio(totalRuns: Int, ratioUpperBound: Int) : Array[Double] = {
+    val range = (0 until ratioUpperBound by 10)//todo note that this goes to n-1 by 10
+      .map(getAvgDistinctProposals(totalRuns, _))
+    range.toArray
+  }
+
+  "Convergence test" should "run and plot convergence" in {
+    val seedRatios = 40
+    (0 until seedRatios by 10)//todo note that this goes to n-1 by 10
+      .foreach(ratio => generateAndSaveConvergenceData(ratio))
+
     assert(true)
   }
 
   "plot" should "plot" in {
-
-    def testRunFiles(fileName: String, testRunNum: Int) =
-      Source.fromFile(System.getProperty("user.home") + s"/constellation_test-data/${fileName + testRunNum.toString}")
-    val lines = testRunFiles("raw_output", 0)
-    for (line <- lines.getLines) {
-      println(line)
-      val Array(snapshotHash, numVotes) = line.split('|').map(_.trim)
-      println(s"$snapshotHash $numVotes")
-    }
+    val ratioUpperBound = 40
+    val numTestRounds = 3
+    val domain = DenseVector(getAvgConvergencePerSeedRatio(numTestRounds, ratioUpperBound))
+    println(domain)
 //    val dv = DenseVector(10.5, 9.1, 4.4, 2.6)//todo fill by step in seedRatios
-//    val f = Figure()
-//    val p = f.subplot(0)
-//    val x = linspace(0.0, 30.0, 4)//length = dv.length
-//    p += plot(x, dv)
-//    p.xlabel = "Seed nodes (out of 100)"
-//    p.ylabel = "Unique proposal count avg"
-//    f.saveas("subplots.png")
+    val f = Figure()
+    val p = f.subplot(0)
+    val x = linspace(0.0, 30.0, domain.length)//length = dv.length
+    p += plot(x, domain)
+    p.xlabel = "Seed nodes (out of 100)"
+    p.ylabel = "Unique proposal count avg"
+    f.saveas("convergence_over_seed_ratios.png")
     assert(true)
   }
 
