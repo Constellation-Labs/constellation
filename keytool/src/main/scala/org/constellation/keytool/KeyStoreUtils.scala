@@ -10,7 +10,8 @@ import cats.implicits._
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
-  val storeType = "JKS"
+  val storeType = "PKCS12"
+  val storeExtension = "p12"
 
   private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
@@ -87,13 +88,16 @@ object KeyStoreUtils {
       } yield EnvPasswords(storepass = storepass.toCharArray, keypass = keypass.toCharArray)
     }
 
+  private def withExtension(path: String): String =
+    if (path.endsWith(storeExtension)) path else s"$path.$storeExtension"
+
   def keyPairToStorePath[F[_]: Sync](
     path: String,
     alias: String,
     storePassword: Array[Char],
     keyPassword: Array[Char]
   ): EitherT[F, Throwable, KeyStore] =
-    writer(path)
+    writer(withExtension(path))
       .use(
         stream =>
           for {
