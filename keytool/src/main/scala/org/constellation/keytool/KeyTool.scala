@@ -2,7 +2,6 @@ package org.constellation.keytool
 
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
-import org.constellation.BuildInfo
 import scopt.OParser
 
 object KeyTool extends IOApp {
