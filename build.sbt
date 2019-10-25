@@ -205,9 +205,8 @@ lazy val keytool = (project in file("keytool"))
     buildInfoKeys := Seq[BuildInfoKey](
       version
     ),
-    buildInfoPackage := "org.constellation",
+    buildInfoPackage := "org.constellation.keytool",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
-    Defaults.itSettings,
-    mainClass := Some("org.constellation.crypto.keytool.KeyTool"),
+    mainClass := Some("org.constellation.keytool.KeyTool"),
     libraryDependencies ++= sharedDependencies
   )
