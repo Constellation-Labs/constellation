@@ -21,6 +21,7 @@ object KeyTool extends IOApp {
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
     val builder = OParser.builder[CliConfig]
+
     /**
       * Follows API parts of https://docs.oracle.com/javase/6/docs/technotes/tools/solaris/keytool.html
       */
@@ -28,7 +29,8 @@ object KeyTool extends IOApp {
       import builder._
       OParser.sequence(
         programName("cl-keytool"),
-        head("cl-keytool", BuildInfo.version),
+        // TODO: keytool BuildInfo needs to be generated BEFORE compiling constellation in CircleCI
+//        head("cl-keytool", BuildInfo.version),
         opt[String]("keystore").required
           .action((x, c) => c.copy(keystore = x)),
         opt[String]("alias").required
