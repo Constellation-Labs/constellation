@@ -7,7 +7,7 @@ import java.util.Random
 import cats.effect.{ContextShift, IO}
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}

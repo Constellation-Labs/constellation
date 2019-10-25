@@ -2,7 +2,7 @@ package org.constellation.rollback
 
 import constellation._
 import org.constellation.{DAO, TestHelpers}
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Genesis
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}

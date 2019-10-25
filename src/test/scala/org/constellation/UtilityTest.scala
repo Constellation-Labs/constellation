@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.scalatest.FlatSpec
-import org.constellation.crypto.KeyUtils._
+import org.constellation.keytool.KeyUtils._
 import org.json4s.JsonAST.JValue
 import org.constellation.util.Logging._
 

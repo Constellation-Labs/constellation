@@ -2,8 +2,8 @@ package org.constellation.tx
 
 import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures._
-import org.constellation.crypto.KeyUtils
-import org.constellation.crypto.KeyUtils._
+import org.constellation.keytool.KeyUtils
+import org.constellation.keytool.KeyUtils._
 import org.constellation.domain.transaction.TransactionValidator
 import org.scalatest.FlatSpec
 

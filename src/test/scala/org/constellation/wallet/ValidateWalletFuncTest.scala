@@ -5,7 +5,7 @@ import org.json4s.native.Serialization
 import org.scalatest.FlatSpec
 
 import constellation._
-import org.constellation.crypto.KeyUtils._
+import org.constellation.keytool.KeyUtils._
 
 case class SetSerialize(s: Set[String])
 

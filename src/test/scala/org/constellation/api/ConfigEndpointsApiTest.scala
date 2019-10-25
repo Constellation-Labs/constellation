@@ -6,7 +6,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.util.Timeout
 import cats.effect.IO
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
