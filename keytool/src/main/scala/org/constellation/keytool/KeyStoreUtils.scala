@@ -10,7 +10,7 @@ import cats.implicits._
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
-  val storeType = "PKCS12"
+  val storeType = "JKS"
 
   private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {

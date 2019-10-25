@@ -21,12 +21,11 @@ object KeyTool extends IOApp {
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
     val builder = OParser.builder[CliConfig]
-    import builder._
-
     /**
       * Follows API parts of https://docs.oracle.com/javase/6/docs/technotes/tools/solaris/keytool.html
       */
     val cliParser = {
+      import builder._
       OParser.sequence(
         programName("cl-keytool"),
         head("cl-keytool", BuildInfo.version),
