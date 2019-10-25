@@ -3,27 +3,31 @@ package org.constellation.storage.transactions
 import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.{ConstellationExecutionContext, Fixtures}
-import org.constellation.domain.transaction.{LastTransactionRef, PendingTransactionsMemPool, TransactionChainService}
-import org.constellation.primitives.Schema.{Address, EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
+import org.constellation.domain.transaction.{PendingTransactionsMemPool, TransactionChainService, TransactionService}
+import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.mockito.IdiomaticMockito
-import org.scalatest.{BeforeAndAfter, FreeSpec, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers with BeforeAndAfter {
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   var txChainService: TransactionChainService[IO] = _
+  var txService: TransactionService[IO] = _
   var semaphore: Semaphore[IO] = _
+  var dao: DAO = _
 
   before {
+    dao = TestHelpers.prepareMockedDAO()
     txChainService = TransactionChainService[IO]
-    semaphore = Semaphore[IO](1).unsafeRunSync()
+    txService = TransactionService[IO](txChainService, dao)
+    semaphore = Semaphore[IO](1).unsafeRunSync
   }
 
   "update" - {
     "it should update existing transaction" in {
-      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+      val memPool = PendingTransactionsMemPool[IO](txChainService, semaphore)
 
       val tx = mock[Transaction]
       tx.hash shouldReturn "lorem"
@@ -46,7 +50,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should not update transaction if it does not exist" in {
-      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+      val memPool = PendingTransactionsMemPool[IO](txChainService, semaphore)
 
       val tx = mock[Transaction]
       tx.hash shouldReturn "lorem"
@@ -66,14 +70,14 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
   }
 
   "pull" - {
-    "it should return None if there are less txs than min required count" in {
-      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+    "it should return None if there are no transactions to return" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, semaphore)
 
       memPool.pull(10).unsafeRunSync shouldBe none
     }
 
-    "it should return min required count of txs" in {
-      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+    "it should return up to max count of txs" in {
+      val memPool = new PendingTransactionsMemPool[IO](txChainService, semaphore)
 
       val tx1 = createTransaction("a")
       val tx2 = createTransaction("b")
@@ -87,7 +91,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should return transactions sorted by the fee" in {
-      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+      val memPool = PendingTransactionsMemPool[IO](txChainService, semaphore)
 
       val tx1 = createTransaction("a", fee = 3L.some)
       val tx2 = createTransaction("b", fee = 1L.some)
@@ -101,7 +105,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     }
 
     "it should return transactions sorted by the address and the fee" in {
-      val memPool = new PendingTransactionsMemPool[IO](semaphore)
+      val memPool = PendingTransactionsMemPool[IO](txChainService, semaphore)
 
       val txs = List(
         createTransaction("a", fee = 3L.some),
@@ -115,7 +119,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         createTransaction("c", fee = 3L.some)
       )
 
-      txs.traverse(tx => memPool.put(tx.hash, tx)).unsafeRunSync()
+      txs.traverse(tx => memPool.put(tx.hash, tx)).unsafeRunSync
 
       memPool
         .pull(10)
@@ -131,6 +135,22 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
         ("b", 1),
         ("b", 2)
       )
+    }
+
+    "it should not return transactions for which the latest reference was not accepted" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, semaphore)
+
+      val tx1 = createTransaction("a")
+      val tx2 = createTransaction("a")
+      val tx3 = createTransaction("a")
+
+      txService.accept(tx1).unsafeRunSync
+
+      memPool.put(tx3.hash, tx3).unsafeRunSync
+
+      val ret = memPool.pull(10).unsafeRunSync
+
+      ret shouldBe None
     }
   }
 

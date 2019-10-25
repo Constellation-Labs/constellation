@@ -37,7 +37,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
   private final val transactionsRounds =
     ConfigUtil.constellation.getInt("transaction.generator.amountTransactionsRounds")
 
-  val multiAddressGenerationMode = false
+  val multiAddressGenerationMode = true
   val requiredBalance = 10000000
   val rangeAmount = 1000
 

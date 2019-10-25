@@ -10,9 +10,19 @@ class TransactionChainService[F[_]: Concurrent] {
 
   // TODO: Make sure to clean-up those properly
   private[domain] val lastTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)
+  private[domain] val lastAcceptedTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)
 
   def getLastTransactionRef(address: String): F[LastTransactionRef] =
     lastTransactionRef.get.map(_.getOrElse(address, LastTransactionRef.empty))
+
+  def getLastAcceptedTransactionRef(address: String): F[LastTransactionRef] =
+    lastAcceptedTransactionRef.get.map(_.getOrElse(address, LastTransactionRef.empty))
+
+  def acceptTransaction(transaction: Transaction): F[Unit] =
+    lastAcceptedTransactionRef.modify { m =>
+      val address = transaction.src.address
+      (m + (address -> transaction.lastTxRef), ())
+    }
 
   def setLastTransaction(edge: Edge[TransactionEdgeData], isDummy: Boolean): F[Transaction] = {
     val address = edge.observationEdge.parents.head.hash

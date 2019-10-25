@@ -1,32 +1,62 @@
 package org.constellation.domain.transaction
 
-import cats.effect.Concurrent
+import cats.effect.{Bracket, Concurrent}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.PendingMemPool
 
-class PendingTransactionsMemPool[F[_]: Concurrent](semaphore: Semaphore[F])
-    extends PendingMemPool[F, String, TransactionCacheData](semaphore) {
+class PendingTransactionsMemPool[F[_]: Concurrent](
+  transactionChainService: TransactionChainService[F],
+  semaphore: Semaphore[F]
+) extends PendingMemPool[F, String, TransactionCacheData](semaphore) {
 
   // TODO: Rethink - use queue
   def pull(maxCount: Int): F[Option[List[TransactionCacheData]]] =
-    ref.modify {
-      case txs if txs.isEmpty =>
-        (txs, none[List[TransactionCacheData]])
-      case txs =>
-        val sorted = sortForPull(txs.values.toList)
-        val (left, right) = sorted.splitAt(maxCount)
-        (right.map(tx => tx.hash -> tx).toMap, left.some)
-    }
+    Bracket[F, Throwable].bracket(ref.acquire)(
+      _ =>
+        ref.getUnsafe
+          .flatMap(
+            txs =>
+              (if (txs.isEmpty) {
+                 none[List[TransactionCacheData]].pure[F]
+               } else {
+                 sortForPull(txs.values.toList).flatMap { sorted =>
+                   val (left, right) = sorted.splitAt(maxCount)
+                   ref.unsafeModify(_ => (right.map(tx => tx.hash -> tx).toMap, Option(left).filter(_.isEmpty)))
+                 }
+               })
+          )
+    )(_ => ref.release)
 
-  private def sortForPull(txs: List[TransactionCacheData]): List[TransactionCacheData] =
+  private def sortForPull(txs: List[TransactionCacheData]): F[List[TransactionCacheData]] =
     txs
       .groupBy(_.transaction.src.address)
       .mapValues(_.sortBy(_.transaction.lastTxRef.ordinal))
-      .values
-      .toSeq
-      .sortBy(_.map(-_.transaction.fee.getOrElse(0L)).sum)
       .toList
-      .flatten
+      .pure[F]
+      .flatMap { t =>
+        {
+          t.traverse {
+            case (hash, txs) =>
+              transactionChainService
+                .getLastAcceptedTransactionRef(hash)
+                .map(
+                  b => {
+                    if (b.ordinal == txs.headOption.map(_.transaction.lastTxRef.ordinal).getOrElse(-1)) txs
+                    else List.empty[TransactionCacheData]
+                  }
+                )
+          }
+        }
+      }
+      .map(
+        _.sortBy(_.map(-_.transaction.fee.getOrElse(0L)).sum).flatten
+      )
+}
+
+object PendingTransactionsMemPool {
+
+  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], semaphore: Semaphore[F]) =
+    new PendingTransactionsMemPool[F](transactionChainService, semaphore)
 }

@@ -5,7 +5,7 @@ import cats.effect.{Concurrent, IO}
 
 class SingleRef[F[_]: Concurrent, A](default: A, s: Semaphore[F] = null) {
 
-  private val ref = Ref.unsafe[F, A](default)
+  val ref = Ref.unsafe[F, A](default)
   private val semaphore: Semaphore[F] = Semaphore.in[IO, F](1).unsafeRunSync()
 
   val lock = new SingleLock[F, A]("", if (s != null) s else semaphore)

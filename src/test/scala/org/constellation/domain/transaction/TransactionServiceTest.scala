@@ -312,7 +312,7 @@ class TransactionServiceTest
 
       val results = {
         implicit val shadedEc: ExecutionContext = ec
-        Await.result(Future.sequence(pulls.map(_.unsafeToFuture())), 5 seconds).map(_.map(_.transaction.hash))
+        Await.result(Future.sequence(pulls.map(_.unsafeToFuture())), 10 seconds).map(_.map(_.transaction.hash))
       }
 
       // Should always pull txs
