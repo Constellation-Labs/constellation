@@ -23,6 +23,7 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
+import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rollback.RollbackService
 import org.constellation.storage._
@@ -143,6 +144,7 @@ trait EdgeDAO {
   var majorityStateChooser: MajorityStateChooser[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
+  var genesisObservationWriter: GenesisObservationWriter[IO] = _
 
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _

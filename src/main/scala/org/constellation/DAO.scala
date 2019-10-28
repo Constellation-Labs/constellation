@@ -36,6 +36,7 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
+import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
@@ -255,6 +256,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     rollbackService = new RollbackService[IO](this, new RollbackAccountBalances, snapshotService)
 
     cloudStorage = new GcpStorage[IO]
+
+    genesisObservationWriter = new GenesisObservationWriter[IO](
+      cloudStorage,
+      this,
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      ConstellationExecutionContext.unbounded
+    )
   }
 
   implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)

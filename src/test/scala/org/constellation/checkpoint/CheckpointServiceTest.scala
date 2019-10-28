@@ -10,6 +10,7 @@ import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.schema.Id
+import org.constellation.genesis.GenesisObservationWriterProperties
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -30,7 +31,7 @@ class CheckpointServiceTest
   implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   after {
-    dao.genesisObservationPath.delete()
+    File(GenesisObservationWriterProperties.path(dao.id), GenesisObservationWriterProperties.FILE_NAME).delete()
   }
 
   "with real dao" - {
@@ -106,7 +107,7 @@ class CheckpointServiceTest
         setAsTips = true
       )
 
-      File(dao.genesisObservationPath, GenesisObservationWriter.FILE_NAME).exists shouldBe true
+      File(GenesisObservationWriterProperties.path(dao.id), GenesisObservationWriterProperties.FILE_NAME).exists shouldBe true
     }
   }
 

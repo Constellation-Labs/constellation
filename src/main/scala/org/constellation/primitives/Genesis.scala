@@ -164,22 +164,16 @@ object Genesis extends StrictLogging {
 
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
 
-    GenesisObservationWriter
-      .writeToDisk(go, dao.genesisObservationPath)(IO.contextShift(ConstellationExecutionContext.bounded))
-      .flatTap {
-        case Success(value)     => Logger[IO].info(s"Genesis observation saved successfully ${value.pathAsString}")
-        case Failure(exception) => Logger[IO].error(s"Cannot save genesis observation to disk ${exception.getMessage}")
+    //TODO: `unsafeRunSync` temporary solution before refactoring Genesis
+    dao.genesisObservationWriter
+      .write(go)
+      .value
+      .map {
+        case Left(value) => logger.error(s"Cannot write genesis observation ${value.exceptionMessage}")
+        case Right(_)    => logger.info("Genesis observation saved successfully")
       }
       .unsafeRunSync()
-
-    if (shouldSendGenesisObservationToCloud()) {
-      GenesisObservationWriter
-        .writeToCloud(dao.genesisObservationPath)(dao, IO.contextShift(ConstellationExecutionContext.bounded))
-    }
   }
-
-  private def shouldSendGenesisObservationToCloud(): Boolean =
-    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
     Seq(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2).flatMap {
@@ -188,19 +182,4 @@ object Genesis extends StrictLogging {
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
           .map(tcd => dao.transactionService.put(tcd, ConsensusStatus.Accepted))
     }.toList.sequence.void.unsafeRunSync()
-}
-
-object GenesisObservationWriter {
-
-  final val FILE_NAME: String = "genesisObservation"
-
-  def writeToDisk(genesisObservation: GenesisObservation, path: File)(implicit cs: ContextShift[IO]): IO[Try[File]] =
-    cs.evalOn(ConstellationExecutionContext.unbounded) {
-      IO(Try(File(path, FILE_NAME).writeByteArray(KryoSerializer.serializeAnyRef(genesisObservation))))
-    }
-
-  def writeToCloud(path: File)(implicit dao: DAO, cs: ContextShift[IO]): IO[List[String]] =
-    cs.evalOn(ConstellationExecutionContext.unbounded) {
-      dao.cloudStorage.upload(Seq(File(path, FILE_NAME)))
-    }
 }
