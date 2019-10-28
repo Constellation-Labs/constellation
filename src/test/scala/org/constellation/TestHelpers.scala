@@ -4,6 +4,7 @@ import java.util.UUID
 
 import better.files.File
 import cats.effect.IO
+import cats.implicits._
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -43,7 +44,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao.metrics = new Metrics(nodeConfig.processingConfig.metricCheckInterval)(dao)
     dao.initialize(nodeConfig)
 
-    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
+    (dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready) >>
+      facilitators.toList.traverse(p => dao.cluster.updatePeerInfo(p._2))).unsafeRunSync
     dao
   }
 
@@ -62,6 +64,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
         peerData1.notification shouldReturn Seq()
         peerData1.client shouldReturn mock[APIClient]
         peerData1.client.hostPortForLogging shouldReturn HostPort(s"http://$hash", 9000)
+        peerData1.client.id shouldReturn facilitatorId1
 
         facilitatorId1 -> peerData1
       }

@@ -7,7 +7,8 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.{ConsensusManager, Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.consensus.{ConsensusManager, FinishedCheckpoint, Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
@@ -22,6 +23,7 @@ class SnapshotService[F[_]: Concurrent](
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
   transactionService: TransactionService[F],
+  observationService: ObservationService[F],
   rateLimiting: RateLimiting[F],
   consensusManager: ConsensusManager[F],
   dao: DAO
@@ -31,7 +33,7 @@ class SnapshotService[F[_]: Concurrent](
   implicit val shadowDao: DAO = dao
 
   val acceptedCBSinceSnapshot: SingleRef[F, Seq[String]] = SingleRef(Seq())
-  val syncBuffer: SingleRef[F, Seq[CheckpointCache]] = SingleRef(Seq())
+  val syncBuffer: SingleRef[F, Map[String, FinishedCheckpoint]] = SingleRef(Map.empty)
   val snapshot: SingleRef[F, Snapshot] = SingleRef(Snapshot.snapshotZero)
 
   val totalNumCBsInSnapshots: SingleRef[F, Long] = SingleRef(0L)
@@ -77,6 +79,7 @@ class SnapshotService[F[_]: Concurrent](
       cbs = (snap.checkpointBlocks ++ accepted).toList
       fetched <- getCheckpointBlocksFromSnapshot(cbs)
       _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
+      _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.applySnapshot))
       _ <- checkpointService.applySnapshot(cbs)
     } yield ()
 
@@ -108,12 +111,20 @@ class SnapshotService[F[_]: Concurrent](
       _ <- updateMetricsAfterSnapshot()
     } yield ()
 
-  def syncBufferAccept(cb: CheckpointCache): F[Unit] =
+  def syncBufferAccept(cb: FinishedCheckpoint): F[Unit] =
     for {
-      _ <- syncBuffer.update(_ ++ Seq(cb))
-      buffer <- syncBuffer.get
-      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", buffer.size.toString)
+      size <- syncBuffer.modify { curr =>
+        val updated = curr + (cb.checkpointCacheData.checkpointBlock.get.baseHash -> cb)
+        (updated, updated.size)
+      }
+      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", size.toString)
     } yield ()
+
+  def syncBufferPull(): F[Map[String, FinishedCheckpoint]] =
+    for {
+      pulled <- syncBuffer.modify(curr => (Map.empty, curr))
+      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", pulled.size.toString)
+    } yield pulled
 
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
@@ -360,6 +371,7 @@ class SnapshotService[F[_]: Concurrent](
       cbs <- getCheckpointBlocksFromSnapshot(s.checkpointBlocks.toList)
       _ <- cbs.traverse(applySnapshotMessages(s, _))
       _ <- applySnapshotTransactions(s, cbs)
+      _ <- applySnapshotObservations(cbs)
     } yield ()
 
   private def getCheckpointBlocksFromSnapshot(blocks: List[String]): F[List[CheckpointBlockMetadata]] =
@@ -402,6 +414,11 @@ class SnapshotService[F[_]: Concurrent](
     }.void
   }
 
+  private def applySnapshotObservations(cbs: List[CheckpointBlockMetadata]): F[Unit] =
+    for {
+      _ <- cbs.traverse(c => c.observationsMerkleRoot.traverse(observationService.applySnapshot)).void
+    } yield ()
+
   private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] =
     for {
       txs <- cbs
@@ -429,6 +446,7 @@ object SnapshotService {
     checkpointService: CheckpointService[F],
     messageService: MessageService[F],
     transactionService: TransactionService[F],
+    observationService: ObservationService[F],
     rateLimiting: RateLimiting[F],
     consensusManager: ConsensusManager[F],
     dao: DAO
@@ -439,6 +457,7 @@ object SnapshotService {
       checkpointService,
       messageService,
       transactionService,
+      observationService,
       rateLimiting,
       consensusManager,
       dao

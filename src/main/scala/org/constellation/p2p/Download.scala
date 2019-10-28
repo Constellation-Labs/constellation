@@ -217,7 +217,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
           )
         case head :: tail =>
           head.client
-            .getNonBlockingArrayByteF("info", timeout = 8.seconds)(C)
+            .getNonBlockingArrayByteF("snapshot/info", timeout = 8.seconds)(C)
             .handleErrorWith(e => {
               Sync[F]
                 .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
@@ -261,7 +261,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
     for {
       _ <- setSnapshot(snapshot)
       _ <- acceptSnapshotCacheData(snapshot)
-      _ <- clearSyncBuffer
       _ <- setDownloadFinishedTime()
     } yield ()
 
@@ -291,13 +290,18 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
 
   private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): F[Unit] =
     LiftIO[F]
-      .liftIO(dao.snapshotService.syncBuffer.get)
+      .liftIO(
+        dao.snapshotService
+          .syncBufferPull()
+          .map(x => filter(x.values.toList, snapshotInfo))
+      )
       .flatMap(
-        _.toList.map { h =>
-          if (!snapshotInfo.acceptedCBSinceSnapshotCache.contains(h) && !snapshotInfo.snapshotCache
-                .contains(h)) { // TODO: #640 make it distinct by baseHash as there is a lot of duplicates
+        f =>
+          f.traverse { h =>
             Sync[F].delay(
-              logger.debug(s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointBlock.get.baseHash}")
+              logger.debug(
+                s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.get.baseHash}"
+              )
             ) >> LiftIO[F].liftIO(dao.checkpointAcceptanceService.accept(h)).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
                 Sync[F].pure(None)
@@ -306,15 +310,17 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
                   logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
                 } >> Sync[F].pure(None)
             }
-          } else {
-            Sync[F].unit
           }
-        }.sequence[F, Unit]
       )
       .void
 
-  private def clearSyncBuffer: F[Unit] =
-    LiftIO[F].liftIO(dao.snapshotService.syncBuffer.set(Seq()))
+  private def filter(buffer: List[FinishedCheckpoint], info: SnapshotInfo) = {
+    val alreadyAccepted =
+      (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.get.baseHash)).distinct
+    buffer.filterNot(
+      f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.get.baseHash)
+    )
+  }
 
   private def setDownloadFinishedTime(): F[Unit] = Sync[F].delay {
     dao.downloadFinishedTime = System.currentTimeMillis()

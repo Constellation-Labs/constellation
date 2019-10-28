@@ -3,6 +3,15 @@ package org.constellation.serializer
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
+import org.constellation.domain.observation.{
+  CheckpointBlockInvalid,
+  CheckpointBlockWithMissingParents,
+  CheckpointBlockWithMissingSoe,
+  ObservationData,
+  RequestTimeoutOnConsensus,
+  RequestTimeoutOnResolving,
+  SnapshotMisalignment
+}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives._
 import org.constellation.primitives.Schema._
@@ -49,6 +58,13 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Snapshot])
     kryo.register(classOf[GenesisObservation])
     kryo.register(classOf[LastTransactionRef])
+    kryo.register(classOf[ObservationData])
+    kryo.register(classOf[CheckpointBlockWithMissingParents])
+    kryo.register(classOf[CheckpointBlockWithMissingSoe])
+    kryo.register(classOf[RequestTimeoutOnConsensus])
+    kryo.register(classOf[RequestTimeoutOnResolving])
+    kryo.register(classOf[SnapshotMisalignment])
+    kryo.register(classOf[CheckpointBlockInvalid])
 
     kryo.register(classOf[Set[String]])
 

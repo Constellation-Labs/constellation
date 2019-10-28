@@ -2,6 +2,7 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
+import cats.data.OptionT
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -58,6 +59,11 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
 
   def getPeerInfo: F[Map[Id, PeerData]] = peers.get
+
+  // TODO: wkoszycki consider using complex structure of peers so the lookup has O(n) complexity
+  def getPeerData(host: String): F[Option[PeerData]] =
+    peers.get
+      .map(m => m.find(t => t._2.peerMetadata.host == host).map(_._2))
 
   def updatePeerNotifications(notifications: List[PeerNotification]): F[Unit] =
     logThread(

@@ -28,14 +28,6 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
       .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
 
-  def applySnapshot(txs: List[TransactionCacheData], merkleRoot: String): F[Unit] =
-    withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>
-      txs.traverse(tx => withLock("acceptedUpdate", accepted.remove(tx.hash))).void
-
-  def applySnapshot(merkleRoot: String): F[Unit] =
-    findHashesByMerkleRoot(merkleRoot).flatMap(tx => withLock("acceptedUpdate", accepted.remove(tx.toSet.flatten))) >>
-      withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
-
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
     count(status = ConsensusStatus.Pending).flatMap {
       case 0L => createDummyTransactions(1)

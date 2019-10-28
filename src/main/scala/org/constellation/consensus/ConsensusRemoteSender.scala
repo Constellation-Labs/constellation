@@ -1,9 +1,13 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import java.net.SocketTimeoutException
+import java.security.KeyPair
+
+import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
-import com.typesafe.scalalogging.StrictLogging
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
 import org.constellation.consensus.Consensus.{FacilitatorId, RoundData, RoundId}
 import org.constellation.consensus.ConsensusManager.{
@@ -11,13 +15,17 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
-import org.constellation.domain.observation.Observation
+import org.constellation.domain.observation.{Observation, ObservationService, RequestTimeoutOnConsensus}
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
 
 class ConsensusRemoteSender[F[_]: Concurrent](
-  contextShift: ContextShift[F]
-) extends StrictLogging {
+  contextShift: ContextShift[F],
+  observationService: ObservationService[F],
+  keyPair: KeyPair
+) {
+
+  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def notifyFacilitators(roundData: RoundData): F[List[Response[Unit]]] =
     sendToAll(
@@ -75,12 +83,14 @@ class ConsensusRemoteSender[F[_]: Concurrent](
       pd =>
         pd.client
           .postNonBlockingUnitF(path, cmd)(contextShift)
+          .onError {
+            case _: SocketTimeoutException =>
+              observationService
+                .put(Observation.create(pd.peerMetadata.id, RequestTimeoutOnConsensus(roundId))(keyPair))
+                .void
+          }
           .flatTap(
-            r =>
-              Sync[F]
-                .delay(
-                  logger.debug(s"Consensus ${roundId} sending msg ${msg}  code ${r.code} and text ${r.statusText}")
-                )
+            r => logger.debug(s"Consensus ${roundId} sending msg ${msg}  code ${r.code} and text ${r.statusText}")
           )
     )
 

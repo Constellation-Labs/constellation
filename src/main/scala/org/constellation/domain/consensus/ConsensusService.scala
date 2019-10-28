@@ -40,6 +40,14 @@ abstract class ConsensusService[F[_]: Concurrent: Logger, A <: ConsensusObject]
   protected[domain] val accepted = new StorageService[F, A](metricRecordPrefix.map(_ + "_accepted"), Some(240))
   protected[domain] val unknown = new StorageService[F, A](metricRecordPrefix.map(_ + "_unknown"), Some(240))
 
+  def applySnapshot(a: List[A], merkleRoot: String): F[Unit] =
+    withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>
+      a.traverse(x => withLock("acceptedUpdate", accepted.remove(x.hash))).void
+
+  def applySnapshot(merkleRoot: String): F[Unit] =
+    findHashesByMerkleRoot(merkleRoot).flatMap(a => withLock("acceptedUpdate", accepted.remove(a.toSet.flatten))) >>
+      withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
+
   def put(a: A): F[A] = put(a, ConsensusStatus.Pending)
 
   def put(a: A, as: ConsensusStatus, cpc: Option[CheckpointCache] = None): F[A] = as match {

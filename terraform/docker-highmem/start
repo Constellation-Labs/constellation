@@ -11,7 +11,7 @@ java "-Dcom.sun.management.jmxremote" \
 "-Xmx14G" \
 "-Xss256K" \
 -Dconstellation.snapshot.snapshotHeightDelayInterval=20 \
--Dconstellation.consensus.maxCheckpointFormationThreshold=10 \
+-Dconstellation.consensus.maxTransactionThreshold=10 \
 -Dconstellation.transaction.generator.maxTransactionsPerRound=30 \
 -Djava.rmi.server.hostname=$(cat external_host_ip) \
 -agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=n \

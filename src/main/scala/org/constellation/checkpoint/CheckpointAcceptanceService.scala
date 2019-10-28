@@ -6,11 +6,19 @@ import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
+import org.constellation.domain.observation.{
+  CheckpointBlockInvalid,
+  CheckpointBlockWithMissingParents,
+  CheckpointBlockWithMissingSoe,
+  Observation,
+  ObservationService
+}
+import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.p2p.DataResolver
+import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives._
+import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO}
@@ -18,11 +26,13 @@ import org.constellation.{ConstellationExecutionContext, DAO}
 class CheckpointAcceptanceService[F[_]: Concurrent](
   addressService: AddressService[F],
   transactionService: TransactionService[F],
+  observationService: ObservationService[F],
   concurrentTipService: ConcurrentTipService[F],
   snapshotService: SnapshotService[F],
   checkpointService: CheckpointService[F],
   checkpointParentService: CheckpointParentService[F],
   checkpointBlockValidator: CheckpointBlockValidator[F],
+  cluster: Cluster[F],
   rateLimiting: RateLimiting[F],
   dao: DAO
 ) {
@@ -36,40 +46,44 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
+  def acceptWithNodeCheck(checkpoint: FinishedCheckpoint): F[Unit] =
+    cluster.getNodeState.flatMap { nodeState =>
+      (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
+        case (_, None)                  => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+        case (NodeState.Ready, Some(_)) => accept(checkpoint)
+        case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
+          snapshotService.syncBufferAccept(checkpoint)
+        case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
+      }
+    }
+
   def accept(checkpoint: FinishedCheckpoint): F[Unit] = {
 
-    val obtainPeers = dao.peerInfo.map { ready =>
-      val filtered = ready.filter(t => checkpoint.facilitators.contains(t._1))
-      (if (filtered.isEmpty) ready else filtered)
+    val obtainPeers = cluster.getPeerInfo.map { allPeers =>
+      val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))
+      (if (filtered.isEmpty) allPeers else filtered)
         .map(p => PeerApiClient(p._1, p._2.client))
         .toList
     }
 
-    LiftIO[F].liftIO(dao.cluster.getNodeState).flatMap { nodeState =>
-      (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
-        case (_, None) => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
-        case (NodeState.Ready, Some(cb)) =>
-          val acceptance = for {
-            _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
-            _ <- Sync[F].delay { logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others") }
-            peers <- LiftIO[F].liftIO(obtainPeers)
-            _ <- resolveMissingParents(cb, peers)
-            _ <- accept(checkpoint.checkpointCacheData)
-            _ <- pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash))
-          } yield ()
+    checkpoint.checkpointCacheData.checkpointBlock match {
+      case None => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+      case Some(cb) =>
+        val acceptance = for {
+          _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
+          _ <- logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others")
+          peers <- obtainPeers
+          _ <- resolveMissingParents(cb, peers)
+          _ <- accept(checkpoint.checkpointCacheData, checkpoint.facilitators)
+          _ <- pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash))
+        } yield ()
 
-          acceptance.recoverWith {
-            case ex: PendingAcceptance =>
-              acceptErrorHandler(ex)
-            case error =>
-              pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) >> acceptErrorHandler(error)
-          }
-
-          acceptance
-        case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
-          LiftIO[F].liftIO(dao.snapshotService.syncBufferAccept(checkpoint.checkpointCacheData))
-        case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
-      }
+        acceptance.recoverWith {
+          case ex: PendingAcceptance =>
+            acceptErrorHandler(ex)
+          case error =>
+            pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) >> acceptErrorHandler(error)
+        }
     }
   }
 
@@ -88,7 +102,16 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       .flatMap({
         case List(_, _) => Sync[F].unit
         case _ =>
-          LiftIO[F].liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift)(dao = dao).void)
+          LiftIO[F]
+            .liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift)(dao = dao).void)
+            .flatTap(
+              _ =>
+                peers.traverse(
+                  p =>
+                    observationService
+                      .put(Observation.create(p.id, CheckpointBlockWithMissingSoe(cb.baseHash))(dao.keyPair))
+                )
+            )
       })
 
     val resolveCheckpoint =
@@ -104,7 +127,16 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
               .raiseError[List[CheckpointCache]](new RuntimeException("Soe hashes are empty even resolved previously"))
           case List((_, true), (_, true)) => Sync[F].pure(List[CheckpointCache]())
           case missing =>
-            LiftIO[F].liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift)(dao = dao))
+            LiftIO[F]
+              .liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift)(dao = dao))
+              .flatTap(
+                _ =>
+                  peers.traverse(
+                    p =>
+                      observationService
+                        .put(Observation.create(p.id, CheckpointBlockWithMissingParents(cb.baseHash))(dao.keyPair))
+                  )
+              )
         }
 
     for {
@@ -116,7 +148,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
 
   }
 
-  def accept(checkpoint: CheckpointCache): F[Unit] = {
+  def accept(checkpoint: CheckpointCache, facilitators: Set[Id] = Set.empty): F[Unit] = {
 
     val acceptCheckpoint: F[Unit] = checkpoint.checkpointBlock match {
       case None => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
@@ -144,7 +176,14 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           }
 
           validation <- checkpointBlockValidator.simpleValidation(cb)
-          _ <- if (!validation.isValid) Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation"))
+          _ <- if (!validation.isValid)
+            facilitators.toList
+              .traverse(
+                id =>
+                  observationService
+                    .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair))
+              )
+              .flatMap(_ => Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation")))
           else Sync[F].unit
           _ <- LiftIO[F].liftIO(cb.storeSOE()(dao))
           maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
@@ -160,12 +199,13 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
           _ <- acceptTransactions(cb, Some(checkpoint))
+          _ <- acceptObservations(cb, Some(checkpoint))
           _ <- updateRateLimiting(cb)
           _ <- Sync[F].delay {
             logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
           }
           _ <- concurrentTipService.update(cb, height)
-          _ <- LiftIO[F].liftIO(dao.snapshotService.updateAcceptedCBSinceSnapshot(cb))
+          _ <- snapshotService.updateAcceptedCBSinceSnapshot(cb)
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- incrementMetricIfDummy(cb)
           _ <- pendingAcceptance.update(_.filterNot(_ == cb.baseHash))
@@ -205,6 +245,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
     } else {
       Sync[F].unit
     }
+
+  def acceptObservations(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] =
+    cb.observations.toList.traverse(o => observationService.accept(o, cpc)).void
 
   def acceptTransactions(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(

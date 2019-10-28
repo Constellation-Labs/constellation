@@ -11,21 +11,25 @@ import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromE
 import akka.util.Timeout
 import cats.effect.IO
 import cats.implicits._
+import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.consensus.{ConsensusRoute, _}
+import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
 import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage._
 import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
+import scala.concurrent.Future
 import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long)
@@ -222,7 +226,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  val callback = dao.checkpointAcceptanceService.accept(fc).map { result =>
+                  val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc).map { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>
@@ -275,7 +279,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     createRoute(ConsensusRoute.pathPrefix)(
       () => new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.backend).createBlockBuildingRoundRoutes()
     )
-  private[p2p] val mixedEndpoints = {
+
+  private[p2p] def mixedEndpoints(socketAddress: InetSocketAddress) =
     path("transaction") {
       put {
         entity(as[TransactionGossip]) { gossip =>
@@ -305,27 +310,58 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           complete(StatusCodes.OK)
         }
       }
+    } ~ get {
+      path("snapshot" / "info") {
+        APIDirective.extractIP(socketAddress) { ip =>
+          logger.info(
+            s"wkoszycki socket name ${socketAddress.getHostName} string ${socketAddress.getHostString} port ${socketAddress.getPort} x ${socketAddress.getAddress.toString}"
+          )
+          val getInfo = idLookup(ip)
+            .flatMap(
+              maybePeer =>
+                maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
+                  pd =>
+                    dao.observationService
+                      .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
+                      .void
+                )
+            )
+            .flatMap(
+              _ =>
+                dao.snapshotService.getSnapshotInfo.flatMap { info =>
+                  info.acceptedCBSinceSnapshot.toList.traverse {
+                    dao.checkpointService.fullData(_)
+                  }.map(
+                    cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
+                  )
+                }
+            )
+
+          APIDirective.handle(
+            dao.cluster.getNodeState
+              .map(NodeState.canActAsDownloadSource)
+              .ifM(getInfo, IO.pure(none[Array[Byte]]))
+          )(complete(_))
+        }
+      }
     }
-  }
 
   def routes(socketAddress: InetSocketAddress): Route =
     APIDirective.extractIP(socketAddress) { ip =>
-      // val id = ipLookup(address) causes circular dependencies and cluster with 6 nodes unable to start due to timeouts. Consider reopen #391
-      // TODO: pass id down and use it if needed
       decodeRequest {
         encodeResponse {
           // rejectBannedIP {
           signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
             withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
               enforceKnownIP(ip) {
-                postEndpoints(socketAddress) ~ mixedEndpoints ~ blockBuildingRoundRoute
+                postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
               }
             }
         }
       }
     }
 
-  private[p2p] def makeCallback(u: URI, entity: AnyRef) =
+  private[p2p] def makeCallback(u: URI, entity: AnyRef): Future[Response[Unit]] =
     APIClient(u.getHost, u.getPort)(dao.backend, dao)
       .postNonBlockingUnit(u.getPath, entity)
 
@@ -345,11 +381,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         }
     }
 
-  private def ipLookup(address: InetSocketAddress): Option[Id] = {
-    val ip = address.getAddress.getHostAddress
-
-    def sameHost(p: PeerData) = p.peerMetadata.host == ip
-
-    dao.peerInfo.unsafeRunSync().find(p => sameHost(p._2)).map(_._1)
-  }
+  def idLookup(host: String): IO[Option[PeerData]] =
+    dao.cluster.getPeerData(host)
 }
+
+case class IpIdMappingException(ip: String, port: Int) extends Exception(s"Unable to map ip: $ip to Id")

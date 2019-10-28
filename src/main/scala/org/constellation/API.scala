@@ -586,7 +586,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         }
     }
 
-  private val mainRoutes: Route = cors() {
+  def mainRoutes(socketAddress: InetSocketAddress): Route = cors() {
     decodeRequest {
       encodeResponse {
         getEndpoints ~ postEndpoints ~ configEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ batchEndpoints ~ serveMainPage
@@ -601,12 +601,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       case _ => None
     }
 
-  val routes =
-    if (authEnabled) {
-      noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
-        mainRoutes
+  def routes(socketAddress: InetSocketAddress): Route =
+    APIDirective.extractIP(socketAddress) { ip =>
+      if (authEnabled) {
+        noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
+          mainRoutes(socketAddress)
+        }
+      } else {
+        noAuthRoutes ~ mainRoutes(socketAddress)
       }
-    } else {
-      noAuthRoutes ~ mainRoutes
     }
 }

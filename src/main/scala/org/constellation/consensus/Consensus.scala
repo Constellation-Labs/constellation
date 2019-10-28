@@ -63,11 +63,13 @@ class Consensus[F[_]: Concurrent](
   def startTransactionProposal(): F[Unit] =
     for {
       transactions <- transactionService
-        .pullForConsensus(ConfigUtil.constellation.getInt("consensus.maxCheckpointFormationThreshold"))
+        .pullForConsensus(ConfigUtil.constellation.getInt("consensus.maxTransactionThreshold"))
         .map(_.map(_.transaction))
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull())
       notifications <- LiftIO[F].liftIO(dao.peerInfo.map(_.values.flatMap(_.notification).toSeq))
-      observations <- observationService.pullForConsensus(1) // TODO: adjust size
+      observations <- observationService.pullForConsensus(
+        ConfigUtil.constellation.getInt("consensus.maxObservationThreshold")
+      )
       proposal = LightTransactionsProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
@@ -78,7 +80,7 @@ class Consensus[F[_]: Concurrent](
           .filter(_._2 == 0)
           .map(_._1.signedMessageData.hash),
         notifications,
-        observations.map(_.hash)
+        observations
       )
       _ <- remoteCall.shift >> remoteSender.broadcastLightTransactionProposal(
         BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
@@ -439,22 +441,6 @@ class Consensus[F[_]: Concurrent](
         .toSet
         .union(roundData.peers.flatMap(_.notification))
         .toSeq
-      observations <- proposals
-        .flatMap(_._2.exHashes)
-        .toList
-        .traverse(o => observationService.lookup(o).map((o, _)))
-      resolvedObs <- prepareConsensusData[Observation, Observation](
-        "observation",
-        proposals,
-        allPeers, { p =>
-          p.exHashes
-        },
-        roundData.observations.map(_.hash), { s =>
-          observationService.lookup(s)
-        }, { o =>
-          o
-        }
-      )
       proposal = UnionBlockProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
@@ -464,7 +450,7 @@ class Consensus[F[_]: Concurrent](
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
           messages,
           notifications,
-          observations.flatMap(_._2) ++ resolvedObs
+          proposals.flatMap(_._2.observations).toSeq
         )(dao.keyPair)
       )
       _ <- remoteCall.shift >> remoteSender.broadcastBlockUnion(
@@ -505,8 +491,8 @@ class Consensus[F[_]: Concurrent](
   private[consensus] def getOwnTransactionsToReturn: F[Seq[String]] =
     transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.txHashes).getOrElse(Seq.empty))
 
-  private[consensus] def getOwnObservationsToReturn: F[Seq[String]] =
-    transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.exHashes).getOrElse(Seq.empty))
+  private[consensus] def getOwnObservationsToReturn: F[Seq[Observation]] =
+    transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.observations).getOrElse(Seq.empty))
 
   private def roundStartedByMe: Boolean = roundData.facilitatorId.id == dao.id
 
@@ -561,7 +547,7 @@ object Consensus {
   abstract class ConsensusException(msg: String) extends Exception(msg) {
     def roundId: RoundId
     def transactionsToReturn: Seq[String]
-    def observationsToReturn: Seq[String]
+    def observationsToReturn: Seq[Observation]
   }
 
   object ConsensusStage extends Enumeration {
@@ -594,7 +580,7 @@ object Consensus {
     txHashes: Seq[String],
     messages: Seq[String] = Seq(),
     notifications: Seq[PeerNotification] = Seq(),
-    exHashes: Seq[String] = Seq()
+    observations: Seq[Observation] = Seq.empty[Observation]
   ) extends ConsensusProposal
 
   case class UnionBlockProposal(
@@ -618,21 +604,21 @@ object Consensus {
     roundId: RoundId,
     maybeCB: Option[CheckpointBlock],
     transactionsToReturn: Seq[String],
-    observationsToReturn: Seq[String]
+    observationsToReturn: Seq[Observation]
   )
 
   case class EmptyProposals(
     roundId: RoundId,
     stage: String,
     transactionsToReturn: Seq[String],
-    observationsToReturn: Seq[String]
+    observationsToReturn: Seq[Observation]
   ) extends ConsensusException(s"Proposals for stage: $stage and round: $roundId are empty.")
 
   case class PreviousStage(
     roundId: RoundId,
     stage: ConsensusStage,
     transactionsToReturn: Seq[String],
-    observationsToReturn: Seq[String]
+    observationsToReturn: Seq[Observation]
   ) extends ConsensusException(s"Received message from previous round stage. Current round stage is $stage")
 
   case class NotEnoughProposals(
@@ -641,7 +627,7 @@ object Consensus {
     facilitators: Int,
     stage: String,
     transactionsToReturn: Seq[String],
-    observationsToReturn: Seq[String]
+    observationsToReturn: Seq[Observation]
   ) extends ConsensusException(
         s"Proposals number: $proposals for stage: $stage and round: $roundId are below given percentage. Number of facilitators: $facilitators"
       )
