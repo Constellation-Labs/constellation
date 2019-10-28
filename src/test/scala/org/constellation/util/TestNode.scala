@@ -5,7 +5,7 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import cats.implicits._
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.{ConstellationNode, ProcessingConfig}
 

@@ -9,7 +9,7 @@ import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.crypto.KeyUtils._
+import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.util.Metrics

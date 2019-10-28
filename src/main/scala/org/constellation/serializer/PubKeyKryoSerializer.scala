@@ -1,11 +1,11 @@
 package org.constellation.serializer
 
 import java.security.PublicKey
+
 import com.esotericsoftware.kryo.Serializer
 import com.esotericsoftware.kryo.io.{Input, Output}
 import com.twitter.chill.Kryo
-
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 
 case class EncodedPubKey(pubKeyEncoded: Array[Byte])
 

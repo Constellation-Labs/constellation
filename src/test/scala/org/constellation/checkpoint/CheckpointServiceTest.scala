@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.crypto.KeyUtils.makeKeyPair
+import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.schema.Id
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._

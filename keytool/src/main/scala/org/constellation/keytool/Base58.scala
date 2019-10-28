@@ -1,6 +1,7 @@
-package org.constellation.crypto
+package org.constellation.keytool
 
 import java.math.BigInteger
+
 import scala.annotation.tailrec
 
 // From https://github.com/ACINQ/bitcoin-lib/blob/master/src/main/scala/fr/acinq/bitcoin/Base58.scala

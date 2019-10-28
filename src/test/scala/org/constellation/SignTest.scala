@@ -1,7 +1,7 @@
 package org.constellation
 
 import com.typesafe.scalalogging.Logger
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.util.Signable
 import org.scalatest.FlatSpec
 

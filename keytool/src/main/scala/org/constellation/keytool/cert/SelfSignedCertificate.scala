@@ -1,4 +1,4 @@
-package org.constellation.crypto.cert
+package org.constellation.keytool.cert
 
 import java.math.BigInteger
 import java.security.cert.X509Certificate

@@ -1,9 +1,8 @@
-package org.constellation.crypto.keytool
+package org.constellation.keytool
 
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
-import org.constellation.BuildInfo
-import org.constellation.crypto.KeyStoreUtils
+import scopt.OParser
 
 object KeyTool extends IOApp {
 
@@ -20,7 +19,6 @@ object KeyTool extends IOApp {
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
-    import scopt.OParser
     val builder = OParser.builder[CliConfig]
 
     /**
@@ -30,7 +28,8 @@ object KeyTool extends IOApp {
       import builder._
       OParser.sequence(
         programName("cl-keytool"),
-        head("cl-keytool", BuildInfo.version),
+        // TODO: keytool BuildInfo needs to be generated BEFORE compiling constellation in CircleCI
+//        head("cl-keytool", BuildInfo.version),
         opt[String]("keystore").required
           .action((x, c) => c.copy(keystore = x)),
         opt[String]("alias").required
@@ -46,10 +45,3 @@ object KeyTool extends IOApp {
     }
   }
 }
-
-case class CliConfig(
-  keystore: String = null,
-  alias: String = null,
-  storepass: Array[Char] = null,
-  keypass: Array[Char] = null
-)

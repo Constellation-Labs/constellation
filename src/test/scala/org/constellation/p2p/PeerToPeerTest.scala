@@ -11,7 +11,7 @@ import org.scalatest._
 import scala.util.Random
 
 import org.constellation.DAO
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 
 class PeerToPeerTest
     extends TestKit(ActorSystem("BlockChain"))

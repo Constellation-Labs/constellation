@@ -7,7 +7,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 import org.constellation.Fixtures.{dummyTx, _}
 import Partitioner._
 import org.constellation.DAO
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.primitives.Schema.SendToAddress
 

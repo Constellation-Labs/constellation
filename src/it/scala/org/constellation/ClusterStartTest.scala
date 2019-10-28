@@ -6,7 +6,7 @@ import akka.testkit.TestKit
 import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.util.Simulation
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike}
 

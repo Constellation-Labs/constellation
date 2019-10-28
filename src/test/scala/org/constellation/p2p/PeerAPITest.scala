@@ -15,7 +15,7 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
-import org.constellation.crypto.KeyUtils
+import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.domain.schema.Id

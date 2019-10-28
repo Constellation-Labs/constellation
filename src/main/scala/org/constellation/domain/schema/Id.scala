@@ -3,8 +3,8 @@ package org.constellation.domain.schema
 import java.security.PublicKey
 
 import com.google.common.hash.Hashing
-import org.constellation.crypto.KeyUtils
-import org.constellation.crypto.KeyUtils.hexToPublicKey
+import org.constellation.keytool.KeyUtils
+import org.constellation.keytool.KeyUtils._
 
 case class Id(hex: String) {
 

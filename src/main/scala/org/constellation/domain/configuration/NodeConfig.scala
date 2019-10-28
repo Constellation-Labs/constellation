@@ -2,9 +2,9 @@ package org.constellation.domain.configuration
 
 import java.security.KeyPair
 
-import org.constellation.crypto.KeyUtils
-import org.constellation.util.{AccountBalance, HostPort}
 import org.constellation.ProcessingConfig
+import org.constellation.keytool.KeyUtils
+import org.constellation.util.{AccountBalance, HostPort}
 
 case class NodeConfig(
   seeds: Seq[HostPort] = Seq(),

@@ -1,5 +1,6 @@
 package org.constellation.crypto
 
+import org.constellation.keytool.KeyUtils
 import org.scalatest.FlatSpec
 
 class KeyTest extends FlatSpec {

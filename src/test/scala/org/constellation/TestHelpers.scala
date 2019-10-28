@@ -9,8 +9,8 @@ import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
-import org.constellation.crypto.KeyUtils
-import org.constellation.crypto.KeyUtils.makeKeyPair
+import org.constellation.keytool.KeyUtils
+import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.schema.Id
