@@ -220,7 +220,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
             .getNonBlockingArrayByteF("info", timeout = 8.seconds)(C)
             .handleErrorWith(e => {
               Sync[F]
-                .delay(logger.info(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
                 makeAttempt(tail)
             })
       }
