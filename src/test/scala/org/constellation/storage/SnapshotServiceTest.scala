@@ -7,6 +7,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
@@ -37,6 +38,7 @@ class SnapshotServiceTest
     val checkpointService = mock[CheckpointService[IO]]
     val messageService = mock[MessageService[IO]]
     val transactionService = mock[TransactionService[IO]]
+    val observationService = mock[ObservationService[IO]]
     val rateLimiting = mock[RateLimiting[IO]]
     val consensusManager = mock[ConsensusManager[IO]]
 
@@ -46,6 +48,7 @@ class SnapshotServiceTest
       checkpointService,
       messageService,
       transactionService,
+      observationService,
       rateLimiting,
       consensusManager,
       dao

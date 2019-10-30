@@ -69,7 +69,7 @@ class CheckpointServiceTest
       }
 
       dao.checkpointAcceptanceService
-        .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
     }
@@ -96,7 +96,7 @@ class CheckpointServiceTest
       }
 
       dao.checkpointAcceptanceService
-        .accept(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
     }

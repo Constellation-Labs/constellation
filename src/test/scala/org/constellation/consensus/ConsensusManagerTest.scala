@@ -4,6 +4,7 @@ import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
+import org.constellation.domain.observation.Observation
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
@@ -84,8 +85,10 @@ class ConsensusManagerTest
         .flatMap(_ => consensusManager.ownConsensus.set(Some(OwnConsensus(generateRoundId, Some(obsolete._2)))))
         .unsafeRunSync()
 
+      val someObseravation = mock[Observation]
+      someObseravation.hash shouldReturn "someOb"
       consensus.getOwnTransactionsToReturn shouldReturnF Seq("someTx")
-      consensus.getOwnObservationsToReturn shouldReturnF Seq("someOb")
+      consensus.getOwnObservationsToReturn shouldReturnF Seq(someObseravation)
       dao.transactionService.returnToPending(*) shouldReturnF List.empty
       dao.observationService.returnToPending(*) shouldReturnF List.empty
       dao.transactionService.clearInConsensus(*) shouldReturnF List.empty

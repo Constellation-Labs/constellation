@@ -1,5 +1,7 @@
 package org.constellation.p2p
 
+import java.net.SocketTimeoutException
+
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -7,7 +9,7 @@ import constellation._
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
-import org.constellation.domain.observation.Observation
+import org.constellation.domain.observation.{Observation, RequestTimeoutOnResolving}
 import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.Logging._
@@ -352,17 +354,30 @@ class DataResolver extends StrictLogging {
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] =
     peerApiClient.client
       .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)(contextToReturn)
+      .onError {
+        case _: SocketTimeoutException =>
+          dao.observationService
+            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(endpoint, List(hash)))(dao.keyPair))
+            .void
+      }
 
   private[p2p] def getBatchData[T <: AnyRef](
     hashes: List[String],
     endpoint: String,
     peerApiClient: PeerApiClient
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
-    peerApiClient.client.postNonBlockingIO[List[(String, T)]](
-      s"batch/$endpoint",
-      hashes,
-      timeout = apiTimeout
-    )(contextToReturn)
+    peerApiClient.client
+      .postNonBlockingIO[List[(String, T)]](
+        s"batch/$endpoint",
+        hashes,
+        timeout = apiTimeout
+      )(contextToReturn)
+      .onError {
+        case _: SocketTimeoutException =>
+          dao.observationService
+            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(endpoint, hashes))(dao.keyPair))
+            .void
+      }
 
   private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],

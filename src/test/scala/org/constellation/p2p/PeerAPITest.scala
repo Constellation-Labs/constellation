@@ -5,8 +5,8 @@ import java.net.InetSocketAddress
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
-import akka.util.Timeout
 import better.files.File
+import cats.data.OptionT
 import cats.effect.IO
 import com.softwaremill.sttp.Response
 import constellation._
@@ -14,19 +14,23 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
-import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse}
+import org.constellation.consensus.{FinishedCheckpoint, FinishedCheckpointResponse, Snapshot, SnapshotInfo}
 import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
-import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
+import org.constellation.domain.observation
+import org.constellation.domain.observation.{Observation, ObservationService, SnapshotMisalignment}
 import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
-import org.constellation.primitives.{IPManager, Transaction, TransactionCacheData, TransactionGossip}
-import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove, SnapshotInvalid}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
+import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
+import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove}
 import org.constellation.storage._
-import org.constellation.util.{APIClient, Metrics}
-import org.constellation.{DAO, Fixtures, ProcessingConfig}
+import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.{DAO, Fixtures, PeerMetadata, ProcessingConfig}
+import org.joda.time.DateTimeUtils
 import org.json4s.native
 import org.json4s.native.Serialization
+import org.mockito.captor.ArgCaptor
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -209,7 +213,7 @@ class PeerAPITest
 
           val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
 
-          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
             dao.transactionGossiping.observe(*).was(called)
           }
         }
@@ -231,7 +235,7 @@ class PeerAPITest
           dao.transactionGossiping.selectPeers(tcd)(scala.util.Random) shouldReturnF Set(id)
           dao.peerInfo shouldReturnF Map(id -> peerData)
 
-          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
             peerData.client.putAsync(*, *, *)(*).was(called)
           }
         }
@@ -247,8 +251,36 @@ class PeerAPITest
 
           val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
 
-          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints ~> check {
+          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
             status shouldEqual StatusCodes.OK
+          }
+        }
+      }
+
+      "GET snapshot info" - {
+
+        "should get snapshot info" in {
+          val pd = mock[PeerData]
+          pd.peerMetadata shouldReturn mock[PeerMetadata]
+          pd.peerMetadata.id shouldReturn Id("foo")
+          dao.snapshotService.getSnapshotInfo shouldReturnF SnapshotInfo(Snapshot("hash", Seq.empty))
+          dao.observationService.put(*) shouldReturnF mock[Observation]
+          val observationCapture = ArgCaptor[Observation]
+          dao.cluster.getPeerData("127.0.0.1") shouldReturnF Some(pd)
+
+          DateTimeUtils.setCurrentMillisFixed(1234567)
+
+          Get(s"/snapshot/info") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+            Mockito.verify(dao.observationService).put(observationCapture)
+
+            dao.observationService.put(*).was(called)
+            val hashEquality = new org.scalactic.Equality[Observation] {
+              def areEqual(a: Observation, b: Any): Boolean =
+                b.isInstanceOf[Observation] && a.hash == b.asInstanceOf[Observation].hash
+            }
+            observationCapture.hasCaptured(Observation.create(Id("foo"), SnapshotMisalignment(), 1234567)(dao.keyPair))(
+              hashEquality
+            )
           }
         }
       }
@@ -305,15 +337,16 @@ class PeerAPITest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-    val ipManager = IPManager[IO]()
-    val cluster = Cluster[IO](() => metrics, ipManager, dao)
-    dao.cluster shouldReturn cluster
-    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
+//    val ipManager = IPManager[IO]()
+//    val cluster = Cluster[IO](() => metrics, ipManager, dao)
+//    dao.cluster shouldReturn cluster
+//    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
     dao.peerInfo shouldReturnF Map()
 
     dao.snapshotService shouldReturn mock[SnapshotService[IO]]
+    dao.observationService shouldReturn mock[ObservationService[IO]]
     dao.checkpointAcceptanceService shouldReturn mock[CheckpointAcceptanceService[IO]]
-    dao.checkpointAcceptanceService.accept(any[FinishedCheckpoint]) shouldReturn IO({
+    dao.checkpointAcceptanceService.acceptWithNodeCheck(any[FinishedCheckpoint]) shouldReturn IO({
       Thread.sleep(100)
     })
     dao

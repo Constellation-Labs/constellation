@@ -20,7 +20,7 @@ object APIDirective {
   ): Directive1[A] =
     Directives.onComplete(eval(ioa, ec)).flatMap {
       case Success(response) => Directives.provide(response)
-      case Failure(error)    => Directives.complete(error)
+      case Failure(error)    => Directives.failWith(error)
     }
 
   def onHandle[A](

@@ -3,32 +3,20 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, Timer}
-import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
+import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.{
-  CheckpointAcceptanceService,
-  CheckpointBlockValidator,
-  CheckpointMerkleService,
-  CheckpointParentService,
-  CheckpointService
-}
+import org.constellation.checkpoint._
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
-import org.constellation.p2p._
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.NodeType.NodeType
-import org.constellation.primitives.Schema._
 import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{
   TransactionChainService,
@@ -36,6 +24,11 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
+import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
+import org.constellation.p2p._
+import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType.NodeType
+import org.constellation.primitives.Schema._
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
@@ -50,7 +43,11 @@ import scala.concurrent.duration._
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
   val backend: SttpBackend[Future, Nothing] =
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
+    PrometheusBackend[Future, Nothing](
+      OkHttpFutureBackend(
+        SttpBackendOptions.connectionTimeout(ConfigUtil.getDurationFromConfig("connection-timeout", 5.seconds))
+      )(ConstellationExecutionContext.unbounded)
+    )
 
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
@@ -151,7 +148,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
-    consensusRemoteSender = new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded))
+    consensusRemoteSender =
+      new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
 
     majorityStateChooser = new MajorityStateChooser[IO]()
 
@@ -206,6 +204,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       checkpointService,
       messageService,
       transactionService,
+      observationService,
       rateLimiting,
       consensusManager,
       this
@@ -223,11 +222,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
       addressService,
       transactionService,
+      observationService,
       concurrentTipService,
       snapshotService,
       checkpointService,
       checkpointParentService,
       checkpointBlockValidator,
+      cluster,
       rateLimiting,
       this
     )

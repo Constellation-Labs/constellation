@@ -5,12 +5,12 @@ import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.Directive0
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
-import akka.http.scaladsl.server.{Directive0, Route}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import better.files._
-import cats.effect.{ExitCode, IO, IOApp, Sync}
+import cats.effect.{ContextShift, ExitCode, IO, IOApp, Sync}
 import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -28,7 +28,7 @@ import org.constellation.primitives._
 import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Metrics}
 import org.slf4j.MDC
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
 /**
@@ -180,13 +180,18 @@ class ConstellationNode(
   )
 
   // If we are exposing rpc then create routes
-  val routes: Route = new API()(system, constellation.standardTimeout, dao).routes
+  val api: API = new API()(system, constellation.standardTimeout, dao)
 
   logger.info("Binding API")
 
   // Setup http server for internal API
-  private val bindingFuture: Future[Http.ServerBinding] =
-    Http().bindAndHandle(routes, nodeConfig.httpInterface, nodeConfig.httpPort)
+  val apiBinding: Future[Http.ServerBinding] = Http()
+    .bind(nodeConfig.httpInterface, nodeConfig.httpPort)
+    .to(Sink.foreach { conn =>
+      val address = conn.remoteAddress
+      conn.handleWith(api.routes(address))
+    })
+    .run()
 
   val peerAPI = new PeerAPI(dao.ipManager)
 
@@ -197,25 +202,30 @@ class ConstellationNode(
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
   // Setup http server for peer API
-  // TODO: Add shutdown mechanism
-  Http()
+  val peerApiBinding: Future[Http.ServerBinding] = Http()
     .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
-    .runWith(Sink.foreach { conn =>
+    .to(Sink.foreach { conn =>
       val address = conn.remoteAddress
       conn.handleWith(peerAPI.routes(address))
     })
+    .run()
 
   def shutdown(): Unit = {
-    val gracefulShutdown = IO.delay(bindingFuture.foreach(_.unbind())(ConstellationExecutionContext.callbacks)) >>
-      IO.delay(logger.info("Node shutdown completed"))
+
+    val unbindTimeout = ConfigUtil.getDurationFromConfig("akka.http.unbind-api-timeout")
+
+    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+    implicit val cs: ContextShift[IO] = IO.contextShift(ec)
+
+    val gracefulShutdown = IO(logger.info("Shutdown procedure starts")) >>
+      IO.fromFuture(IO(peerApiBinding.flatMap(_.terminate(unbindTimeout)))) >>
+      IO.fromFuture(IO(apiBinding.flatMap(_.terminate(unbindTimeout)))) >>
+      IO.fromFuture(IO(system.terminate())) >>
+      IO(logger.info("Shutdown completed"))
 
     dao.cluster
-      .leave(gracefulShutdown)
+      .leave(gracefulShutdown.void)
       .unsafeRunSync()
-
-    // TODO: we should add this back but it currently causes issues in the integration test
-    //.onComplete(_ => system.terminate())
-
   }
 
   //////////////

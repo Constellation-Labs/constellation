@@ -2,25 +2,33 @@ package org.constellation.rpc
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import com.softwaremill.sttp.SttpBackend
+import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
+import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.ConstellationExecutionContext
-import org.constellation.keytool.KeyUtils
 import org.constellation.domain.schema.Id
+import org.constellation.keytool.KeyUtils
 import org.constellation.util.{APIClient, TestNode}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}
 
-import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
-class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll {
+class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with BeforeAndAfterAll with StrictLogging {
 
   implicit val system: ActorSystem = ActorSystem("BlockChain")
   implicit val materialize: ActorMaterializer = ActorMaterializer()
 
   implicit val backend: SttpBackend[Future, Nothing] =
-    PrometheusBackend[Future, Nothing](OkHttpFutureBackend()(ConstellationExecutionContext.unbounded))
+    PrometheusBackend[Future, Nothing](
+      OkHttpFutureBackend(
+        SttpBackendOptions.connectionTimeout(ConfigUtil.getDurationFromConfig("connection-timeout", 5.seconds))
+      )(
+        ConstellationExecutionContext.unbounded
+      )
+    )
 
   override def afterEach(): Unit =
     TestNode.clearNodes()

@@ -5,7 +5,7 @@ import cats.effect.{Concurrent, ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
 import org.constellation.primitives.Transaction
 import org.constellation.storage.algebra.Lookup
