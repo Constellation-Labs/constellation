@@ -28,6 +28,7 @@ import org.constellation.rollback.RollbackService
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
+import org.constellation.trust.TrustManager
 import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
@@ -130,6 +131,7 @@ trait EdgeDAO {
 
   var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _
+  var trustManager: TrustManager[IO] = _
   var transactionService: TransactionService[IO] = _
   var transactionChainService: TransactionChainService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _

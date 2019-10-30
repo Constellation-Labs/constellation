@@ -19,6 +19,8 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
+import org.constellation.domain.Id
+import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
@@ -353,7 +355,18 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               .ifM(getInfo, IO.pure(none[Array[Byte]]))
           )(complete(_))
         }
-      }
+      } ~
+        path("trust") {
+          APIDirective.handle(
+            dao.trustManager.getPredictedReputation
+              .flatMap(
+                predicted =>
+                  if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(_ => TrustData(_))
+                  else IO.pure(TrustData(predicted))
+              )
+          )(complete(_))
+        }
+
     }
 
   def routes(socketAddress: InetSocketAddress): Route =
