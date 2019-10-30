@@ -266,7 +266,7 @@ class PeerAPITest
           dao.snapshotService.getSnapshotInfo shouldReturnF SnapshotInfo(Snapshot("hash", Seq.empty))
           dao.observationService.put(*) shouldReturnF mock[Observation]
           val observationCapture = ArgCaptor[Observation]
-          dao.cluster.getPeerData(HostPort("127.0.0.1", 9001)) shouldReturnF Some(pd)
+          dao.cluster.getPeerData("127.0.0.1") shouldReturnF Some(pd)
 
           DateTimeUtils.setCurrentMillisFixed(1234567)
 

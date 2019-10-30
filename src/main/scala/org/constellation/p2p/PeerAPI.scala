@@ -62,6 +62,15 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
+  implicit def exceptionHandler: ExceptionHandler =
+    ExceptionHandler {
+      case e: Exception =>
+        extractUri { uri =>
+          logger.error(s"Request to $uri could not be handled normally", e)
+          complete(HttpResponse(StatusCodes.InternalServerError, entity = e.getMessage))
+        }
+    }
+
   val snapshotHeightRedownloadDelayInterval =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
   private val config: Config = ConfigFactory.load()
@@ -313,9 +322,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     } ~ get {
       path("snapshot" / "info") {
         APIDirective.extractIP(socketAddress) { ip =>
-          logger.info(
-            s"wkoszycki socket name ${socketAddress.getHostName} string ${socketAddress.getHostString} port ${socketAddress.getPort} x ${socketAddress.getAddress.toString}"
-          )
           val getInfo = idLookup(ip)
             .flatMap(
               maybePeer =>
@@ -370,15 +376,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       handleExceptions(exceptionHandler) {
         routeFactory()
       }
-    }
-
-  def exceptionHandler: ExceptionHandler =
-    ExceptionHandler {
-      case e: Exception =>
-        extractUri { uri =>
-          logger.error(s"Request to $uri could not be handled normally", e)
-          complete(HttpResponse(StatusCodes.InternalServerError))
-        }
     }
 
   def idLookup(host: String): IO[Option[PeerData]] =

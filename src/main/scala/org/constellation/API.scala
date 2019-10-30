@@ -8,7 +8,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
@@ -124,7 +124,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller
 
-//  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
+  implicit def exceptionHandler: ExceptionHandler =
+    ExceptionHandler {
+      case e: Exception =>
+        extractUri { uri =>
+          logger.error(s"Request to $uri could not be handled normally", e)
+          complete(HttpResponse(StatusCodes.InternalServerError, entity = e.getMessage))
+        }
+    }
 
   val config: Config = ConfigFactory.load()
 
