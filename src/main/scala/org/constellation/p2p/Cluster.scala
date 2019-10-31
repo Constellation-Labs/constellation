@@ -9,6 +9,7 @@ import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.domain.schema.Id
+import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
@@ -64,6 +65,11 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def getPeerData(host: String): F[Option[PeerData]] =
     peers.get
       .map(m => m.find(t => t._2.peerMetadata.host == host).map(_._2))
+
+  def clusterNodes(): F[List[ClusterNode]] =
+    getPeerInfo.map(_.values.toList.map(_.peerMetadata).map(ClusterNode(_))).flatMap { nodes =>
+      getNodeState.map(ClusterNode(dao.id, dao.peerHostPort, _, 0L)).map(nodes ++ List(_))
+    }
 
   def updatePeerNotifications(notifications: List[PeerNotification]): F[Unit] =
     logThread(
@@ -541,5 +547,11 @@ object Cluster {
 
   def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
     new Cluster(ipManager, dao)
+
+  case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
+
+  object ClusterNode {
+    def apply(pm: PeerMetadata) = new ClusterNode(pm.id, HostPort(pm.host, pm.httpPort), pm.nodeState, 0L)
+  }
 
 }
