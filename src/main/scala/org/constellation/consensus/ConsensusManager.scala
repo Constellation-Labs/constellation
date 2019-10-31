@@ -22,7 +22,7 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.Try
 
-class ConsensusManager[F[_]: Concurrent](
+class ConsensusManager[F[_]: Concurrent: ContextShift](
   transactionService: TransactionService[F],
   concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],

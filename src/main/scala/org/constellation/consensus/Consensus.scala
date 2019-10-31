@@ -28,7 +28,7 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 
-class Consensus[F[_]: Concurrent](
+class Consensus[F[_]: Concurrent: ContextShift](
   roundData: RoundData,
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   dataResolver: DataResolver,
@@ -46,8 +46,8 @@ class Consensus[F[_]: Concurrent](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  implicit val contextShift
-    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki apply from calculationContext[F]
+  implicit val contextShift: ContextShift[IO] =
+    IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki apply from calculationContext[F]
 
   implicit val shadowDAO: DAO = dao
 

@@ -39,6 +39,7 @@ class ConsensusManagerTest
   val dao: DAO = TestHelpers.prepareMockedDAO()
 
   implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded))
+  implicit val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

@@ -13,7 +13,7 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
 
-class TransactionService[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO)
+class TransactionService[F[_]: Concurrent](val transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
 
   private val logger = Slf4jLogger.getLogger[F]

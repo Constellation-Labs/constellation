@@ -1,5 +1,7 @@
 package org.constellation.checkpoint
 
+import cats.Applicative
+import cats.data.OptionT
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import constellation._
@@ -13,7 +15,7 @@ import org.constellation.domain.observation.{
   Observation,
   ObservationService
 }
-import org.constellation.domain.transaction.TransactionService
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
@@ -36,29 +38,42 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
   rateLimiting: RateLimiting[F],
   dao: DAO
 ) {
+  import CheckpointAcceptanceService._
 
-  val contextShift
-    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
+  val contextShift: ContextShift[IO] =
+    IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
+  val awaitingForAcceptance: SingleRef[F, Set[CheckpointCache]] = SingleRef(Set())
   val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
   val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
   val maxDepth: Int = 10
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  def acceptWithNodeCheck(checkpoint: FinishedCheckpoint): F[Unit] =
+  // TODO: use combined functions
+  def acceptWithReferenceCheck(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] =
+    OptionT
+      .fromOption[F](checkpoint.checkpointCacheData.checkpointBlock)
+      .semiflatMap(isCheckpointBlockAllowedForAcceptance[F](_)(transactionService.transactionChainService))
+      .value
+      .flatMap {
+        case Some(true)  => accept(checkpoint)
+        case Some(false) => awaitingForAcceptance.unsafeModify(s => (s + checkpoint.checkpointCacheData, ()))
+        case _           => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+      }
+
+  def acceptWithNodeCheck(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] =
     cluster.getNodeState.flatMap { nodeState =>
       (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
-        case (_, None)                  => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
-        case (NodeState.Ready, Some(_)) => accept(checkpoint)
+        case (NodeState.Ready, Some(_)) => acceptWithReferenceCheck(checkpoint)
         case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
           snapshotService.syncBufferAccept(checkpoint)
         case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
+        case (_, None)    => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
       }
     }
 
-  def accept(checkpoint: FinishedCheckpoint): F[Unit] = {
-
+  def accept(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] = {
     val obtainPeers = cluster.getPeerInfo.map { allPeers =>
       val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))
       (if (filtered.isEmpty) allPeers else filtered)
@@ -84,6 +99,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           case error =>
             pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) >> acceptErrorHandler(error)
         }
+
     }
   }
 
@@ -148,7 +164,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
 
   }
 
-  def accept(checkpoint: CheckpointCache, facilitators: Set[Id] = Set.empty): F[Unit] = {
+  def accept(checkpoint: CheckpointCache, facilitators: Set[Id] = Set.empty)(implicit cs: ContextShift[F]): F[Unit] = {
 
     val acceptCheckpoint: F[Unit] = checkpoint.checkpointBlock match {
       case None => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
@@ -209,8 +225,17 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- incrementMetricIfDummy(cb)
           _ <- pendingAcceptance.update(_.filterNot(_ == cb.baseHash))
+          awaiting <- awaitingForAcceptance.modify { s =>
+            val ret = s.filterNot(_.checkpointBlock.map(_.baseHash).getOrElse("unknown") == cb.baseHash)
+            (ret, ret)
+          }
+          allowedToAccept <- awaiting
+            .flatMap(cc => cc.checkpointBlock.map((_, cc)))
+            .toList
+            .filterA(c => isCheckpointBlockAllowedForAcceptance[F](c._1)(transactionService.transactionChainService))
+            .map(_.map(_._2))
+          _ <- cs.shift >> allowedToAccept.traverse(accept(_))
         } yield ()
-
     }
 
     acceptCheckpoint.recoverWith {
@@ -317,4 +342,29 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
     }
 
   def calculateHeight(cb: CheckpointBlock): F[Option[Height]] = checkpointParentService.calculateHeight(cb)
+}
+
+object CheckpointAcceptanceService {
+
+  def isCheckpointBlockAllowedForAcceptance[F[_]: Concurrent](
+    cb: CheckpointBlock
+  )(txChainService: TransactionChainService[F]) =
+    cb.transactions.toList
+      .groupBy(_.src.address)
+      .mapValues(_.sortBy(_.lastTxRef.ordinal))
+      .toList
+      .pure[F]
+      .flatMap { t =>
+        t.traverse {
+          case (hash, txs) =>
+            txChainService
+              .getLastAcceptedTransactionRef(hash)
+              .map(_.ordinal == txs.headOption.map(_.lastTxRef.ordinal).getOrElse(-1))
+              .ifM(
+                true.pure[F],
+                false.pure[F]
+              )
+        }
+      }
+      .map(_.forall(_ == true))
 }

@@ -23,7 +23,7 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
                } else {
                  sortForPull(txs.values.toList).flatMap { sorted =>
                    val (left, right) = sorted.splitAt(maxCount)
-                   ref.unsafeModify(_ => (right.map(tx => tx.hash -> tx).toMap, Option(left).filter(_.isEmpty)))
+                   ref.unsafeModify(_ => (right.map(tx => tx.hash -> tx).toMap, Option(left).filter(_.nonEmpty)))
                  }
                })
           )
@@ -36,18 +36,15 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
       .toList
       .pure[F]
       .flatMap { t =>
-        {
-          t.traverse {
-            case (hash, txs) =>
-              transactionChainService
-                .getLastAcceptedTransactionRef(hash)
-                .map(
-                  b => {
-                    if (b.ordinal == txs.headOption.map(_.transaction.lastTxRef.ordinal).getOrElse(-1)) txs
-                    else List.empty[TransactionCacheData]
-                  }
-                )
-          }
+        t.traverse {
+          case (hash, txs) =>
+            transactionChainService
+              .getLastAcceptedTransactionRef(hash)
+              .map(_.ordinal == txs.headOption.map(_.transaction.lastTxRef.ordinal).getOrElse(-1))
+              .ifM(
+                txs.pure[F],
+                List.empty[TransactionCacheData].pure[F]
+              )
         }
       }
       .map(

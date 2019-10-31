@@ -6,7 +6,7 @@ import java.nio.file.{NoSuchFileException, Path}
 import better.files.File
 import cats.data.{EitherT, NonEmptyList}
 import cats.data.Validated.{Invalid, Valid}
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -93,6 +93,7 @@ object EdgeProcessor extends StrictLogging {
   ) = {
 
     implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
+    implicit val cs: ContextShift[IO] = IO.contextShift(ec)
 
     val transactions = dao.transactionService
       .pullForConsensus(ConfigUtil.constellation.getInt("consensus.maxTransactionThreshold"))

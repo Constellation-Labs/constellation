@@ -161,7 +161,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         ConstellationExecutionContext.bounded,
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
-    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster)(
+    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService)(
       Concurrent(IO.ioConcurrentEffect),
       ioTimer,
       ioTimer.clock,

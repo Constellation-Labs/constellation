@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus._
 import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -112,7 +113,11 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
     }
 }
 
-class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: SnapshotsProcessor[F], cluster: Cluster[F])(
+class DownloadProcess[F[_]: Concurrent: Timer: Clock](
+  snapshotsProcessor: SnapshotsProcessor[F],
+  cluster: Cluster[F],
+  checkpointAcceptanceService: CheckpointAcceptanceService[F]
+)(
   implicit dao: DAO,
   ec: ExecutionContext,
   C: ContextShift[F]
@@ -302,7 +307,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](snapshotsProcessor: Snapsh
               logger.debug(
                 s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.get.baseHash}"
               )
-            ) >> LiftIO[F].liftIO(dao.checkpointAcceptanceService.accept(h)).recoverWith {
+            ) >> checkpointAcceptanceService.accept(h).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
                 Sync[F].pure(None)
               case unknownError =>
@@ -338,7 +343,7 @@ object Download extends StrictLogging {
           implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
           val snapshotsProcessor =
             new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
-          val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster)
+          val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster, dao.checkpointAcceptanceService)
           val download = process.download()
           val wrappedDownload =
             dao.cluster.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress).flatMap {

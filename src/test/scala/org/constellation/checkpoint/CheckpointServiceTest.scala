@@ -3,7 +3,7 @@ package org.constellation.checkpoint
 import java.security.KeyPair
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
@@ -28,6 +28,7 @@ class CheckpointServiceTest
 
   implicit val kp: KeyPair = makeKeyPair()
   implicit val dao: DAO = TestHelpers.prepareRealDao(readyFacilitators)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   after {
@@ -60,7 +61,6 @@ class CheckpointServiceTest
       val blocks = Seq(cb1, cb2)
 
       blocks.foreach { c =>
-        println(c.soeHash)
         peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
           .pure(Some(SignedObservationEdgeCache(c.soe)))
 
