@@ -1,5 +1,7 @@
 package org.constellation.snapshot
 
+import cats.effect.IO
+import org.constellation.ConstellationExecutionContext
 import org.constellation.schema.Id
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
 import org.constellation.util.SnapshotDiff
@@ -13,7 +15,10 @@ class HeightIdBasedSnapshotSelectorTest
     with ArgumentMatchersSugar {
 
   val thisNode = Id("bbb")
-  val snapshotSelector = new HeightIdBasedSnapshotSelector(thisNode, 8)
+
+  implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
+
+  val snapshotSelector = new HeightIdBasedSnapshotSelector[IO](thisNode, 8)
 
   test("selectSnapshotFromBroadcastResponses should handle empty inputs") {
     snapshotSelector.selectSnapshotFromBroadcastResponses(List.empty, List.empty) shouldBe None
@@ -30,7 +35,7 @@ class HeightIdBasedSnapshotSelectorTest
       (Id("peer2"), List(RecentSnapshot("differentSnap10", 10), RecentSnapshot("snap8", 8), RecentSnapshot("snap6", 6)))
 
     snapshotSelector.selectSnapshotFromRecent(List(peer1, peer2), List.empty) shouldBe Some(
-      DownloadInfo(SnapshotDiff(List.empty, peer2._2, List(peer2._1)), peer2._2)
+      (SnapshotDiff(List.empty, peer2._2, List(peer2._1)), peer2._2)
     )
   }
 
@@ -147,7 +152,7 @@ class HeightIdBasedSnapshotSelectorTest
     val responses =
       List(Some(SnapshotVerification(Id("ccc"), VerificationStatus.SnapshotInvalid, List(RecentSnapshot("aaa10", 10)))))
     snapshotSelector.selectSnapshotFromBroadcastResponses(responses, own) shouldBe Some(
-      DownloadInfo(
+      (
         SnapshotDiff(own, responses.head.get.recentSnapshot, List(responses.head.get.id)),
         responses.head.get.recentSnapshot
       )
@@ -164,7 +169,7 @@ class HeightIdBasedSnapshotSelectorTest
         Some(SnapshotVerification(Id("ddd"), VerificationStatus.SnapshotInvalid, List(RecentSnapshot("aaa10", 10))))
       )
     snapshotSelector.selectSnapshotFromBroadcastResponses(responses, own) shouldBe Some(
-      DownloadInfo(
+      (
         SnapshotDiff(own, responses.head.get.recentSnapshot, List(Id("ccc"), Id("ddd"))),
         responses.head.get.recentSnapshot
       )

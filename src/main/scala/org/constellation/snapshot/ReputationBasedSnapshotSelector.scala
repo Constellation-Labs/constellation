@@ -6,7 +6,7 @@ import org.constellation.schema.Id
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
 import org.constellation.util.SnapshotDiff
 
-class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
+class ReputationBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
     extends SnapshotSelector[F, List[RecentSnapshot]] {
 
   /**
@@ -154,5 +154,4 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHe
     )
 
 }
-
-case class DownloadInfo(diff: SnapshotDiff, recentStateToSet: List[RecentSnapshot])
+case class ReputationSelectionInput(recentSnapshots: List[RecentSnapshot], publicReputation: Map[Id, Double])

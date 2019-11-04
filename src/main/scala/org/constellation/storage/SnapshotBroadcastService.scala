@@ -7,6 +7,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.schema.Id
@@ -19,7 +20,7 @@ import scala.concurrent.duration._
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
   cluster: Cluster[F],
-  snapshotSelector: SnapshotSelector,
+  snapshotSelector: SnapshotSelector[F, List[RecentSnapshot]],
   contextShift: ContextShift[F],
   dao: DAO
 ) extends StrictLogging {
@@ -50,9 +51,9 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
           healthChecker
-            .startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1)))
+            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
             .flatMap(
-              _ => recentSnapshots.set(d.recentStateToSet)
+              _ => recentSnapshots.set(d._2)
             )
       )
     } yield ()
@@ -61,16 +62,16 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     val verify = for {
       ownRecent <- getRecentSnapshots
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
-      responses <- collectSnapshot(peers)
+      responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
       maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
           healthChecker
-            .startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1)))
+            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
             .flatMap(
               _ =>
                 recentSnapshots
-                  .set(d.recentStateToSet)
+                  .set(d._2)
             )
       )
     } yield ()
@@ -107,11 +108,6 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       val updated = (RecentSnapshot(hash, height) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
       (updated, updated)
     }
-
-  private def collectSnapshot(peers: Map[Id, PeerData]): F[List[(Id, List[RecentSnapshot])]] =
-    peers.toList.traverse(
-      p => (p._1, p._2.client.getNonBlockingF[F, List[RecentSnapshot]]("snapshot/recent")(contextShift)).sequence
-    )
 
   def shouldRunClusterCheck(responses: List[Option[SnapshotVerification]]): Boolean =
     responses.nonEmpty && ((responses.count(r => r.nonEmpty && r.get.status == VerificationStatus.SnapshotInvalid) * 100) / responses.size) >= dao.processingConfig.maxInvalidSnapshotRate

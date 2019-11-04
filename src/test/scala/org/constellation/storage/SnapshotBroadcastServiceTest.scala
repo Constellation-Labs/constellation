@@ -30,7 +30,7 @@ class SnapshotBroadcastServiceTest
 
   var dao: DAO = _
   val healthChecker = mock[HealthChecker[IO]]
-  val snapshotSelector = mock[SnapshotSelector]
+  val snapshotSelector = mock[SnapshotSelector[IO, List[RecentSnapshot]]]
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
 
   before {

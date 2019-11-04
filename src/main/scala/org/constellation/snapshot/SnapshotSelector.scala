@@ -1,34 +1,34 @@
 package org.constellation.snapshot
 
+import cats.effect.{Concurrent, ContextShift}
+import cats.implicits._
 import org.constellation.schema.Id
-import org.constellation.storage.{RecentSnapshot, SnapshotVerification}
+import org.constellation.p2p.PeerData
+import org.constellation.storage.SnapshotVerification
 import org.constellation.util.SnapshotDiff
 
-case class DownloadInfo(diff: SnapshotDiff, recentStateToSet: List[RecentSnapshot])
+abstract class SnapshotSelector[F[_]: Concurrent, T <: AnyRef] {
 
-trait SnapshotSelector {
+  type SnapshotSelectionInput = T
 
-  type NodeSnapshots = (Id, List[RecentSnapshot])
+  type NodeSnapshots = (Id, SnapshotSelectionInput)
+  type SelectionInfo = (SnapshotDiff, SnapshotSelectionInput)
 
   def selectSnapshotFromRecent(
     peersSnapshots: List[NodeSnapshots],
-    ownSnapshots: List[RecentSnapshot]
-  ): Option[DownloadInfo]
+    ownSnapshots: SnapshotSelectionInput
+  ): Option[SelectionInfo]
 
   def selectSnapshotFromBroadcastResponses(
     responses: List[Option[SnapshotVerification]],
-    ownSnapshots: List[RecentSnapshot]
-  ): Option[DownloadInfo]
+    ownSnapshots: SnapshotSelectionInput
+  ): Option[SelectionInfo]
 
-  private[snapshot] def createDiff(
-    major: List[RecentSnapshot],
-    ownSnapshots: List[RecentSnapshot],
-    peers: List[Id]
-  ): SnapshotDiff =
-    SnapshotDiff(
-      ownSnapshots.diff(major).sortBy(_.height).reverse,
-      major.diff(ownSnapshots).sortBy(_.height).reverse,
-      peers
+  def collectSnapshot(
+    peers: Map[Id, PeerData]
+  )(cs: ContextShift[F])(implicit m: Manifest[SnapshotSelectionInput]): F[List[(Id, SnapshotSelectionInput)]] =
+    peers.toList.traverse(
+      p => (p._1, p._2.client.getNonBlockingF[F, SnapshotSelectionInput]("snapshot/recent")(cs)).sequence
     )
 
 }

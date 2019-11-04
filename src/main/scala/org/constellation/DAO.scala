@@ -181,7 +181,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
 
     val snapshotSelector =
-      new HeightIdBasedSnapshotSelector(
+      new HeightIdBasedSnapshotSelector[IO](
         this.id,
         ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
       )

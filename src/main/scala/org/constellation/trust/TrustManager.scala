@@ -3,7 +3,7 @@ package org.constellation.trust
 import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 import org.constellation.domain.trust.{TrustData, TrustDataInternal}
 import org.constellation.primitives.concurrency.SingleRef
 

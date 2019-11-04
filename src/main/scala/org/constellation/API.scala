@@ -23,6 +23,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{ChangePeerState, Download, SetStateResult}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -140,11 +141,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
-        pathPrefix("cluster") {
-          path("info") {
-            APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
-          }
+        path("trust") {
+          complete(TrustData(Map(Id("foo") -> 2.2, Id("bar") -> 4.8)))
         } ~
+          pathPrefix("cluster") {
+            path("info") {
+              APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
+            }
+          } ~
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
           } ~

@@ -4,8 +4,8 @@ import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
 import org.constellation.ConfigUtil
-import org.constellation.domain.schema.Id
-import org.constellation.domain.trust.TrustData
+import org.constellation.schema.Id
+import org.constellation.domain.trust.{TrustData, TrustDataInternal}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.PeriodicIO
@@ -25,8 +25,8 @@ class TrustDataPollingScheduler(
         _.traverse(
           pd =>
             pd.client
-              .getNonBlockingIO[TrustData]("trust")(IO.contextShift(taskPool))
-              .handleError(_ => TrustData(pd.client.id, Map.empty[Id, Double]))
+              .getNonBlockingIO[TrustDataInternal]("trust")(IO.contextShift(taskPool))
+              .handleError(_ => TrustDataInternal(pd.client.id, Map.empty[Id, Double]))
         )
       )
       .flatMap(trustManager.handleTrustScoreUpdate)

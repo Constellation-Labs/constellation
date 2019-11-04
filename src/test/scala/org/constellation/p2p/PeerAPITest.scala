@@ -283,6 +283,7 @@ class PeerAPITest
             observationCapture.hasCaptured(Observation.create(Id("foo"), SnapshotMisalignment(), 1234567)(dao.keyPair))(
               hashEquality
             )
+            true
           }
         }
       }
