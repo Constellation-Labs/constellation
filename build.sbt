@@ -133,7 +133,7 @@ lazy val coreDependencies = Seq(
   ("com.typesafe.slick" %% "slick" % "3.3.2").withSources().withJavadoc(),
   "com.h2database" % "h2" % "1.4.199",
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
-  "com.amazonaws" % "aws-java-sdk" % "1.11.648"
+  "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665"
 ) ++ sttpDependencies ++ sharedDependencies
 
 //Test dependencies
