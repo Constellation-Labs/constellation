@@ -234,6 +234,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
             .toList
             .filterA(c => isCheckpointBlockAllowedForAcceptance[F](c._1)(transactionService.transactionChainService))
             .map(_.map(_._2))
+          _ <- logger.info(s"Awaiting: ${awaiting.size} | Allowed to accept: ${allowedToAccept.size}")
           _ <- cs.shift >> allowedToAccept.traverse(accept(_))
         } yield ()
     }

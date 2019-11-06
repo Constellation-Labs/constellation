@@ -516,13 +516,9 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val peerSize = roundData.peers.size + (if (countSelfAsPeer) 1 else 0)
     val proposalPercentage: Float = proposals.size * 100 / peerSize
     (proposalPercentage, proposals.size) match {
-      case (0, _) =>
+      case (percentage, size) if percentage == 0 || size == 1 =>
         getOwnTransactionsToReturn.flatMap(
-          txs => getOwnObservationsToReturn.map(exs => Left(EmptyProposals(roundData.roundId, stage, txs, exs)))
-        )
-      case (_, size) if size == 1 =>
-        getOwnTransactionsToReturn.flatMap(
-          txs => getOwnObservationsToReturn.map(exs => Left(EmptyProposals(roundData.roundId, stage, txs, exs)))
+          txs => getOwnObservationsToReturn.map(obs => Left(EmptyProposals(roundData.roundId, stage, txs, obs)))
         )
       case (p, _) if p < minimumPercentage =>
         getOwnTransactionsToReturn.flatMap(

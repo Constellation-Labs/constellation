@@ -180,6 +180,6 @@ object Genesis extends StrictLogging {
       cb =>
         cb.transactions
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-          .map(tcd => dao.transactionService.put(tcd, ConsensusStatus.Accepted))
+          .map(tcd => dao.transactionService.accept(tcd))
     }.toList.sequence.void.unsafeRunSync()
 }
