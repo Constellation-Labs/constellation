@@ -315,7 +315,7 @@ object Simulation {
   }
 
   def disableCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
-    val responses = apis.map(_.deleteNonBlockingEmptyString("random"))
+    val responses = apis.map(_.deleteNonBlockingEmptyString("checkpointFormation"))
     Future.sequence(responses).get()
   }
 
