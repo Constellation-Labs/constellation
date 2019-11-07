@@ -3,9 +3,9 @@ package org.constellation.domain.observation
 import java.security.KeyPair
 
 import org.constellation.domain.consensus.ConsensusObject
-import org.constellation.domain.schema.Id
 import constellation._
 import org.constellation.primitives.SignedData
+import org.constellation.schema.Id
 import org.joda.time.{DateTime, DateTimeUtils}
 
 case class Observation(

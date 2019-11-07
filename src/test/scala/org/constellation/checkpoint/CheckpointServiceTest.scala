@@ -9,11 +9,11 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.keytool.KeyUtils.makeKeyPair
-import org.constellation.domain.schema.Id
 import org.constellation.genesis.GenesisObservationWriterProperties
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.schema.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 

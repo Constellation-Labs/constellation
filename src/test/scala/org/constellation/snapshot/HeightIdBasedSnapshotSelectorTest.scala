@@ -1,6 +1,6 @@
 package org.constellation.snapshot
 
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
 import org.constellation.util.SnapshotDiff
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

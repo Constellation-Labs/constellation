@@ -14,11 +14,11 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.mockito.IdiomaticMockito

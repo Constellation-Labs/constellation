@@ -13,12 +13,12 @@ import org.constellation.domain.observation.{
   Observation,
   ObservationService
 }
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO}

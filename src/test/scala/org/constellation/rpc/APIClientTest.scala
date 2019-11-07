@@ -7,8 +7,8 @@ import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
-import org.constellation.domain.schema.Id
 import org.constellation.keytool.KeyUtils
+import org.constellation.schema.Id
 import org.constellation.util.{APIClient, TestNode}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FlatSpec, Matchers}

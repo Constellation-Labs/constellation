@@ -4,10 +4,10 @@ import java.security.{KeyPair, PublicKey}
 
 import cats.kernel.Monoid
 import constellation._
-import org.constellation.domain.schema.Id
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
+import org.constellation.schema.Id
 
 trait Signable {
 

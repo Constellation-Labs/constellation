@@ -5,8 +5,8 @@ import cats.data.EitherT
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.external.CloudStorage
 import org.constellation.{ConfigUtil, DAO}

@@ -12,9 +12,9 @@ import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
+import org.constellation.schema.Id
 import org.constellation.storage.AddressService
 import org.constellation.util.Distance
 import org.constellation.util.Logging._

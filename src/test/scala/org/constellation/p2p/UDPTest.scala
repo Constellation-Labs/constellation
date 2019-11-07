@@ -2,12 +2,12 @@ package org.constellation.p2p
 
 import java.security.PublicKey
 import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.Timeout
+import org.constellation.schema.Id
 import org.scalatest._
-
-import org.constellation.domain.schema.Id
 
 case class AnotherPublicKey(c: Id, seq: Seq[PublicKey])
 

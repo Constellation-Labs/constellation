@@ -1,8 +1,8 @@
 package org.constellation.p2p
 import cats.effect.IO
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema
+import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

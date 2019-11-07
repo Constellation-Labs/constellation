@@ -6,8 +6,8 @@ import cats.implicits._
 import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
-import org.constellation.domain.schema.Id
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.schema.Id
 import org.constellation.util.APIClient
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats

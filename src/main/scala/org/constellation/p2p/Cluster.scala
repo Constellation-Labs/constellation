@@ -8,13 +8,13 @@ import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
-import org.constellation.domain.schema.Id
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata}
