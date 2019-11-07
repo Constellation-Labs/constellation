@@ -170,7 +170,7 @@ object Genesis extends StrictLogging {
       .value
       .map {
         case Left(value) => logger.error(s"Cannot write genesis observation ${value.exceptionMessage}")
-        case Right(_)    => logger.info("Genesis observation saved successfully")
+        case Right(_)    => logger.debug("Genesis observation saved successfully")
       }
       .unsafeRunSync()
   }

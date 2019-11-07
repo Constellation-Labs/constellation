@@ -33,7 +33,7 @@ object KeyUtils extends StrictLogging {
     import java.security.Security
     val provider = new org.spongycastle.jce.provider.BouncyCastleProvider()
     val ret = Security.insertProviderAt(provider, 1)
-    logger.info(s"Insert provider return $ret")
+    logger.debug(s"Insert provider return $ret")
     provider
   }
 

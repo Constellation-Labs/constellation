@@ -87,7 +87,7 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
-      _ <- Logger[F].info(s"[${dao.id.short}] Re-download checking cluster consistency")
+      _ <- Logger[F].debug(s"[${dao.id.short}] Re-download checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
@@ -132,13 +132,13 @@ class HealthChecker[F[_]: Concurrent: Logger](
 
   def clearStaleTips(clusterSnapshots: List[(Id, List[RecentSnapshot])]): F[Unit] = {
     val nodesWithHeights = clusterSnapshots.filter(_._2.nonEmpty)
-    logger.info(s"[Clear staletips] Nodes with heights: ${nodesWithHeights.size}")
+    logger.debug(s"[Clear staletips] Nodes with heights: ${nodesWithHeights.size}")
     if (clusterSnapshots.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
       val maxHeightsOfMinimumFacilitators = nodesWithHeights
         .map(x => x._2.map(_.height).max)
         .groupBy(x => x)
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
-      logger.info(s"[Clear staletips] Max Heights Of Minimum Facilitators>: ${maxHeightsOfMinimumFacilitators.size}")
+      logger.debug(s"[Clear staletips] Max Heights Of Minimum Facilitators>: ${maxHeightsOfMinimumFacilitators.size}")
 
       if (maxHeightsOfMinimumFacilitators.nonEmpty)
         concurrentTipService.clearStaleTips(
