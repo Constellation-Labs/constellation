@@ -14,8 +14,8 @@ import org.constellation.{ConstellationExecutionContext, PeerMetadata}
 import org.constellation.consensus.Consensus.FacilitatorId
 import org.constellation.domain.observation.Observation
 import org.constellation.primitives.Schema.SignedObservationEdge
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
+import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
 import org.json4s.native
 import org.json4s.native.Serialization

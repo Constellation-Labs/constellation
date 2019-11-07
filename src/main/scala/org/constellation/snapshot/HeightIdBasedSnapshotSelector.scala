@@ -1,7 +1,7 @@
 package org.constellation.snapshot
 
 import cats.implicits._
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
 
 class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDelayInterval: Int)

@@ -1,6 +1,6 @@
 package org.constellation.snapshot
 
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification}
 import org.constellation.util.SnapshotDiff
 

@@ -8,8 +8,8 @@ import org.constellation.consensus.{ConsensusManager, Snapshot}
 import org.constellation.p2p.{Cluster, DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.domain.schema.Id
 import org.constellation.p2p.Download.logger
+import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.maxOrZero
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}

@@ -5,7 +5,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.DAO
 import org.constellation.p2p.PeerData
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 
 import scala.util.Random
 

@@ -6,8 +6,8 @@ import cats.implicits._
 import cats.effect.{ContextShift, IO, Timer}
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema
+import org.constellation.schema.Id
 import org.constellation.snapshot.SnapshotSelector
 import org.constellation.util.{APIClient, HealthChecker, HostPort}
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata, ProcessingConfig}

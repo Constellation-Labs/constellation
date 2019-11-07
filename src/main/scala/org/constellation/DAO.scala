@@ -17,7 +17,6 @@ import org.constellation.crypto.SimpleWalletLike
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -32,6 +31,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
+import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage

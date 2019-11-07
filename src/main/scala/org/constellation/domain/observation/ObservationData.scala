@@ -1,6 +1,6 @@
 package org.constellation.domain.observation
 
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 import org.constellation.util.Signable
 
 case class ObservationData(

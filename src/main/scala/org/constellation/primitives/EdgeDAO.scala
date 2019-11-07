@@ -16,7 +16,6 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema._
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -26,6 +25,7 @@ import org.constellation.domain.transaction.{
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rollback.RollbackService
+import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
 import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}

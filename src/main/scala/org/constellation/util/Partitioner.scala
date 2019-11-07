@@ -1,8 +1,8 @@
 package org.constellation.util
 
 import com.google.common.hash.Hashing
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.Transaction
+import org.constellation.schema.Id
 
 /**
   * First pass at facilitator selection. Need to impl proper epidemic model. For checkpoint blocks, in lieu of min-cut,

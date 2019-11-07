@@ -33,6 +33,7 @@ lazy val versions = new {
   val cats = "2.0.0"
   val json4s = "3.6.7"
   val mockito = "1.5.16"
+  val twitterChill = "0.9.3"
 }
 
 lazy val sttpDependencies = Seq(
@@ -84,7 +85,7 @@ lazy val coreSettings = Seq(
   resolvers += "jitpack".at("https://jitpack.io")
 )
 
-lazy val sharedDependencies = Seq(
+lazy val keyToolSharedDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
@@ -98,6 +99,10 @@ lazy val sharedDependencies = Seq(
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
   ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc()
 )
+
+lazy val schemaSharedDependencies = Seq(
+  "com.twitter" %% "chill" % versions.twitterChill
+) ++ keyToolSharedDependencies
 
 lazy val coreDependencies = Seq(
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
@@ -134,7 +139,7 @@ lazy val coreDependencies = Seq(
   "com.h2database" % "h2" % "1.4.199",
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665"
-) ++ sttpDependencies ++ sharedDependencies
+) ++ sttpDependencies ++ schemaSharedDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
@@ -174,7 +179,7 @@ lazy val protobuf = (project in file("proto"))
   )
 
 lazy val root = (project in file("."))
-  .dependsOn(protobuf, keytool)
+  .dependsOn(protobuf, schema)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .configs(E2ETest)
@@ -208,5 +213,17 @@ lazy val keytool = (project in file("keytool"))
     buildInfoPackage := "org.constellation.keytool",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.keytool.KeyTool"),
-    libraryDependencies ++= sharedDependencies
+    libraryDependencies ++= keyToolSharedDependencies
+  )
+
+lazy val schema = (project in file("schema"))
+  .dependsOn(keytool)
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation.schema",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    libraryDependencies ++= schemaSharedDependencies
   )

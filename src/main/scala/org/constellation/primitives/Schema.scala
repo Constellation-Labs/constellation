@@ -2,8 +2,8 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
+import org.constellation.schema.Id
 import org.constellation.util._
 
 // This can't be a trait due to serialization issues.

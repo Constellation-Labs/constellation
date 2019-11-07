@@ -19,10 +19,10 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation
 import org.constellation.domain.observation.{Observation, ObservationService, SnapshotMisalignment}
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
+import org.constellation.schema.Id
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove}
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}

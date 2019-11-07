@@ -5,7 +5,7 @@ import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.primitives.Schema._
-import org.constellation.domain.schema.Id
+import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 
 import scala.util.Random

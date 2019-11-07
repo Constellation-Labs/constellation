@@ -9,9 +9,9 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
-import org.constellation.domain.schema.Id
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
+import org.constellation.schema.Id
 import org.constellation.util.{APIClient, SignHelp}
 
 import scala.concurrent.ExecutionContext

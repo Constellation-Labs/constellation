@@ -19,9 +19,9 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
-import org.constellation.domain.schema.Id
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage._
 import org.constellation.util._

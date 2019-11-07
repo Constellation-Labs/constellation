@@ -1,4 +1,4 @@
-package org.constellation.domain.schema
+package org.constellation.schema
 
 import java.security.PublicKey
 
@@ -28,5 +28,4 @@ case class Id(hex: String) {
 
   @transient
   lazy val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
-
 }

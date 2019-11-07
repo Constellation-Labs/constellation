@@ -8,9 +8,9 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.ResourceInfo
 import org.constellation.domain.configuration.NodeConfig
-import org.constellation.domain.schema.Id
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.PeerRegistrationRequest
+import org.constellation.schema.Id
 import org.constellation.util.Metrics
 
 case class LocalNodeConfig(

@@ -12,9 +12,9 @@ import cats.effect.Sync
 import cats.implicits._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
-import org.constellation.domain.schema.Id
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
+import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.VerificationStatus
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}

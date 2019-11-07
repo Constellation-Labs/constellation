@@ -6,10 +6,10 @@ import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
-import org.constellation.domain.schema.Id
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.schema.Id
 import org.constellation.snapshot.SnapshotSelector
 import org.constellation.storage.VerificationStatus.VerificationStatus
 import org.constellation.util.HealthChecker
