@@ -86,7 +86,6 @@ lazy val coreSettings = Seq(
 )
 
 lazy val keyToolSharedDependencies = Seq(
-  ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "com.google.cloud" % "google-cloud-storage" % "1.91.0",
@@ -105,6 +104,7 @@ lazy val schemaSharedDependencies = Seq(
 ) ++ keyToolSharedDependencies
 
 lazy val coreDependencies = Seq(
+  ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
   "com.roundeights" %% "hasher" % "1.2.0",
   "ch.qos.logback" % "logback-classic" % "1.2.3",

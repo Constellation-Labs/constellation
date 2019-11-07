@@ -18,6 +18,7 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.CustomDirectives.printResponseTime
+import org.constellation.crypto.KeyUtilsOld
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
@@ -92,7 +93,7 @@ object ConstellationNode extends IOApp {
           case Left(e)        => e.raiseError[F, KeyPair]
         })
       // TODO: kpudlik: Fallback. Remove after forcing node operators to use keystore only.
-    } else Sync[F].delay(KeyUtils.makeKeyPair())
+    } else Sync[F].delay(KeyUtilsOld.loadDefaultKeyPair())
 
   private def getNodeConfig[F[_]: Sync](cliConfig: CliConfig, config: Config): F[NodeConfig] =
     for {
