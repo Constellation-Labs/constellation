@@ -180,7 +180,11 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) >>
           txs.traverse(tx => put(tx))
       }
-      .flatTap(txs => logger.debug(s"ConsensusService returningToPending with hashes=${txs.map(_.hash)}"))
+      .flatTap(
+        txs =>
+          if (txs.nonEmpty) logger.info(s"ConsensusService returningToPending with hashes=${txs.map(_.hash)}")
+          else Sync[F].unit
+      )
 
   def getLast20Accepted: F[List[A]] =
     accepted.getLast20()
@@ -216,9 +220,9 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         counts => {
           Map(
             "pending" -> counts.get(0).getOrElse(0),
-            "inConsensus" -> counts.get(2).getOrElse(0),
-            "accepted" -> counts.get(3).getOrElse(0),
-            "unknown" -> counts.get(4).getOrElse(0)
+            "inConsensus" -> counts.get(1).getOrElse(0),
+            "accepted" -> counts.get(2).getOrElse(0),
+            "unknown" -> counts.get(3).getOrElse(0)
           )
         }
       )

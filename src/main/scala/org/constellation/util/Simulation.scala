@@ -413,8 +413,8 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-//    enableRandomTransactions(apis)
-//    logger.info("Starting random transactions")
+    enableRandomTransactions(apis)
+    logger.info("Starting random transactions")
 
     setReady(apis)
 

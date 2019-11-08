@@ -18,21 +18,23 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
         ref.getUnsafe
           .flatMap(
             txs =>
-              (if (txs.isEmpty) {
-                 none[List[TransactionCacheData]].pure[F]
-               } else {
-                 sortForPull(txs.values.toList).flatMap { sorted =>
-                   val (left, right) = sorted.splitAt(maxCount)
-                   ref.unsafeModify(_ => (right.map(tx => tx.hash -> tx).toMap, Option(left).filter(_.nonEmpty)))
-                 }
-               })
+              if (txs.isEmpty) {
+                none[List[TransactionCacheData]].pure[F]
+              } else {
+                sortAndFilterForPull(txs.values.toList).flatMap { sorted =>
+                  val (toUse, _) = sorted.splitAt(maxCount)
+                  val hashesToUse = toUse.map(_.hash)
+                  val leftTxs = txs.filterKeys(!hashesToUse.contains(_))
+                  ref.unsafeModify(_ => (leftTxs, Option(toUse).filter(_.nonEmpty)))
+                }
+              }
           )
     )(_ => ref.release)
 
-  private def sortForPull(txs: List[TransactionCacheData]): F[List[TransactionCacheData]] =
+  private def sortAndFilterForPull(txs: List[TransactionCacheData]): F[List[TransactionCacheData]] =
     txs
       .groupBy(_.transaction.src.address)
-      .mapValues(_.sortBy(_.transaction.lastTxRef.ordinal))
+      .mapValues(_.sortBy(_.transaction.ordinal))
       .toList
       .pure[F]
       .flatMap { t =>
@@ -40,7 +42,7 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
           case (hash, txs) =>
             transactionChainService
               .getLastAcceptedTransactionRef(hash)
-              .map(_.ordinal == txs.headOption.map(_.transaction.lastTxRef.ordinal).getOrElse(-1))
+              .map(txs.headOption.map(_.transaction.lastTxRef).contains)
               .ifM(
                 txs.pure[F],
                 List.empty[TransactionCacheData].pure[F]

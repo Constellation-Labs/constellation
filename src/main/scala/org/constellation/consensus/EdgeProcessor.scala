@@ -10,6 +10,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -227,7 +228,8 @@ case class SnapshotInfo(
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
   tips: Map[String, TipData] = Map(),
-  snapshotCache: Seq[CheckpointCache] = Seq()
+  snapshotCache: Seq[CheckpointCache] = Seq(),
+  lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
 )
 
 case object GetMemPool

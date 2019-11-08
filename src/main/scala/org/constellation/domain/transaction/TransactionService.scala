@@ -32,20 +32,24 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
       .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
-    count(status = ConsensusStatus.Pending).flatMap {
-      case 0L => createDummyTransactions(1)
-      case _  => super.pullForConsensus(maxCount)
+    super.pullForConsensus(maxCount).flatMap { txs =>
+      if (txs.isEmpty) createDummyTransactions(1) else txs.pure[F]
     }
 
   def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
     List
-      .fill(count)(
+      .fill(count) {
+        val keyPair = KeyUtils.makeKeyPair()
         TransactionService
-          .createDummyTransaction(dao.selfAddressStr, KeyUtils.makeKeyPair().getPublic.toId.address, dao.keyPair)(
+          .createDummyTransaction(
+            keyPair.getPublic.toId.address,
+            KeyUtils.makeKeyPair().getPublic.toId.address,
+            keyPair
+          )(
             transactionChainService
           )
           .map(TransactionCacheData(_))
-      )
+      }
       .sequence
       .flatMap(_.traverse(tx => inConsensus.put(tx.hash, tx)))
 

@@ -15,6 +15,8 @@ import org.constellation.p2p.PeerData
 import org.constellation.storage.SnapshotService
 import org.constellation.util.{APIClient, APIDirective}
 import org.constellation.ConstellationExecutionContext
+import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.domain.transaction.TransactionService
 import org.json4s.native
 import org.json4s.native.Serialization
 import org.slf4j.{Logger, LoggerFactory}
@@ -32,12 +34,12 @@ object ConsensusRoute {
   val newRoundFullPath = s"$pathPrefix/$newRoundPath"
   val selectedPath = "selected"
   val selectedFullPath = s"$pathPrefix/$selectedPath"
-
 }
 
 class ConsensusRoute(
   consensusManager: ConsensusManager[IO],
   snapshotService: SnapshotService[IO],
+  transactionService: TransactionService[IO],
   backend: SttpBackend[Future, Nothing]
 ) extends Json4sSupport {
 
@@ -68,10 +70,6 @@ class ConsensusRoute(
     post {
       path(ConsensusRoute.newRoundPath) {
         entity(as[RoundDataRemote]) { cmd =>
-          // proposed minHeight
-          // getNextHeight (snapshotHeight + 2)
-          // if (last != 2) if (last > min)
-
           val participate = cmd.tipsSOE.minHeight
             .fold(IO.unit) { min =>
               snapshotService.getNextHeightInterval
@@ -83,6 +81,7 @@ class ConsensusRoute(
 
           APIDirective.onHandle(participate) {
             case Failure(err: SnapshotHeightAboveTip) =>
+              logger.error(s"Error when participating in new round: ${cmd.roundId} cause: ${err.getMessage}", err)
               complete(StatusCodes.custom(400, err.getMessage))
             case Failure(e) =>
               logger.error(s"Error when participating in new round: ${cmd.roundId} cause: ${e.getMessage}", e)
@@ -99,7 +98,7 @@ class ConsensusRoute(
   protected def addTransactionsProposal(ctx: RequestContext): Route =
     post {
       path(ConsensusRoute.proposalPath) {
-        entity(as[LightTransactionsProposal]) { proposal =>
+        entity(as[ConsensusDataProposal]) { proposal =>
           logger.debug(s"LightTransactionsProposal adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
@@ -126,21 +125,36 @@ class ConsensusRoute(
       }
     }
 
-  private def handleProposal(proposal: ConsensusProposal): Route =
-    APIDirective.handle(consensusManager.getRound(proposal.roundId)) {
-      case None =>
-        (IO.contextShift(ConstellationExecutionContext.bounded).shift >> consensusManager
-          .addMissed(proposal.roundId, proposal))
-          .unsafeRunAsyncAndForget()
-        complete(StatusCodes.Accepted)
-      case Some(consensus) =>
-        val add = proposal match {
-          case proposal: LightTransactionsProposal => consensus.addTransactionProposal(proposal)
-          case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
-          case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
-        }
-        (IO.contextShift(ConstellationExecutionContext.bounded).shift >> add).unsafeRunAsyncAndForget()
-        complete(StatusCodes.Created)
-    }
+  private def handleProposal(proposal: ConsensusProposal): Route = {
+    implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
+
+    APIDirective.handle(consensusManager.getRound(proposal.roundId).flatMap {
+      _ match {
+        case None =>
+          (consensusManager
+            .addMissed(proposal.roundId, proposal))
+            .start >> StatusCodes.Accepted.pure[IO]
+        case Some(consensus) =>
+          proposal match {
+            case proposal: ConsensusDataProposal =>
+              CheckpointAcceptanceService
+                .areTransactionsAllowedForAcceptance[IO](proposal.transactions.toList)(
+                  transactionService.transactionChainService
+                )
+                .flatMap { allowed =>
+                  if (allowed) {
+                    consensus.addTransactionProposal(proposal).start >> StatusCodes.Accepted.pure[IO]
+                  } else {
+                    StatusCodes.BadRequest.pure[IO]
+                  }
+                }
+            case proposal: UnionBlockProposal =>
+              consensus.addBlockProposal(proposal).start >> StatusCodes.Accepted.pure[IO]
+            case proposal: SelectedUnionBlock =>
+              consensus.addSelectedBlockProposal(proposal).start >> StatusCodes.Accepted.pure[IO]
+          }
+      }
+    })(complete(_))
+  }
 
 }

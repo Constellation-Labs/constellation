@@ -2,7 +2,8 @@ package org.constellation.checkpoint
 
 import cats.Applicative
 import cats.data.OptionT
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.concurrent.Semaphore
+import cats.effect.{Concurrent, ContextShift, Fiber, IO, LiftIO, Sync}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -15,11 +16,11 @@ import org.constellation.domain.observation.{
   Observation,
   ObservationService
 }
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
-import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
@@ -48,24 +49,38 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
   val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
   val maxDepth: Int = 10
 
+  val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
+
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  // TODO: use combined functions
-  def acceptWithReferenceCheck(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] =
-    OptionT
-      .fromOption[F](checkpoint.checkpointCacheData.checkpointBlock)
-      .semiflatMap(isCheckpointBlockAllowedForAcceptance[F](_)(transactionService.transactionChainService))
-      .value
+  // TODO: For debugging only
+  private def logConditions(cb: CheckpointBlock, correct: Boolean): F[Unit] =
+    cb.transactions.toList
+      .groupBy(_.src.address)
+      .mapValues(_.sortBy(_.ordinal))
+      .toList
+      .pure[F]
+      .flatMap { t =>
+        t.traverse {
+          case (hash, txs) =>
+            transactionService.transactionChainService
+              .getLastAcceptedTransactionRef(hash)
+              .map(
+                la =>
+                  s"${if (correct) s"${Console.GREEN}+++" else s"${Console.RED}---"}[${dao.id.short}] [${cb.baseHash}] Last accepted: ${la} | Tx ref: ${txs.headOption
+                    .map(_.lastTxRef)} | Tx first: ${txs.headOption.map(a => (a.hash, a.ordinal))} | Tx last: ${txs.lastOption
+                    .map(a => (a.hash, a.ordinal))} | Src: $hash | Dummy: ${txs.headOption.map(_.isDummy)} ${Console.RESET}"
+              )
+        }
+      }
       .flatMap {
-        case Some(true)  => accept(checkpoint)
-        case Some(false) => awaitingForAcceptance.unsafeModify(s => (s + checkpoint.checkpointCacheData, ()))
-        case _           => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+        _.traverse_(s => logger.info(s))
       }
 
   def acceptWithNodeCheck(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] =
     cluster.getNodeState.flatMap { nodeState =>
       (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
-        case (NodeState.Ready, Some(_)) => acceptWithReferenceCheck(checkpoint)
+        case (NodeState.Ready, Some(cb)) => accept(checkpoint)
         case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
           snapshotService.syncBufferAccept(checkpoint)
         case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
@@ -86,6 +101,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       case Some(cb) =>
         val acceptance = for {
           _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
+          _ <- checkPending(cb.baseHash)
           _ <- logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others")
           peers <- obtainPeers
           _ <- resolveMissingParents(cb, peers)
@@ -171,6 +187,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
 
       case Some(cb) =>
         for {
+          _ <- acceptLock.acquire
           _ <- syncPending(pendingAcceptance, cb.baseHash)
           _ <- checkpointService
             .contains(cb.baseHash)
@@ -180,6 +197,14 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
                 .raiseError[F, Unit],
               Sync[F].unit
             )
+
+          _ <- isCheckpointBlockAllowedForAcceptance[F](cb)(transactionService.transactionChainService).ifM(
+            logConditions(cb, true) >> Sync[F].unit,
+            logConditions(cb, false) >> awaitingForAcceptance.unsafeModify(
+              s => (s + checkpoint, ())
+            ) >> MissingTransactionReference(cb).raiseError[F, Unit]
+          )
+
           conflicts <- LiftIO[F].liftIO(checkpointBlockValidator.containsAlreadyAcceptedTx(cb))
 
           _ <- conflicts match {
@@ -225,6 +250,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- incrementMetricIfDummy(cb)
           _ <- pendingAcceptance.update(_.filterNot(_ == cb.baseHash))
+          _ <- acceptLock.release
           awaiting <- awaitingForAcceptance.modify { s =>
             val ret = s.filterNot(_.checkpointBlock.map(_.baseHash).getOrElse("unknown") == cb.baseHash)
             (ret, ret)
@@ -234,8 +260,10 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
             .toList
             .filterA(c => isCheckpointBlockAllowedForAcceptance[F](c._1)(transactionService.transactionChainService))
             .map(_.map(_._2))
-          _ <- logger.info(s"Awaiting: ${awaiting.size} | Allowed to accept: ${allowedToAccept.size}")
-          _ <- cs.shift >> allowedToAccept.traverse(accept(_))
+          _ <- dao.metrics.updateMetricAsync[F]("awaitingForAcceptance", awaiting.size)
+          _ <- dao.metrics.updateMetricAsync[F]("allowedForAcceptance", allowedToAccept.size)
+          _ <- logger.debug(s"Awaiting for acceptance: ${awaiting.size} | Allowed to accept: ${allowedToAccept.size}")
+          _ <- Concurrent[F].start(allowedToAccept.traverse(accept(_)))
         } yield ()
     }
 
@@ -256,13 +284,46 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
       }
     }
 
-  def acceptErrorHandler(err: Throwable): F[Unit] =
+  private[checkpoint] def checkPending(baseHash: String): F[Unit] =
+    awaitingForAcceptance.get.map { cbs =>
+      if (cbs.map(_.checkpointBlock.map(_.baseHash).getOrElse("unknown")).contains(baseHash)) {
+        throw PendingAcceptance(baseHash)
+      }
+    }
+
+  def resolveMissingReferences(cb: CheckpointBlock)(implicit cs: ContextShift[F]): F[Unit] = {
+    implicit val _dao = dao
+
+    getMissingTransactionReferences(cb)(transactionService.transactionChainService).map { txs =>
+      txs.flatMap(_.headOption)
+    }.flatMap { txs =>
+      if (txs.nonEmpty) {
+        for {
+          t <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(txs)(contextShift))
+          _ <- logger.info(s"${Console.YELLOW}${t.map(tx => (tx.hash, tx.cbBaseHash))}${Console.RESET}")
+          cbs <- t.flatMap(_.cbBaseHash).distinct.traverse { hash =>
+            LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash)(contextShift))
+          }
+          _ <- cbs.traverse(accept(_))
+        } yield ()
+      } else Sync[F].unit
+    }
+  }
+
+  def acceptErrorHandler(err: Throwable)(implicit cs: ContextShift[F]): F[Unit] =
     err match {
       case knownError @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-        knownError.raiseError[F, Unit]
+        acceptLock.release >>
+          knownError.raiseError[F, Unit]
+      case error @ MissingTransactionReference(cb) =>
+        acceptLock.release >>
+          Concurrent[F].start(resolveMissingReferences(cb)) >>
+          error.raiseError[F, Unit]
       case otherError =>
-        Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) >> dao.metrics
-          .incrementMetricAsync[F]("acceptCheckpoint_failure") >> otherError.raiseError[F, Unit]
+        acceptLock.release >>
+          Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) >>
+          dao.metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") >>
+          otherError.raiseError[F, Unit]
     }
 
   private def incrementMetricIfDummy(checkpointBlock: CheckpointBlock): F[Unit] =
@@ -350,9 +411,14 @@ object CheckpointAcceptanceService {
   def isCheckpointBlockAllowedForAcceptance[F[_]: Concurrent](
     cb: CheckpointBlock
   )(txChainService: TransactionChainService[F]) =
-    cb.transactions.toList
+    areTransactionsAllowedForAcceptance(cb.transactions.toList)(txChainService)
+
+  def areTransactionsAllowedForAcceptance[F[_]: Concurrent](
+    txs: List[Transaction]
+  )(txChainService: TransactionChainService[F]) =
+    txs
       .groupBy(_.src.address)
-      .mapValues(_.sortBy(_.lastTxRef.ordinal))
+      .mapValues(_.sortBy(_.ordinal))
       .toList
       .pure[F]
       .flatMap { t =>
@@ -360,12 +426,30 @@ object CheckpointAcceptanceService {
           case (hash, txs) =>
             txChainService
               .getLastAcceptedTransactionRef(hash)
-              .map(_.ordinal == txs.headOption.map(_.lastTxRef.ordinal).getOrElse(-1))
-              .ifM(
-                true.pure[F],
-                false.pure[F]
-              )
+              .map(txs.headOption.map(_.lastTxRef).contains)
+              .map(_.pure[F])
         }
       }
       .map(_.forall(_ == true))
+
+  def getMissingTransactionReferences[F[_]: Concurrent](cb: CheckpointBlock)(
+    txChainService: TransactionChainService[F]
+  ): F[List[List[String]]] = // mwadon: List[List because of grouping by addresses
+    cb.transactions.toList
+      .groupBy(_.src.address)
+      .mapValues(_.sortBy(_.ordinal))
+      .toList
+      .pure[F]
+      .flatMap { t =>
+        t.traverse {
+          case (hash, txs) =>
+            txChainService
+              .getLastAcceptedTransactionRef(hash)
+              .map(a => {
+                if (txs.headOption.map(_.lastTxRef).contains(a)) {
+                  List.empty
+                } else txs.map(_.lastTxRef.hash)
+              })
+        }
+      }
 }

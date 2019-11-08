@@ -289,7 +289,7 @@ class TransactionServiceTest
 
   "pullForConsensusSafe" - {
     // Ignored because of non deterministic output (4999 isn't exual 5000).
-    "should be safe to use concurrently" ignore {  
+    "should be safe to use concurrently" ignore {
       val pullsIteration = 100
       val pullsMaxCount = 50
 

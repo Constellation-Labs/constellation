@@ -125,7 +125,7 @@ class CheckpointBlockValidator[F[_]: Sync](
       else
         dao.metrics
           .incrementMetricAsync(Metrics.checkpointValidationFailure)
-          .flatTap(_ => logger.warn(s"Checkpoint block with baseHashe: ${cb.baseHash} is invalid $validation"))
+          .flatTap(_ => logger.warn(s"Checkpoint block with baseHash: ${cb.baseHash} is invalid $validation"))
     } yield validation
 
   def validateTransactionIntegrity(t: Transaction): F[ValidationResult[Transaction]] =
@@ -143,7 +143,7 @@ class CheckpointBlockValidator[F[_]: Sync](
   def validateTransactions(
     t: Iterable[Transaction]
   ): F[ValidationResult[List[Transaction]]] =
-    t.toList.traverse(validateTransaction(_)).map(x => x.map(_.map(List(_)))).map(_.combineAll)
+    t.toList.traverse(validateTransaction).map(x => x.map(_.map(List(_)))).map(_.combineAll)
 
   def validateDuplicatedTransactions(
     t: Iterable[Transaction]

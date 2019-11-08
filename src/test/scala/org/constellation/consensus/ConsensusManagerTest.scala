@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import cats.effect.IO
+import cats.effect.{Blocker, IO}
 import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
@@ -56,7 +56,7 @@ class ConsensusManagerTest
       dao.cluster,
       dao,
       conf,
-      IO.contextShift(ConstellationExecutionContext.unbounded),
+      Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
   }

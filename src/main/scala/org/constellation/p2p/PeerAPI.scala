@@ -237,7 +237,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
-
                   val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc)(cs).map { result =>
                     replyToOpt
                       .map(URI.create)
@@ -289,7 +288,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
   private val blockBuildingRoundRoute =
     createRoute(ConsensusRoute.pathPrefix)(
-      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.backend).createBlockBuildingRoundRoutes()
+      () =>
+        new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.transactionService, dao.backend)
+          .createBlockBuildingRoundRoutes()
     )
 
   private[p2p] def mixedEndpoints(socketAddress: InetSocketAddress) =

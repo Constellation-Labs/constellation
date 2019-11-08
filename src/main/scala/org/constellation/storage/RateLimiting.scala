@@ -20,7 +20,7 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
       _ <- counter.acquire
       _ <- counter.updateUnsafe(_ |+| grouped)
 
-      _ <- counter.getUnsafe.flatTap(c => Logger[F].debug(s"Update [rate-limiting]: $c"))
+//      _ <- counter.getUnsafe.flatTap(c => Logger[F].debug(s"Update [rate-limiting]: $c"))
       _ <- blacklist()
       _ <- counter.release
     } yield ()
@@ -34,10 +34,10 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
 
       _ <- counter.setUnsafe(grouped)
 
-      _ <- counter.getUnsafe.flatTap(c => Logger[F].debug(s"Reset [rate-limiting]: $c"))
+//      _ <- counter.getUnsafe.flatTap(c => Logger[F].debug(s"Reset [rate-limiting]: $c"))
       _ <- counter.getUnsafe
         .flatMap(_.map(a => available(a._1)).toList.sequence)
-        .flatTap(c => Logger[F].debug(s"Available [rate-limiting]: $c"))
+//        .flatTap(c => Logger[F].debug(s"Available [rate-limiting]: $c"))
       _ <- blacklist()
       _ <- counter.release
     } yield ()

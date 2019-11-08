@@ -61,7 +61,9 @@ class DataResolver extends StrictLogging {
   )(
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
-    getPeersForResolving(dao).flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId)(contextToReturn))
+    if (hashes.nonEmpty)
+      getPeersForResolving(dao).flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId)(contextToReturn))
+    else List.empty[TransactionCacheData].pure[IO]
 
   def resolveTransaction(
     hash: String,
@@ -131,17 +133,7 @@ class DataResolver extends StrictLogging {
         pool,
         priorityClient
       )(contextToReturn).head
-        .flatTap(
-          cpc =>
-            cpc.checkpointBlock.get.storeSOE() >> dao.checkpointService
-              .put(cpc) >> cpc.checkpointBlock.get.transactions.toList.traverse(
-              t =>
-                dao.transactionService.put(
-                  TransactionCacheData(t, cbBaseHash = Some(cpc.checkpointBlock.get.baseHash)),
-                  ConsensusStatus.Unknown
-                )
-            )
-        )
+        .flatTap(cpc => dao.checkpointAcceptanceService.accept(cpc)(contextToReturn))
         .flatTap(
           cb =>
             IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
@@ -188,18 +180,7 @@ class DataResolver extends StrictLogging {
         pool,
         priorityClient
       )(contextToReturn).flatTap(
-        cbs =>
-          cbs.traverse(
-            cb =>
-              cb.checkpointBlock.get.storeSOE() >> dao.checkpointService
-                .put(cb) >> cb.checkpointBlock.get.transactions.toList.traverse(
-                t =>
-                  dao.transactionService.put(
-                    TransactionCacheData(t, cbBaseHash = Some(cb.checkpointBlock.get.baseHash)),
-                    ConsensusStatus.Unknown
-                  )
-              )
-          )
+        cbs => cbs.traverse(cb => dao.checkpointAcceptanceService.accept(cb)(contextToReturn))
       ),
       s"dataResolver_resolveCheckpoints [${hashes}]",
       logger

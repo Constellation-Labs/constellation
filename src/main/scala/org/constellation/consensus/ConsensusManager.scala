@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import org.constellation.domain.exception.InvalidNodeState
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -20,6 +20,7 @@ import org.constellation.storage._
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
+import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 class ConsensusManager[F[_]: Concurrent: ContextShift](
@@ -34,7 +35,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
   cluster: Cluster[F],
   dao: DAO,
   config: Config,
-  remoteCall: ContextShift[F],
+  remoteCall: Blocker,
   calculationContext: ContextShift[F]
 ) {
 
@@ -110,13 +111,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
       _ <- if (responses.forall(_.isSuccess)) Sync[F].unit
       else
         Sync[F].raiseError[Unit](
-          NotAllPeersParticipate(roundId, roundData._1.transactions.map(_.hash), roundData._1.observations)
+          NotAllPeersParticipate(roundId, roundData._1.transactions, roundData._1.observations)
         )
       _ <- roundInfo.consensus.addTransactionProposal(
-        LightTransactionsProposal(
+        ConsensusDataProposal(
           roundData._1.roundId,
           FacilitatorId(dao.id),
-          roundData._1.transactions.map(_.hash),
+          roundData._1.transactions,
           roundData._1.messages.map(_.signedMessageData.hash),
           roundData._1.peers.flatMap(_.notification).toSeq,
           roundData._1.observations
@@ -162,15 +163,16 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
     for {
       transactions <- transactionService
         .pullForConsensus(maxTransactionThreshold)
+      _ <- logger.info(s"Pulled for new consensus: ${transactions.size}")
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty)
         Sync[F]
-          .raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction.hash), List.empty[Observation]))
+          .raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
       _ <- if (tips.get.peers.isEmpty)
         Sync[F]
-          .raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction.hash), List.empty[Observation]))
+          .raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
       observations <- observationService.pullForConsensus(maxObservationThreshold)
@@ -247,9 +249,9 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
       _ <- missed.traverse {
-        case proposal: LightTransactionsProposal => consensus.addTransactionProposal(proposal)
-        case proposal: SelectedUnionBlock        => consensus.addSelectedBlockProposal(proposal)
-        case proposal: UnionBlockProposal        => consensus.addBlockProposal(proposal)
+        case proposal: ConsensusDataProposal => consensus.addTransactionProposal(proposal)
+        case proposal: SelectedUnionBlock    => consensus.addSelectedBlockProposal(proposal)
+        case proposal: UnionBlockProposal    => consensus.addBlockProposal(proposal)
       }
     } yield ()
 
@@ -266,9 +268,9 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
     for {
       _ <- consensuses.update(curr => curr - cmd.roundId)
       _ <- ownConsensus.update(curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) None else curr)
-//      _ <- transactionService.returnToPending(cmd.transactionsToReturn) // TODO: wkoszycki temporally discard transactions/observations
-//      _ <- observationService.returnToPending(cmd.observationsToReturn)
-      _ <- transactionService.clearInConsensus(cmd.transactionsToReturn)
+      _ <- transactionService.returnToPending(cmd.transactionsToReturn.map(_.hash)) // TODO: wkoszycki temporally discard transactions/observations
+      _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
+      _ <- transactionService.clearInConsensus(cmd.transactionsToReturn.map(_.hash))
       _ <- observationService.clearInConsensus(cmd.observationsToReturn.map(_.hash))
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
@@ -406,7 +408,7 @@ object ConsensusManager {
   case class BroadcastLightTransactionProposal(
     roundId: RoundId,
     peers: Set[PeerData],
-    transactionsProposal: LightTransactionsProposal
+    transactionsProposal: ConsensusDataProposal
   )
 
   case object OwnRoundAlreadyInProgress extends ConsensusStartError("Node has already start own consensus")
@@ -415,16 +417,16 @@ object ConsensusManager {
 
   class ConsensusError(
     val roundId: RoundId,
-    val transactions: List[String],
+    val transactions: List[Transaction],
     val observations: List[Observation],
     message: String
   ) extends Exception(message)
 
-  case class NoTipsForConsensus(id: RoundId, txs: List[String], obs: List[Observation])
+  case class NoTipsForConsensus(id: RoundId, txs: List[Transaction], obs: List[Observation])
       extends ConsensusError(id, txs, obs, s"No tips to start consensus $id")
-  case class NoPeersForConsensus(id: RoundId, txs: List[String], obs: List[Observation])
+  case class NoPeersForConsensus(id: RoundId, txs: List[Transaction], obs: List[Observation])
       extends ConsensusError(id, txs, obs, s"No active peers to start consensus $id")
-  case class NotAllPeersParticipate(id: RoundId, txs: List[String], obs: List[Observation])
+  case class NotAllPeersParticipate(id: RoundId, txs: List[Transaction], obs: List[Observation])
       extends ConsensusError(id, txs, obs, s"Not all of the peers has participated in consensus $id")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)

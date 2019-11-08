@@ -4,6 +4,7 @@ import cats.effect.{Concurrent, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.consensus.{Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
 
@@ -21,12 +22,12 @@ class TransactionChainService[F[_]: Concurrent] {
   def getLastAcceptedTransactionRef(address: String): F[LastTransactionRef] =
     lastAcceptedTransactionRef.get.map(_.getOrElse(address, LastTransactionRef.empty))
 
-  def acceptTransaction(transaction: Transaction): F[Unit] =
+  def getLastAcceptedTransactionMap(): F[Map[String, LastTransactionRef]] = lastAcceptedTransactionRef.get
+
+  def acceptTransaction(tx: Transaction): F[Unit] =
     lastAcceptedTransactionRef.modify { m =>
-      val address = transaction.src.address
-      (m + (address -> transaction.lastTxRef), ())
-    }.flatTap { _ =>
-      logger.info(s"Accepting tx hash=${transaction.hash} ref=${transaction.lastTxRef}")
+      val address = tx.src.address
+      (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
     }
 
   def setLastTransaction(edge: Edge[TransactionEdgeData], isDummy: Boolean): F[Transaction] = {
@@ -35,11 +36,14 @@ class TransactionChainService[F[_]: Concurrent] {
     lastTransactionRef.modify { m =>
       val ref = m.getOrElse(address, LastTransactionRef.empty)
       val tx = Transaction(edge, ref, isDummy)
-      (m + (address -> LastTransactionRef(tx.hash, ref.ordinal + 1)), tx)
-    }.flatTap { tx =>
-      logger.info(s"Generated tx hash=${tx.hash} ref=${tx.lastTxRef}")
+      (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
     }
   }
+
+  def applySnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =
+    lastAcceptedTransactionRef.modify { _ =>
+      (snapshotInfo.lastAcceptedTransactionRef, ())
+    }
 
 }
 

@@ -64,11 +64,9 @@ case class UpdatePassword(password: String)
 object ProcessingConfig {
 
   val testProcessingConfig = ProcessingConfig(
-    numFacilitatorPeers = 2,
-    metricCheckInterval = 10,
-    maxWidth = 6,
-    maxMemPoolSize = 15,
-    minPeerTimeAddedSeconds = 1,
+    maxWidth = 10,
+    maxMemPoolSize = 1000,
+    minPeerTimeAddedSeconds = 5,
     roundsPerMessage = 1,
     leavingStandbyTimeout = 3
   )

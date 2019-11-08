@@ -27,8 +27,8 @@ sed -i'.bak' "s/state-default/state-default-$JAR_TAG/g" ./main.tf
 sed -i'.bak' "s/instance_count = 3/instance_count = $NODE_COUNT/g" ./main.tf
 sed -i'.bak' "s/dag-dev/dag-$JAR_TAG/g" ./setup.sh
 
-terraform init -force-copy
-terraform apply -auto-approve
+terraform init -force-copy -lock=false
+terraform apply -auto-approve -lock=false
 
 ./ips_to_hosts_file.sh > ./hosts
 
