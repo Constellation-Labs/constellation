@@ -1,7 +1,8 @@
 package org.constellation.p2p
 
 import cats.effect.{ContextShift, IO}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.{APIClient, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig}
 import org.mockito.IdiomaticMockitoBase.Times
@@ -19,6 +20,7 @@ class BatchDataResolverTest
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val dao: DAO = mock[DAO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   dao.id shouldReturn Fixtures.id
   dao.processingConfig shouldReturn ProcessingConfig()
@@ -31,7 +33,8 @@ class BatchDataResolverTest
         hashes.map(h => (h, "resolved"))
       val peers = List(PeerApiClient(Id("first"), firstMockApiClient))
 
-      val resolves = DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift).unsafeRunSync()
+      val resolves =
+        DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift, hashGenerator).unsafeRunSync()
 
       resolves.size shouldBe 3
     }
@@ -47,7 +50,8 @@ class BatchDataResolverTest
       val peers =
         List(PeerApiClient(Id("first"), firstMockApiClient), PeerApiClient(Id("second"), secondMockApiClient))
 
-      val resolves = DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift).unsafeRunSync()
+      val resolves =
+        DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift, hashGenerator).unsafeRunSync()
 
       resolves.size shouldBe 3
     }
@@ -64,7 +68,7 @@ class BatchDataResolverTest
         List(PeerApiClient(Id("first"), firstMockApiClient), PeerApiClient(Id("second"), secondMockApiClient))
 
       assertThrows[DataResolutionOutOfPeers] {
-        DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift).unsafeRunSync()
+        DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift, hashGenerator).unsafeRunSync()
       }
     }
 
@@ -85,7 +89,7 @@ class BatchDataResolverTest
         PeerApiClient(Id("third"), thirdMockApiClient)
       )
 
-      DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift).unsafeRunSync()
+      DataResolver.resolveBatchData[String](hashes, "endpoint", peers)(contextShift, hashGenerator).unsafeRunSync()
 
       firstMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(once)
       secondMockApiClient.postNonBlockingIO[List[(String, String)]](*, *, *)(*)(*, *).wasCalled(once)

@@ -18,7 +18,8 @@ import org.constellation.domain.transaction.{TransactionChainService, Transactio
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
 import org.mockito.IdiomaticMockito
@@ -140,6 +141,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
     implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
     implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
     val dao: DAO = mock[DAO]
     val kp: KeyPair = makeKeyPair()
@@ -165,7 +167,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao.messageService shouldReturn ms
 
     val txChain = TransactionChainService[IO]
-    val ts = new TransactionService[IO](txChain, dao)
+    val ts = new TransactionService[IO](txChain, hashGenerator, dao)
     dao.transactionService shouldReturn ts
 
     val cts = mock[ConcurrentTipService[IO]]
@@ -186,7 +188,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao.metrics shouldReturn metrics
 
     val ipManager = IPManager[IO]()
-    val cluster = Cluster[IO](() => metrics, ipManager, dao)
+    val cluster = Cluster[IO](() => metrics, ipManager, hashGenerator, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
 

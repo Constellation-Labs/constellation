@@ -6,12 +6,14 @@ import org.constellation.domain.observation.Observation
 import org.constellation.p2p.{DataResolver, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
 import org.constellation.primitives._
+import org.constellation.schema.HashGenerator
 import org.constellation.storage.algebra.MerkleStorageAlgebra
 import org.constellation.util.MerkleTree
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 class CheckpointMerkleService[F[_]: Concurrent](
   dao: DAO,
+  hashGenerator: HashGenerator,
   transactionService: MerkleStorageAlgebra[F, String, TransactionCacheData],
   messageService: MerkleStorageAlgebra[F, String, ChannelMessageMetadata],
   notificationService: MerkleStorageAlgebra[F, String, PeerNotification],
@@ -89,7 +91,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s)(contextShift)(dao = dao))
+      (s: String) =>
+        LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s)(contextShift, hashGenerator)(dao = dao))
     )
 
   def fetchBatchTransactions(merkleRoot: String): F[List[Transaction]] =
@@ -97,7 +100,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: List[String]) => LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(s)(contextShift)(dao = dao))
+      (s: List[String]) =>
+        LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(s)(contextShift, hashGenerator)(dao = dao))
     )
 
   def fetchBatchObservations(merkleRoot: String): F[List[Observation]] =
@@ -114,7 +118,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       messageService,
       (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s)(contextShift)(dao = dao))
+      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s)(contextShift, hashGenerator)(dao = dao))
     )
 
   def fetchNotifications(merkleRoot: String): F[List[PeerNotification]] =

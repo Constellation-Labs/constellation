@@ -13,8 +13,8 @@ import constellation._
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
+import org.constellation.schema.{HashGenerator, Id, Signable}
+import org.constellation.serializer.{KryoHashGenerator, KryoSerializer}
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -89,7 +89,8 @@ object EdgeProcessor extends StrictLogging {
   }
 
   def formCheckpoint(messages: Seq[ChannelMessage] = Seq())(
-    implicit dao: DAO
+    implicit dao: DAO,
+    hashGenerator: HashGenerator
   ) = {
 
     implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
@@ -117,7 +118,7 @@ object EdgeProcessor extends StrictLogging {
           val checkpointBlock =
             CheckpointBlock.createCheckpointBlock(transactions, pulledTip.tipSoe.soe.map { soe =>
               TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
-            }, messages)(dao.keyPair)
+            }, messages)(dao.keyPair, hashGenerator)
 
           val cache =
             CheckpointCache(
@@ -137,7 +138,7 @@ object EdgeProcessor extends StrictLogging {
       // Change to method on TipsReturned // abstract for reuse.
       val checkpointBlock = CheckpointBlock.createCheckpointBlock(transactions, pulledTip.tipSoe.soe.map { soe =>
         TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash)
-      }, messages)(dao.keyPair)
+      }, messages)(dao.keyPair, hashGenerator)
       dao.metrics.incrementMetric("checkpointBlocksCreated")
 
       val finalFacilitators = pulledTip.peers.keySet
@@ -231,7 +232,14 @@ case class SnapshotInfo(
 
 case object GetMemPool
 
-case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends Signable
+case class Snapshot(
+  lastSnapshot: String,
+  checkpointBlocks: Seq[String]
+)(implicit hashGenerator: HashGenerator)
+    extends Signable {
+
+  override def hash: String = hashGenerator.hash(this)
+}
 
 case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache])
 
@@ -240,6 +248,8 @@ case class DownloadComplete(latestSnapshot: Snapshot)
 import java.nio.file.{Files, Paths}
 
 object Snapshot extends StrictLogging {
+
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   def writeSnapshot[F[_]: Concurrent](
     storedSnapshot: StoredSnapshot
@@ -398,5 +408,4 @@ object Snapshot extends StrictLogging {
 
   val snapshotZero = Snapshot("", Seq())
   val snapshotZeroHash: String = Snapshot("", Seq()).hash
-
 }

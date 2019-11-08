@@ -3,13 +3,14 @@ package org.constellation.storage
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.mockito.IdiomaticMockito
-import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{FreeSpec, Matchers}
 import org.constellation.Fixtures
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.primitives.CheckpointBlock
-import org.constellation.primitives.Schema.{Address, CheckpointCache}
+import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.schema.Address
+import org.mockito.IdiomaticMockito
+import org.mockito.cats.IdiomaticMockitoCats
+import org.scalatest.{FreeSpec, Matchers}
 
 import scala.concurrent.ExecutionContext
 

@@ -9,6 +9,8 @@ import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService}
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -27,6 +29,7 @@ class TransactionGossipingTest
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {
     val dao = mockDAO
@@ -46,7 +49,7 @@ class TransactionGossipingTest
   test("it should update the transaction path if it's the first time the tx is being observed") {
     val dao = mockDAO
     val txChain = TransactionChainService[IO]
-    val txService = spy(new TransactionService[IO](txChain, dao))
+    val txService = spy(new TransactionService[IO](txChain, hashGenerator, dao))
     val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
     val t = Fixtures.makeTransaction("a", "b", 1L, Fixtures.tempKey)

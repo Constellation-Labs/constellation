@@ -6,6 +6,8 @@ import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}
 import org.constellation.primitives._
+import org.constellation.schema.{ChannelMessageData, HashGenerator}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -18,6 +20,7 @@ class CheckpointMerkleServiceTest
     with BeforeAndAfter {
 
   implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
 
   before {
@@ -29,6 +32,7 @@ class CheckpointMerkleServiceTest
 
     val merkleService = new CheckpointMerkleService[IO](
       dao,
+      hashGenerator,
       dao.transactionService,
       dao.messageService,
       dao.notificationService,
@@ -38,7 +42,8 @@ class CheckpointMerkleServiceTest
 
       val cbProposal = CheckpointBlock
         .createCheckpointBlockSOE(prepareTransactions(), Seq(soe), prepareMessages(), prepareNotifications())(
-          dao.keyPair
+          dao.keyPair,
+          hashGenerator
         )
 
       val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
@@ -93,7 +98,7 @@ class CheckpointMerkleServiceTest
     notifics: Seq[PeerNotification]
   ): CheckpointCache = {
 
-    val cbProposal = CheckpointBlock.createCheckpointBlockSOE(txs, Seq(soe), msgs, notifics)(dao.keyPair)
+    val cbProposal = CheckpointBlock.createCheckpointBlockSOE(txs, Seq(soe), msgs, notifics)(dao.keyPair, hashGenerator)
 
     val cbProposalCache = CheckpointCache(Some(cbProposal), 3, Some(Height(2, 4)))
     dao.checkpointService.put(cbProposalCache).unsafeRunSync()

@@ -7,17 +7,7 @@ import constellation._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
-
-trait Signable {
-
-  def signInput: Array[Byte] = hash.getBytes()
-
-  def hash: String = this.kryo.sha256
-
-  def short: String = hash.slice(0, 5)
-
-}
+import org.constellation.schema.{HashGenerator, Id, Signable}
 
 case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 
@@ -91,7 +81,9 @@ trait SignHelpExt {
     SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
   }
 
-  def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge =
+  def signedObservationEdge(
+    oe: ObservationEdge
+  )(implicit kp: KeyPair, hashGenerator: HashGenerator): SignedObservationEdge =
     SignedObservationEdge(hashSignBatchZeroTyped(oe, kp))
 
 }

@@ -8,8 +8,10 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
-import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
+import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
+import org.constellation.schema.{Address, HashGenerator}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -28,6 +30,7 @@ class TransactionServiceTest
     with BeforeAndAfter {
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   var dao: DAO = _
   var txChain: TransactionChainService[IO] = _
@@ -48,7 +51,7 @@ class TransactionServiceTest
   before {
     dao = mockDAO
     txChain = TransactionChainService[IO]
-    txService = new TransactionService[IO](txChain, dao)
+    txService = new TransactionService[IO](txChain, hashGenerator, dao)
   }
 
   "put" - {

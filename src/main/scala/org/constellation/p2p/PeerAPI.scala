@@ -21,7 +21,7 @@ import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage._
 import org.constellation.util._
@@ -49,6 +49,7 @@ object PeerAPI {
 
 class PeerAPI(override val ipManager: IPManager[IO])(
   implicit system: ActorSystem,
+  val hashGenerator: HashGenerator,
   val timeout: Timeout,
   val dao: DAO
 ) extends Json4sSupport
@@ -328,7 +329,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
                   pd =>
                     dao.observationService
-                      .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
+                      .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair, hashGenerator))
                       .void
                 )
             )

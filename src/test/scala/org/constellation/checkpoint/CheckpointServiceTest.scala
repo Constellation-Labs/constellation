@@ -13,7 +13,8 @@ import org.constellation.genesis.GenesisObservationWriterProperties
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -28,6 +29,7 @@ class CheckpointServiceTest
 
   implicit val kp: KeyPair = makeKeyPair()
   implicit val dao: DAO = TestHelpers.prepareRealDao(readyFacilitators)
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
   implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   after {

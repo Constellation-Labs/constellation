@@ -1,7 +1,8 @@
 package org.constellation.p2p
 
 import cats.effect.{ContextShift, IO}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.{APIClient, PeerApiClient}
 import org.constellation.{DAO, Fixtures}
 import org.mockito.ArgumentMatchers
@@ -15,6 +16,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
 
   implicit val dao: DAO = mock(classOf[DAO])
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   val badNode: APIClient = mock(classOf[APIClient])
   val goodNode: APIClient = mock(classOf[APIClient])
@@ -54,7 +56,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         hashes,
         endpoint,
         List(PeerApiClient(badNode.id, badNode), PeerApiClient(goodNode.id, goodNode))
-      )(contextShift)
+      )(contextShift, hashGenerator)
       .unsafeRunSync()
     result shouldBe List("resolved hash1", "resolved hash2")
 
@@ -67,7 +69,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         hashes,
         endpoint,
         List(PeerApiClient(badNode.id, badNode))
-      )(contextShift)
+      )(contextShift, hashGenerator)
 
     assertThrows[TimeoutException] {
       resolverIO.unsafeRunSync()
@@ -85,7 +87,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         hashes,
         endpoint,
         List(PeerApiClient(badNode.id, badNode))
-      )(contextShift)
+      )(contextShift, hashGenerator)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionNoneResponse(_, _, _)) => ()
@@ -102,7 +104,7 @@ class DataResolverTest extends FunSuite with BeforeAndAfter with Matchers {
         endpoint,
         List(PeerApiClient(badNode.id, badNode), PeerApiClient(badNode.id, badNode)),
         1
-      )(contextShift)
+      )(contextShift, hashGenerator)
 
     resolverIO.attempt.unsafeRunSync() should matchPattern {
       case Left(DataResolutionMaxErrors("endpoint", "hash1")) => ()

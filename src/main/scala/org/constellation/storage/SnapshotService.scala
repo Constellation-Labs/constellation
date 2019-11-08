@@ -14,6 +14,7 @@ import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.schema.HashGenerator
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
@@ -26,6 +27,7 @@ class SnapshotService[F[_]: Concurrent](
   observationService: ObservationService[F],
   rateLimiting: RateLimiting[F],
   consensusManager: ConsensusManager[F],
+  hashGenerator: HashGenerator,
   dao: DAO
 )(implicit C: ContextShift[F])
     extends StrictLogging {
@@ -280,7 +282,7 @@ class SnapshotService[F[_]: Concurrent](
   private def getNextSnapshot(hashesForNextSnapshot: Seq[String]): F[Snapshot] =
     snapshot.get
       .map(_.hash)
-      .map(hash => Snapshot(hash, hashesForNextSnapshot))
+      .map(hash => Snapshot(hash, hashesForNextSnapshot)(hashGenerator = hashGenerator))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
@@ -406,7 +408,10 @@ class SnapshotService[F[_]: Concurrent](
             LiftIO[F]
               .liftIO(
                 DataResolver
-                  .resolveMessageDefaults(msgHash)(IO.contextShift(ConstellationExecutionContext.bounded))
+                  .resolveMessageDefaults(msgHash)(
+                    IO.contextShift(ConstellationExecutionContext.bounded),
+                    hashGenerator
+                  )
                   .map(_.channelMessage)
               )
               .flatMap(updateMessage(msgHash, _))
@@ -449,6 +454,7 @@ object SnapshotService {
     observationService: ObservationService[F],
     rateLimiting: RateLimiting[F],
     consensusManager: ConsensusManager[F],
+    hashGenerator: HashGenerator,
     dao: DAO
   )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
@@ -460,6 +466,7 @@ object SnapshotService {
       observationService,
       rateLimiting,
       consensusManager,
+      hashGenerator,
       dao
     )
 }

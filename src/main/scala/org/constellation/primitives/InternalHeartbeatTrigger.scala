@@ -6,7 +6,8 @@ import akka.actor.ActorRef
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.DAO
-import org.constellation.primitives.Schema.InternalHeartbeat
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.Periodic
 
 import scala.concurrent.Future
@@ -15,6 +16,8 @@ import scala.util.{Random, Try}
 class InternalHeartbeatTrigger[T](nodeActor: ActorRef, periodSeconds: Int = 10)(implicit dao: DAO)
     extends Periodic[Try[Unit]]("InternalHeartbeatTrigger", periodSeconds)
     with StrictLogging {
+
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   def trigger(): Future[Try[Unit]] = {
     Thread.currentThread().setName("InternalHeartbeatTrigger")
@@ -33,7 +36,7 @@ class InternalHeartbeatTrigger[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
           val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
           val channelOpen = ChannelOpen(newChannelName)
           val genesis =
-            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)(dao.keyPair)
+            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)(dao.keyPair, hashGenerator)
           val genesisHash = genesis.signedMessageData.hash
           testChannels :+= genesisHash
           dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) = newChannelName
@@ -54,7 +57,7 @@ class InternalHeartbeatTrigger[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
                       Random.nextInt(1000).toString,
                       data.channelMessage.signedMessageData.hash,
                       channel
-                    )(dao.keyPair)
+                    )(dao.keyPair, hashGenerator)
                   )
                 } else None
               }

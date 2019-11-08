@@ -14,8 +14,8 @@ import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
+import org.constellation.schema.{AddressMetaData, Id}
+import org.constellation.serializer.{KryoHashGenerator, KryoSerializer}
 import org.constellation.storage.VerificationStatus
 import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
 import org.json4s.JsonAST.{JInt, JString}
@@ -103,11 +103,6 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     def jsonSave(f: String): Unit = File(f).writeText(json)
   }
 
-  implicit class KryoSerExt(anyRef: AnyRef) {
-
-    def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
-  }
-
   implicit class ParseExt(input: String) {
 
     def jValue: JValue = parse4s(input)
@@ -145,7 +140,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
 
   implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =
-    AddressMetaData(publicKeyToAddressString(key))
+    AddressMetaData(publicKeyToAddressString(key))(new KryoHashGenerator())
 
   implicit class KeyPairFix(kp: KeyPair) {
 

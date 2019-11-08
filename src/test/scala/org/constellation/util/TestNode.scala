@@ -7,6 +7,7 @@ import akka.stream.ActorMaterializer
 import cats.implicits._
 import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{ConstellationNode, ProcessingConfig}
 
 import scala.concurrent.ExecutionContext
@@ -46,7 +47,8 @@ object TestNode {
       processingConfig = ProcessingConfig.testProcessingConfig
     )
     val node = new ConstellationNode(
-      config
+      config,
+      new KryoHashGenerator
     )
 
     nodes = nodes :+ node

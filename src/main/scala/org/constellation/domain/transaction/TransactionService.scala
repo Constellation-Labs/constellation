@@ -12,9 +12,13 @@ import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
+import org.constellation.schema.HashGenerator
 
-class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)
-    extends ConsensusService[F, TransactionCacheData] {
+class TransactionService[F[_]: Concurrent: Logger](
+  transactionChainService: TransactionChainService[F],
+  implicit val hashGenerator: HashGenerator,
+  dao: DAO
+) extends ConsensusService[F, TransactionCacheData] {
 
   override def metricRecordPrefix: Option[String] = "Transaction".some
 
@@ -57,7 +61,8 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
     normalized: Boolean = true,
     dummy: Boolean = false
   ): F[Transaction] =
-    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
+    TransactionService
+      .createTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
 
 }
 
@@ -70,10 +75,10 @@ object TransactionService {
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+  )(transactionChainService: TransactionChainService[F])(implicit hashGenerator: HashGenerator): F[Transaction] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
-    val txData = TransactionEdgeData(amount = amountToUse)
+    val txData = TransactionEdgeData(amount = amountToUse)(hashGenerator)
 
     val oe = ObservationEdge(
       Seq(
@@ -81,15 +86,15 @@ object TransactionService {
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
       TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
-    )
+    )(hashGenerator)
 
-    val soe = signedObservationEdge(oe)(keyPair)
+    val soe = signedObservationEdge(oe)(keyPair, hashGenerator)
 
     transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
   }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
-  ): F[Transaction] =
+  )(implicit hashGenerator: HashGenerator): F[Transaction] =
     createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
 }

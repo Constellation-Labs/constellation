@@ -15,7 +15,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
 import org.constellation.storage._
 import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -33,6 +33,7 @@ class ConsensusManager[F[_]: Concurrent](
   remoteSender: ConsensusRemoteSender[F],
   cluster: Cluster[F],
   dao: DAO,
+  hashGenerator: HashGenerator,
   config: Config,
   remoteCall: ContextShift[F],
   calculationContext: ContextShift[F]
@@ -96,6 +97,7 @@ class ConsensusManager[F[_]: Concurrent](
           remoteSender,
           this,
           shadowDAO,
+          hashGenerator,
           config,
           remoteCall,
           calculationContext
@@ -216,6 +218,7 @@ class ConsensusManager[F[_]: Concurrent](
           remoteSender,
           this,
           shadowDAO,
+          hashGenerator,
           config,
           remoteCall,
           calculationContext
@@ -340,9 +343,10 @@ class ConsensusManager[F[_]: Concurrent](
   )(implicit dao: DAO): F[List[CheckpointCache]] = {
     def resolve(hash: String, peer: Option[PeerApiClient]): F[CheckpointCache] =
       LiftIO[F].liftIO(
-        DataResolver.resolveCheckpointDefaults(hash, peer)(IO.contextShift(ConstellationExecutionContext.bounded))(
-          dao = shadowDAO
-        )
+        DataResolver
+          .resolveCheckpointDefaults(hash, peer)(IO.contextShift(ConstellationExecutionContext.bounded), hashGenerator)(
+            dao = shadowDAO
+          )
       )
 
     for {

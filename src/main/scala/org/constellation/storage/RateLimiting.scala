@@ -6,11 +6,12 @@ import io.chrisdavenport.log4cats.Logger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{Schema, Transaction}
+import org.constellation.schema.Address
 
 import scala.math.ceil
 
 class RateLimiting[F[_]: Concurrent: Logger]() {
-  private[storage] val counter: SingleRef[F, Map[Schema.Address, Int]] = SingleRef[F, Map[Schema.Address, Int]](Map())
+  private[storage] val counter: SingleRef[F, Map[Address, Int]] = SingleRef[F, Map[Address, Int]](Map())
   private[storage] val blacklisted: StorageService[F, Int] = new StorageService("rate_limiting_blacklist".some)
 
   def update(txs: List[Transaction]): F[Unit] =
@@ -42,7 +43,7 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
       _ <- counter.release
     } yield ()
 
-  def available(address: Schema.Address): F[Int] =
+  def available(address: Address): F[Int] =
     for {
       c <- counter.getUnsafe
       accounts = c.size

@@ -12,7 +12,7 @@ import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.AccountBalance
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -41,11 +41,15 @@ object Genesis extends StrictLogging {
         .createTransaction(DebtKey.address, keyPair.getPublic.toId.address, 4e9.toLong, keyPair)).toList.sequence.unsafeRunSync
 
   def createGenesisBlock(keyPair: KeyPair, allocAccountBalances: Seq[AccountBalance])(
-    implicit dao: DAO
+    implicit dao: DAO,
+    hashGenerator: HashGenerator
   ): CheckpointBlock =
-    CheckpointBlock.createCheckpointBlock(createGenesisTransaction(keyPair, allocAccountBalances), GenesisTips)(keyPair)
+    CheckpointBlock.createCheckpointBlock(createGenesisTransaction(keyPair, allocAccountBalances), GenesisTips)(
+      keyPair,
+      hashGenerator
+    )
 
-  def start()(implicit dao: DAO): Unit = {
+  def start()(implicit dao: DAO, hashGenerator: HashGenerator): Unit = {
     // TODO: Remove initial distribution
     val fakeIdToGenerateTips = KeyUtils.makeKeyPair().getPublic.toId
     val go = createGenesisAndInitialDistributionDirect(
@@ -63,7 +67,7 @@ object Genesis extends StrictLogging {
     ids: Seq[Id],
     genesisSOE: SignedObservationEdge,
     keyPair: KeyPair
-  )(implicit dao: DAO): CheckpointBlock = {
+  )(implicit dao: DAO, hashGenerator: HashGenerator): CheckpointBlock = {
 
     val distr = ids.toList.traverse { id =>
       dao.transactionService.createTransaction(selfAddressStr, id.address, 1e6.toLong, keyPair)
@@ -75,8 +79,7 @@ object Genesis extends StrictLogging {
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
         TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
       )
-    )(keyPair)
-
+    )(keyPair, hashGenerator)
   }
 
   /**
@@ -90,7 +93,7 @@ object Genesis extends StrictLogging {
     ids: Set[Id],
     keyPair: KeyPair,
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
-  )(implicit dao: DAO): GenesisObservation = {
+  )(implicit dao: DAO, hashGenerator: HashGenerator): GenesisObservation = {
 
     val genesisCBO = createGenesisBlock(keyPair, allocAccountBalances)
     val soe = genesisCBO.soe
@@ -102,7 +105,8 @@ object Genesis extends StrictLogging {
   }
 
   def createGenesisAndInitialDistribution(selfAddressStr: String, ids: Set[Id], keyPair: KeyPair)(
-    implicit dao: DAO
+    implicit dao: DAO,
+    hashGenerator: HashGenerator
   ): GenesisObservation =
     createGenesisAndInitialDistributionDirect(selfAddressStr, ids, keyPair)
 

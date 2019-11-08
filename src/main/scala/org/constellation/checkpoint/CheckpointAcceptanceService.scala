@@ -18,7 +18,7 @@ import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
 import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO}
@@ -34,6 +34,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
   checkpointBlockValidator: CheckpointBlockValidator[F],
   cluster: Cluster[F],
   rateLimiting: RateLimiting[F],
+  hashGenerator: HashGenerator,
   dao: DAO
 ) {
 
@@ -103,13 +104,18 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
         case List(_, _) => Sync[F].unit
         case _ =>
           LiftIO[F]
-            .liftIO(DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift)(dao = dao).void)
+            .liftIO(
+              DataResolver.resolveSoe(cb.parentSOEHashes.toList, peers)(contextShift, hashGenerator)(dao = dao).void
+            )
             .flatTap(
               _ =>
                 peers.traverse(
                   p =>
                     observationService
-                      .put(Observation.create(p.id, CheckpointBlockWithMissingSoe(cb.baseHash))(dao.keyPair))
+                      .put(
+                        Observation
+                          .create(p.id, CheckpointBlockWithMissingSoe(cb.baseHash))(dao.keyPair, hashGenerator)
+                      )
                 )
             )
       })
@@ -128,13 +134,16 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           case List((_, true), (_, true)) => Sync[F].pure(List[CheckpointCache]())
           case missing =>
             LiftIO[F]
-              .liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift)(dao = dao))
+              .liftIO(DataResolver.resolveCheckpoints(missing.map(_._1), peers)(contextShift, hashGenerator)(dao = dao))
               .flatTap(
                 _ =>
                   peers.traverse(
                     p =>
                       observationService
-                        .put(Observation.create(p.id, CheckpointBlockWithMissingParents(cb.baseHash))(dao.keyPair))
+                        .put(
+                          Observation
+                            .create(p.id, CheckpointBlockWithMissingParents(cb.baseHash))(dao.keyPair, hashGenerator)
+                        )
                   )
               )
         }
@@ -181,7 +190,10 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
               .traverse(
                 id =>
                   observationService
-                    .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair))
+                    .put(
+                      Observation
+                        .create(id, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair, hashGenerator)
+                    )
               )
               .flatMap(_ => Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation")))
           else Sync[F].unit

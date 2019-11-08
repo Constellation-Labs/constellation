@@ -3,6 +3,8 @@ package org.constellation.rollback
 import cats.effect.{ContextShift, IO}
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.storage.SnapshotService
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -19,6 +21,7 @@ class RollbackServiceTest
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   var rollbackAccountBalances: RollbackAccountBalances = _
   var rollbackService: RollbackService[IO] = _
@@ -27,7 +30,7 @@ class RollbackServiceTest
 
   before {
     dao = mockDAO
-    rollbackAccountBalances = new RollbackAccountBalances
+    rollbackAccountBalances = new RollbackAccountBalances(hashGenerator)
     rollbackService = new RollbackService[IO](
       dao,
       rollbackAccountBalances,

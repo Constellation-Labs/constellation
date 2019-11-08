@@ -1,6 +1,6 @@
 package org.constellation.domain.transaction
 
-import cats.effect.{Concurrent}
+import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.primitives.Schema.TransactionEdgeData

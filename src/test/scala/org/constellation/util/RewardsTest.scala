@@ -9,6 +9,8 @@ import org.constellation.consensus.RandomData
 import org.constellation.trust._
 import org.scalatest.FlatSpec
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{DAO, TestHelpers}
 
 import scala.collection.JavaConverters._
@@ -24,8 +26,9 @@ class RewardsTest extends FlatSpec {
   import RandomData._
 
   implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
-  val dummyCb = randomBlock(startingTips(go()), keyPairs.head)
+  val dummyCb = randomBlock(startingTips(go()), keyPairs.head, hashGenerator)
   val acceptedCbRound1 = Seq(randomTransaction, randomTransaction)
   val acceptedCbRound2 = Seq(randomTransaction, randomTransaction)
 

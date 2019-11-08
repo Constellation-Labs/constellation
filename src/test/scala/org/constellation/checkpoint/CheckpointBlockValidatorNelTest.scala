@@ -17,7 +17,8 @@ import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.storage._
 import org.constellation.util.{HashSignature, Metrics}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
@@ -195,6 +196,7 @@ class ValidationSpec
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val keyPair: KeyPair = keyPairs.head
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   implicit val logger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
   implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
@@ -212,7 +214,7 @@ class ValidationSpec
     )
 
   val ipManager = IPManager[IO]()
-  val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
+  val cluster = Cluster[IO](() => dao.metrics, ipManager, hashGenerator, dao)
   dao.cluster = cluster
 
   go.genesis.store(CheckpointCache(Some(go.genesis)))
@@ -381,7 +383,7 @@ class ValidationSpec
           Fixtures.makeTransaction(getAddress(b), getAddress(c), 0L, b)
         )
 
-        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))(keyPairs.head)
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))(keyPairs.head, hashGenerator)
 
         fill(
           Map(

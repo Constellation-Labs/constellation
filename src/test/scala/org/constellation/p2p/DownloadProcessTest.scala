@@ -1,9 +1,8 @@
 package org.constellation.p2p
 import cats.effect.IO
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
-import org.constellation.primitives.Schema
-import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.{KryoHashGenerator, KryoSerializer}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSuite, Matchers}
@@ -13,6 +12,7 @@ import scala.concurrent.ExecutionContextExecutor
 class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
 
   implicit val dao: DAO = mock[DAO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
   implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
   implicit val C = IO.contextShift(ec)
   implicit val timer = IO.timer(ec)

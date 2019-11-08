@@ -18,10 +18,12 @@ import org.constellation.consensus.ConsensusManager.{
 import org.constellation.domain.observation.{Observation, ObservationService, RequestTimeoutOnConsensus}
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
+import org.constellation.schema.HashGenerator
 
 class ConsensusRemoteSender[F[_]: Concurrent](
   contextShift: ContextShift[F],
   observationService: ObservationService[F],
+  hashGenerator: HashGenerator,
   keyPair: KeyPair
 ) {
 
@@ -86,7 +88,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
           .onError {
             case _: SocketTimeoutException =>
               observationService
-                .put(Observation.create(pd.peerMetadata.id, RequestTimeoutOnConsensus(roundId))(keyPair))
+                .put(Observation.create(pd.peerMetadata.id, RequestTimeoutOnConsensus(roundId))(keyPair, hashGenerator))
                 .void
           }
           .flatTap(

@@ -11,6 +11,8 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -26,6 +28,7 @@ class SnapshotServiceTest
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
@@ -51,6 +54,7 @@ class SnapshotServiceTest
       observationService,
       rateLimiting,
       consensusManager,
+      hashGenerator,
       dao
     )
   }
@@ -94,9 +98,9 @@ class SnapshotServiceTest
       val dao = TestHelpers.prepareRealDao()
       val snapshotService = dao.snapshotService
 
-      val go = RandomData.go()(dao)
-      val cb1 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
-      val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
+      val go = RandomData.go()(dao, hashGenerator)
+      val cb1 = RandomData.randomBlock(RandomData.startingTips(go)(dao), hashGenerator = hashGenerator)
+      val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao), hashGenerator = hashGenerator)
       val cbs = Seq(CheckpointCache(cb1.some, 0, None), CheckpointCache(cb2.some, 0, None))
 
       val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))

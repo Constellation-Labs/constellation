@@ -36,7 +36,7 @@ class E2ETest extends E2E {
   private val apis: Seq[APIClient] = nodes.map(_.getAPIClient())
   private val initialAPIs = apis
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
-  private val storeData = false
+  private val storeData = true
 
   private def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
     apiClients.map { client =>

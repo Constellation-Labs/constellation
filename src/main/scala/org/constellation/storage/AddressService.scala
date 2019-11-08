@@ -1,10 +1,11 @@
 package org.constellation.storage
 
-import cats.effect.{Concurrent, Sync}
+import cats.effect.Concurrent
 import cats.implicits._
-import org.constellation.primitives.Schema.{Address, AddressCacheData}
+import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
+import org.constellation.schema.Address
 
 class AddressService[F[_]: Concurrent]() {
 

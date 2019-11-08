@@ -31,7 +31,8 @@ import org.constellation.primitives.Schema._
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
@@ -110,17 +111,25 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     idDir.createDirectoryIfNotExists(createParents = true)
 
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
     rateLimiting = new RateLimiting[IO]
 
     transactionChainService = TransactionChainService[IO]
-    transactionService = new TransactionService[IO](transactionChainService, this)
+    transactionService = new TransactionService[IO](transactionChainService, hashGenerator, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
     observationService = new ObservationService[IO](this)
 
     val merkleService =
-      new CheckpointMerkleService[IO](this, transactionService, messageService, notificationService, observationService)
+      new CheckpointMerkleService[IO](
+        this,
+        hashGenerator,
+        transactionService,
+        messageService,
+        notificationService,
+        observationService
+      )
 
     checkpointService = new CheckpointService[IO](
       this,
@@ -143,13 +152,17 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     addressService = new AddressService[IO]()
 
     ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, this)
+    cluster = Cluster[IO](() => metrics, ipManager, hashGenerator, this)
 
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
-    consensusRemoteSender =
-      new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
+    consensusRemoteSender = new ConsensusRemoteSender[IO](
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      observationService,
+      hashGenerator,
+      keyPair
+    )
 
     majorityStateChooser = new MajorityStateChooser[IO]()
 
@@ -207,6 +220,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       observationService,
       rateLimiting,
       consensusManager,
+      hashGenerator,
       this
     )
 
@@ -230,6 +244,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       checkpointBlockValidator,
       cluster,
       rateLimiting,
+      hashGenerator,
       this
     )
 
@@ -244,6 +259,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusRemoteSender,
       cluster,
       this,
+      hashGenerator,
       ConfigUtil.config,
       IO.contextShift(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
@@ -252,9 +268,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
-    consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
+    consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, hashGenerator, this)
 
-    rollbackService = new RollbackService[IO](this, new RollbackAccountBalances, snapshotService)
+    rollbackService = new RollbackService[IO](this, new RollbackAccountBalances(hashGenerator), snapshotService)
 
     cloudStorage = new GcpStorage[IO]
 

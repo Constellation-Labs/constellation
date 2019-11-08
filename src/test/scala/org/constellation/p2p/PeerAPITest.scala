@@ -22,7 +22,8 @@ import org.constellation.domain.observation.{Observation, ObservationService, Sn
 import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives.{IPManager, TransactionCacheData, TransactionGossip}
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove}
 import org.constellation.storage._
 import org.constellation.util.{APIClient, HostPort, Metrics}
@@ -53,6 +54,7 @@ class PeerAPITest
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
   implicit val cs = IO.contextShift(executionContext)
   implicit val timer = IO.timer(executionContext)
 
@@ -63,7 +65,7 @@ class PeerAPITest
   before {
     dao = prepareDao()
     dao.snapshotBroadcastService shouldReturn mock[SnapshotBroadcastService[IO]]
-    peerAPI = new PeerAPI(IPManager[IO])(system, 10.seconds, dao)
+    peerAPI = new PeerAPI(IPManager[IO])(system, hashGenerator, 10.seconds, dao)
   }
 
   "The PeerAPI" - {
@@ -278,7 +280,9 @@ class PeerAPITest
               def areEqual(a: Observation, b: Any): Boolean =
                 b.isInstanceOf[Observation] && a.hash == b.asInstanceOf[Observation].hash
             }
-            observationCapture.hasCaptured(Observation.create(Id("foo"), SnapshotMisalignment(), 1234567)(dao.keyPair))(
+            observationCapture.hasCaptured(
+              Observation.create(Id("foo"), SnapshotMisalignment(), 1234567)(dao.keyPair, hashGenerator)
+            )(
               hashEquality
             )
           }

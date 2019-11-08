@@ -4,6 +4,8 @@ import constellation._
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Genesis
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -14,8 +16,9 @@ class RollbackCalculateBalancesGenesisTest
     with Matchers {
 
   implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
-  private val rollbackAccountBalances: RollbackAccountBalances = new RollbackAccountBalances
+  private val rollbackAccountBalances: RollbackAccountBalances = new RollbackAccountBalances(hashGenerator)
   private val distributionTransactionAmount = 100000000000000L
   private val genesisTransactionAmount = 400000000000000000L
 

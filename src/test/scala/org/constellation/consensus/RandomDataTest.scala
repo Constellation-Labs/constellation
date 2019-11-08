@@ -2,9 +2,6 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
-import akka.testkit.{TestKit, TestProbe}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
@@ -12,10 +9,9 @@ import constellation._
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.Metrics
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{DAO, Fixtures, TestHelpers}
-import org.mockito.{IdiomaticMockito, Mockito}
-import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
 import scala.collection.concurrent.TrieMap
@@ -27,22 +23,27 @@ object RandomData {
 
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
-  def go()(implicit dao: DAO): GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
-    keyPairs.head.address,
-    keyPairs.tail.map {
-      _.getPublic.toId
-    }.toSet,
-    keyPairs.head
-  )
+  def go()(implicit dao: DAO, hashGenerator: HashGenerator): GenesisObservation =
+    Genesis.createGenesisAndInitialDistributionDirect(
+      keyPairs.head.address,
+      keyPairs.tail.map {
+        _.getPublic.toId
+      }.toSet,
+      keyPairs.head
+    )
 
   def startingTips(go: GenesisObservation)(implicit dao: DAO): Seq[SignedObservationEdge] =
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
 
-  def randomBlock(tips: Seq[SignedObservationEdge], startingKeyPair: KeyPair = keyPairs.head): CheckpointBlock = {
+  def randomBlock(
+    tips: Seq[SignedObservationEdge],
+    startingKeyPair: KeyPair = keyPairs.head,
+    hashGenerator: HashGenerator
+  ): CheckpointBlock = {
     val txs = Seq.fill(5)(randomTransaction)
     CheckpointBlock.createCheckpointBlock(txs, tips.map { s =>
       TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
-    })(startingKeyPair)
+    })(startingKeyPair, hashGenerator)
   }
 
   def randomTransaction: Transaction = {
@@ -104,12 +105,13 @@ class RandomDataTest extends FlatSpec {
   import RandomData._
 
   implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   "Signatures combiners" should "be unique" in {
 
     val genesis = go()
-    val cb = randomBlock(startingTips(genesis), keyPairs.head)
-    val cb2SameSignature = randomBlock(startingTips(genesis), keyPairs.head)
+    val cb = randomBlock(startingTips(genesis), keyPairs.head, hashGenerator)
+    val cb2SameSignature = randomBlock(startingTips(genesis), keyPairs.head, hashGenerator)
 
     //    val bogus = cb.plus(keyPairs.head).signatures
     //    bogus.foreach{logger.debug}
@@ -172,7 +174,7 @@ class RandomDataTest extends FlatSpec {
 
       val block = randomBlock(tips.map {
         _._1
-      }.toSeq)
+      }.toSeq, hashGenerator = hashGenerator)
       cbIndex(block.soe) = block
       activeBlocks(block.soe) = 0
 

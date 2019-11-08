@@ -9,7 +9,7 @@ import org.constellation.DAO
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
+import org.constellation.schema.{CheckpointEdgeData, HashGenerator, Id}
 import org.constellation.util.HashSignature
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
@@ -119,7 +119,7 @@ object CheckpointBlock {
     tips: Seq[SignedObservationEdge],
     messages: Seq[ChannelMessage] = Seq.empty,
     peers: Seq[PeerNotification] = Seq.empty
-  )(implicit keyPair: KeyPair): CheckpointBlock =
+  )(implicit keyPair: KeyPair, hashGenerator: HashGenerator): CheckpointBlock =
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
     }, messages, peers)
@@ -130,7 +130,7 @@ object CheckpointBlock {
     messages: Seq[ChannelMessage] = Seq.empty,
     peers: Seq[PeerNotification] = Seq.empty,
     observations: Seq[Observation] = Seq.empty
-  )(implicit keyPair: KeyPair): CheckpointBlock = {
+  )(implicit keyPair: KeyPair, hashGenerator: HashGenerator): CheckpointBlock = {
 
     val checkpointEdgeData =
       CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map {
@@ -142,7 +142,7 @@ object CheckpointBlock {
       TypedEdgeHash(checkpointEdgeData.hash, EdgeHashType.CheckpointDataHash)
     )
 
-    val soe = signedObservationEdge(observationEdge)(keyPair)
+    val soe = signedObservationEdge(observationEdge)(keyPair, hashGenerator)
 
     val checkpointEdge = CheckpointEdge(
       Edge(observationEdge, soe, checkpointEdgeData)

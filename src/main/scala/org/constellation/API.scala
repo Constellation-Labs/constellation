@@ -29,8 +29,8 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.{KryoHashGenerator, KryoSerializer}
 import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
@@ -120,6 +120,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   import dao._
 
   implicit val serialization: Serialization.type = native.Serialization
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   implicit val stringUnmarshaller: FromEntityUnmarshaller[String] =
     PredefinedFromEntityUnmarshallers.stringUnmarshaller

@@ -2,10 +2,14 @@ package org.constellation
 
 import com.typesafe.scalalogging.Logger
 import org.constellation.keytool.KeyUtils
-import org.constellation.util.Signable
+import org.constellation.schema.Signable
+import org.constellation.serializer.KryoHashGenerator
 import org.scalatest.FlatSpec
 
-case class TestSignable(a: String, b: Int) extends Signable
+case class TestSignable(a: String, b: Int) extends Signable {
+
+  override def hash: String = new KryoHashGenerator().hash(this)
+}
 
 import constellation._
 

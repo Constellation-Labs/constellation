@@ -4,7 +4,8 @@ import java.security.KeyPair
 
 import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, Signable}
+import org.constellation.schema.{CheckpointEdgeData, Signable}
+import org.constellation.util.HashSignature
 
 case class Edge[+D <: Signable](
   observationEdge: ObservationEdge,

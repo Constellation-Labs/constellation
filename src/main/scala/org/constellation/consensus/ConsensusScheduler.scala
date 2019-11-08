@@ -6,6 +6,7 @@ import com.typesafe.config.Config
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
+import org.constellation.schema.HashGenerator
 import org.constellation.util.PeriodicIO
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
@@ -15,12 +16,13 @@ class ConsensusScheduler(
   config: Config,
   consensusManager: ConsensusManager[IO],
   cluster: Cluster[IO],
+  hashGenerator: HashGenerator,
   dao: DAO
 ) extends PeriodicIO("ConsensusScheduler") {
 
   val edgeConsensus: IO[Unit] = IO
     .fromFuture(IO {
-      EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))(dao)
+      EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))(dao, hashGenerator)
     })(IO.contextShift(ConstellationExecutionContext.bounded))
     .void
 

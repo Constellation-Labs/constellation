@@ -3,14 +3,10 @@ package org.constellation.primitives
 import java.security.KeyPair
 import java.time.Instant
 
-import cats.data.ValidatedNel
-import cats.implicits._
-import constellation._
-import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusObject
-import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.schema.Id
+import org.constellation.primitives.Schema.TransactionEdgeData
+import org.constellation.schema.{Address, Id}
 import org.constellation.util.HashSignature
 
 case class TransactionCacheData(

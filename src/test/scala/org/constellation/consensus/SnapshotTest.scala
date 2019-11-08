@@ -10,6 +10,8 @@ import org.constellation._
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.Metrics
 import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
@@ -20,6 +22,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
       NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
   )
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =
@@ -62,7 +65,8 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
   private def randomCB =
     CheckpointBlock
       .createCheckpointBlockSOE(Seq.fill(10)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
-        Fixtures.tempKey1
+        Fixtures.tempKey1,
+        Fixtures.hashGenerator
       )
 
 }

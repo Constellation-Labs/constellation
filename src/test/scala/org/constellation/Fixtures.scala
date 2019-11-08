@@ -11,7 +11,8 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.{APIClient, SignHelp}
 
 import scala.concurrent.ExecutionContext
@@ -20,6 +21,7 @@ object Fixtures {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   implicit val logger = Slf4jLogger.getLogger[IO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   val kp: KeyPair = KeyUtils.makeKeyPair()
   val kp1: KeyPair = KeyUtils.makeKeyPair()

@@ -1,14 +1,13 @@
 package org.constellation.domain.transaction
 
-import java.security.KeyPair
-
-import cats.effect.{Concurrent, IO}
-import cats.implicits._
+import cats.effect.IO
 import constellation.signedObservationEdge
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
-import org.constellation.primitives.{Edge, Schema, Transaction}
+import org.constellation.primitives.{Edge, Transaction}
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -24,6 +23,7 @@ class TransactionChainServiceTest
 
   implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
   var service: TransactionChainService[IO] = _
 
   before {
@@ -60,7 +60,7 @@ class TransactionChainServiceTest
       TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
     )
 
-    val soe = signedObservationEdge(oe)(Fixtures.tempKey)
+    val soe = signedObservationEdge(oe)(Fixtures.tempKey, Fixtures.hashGenerator)
 
     for {
       last <- service.getLastTransactionRef(src)

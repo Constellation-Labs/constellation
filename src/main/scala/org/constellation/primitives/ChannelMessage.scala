@@ -8,25 +8,23 @@ import com.github.fge.jsonschema.core.report.ProcessingReport
 import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.schema.{ChannelMessageData, HashGenerator, Signable}
 import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
+import org.constellation.util.{MerkleProof, SignatureBatch}
 import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import scala.concurrent.Future
 import scala.util.Random
 
 // Should channelId be associated with a unique keyPair or not?
-
-case class ChannelMessageData(
-  message: String,
-  previousMessageHash: String,
-  channelId: String
-) extends Signable
-
 case class SignedData[+D <: Signable](
   data: D,
   signatures: SignatureBatch
-) extends Signable
+)(implicit hashGenerator: HashGenerator)
+    extends Signable {
+
+  override def hash: String = hashGenerator.hash(this)
+}
 
 case class ChannelMessageMetadata(
   channelMessage: ChannelMessage,
@@ -55,7 +53,8 @@ case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 object ChannelMessage extends StrictLogging {
 
   def create(message: String, previous: String, channelId: String)(
-    implicit keyPair: KeyPair
+    implicit keyPair: KeyPair,
+    hashGenerator: HashGenerator
   ): ChannelMessage = {
     val data = ChannelMessageData(message, previous, channelId)
     ChannelMessage(
@@ -65,7 +64,7 @@ object ChannelMessage extends StrictLogging {
 
   def createGenesis(
     channelOpenRequest: ChannelOpen
-  )(implicit dao: DAO): Future[ChannelOpenResponse] = {
+  )(implicit dao: DAO, hashGenerator: HashGenerator): Future[ChannelOpenResponse] = {
 
     logger.info(s"Channel open $channelOpenRequest")
 
@@ -80,7 +79,7 @@ object ChannelMessage extends StrictLogging {
         logger.info(s"Channel not in use")
 
         val genesisMessageStr = channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
+        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair, hashGenerator)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) = channelOpenRequest.name
@@ -110,7 +109,7 @@ object ChannelMessage extends StrictLogging {
 
   def createMessages(
     channelSendRequest: ChannelSendRequest
-  )(implicit dao: DAO): Future[ChannelSendResponse] =
+  )(implicit dao: DAO, hashGenerator: HashGenerator): Future[ChannelSendResponse] =
     dao.messageService.memPool
       .lookup(channelSendRequest.channelId)
       .unsafeRunSync()
@@ -120,7 +119,7 @@ object ChannelMessage extends StrictLogging {
         val messages: Seq[ChannelMessage] = channelSendRequest.messages
           .foldLeft(previous -> Seq[ChannelMessage]()) {
             case ((prvHash, signedMessages), nextMessage) =>
-              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)(dao.keyPair)
+              val nextSigned = create(nextMessage, prvHash, channelSendRequest.channelId)(dao.keyPair, hashGenerator)
               nextSigned.signedMessageData.hash -> (signedMessages :+ nextSigned)
           }
           ._2

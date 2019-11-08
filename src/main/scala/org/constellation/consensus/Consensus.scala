@@ -21,7 +21,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, Typed
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id}
 import org.constellation.storage._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -39,6 +39,7 @@ class Consensus[F[_]: Concurrent](
   remoteSender: ConsensusRemoteSender[F],
   consensusManager: ConsensusManager[F],
   dao: DAO,
+  hashGenerator: HashGenerator,
   config: Config,
   remoteCall: ContextShift[F],
   calculationContext: ContextShift[F]
@@ -361,7 +362,7 @@ class Consensus[F[_]: Concurrent](
           hashesToResolve,
           dataType,
           readyPeers.values.toList
-        )(contextShift)
+        )(contextShift, hashGenerator)
       )
       _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
     } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
@@ -399,7 +400,7 @@ class Consensus[F[_]: Concurrent](
                   dataType,
                   readyPeers.values.toList,
                   readyPeers.get(t._1._2.id)
-                )(contextShift)
+                )(contextShift, hashGenerator)
                 .head
             )
         )
@@ -451,7 +452,7 @@ class Consensus[F[_]: Concurrent](
           messages,
           notifications,
           proposals.flatMap(_._2.observations).toSeq
-        )(dao.keyPair)
+        )(dao.keyPair, hashGenerator)
       )
       _ <- remoteCall.shift >> remoteSender.broadcastBlockUnion(
         BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)

@@ -1,10 +1,13 @@
 package org.constellation.domain.observation
 
-import org.constellation.schema.Id
-import org.constellation.util.Signable
+import org.constellation.schema.{HashGenerator, Id, Signable}
 
 case class ObservationData(
   id: Id,
   event: ObservationEvent,
   time: Long
-) extends Signable
+)(implicit hashGenerator: HashGenerator)
+    extends Signable {
+
+  override def hash: String = hashGenerator.hash(this)
+}

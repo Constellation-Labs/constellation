@@ -25,6 +25,8 @@ import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Metrics}
 import org.slf4j.MDC
 
@@ -58,7 +60,8 @@ object ConstellationNode extends IOApp {
       _ <- createPreferencesPath[IO](preferencesPath)
 
       nodeConfig <- getNodeConfig[IO](cliConfig, config)
-      _ = new ConstellationNode(nodeConfig)
+      hashGenerator = new KryoHashGenerator
+      _ = new ConstellationNode(nodeConfig, hashGenerator)
 
       exitCode = ExitCode.Success
     } yield exitCode
@@ -139,7 +142,8 @@ object ConstellationNode extends IOApp {
 }
 
 class ConstellationNode(
-  val nodeConfig: NodeConfig = NodeConfig()
+  val nodeConfig: NodeConfig = NodeConfig(),
+  implicit val hashGenerator: HashGenerator
 )(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer
@@ -280,13 +284,5 @@ class ConstellationNode(
     logger.info(s"Genesis block hash ${dao.genesisBlock.map { _.soeHash }.getOrElse("")}")
 
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
-  }
-
-//  Keeping disabled for now -- going to only use midDb for the time being.
-//  private val txMigrator = new TransactionPeriodicMigration
-
-  var dataPollingManager: DataPollingManager = _
-  if (nodeConfig.dataPollingManagerOn) {
-    dataPollingManager = new DataPollingManager(60)
   }
 }

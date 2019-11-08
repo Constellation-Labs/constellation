@@ -5,6 +5,8 @@ import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
 import org.constellation.domain.observation.Observation
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
@@ -37,6 +39,7 @@ class ConsensusManagerTest
   val consensus: Consensus[IO] = mock[Consensus[IO]]
 
   val dao: DAO = TestHelpers.prepareMockedDAO()
+  val hashGenerator: HashGenerator = new KryoHashGenerator
 
   implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded))
 
@@ -54,6 +57,7 @@ class ConsensusManagerTest
       dao.consensusRemoteSender,
       dao.cluster,
       dao,
+      hashGenerator,
       conf,
       IO.contextShift(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)

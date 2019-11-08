@@ -3,7 +3,7 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
-import org.constellation.schema.Id
+import org.constellation.schema.{CheckpointEdgeData, HashGenerator, Id, Signable}
 import org.constellation.util._
 
 // This can't be a trait due to serialization issues.
@@ -105,22 +105,6 @@ object Schema {
     def amountActual: Long = if (normalized) amount * NormalizationFactor else amount
   }
 
-  // TODO: We also need a hash pointer to represent the post-tx counter party signing data, add later
-  // TX should still be accepted even if metadata is incorrect, it just serves to help validation rounds.
-
-  case class AddressMetaData(
-    address: String,
-    balance: Long = 0L,
-    lastValidTransactionHash: Option[String] = None,
-    txHashPool: Seq[String] = Seq(),
-    txHashOverflowPointer: Option[String] = None,
-    oneTimeUse: Boolean = false,
-    depth: Int = 0
-  ) extends Signable {
-
-    def normalizedBalance: Long = balance / NormalizationFactor
-  }
-
   /** Our basic set of allowed edge hash types */
   object EdgeHashType extends Enumeration {
     type EdgeHashType = Value
@@ -149,14 +133,23 @@ object Schema {
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
     parents: Seq[TypedEdgeHash],
     data: TypedEdgeHash
-  ) extends Signable
+  )(implicit hashGenerator: HashGenerator)
+      extends Signable {
+
+    override def hash: String = hashGenerator.hash(this)
+  }
 
   /**
     * Encapsulation for all witness information about a given observation edge.
     *
     * @param signatureBatch : Collection of validation signatures about the edge.
     */
-  case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
+  case class SignedObservationEdge(
+    signatureBatch: SignatureBatch
+  )(implicit hashGenerator: HashGenerator)
+      extends Signable {
+
+    override def hash: String = hashGenerator.hash(this)
 
     def withSignatureFrom(keyPair: KeyPair): SignedObservationEdge =
       this.copy(signatureBatch = signatureBatch.withSignatureFrom(keyPair))
@@ -173,33 +166,19 @@ object Schema {
     def baseHash: String = signatureBatch.hash
   }
 
-  /**
-    * Holder for ledger update information about a transaction
-    *
-    * @param amount : Quantity to be transferred
-    * @param salt : Ensure hash uniqueness
-    */
-  case class TransactionEdgeData(
-    amount: Long,
-    salt: Long = Random.nextLong(),
-    fee: Option[Long] = None
-  ) extends Signable
-
-  /**
-    * Collection of references to transaction hashes
-    *
-    * @param hashes : TX edge hashes
-    */
-  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq()) extends Signable
-
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
   }
 
-  case class Address(address: String) extends Signable {
+  case class TransactionEdgeData(
+    amount: Long,
+    salt: Long = Random.nextLong(),
+    fee: Option[Long] = None
+  )(implicit hashGenerator: HashGenerator)
+      extends Signable {
 
-    override def hash: String = address
+    override def hash: String = hashGenerator.hash(this)
   }
 
   case class AddressCacheData(

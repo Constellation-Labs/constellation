@@ -3,15 +3,18 @@ package org.constellation.rollback
 import cats.implicits._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.HashGenerator
 import org.constellation.util.AccountBalances
 import org.constellation.util.AccountBalances.AccountBalances
 
 import scala.annotation.tailrec
 import scala.util.Try
 
-class RollbackAccountBalances {
+class RollbackAccountBalances(
+  hashGenerator: HashGenerator
+) {
 
-  private val zeroSnapshotHash = Snapshot("", Seq()).hash
+  private val zeroSnapshotHash = Snapshot("", Seq())(hashGenerator).hash
 
   def calculate(snapshotHash: String, snapshots: Seq[StoredSnapshot]): Either[RollbackException, AccountBalances] =
     Try(calculateSnapshotsBalances(snapshotHash, snapshots))

@@ -3,6 +3,7 @@ package org.constellation.datastore
 import org.constellation.consensus
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.TransactionCacheData
+import org.constellation.schema.CheckpointEdgeData
 
 trait KVDBDatastoreImpl extends Datastore {
 

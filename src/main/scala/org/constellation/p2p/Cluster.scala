@@ -14,7 +14,7 @@ import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
 import org.constellation.primitives.concurrency.SingleRef
-import org.constellation.schema.Id
+import org.constellation.schema.{HashGenerator, Id, Signable}
 import org.constellation.util.Logging._
 import org.constellation.util._
 import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata}
@@ -39,7 +39,16 @@ case object GetPeerInfo
 case class UpdatePeerInfo(peerData: PeerData)
 case class ChangePeerState(id: Id, state: NodeState)
 
-case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
+case class PeerNotification(
+  id: Id,
+  state: PeerState,
+  timestamp: LocalDateTime = LocalDateTime.now()
+)(
+  implicit hashGenerator: HashGenerator
+) extends Signable {
+
+  override def hash: String = hashGenerator.hash(this)
+}
 
 object PeerState extends Enumeration {
   type PeerState = Value
@@ -47,7 +56,11 @@ object PeerState extends Enumeration {
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
-class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManager[F], dao: DAO)(
+class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](
+  ipManager: IPManager[F],
+  hashGenerator: HashGenerator,
+  dao: DAO
+)(
   implicit C: ContextShift[F]
 ) {
   private val initialState: NodeState =
@@ -294,7 +307,8 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         pm = pd.peerMetadata
         _ <- ipManager.removeKnownIP(pm.host)
         _ <- p.get(pm.id).traverse { peer =>
-          val peerData = peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)))
+          val peerData =
+            peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)(hashGenerator)))
           peers.modify(p => (p + (peerData.client.id -> peerData), p))
         }
         _ <- updateMetrics()
@@ -545,8 +559,13 @@ object Cluster {
 
   type Peers = Map[Id, PeerData]
 
-  def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
-    new Cluster(ipManager, dao)
+  def apply[F[_]: Concurrent: Logger: Timer: ContextShift](
+    metrics: () => Metrics,
+    ipManager: IPManager[F],
+    hashGenerator: HashGenerator,
+    dao: DAO
+  ) =
+    new Cluster(ipManager, hashGenerator, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
 

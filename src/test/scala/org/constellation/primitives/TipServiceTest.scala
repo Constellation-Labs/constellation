@@ -8,6 +8,8 @@ import org.constellation.checkpoint.{CheckpointParentService, CheckpointService}
 import org.constellation.consensus.RandomData
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
+import org.constellation.schema.HashGenerator
+import org.constellation.serializer.KryoHashGenerator
 import org.constellation.storage.SOEService
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
@@ -29,6 +31,7 @@ class TipServiceTest
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
+  implicit val hashGenerator: HashGenerator = new KryoHashGenerator
 
   val facilitatorFilter: FacilitatorFilter[IO] = mock[FacilitatorFilter[IO]]
 
@@ -95,7 +98,7 @@ class TipServiceTest
 
       val cb = CheckpointBlock.createCheckpointBlock(Seq(Fixtures.tx), RandomData.startingTips(go).map { s =>
         TypedEdgeHash(s.hash, EdgeHashType.CheckpointHash)
-      })(Fixtures.tempKey)
+      })(Fixtures.tempKey, Fixtures.hashGenerator)
 
       val tasks = createShiftedTasks(List.fill(maxTipUsage + 1)(cb), { cb =>
         concurrentTipService.update(cb, Height(1, 1))
