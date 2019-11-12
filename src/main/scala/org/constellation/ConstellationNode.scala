@@ -26,6 +26,7 @@ import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
+import org.constellation.serializer.{KryoSerializerImpl, Serializer}
 import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Metrics}
 import org.slf4j.MDC
 
@@ -146,6 +147,10 @@ class ConstellationNode(
   implicit val materialize: ActorMaterializer
 //  implicit val executionContext: ExecutionContext
 ) extends StrictLogging {
+
+  logger.info("KryoSerializer initialization process has started")
+  implicit val serializer: Serializer = new KryoSerializerImpl
+  logger.info(s"KryoSerializer initialization has been completed")
 
   implicit val dao: DAO = new DAO()
   dao.nodeConfig = nodeConfig

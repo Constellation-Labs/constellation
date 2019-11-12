@@ -32,6 +32,7 @@ import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
 import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
 import org.constellation.schema.Id
+import org.constellation.serializer.{KryoSerializerImpl, Serializer}
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
