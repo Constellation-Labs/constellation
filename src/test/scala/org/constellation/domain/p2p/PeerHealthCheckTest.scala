@@ -48,7 +48,7 @@ class PeerHealthCheckTest
   before {
     cluster = mock[Cluster[IO]]
     peerHealthCheck = PeerHealthCheck(cluster)
-    cluster.removeDeadPeer(*) shouldReturnF Unit
+    cluster.removePeer(*) shouldReturnF Unit
   }
 
   "check" - {
@@ -59,20 +59,21 @@ class PeerHealthCheckTest
 
       peerHealthCheck.check().unsafeRunSync
 
-      cluster.removeDeadPeer(*).wasNever(called)
+      cluster.removePeer(*).wasNever(called)
+      cluster.markOfflinePeer(*).wasNever(called)
     }
 
-    "should remove unresponsive peer if peer is unhealthy" in {
+    "should mark peer as offline if peer is unhealthy" in {
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
       peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("ERROR")
       peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
 
       peerHealthCheck.check().unsafeRunSync
 
-      cluster.removeDeadPeer(*).was(called)
+      cluster.markOfflinePeer(*).was(called)
     }
 
-    "should remove unresponsive peer if peer returned error" in {
+    "should mark peer as offline if peer returned error" in {
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
       peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
       peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response
@@ -80,7 +81,7 @@ class PeerHealthCheckTest
 
       peerHealthCheck.check().unsafeRunSync
 
-      cluster.removeDeadPeer(*).was(called)
+      cluster.markOfflinePeer(*).was(called)
     }
   }
 }
