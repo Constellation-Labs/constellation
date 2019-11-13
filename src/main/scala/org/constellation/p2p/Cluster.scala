@@ -403,13 +403,10 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
         _ <- Timer[F].sleep(15.seconds)
 
-        _ <- if (dao.peersInfoPath.nonEmpty) {
-          Logger[F].warn(
-            "Found existing peers in persistent storage. Node probably went offline before and will try rejoining the cluster."
-          )
-        } else Sync[F].unit
-
         _ <- if (dao.peersInfoPath.nonEmpty && dao.seedsPath.isEmpty) {
+          Logger[F].warn(
+            "Found existing peers in persistent storage. Node probably crashed before and will try to rejoin the cluster."
+          )
           rejoin()
         } else {
           Logger[F].warn("No peers in persistent storage. Skipping rejoin.")
@@ -465,16 +462,14 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def rejoin(): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    def attemptRejoin(lastKnownAPIClients: Seq[APIClient]): F[Response[Unit]] =
+    def attemptRejoin(lastKnownAPIClients: Seq[HostPort]): F[Unit] =
       lastKnownAPIClients match {
         case Nil => Sync[F].raiseError(new RuntimeException("Couldn't rejoin the cluster"))
-        case apiClient :: remainingAPIClients =>
-          apiClient
-            .postNonBlockingUnitF("join", null)(C)
-            .flatTap(_ => Logger[F].info(s"Successfully rejoined the cluster via: ${apiClient.hostName}"))
+        case hostPort :: remainingHostPorts =>
+          join(hostPort)
             .handleErrorWith(err => {
-              Logger[F].error(s"Couldn't rejoin via ${apiClient.hostName}: ${err.getMessage}")
-              attemptRejoin(remainingAPIClients)
+              Logger[F].error(s"Couldn't rejoin via ${hostPort.host}: ${err.getMessage}")
+              attemptRejoin(remainingHostPorts)
             })
       }
 
@@ -483,17 +478,9 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
       lastKnownPeers = dao.peersInfoPath.lines.mkString
         .x[Seq[PeerMetadata]]
-        .toList
+        .map(pm => HostPort(pm.host, pm.httpPort))
 
-      apiClients = lastKnownPeers
-        .map(pm => APIClient(pm.host, pm.httpPort)(dao.backend, dao))
-
-      _ <- attemptRejoin(apiClients)
-
-      _ <- Logger[F].info("Triggering redownload after rejoin")
-      _ <- Sync[F].delay(Download.download())
-      _ <- getNodeState
-        .flatMap(state => compareAndSet(Set(state), NodeState.Ready))
+      _ <- attemptRejoin(lastKnownPeers)
     } yield ()
   }
 
