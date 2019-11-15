@@ -49,6 +49,7 @@ class PeerHealthCheckTest
     cluster = mock[Cluster[IO]]
     peerHealthCheck = PeerHealthCheck(cluster)
     cluster.removePeer(*) shouldReturnF Unit
+    cluster.markOfflinePeer(*) shouldReturnF Unit
   }
 
   "check" - {
@@ -60,7 +61,6 @@ class PeerHealthCheckTest
       peerHealthCheck.check().unsafeRunSync
 
       cluster.removePeer(*).wasNever(called)
-      cluster.markOfflinePeer(*).wasNever(called)
     }
 
     "should mark peer as offline if peer is unhealthy" in {
