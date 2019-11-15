@@ -5,6 +5,7 @@ import java.time.LocalDateTime
 import cats.data.OptionT
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
+import cats.syntax._
 import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
@@ -213,12 +214,13 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- Logger[F].debug(s"Pending Registration request: $pr")
         validExternalHost = validWithLoopbackGuard(request.host)
         peers <- peers.get
-        hostAlreadyExists = peers.exists {
-          case (_, d) => d.client.hostName == request.host && d.client.apiPort == request.port
+        existsNotOffline = peers.exists {
+          case (_, d) =>
+            d.client.hostName == request.host && d.client.apiPort == request.port && d.peerMetadata.nodeState != NodeState.Offline
         }
-        validHost = validExternalHost && !hostAlreadyExists
+
         isSelfId = dao.id == request.id
-        badAttempt = isSelfId || !validHost
+        badAttempt = isSelfId || !validExternalHost || existsNotOffline
 
         _ <- if (badAttempt) {
           dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
@@ -303,7 +305,25 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_forgetPeer"
     )
 
-  def removeDeadPeer(pd: PeerData): F[Unit] =
+  def markOfflinePeer(pd: PeerData): F[Unit] =
+    logThread(
+      for {
+        p <- peers.getUnsafe
+        pm = pd.peerMetadata
+        _ <- ipManager.removeKnownIP(pm.host)
+        _ <- p
+          .get(pm.id)
+          .traverse(peer => {
+            val peerData = peer.copy(peerMetadata = pm.copy(nodeState = NodeState.Offline))
+            peers.modify(p => (p + (peerData.client.id -> peerData), p))
+          })
+        _ <- updateMetrics()
+        _ <- updatePersistentStore()
+      } yield (),
+      "cluster_markOfflinePeer"
+    )
+
+  def removePeer(pd: PeerData): F[Unit] =
     logThread(
       for {
         p <- peers.getUnsafe
@@ -315,7 +335,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),
-      "cluster_removeDeadPeer"
+      "cluster_removePeer"
     )
 
   def hostPort(hp: HostPort): F[Unit] =
@@ -383,12 +403,21 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
         _ <- Timer[F].sleep(15.seconds)
 
-        _ <- if (dao.peersInfoPath.nonEmpty || dao.seedsPath.nonEmpty) {
+        _ <- if (dao.peersInfoPath.nonEmpty && dao.seedsPath.isEmpty) {
+          Logger[F].warn(
+            "Found existing peers in persistent storage. Node probably crashed before and will try to rejoin the cluster."
+          )
+          rejoin()
+        } else {
+          Logger[F].warn("No peers in persistent storage. Skipping rejoin.")
+        }
+
+        _ <- if (dao.seedsPath.nonEmpty && dao.peersInfoPath.isEmpty) {
           C.evalOn(ConstellationExecutionContext.bounded)(
             Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.bounded))
           )
         } else {
-          Logger[F].warn("No peers or seeds configured yet. Skipping initial download.")
+          Logger[F].warn("No seeds configured yet. Skipping initial download.")
         }
       } yield (),
       "cluster_initiatePeerReload"
@@ -429,6 +458,31 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       ),
       "cluster_attemptRegisterPeer"
     )
+
+  def rejoin(): F[Unit] = {
+    implicit val ec = ConstellationExecutionContext.bounded
+
+    def attemptRejoin(lastKnownAPIClients: Seq[HostPort]): F[Unit] =
+      lastKnownAPIClients match {
+        case Nil => Sync[F].raiseError(new RuntimeException("Couldn't rejoin the cluster"))
+        case hostPort :: remainingHostPorts =>
+          join(hostPort)
+            .handleErrorWith(err => {
+              Logger[F].error(s"Couldn't rejoin via ${hostPort.host}: ${err.getMessage}")
+              attemptRejoin(remainingHostPorts)
+            })
+      }
+
+    for {
+      _ <- Logger[F].warn("Trying to rejoin the cluster...")
+
+      lastKnownPeers = dao.peersInfoPath.lines.mkString
+        .x[Seq[PeerMetadata]]
+        .map(pm => HostPort(pm.host, pm.httpPort))
+
+      _ <- attemptRejoin(lastKnownPeers)
+    } yield ()
+  }
 
   def addToPeer(hp: HostPort): F[Response[Unit]] =
     logThread(

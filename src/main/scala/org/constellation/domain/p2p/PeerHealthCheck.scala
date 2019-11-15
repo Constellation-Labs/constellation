@@ -24,15 +24,15 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
       }
       .handleErrorWith(_ => PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F])
 
-  private def forgetUnresponsivePeers(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
-    statuses.traverse { a =>
-      a._2 match {
-        case PeerUnresponsive =>
-          logger.info(s"Forgetting peer: ${a._1.client.id.short} (${a._1.client.hostName})") >> cluster.removeDeadPeer(
-            a._1
-          )
-        case _ => Sync[F].unit
-      }
+  private def markOffline(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
+    statuses.traverse {
+      case (pd, healthCheckStatus) =>
+        healthCheckStatus match {
+          case PeerUnresponsive =>
+            logger.info(s"Marking dead peer: ${pd.client.id.short} (${pd.client.hostName}) as offline") >>
+              cluster.markOfflinePeer(pd)
+          case _ => Sync[F].unit
+        }
     }.void
 
   def check(): F[Unit] =
@@ -41,7 +41,7 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
       peers <- cluster.getPeerInfo
       statuses <- peers.values.toList.traverse(pd => checkPeer(pd.client).map(pd -> _))
       _ <- logger.info(s"Found dead peers: ${statuses.count(_._2 == PeerUnresponsive)}")
-      _ <- forgetUnresponsivePeers(statuses)
+      _ <- markOffline(statuses)
     } yield ()
 }
 

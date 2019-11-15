@@ -435,7 +435,7 @@ class SnapshotService[F[_]: Concurrent](
     } yield ()
 
   private def removeLeavingPeers(): F[Unit] =
-    LiftIO[F].liftIO(dao.leavingPeers.flatMap(_.values.toList.traverse(dao.cluster.removeDeadPeer))).void
+    LiftIO[F].liftIO(dao.leavingPeers.flatMap(_.values.toList.traverse(dao.cluster.removePeer))).void
 }
 
 object SnapshotService {

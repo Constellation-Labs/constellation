@@ -354,7 +354,7 @@ object Download extends StrictLogging {
                       recoverState =>
                         IO.delay(
                           logger.warn(
-                            s"Download process error trying to set state back to ${oldState} result: ${recoverState}"
+                            s"Download process error. Trying to set state back to ${oldState}. Result: ${recoverState}"
                           )
                         )
                     )
@@ -362,12 +362,12 @@ object Download extends StrictLogging {
                 download.flatMap(
                   _ =>
                     dao.cluster
-                      .compareAndSet(NodeState.validDuringDownload, oldState)
+                      .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
                       .flatMap(
                         recoverState =>
                           IO.delay(
                             logger.warn(
-                              s"Download process finished trying to set state back to ${oldState} result: ${recoverState}"
+                              s"Download process finished. Trying to set state to ${NodeState.Ready}. Result: ${recoverState}"
                             )
                           )
                       )
