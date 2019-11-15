@@ -13,6 +13,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.{ConstellationExecutionContext, PeerMetadata}
 import org.constellation.consensus.Consensus.FacilitatorId
 import org.constellation.domain.observation.Observation
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.Schema.SignedObservationEdge
 import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
 import org.constellation.schema.Id
@@ -43,8 +44,9 @@ class ConsensusRouteTest
 
   val consensusManager = mock[ConsensusManager[IO]]
   val snapshotService = mock[SnapshotService[IO]]
+  val transactionService = mock[TransactionService[IO]]
 
-  val consensusRoute = new ConsensusRoute(consensusManager, snapshotService, backend)
+  val consensusRoute = new ConsensusRoute(consensusManager, snapshotService, transactionService, backend)
 
   "participate route  " - {
     val data = RoundDataRemote(

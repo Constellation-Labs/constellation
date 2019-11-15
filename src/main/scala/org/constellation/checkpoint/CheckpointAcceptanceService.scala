@@ -427,7 +427,6 @@ object CheckpointAcceptanceService {
             txChainService
               .getLastAcceptedTransactionRef(hash)
               .map(txs.headOption.map(_.lastTxRef).contains)
-              .map(_.pure[F])
         }
       }
       .map(_.forall(_ == true))

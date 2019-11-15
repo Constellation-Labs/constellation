@@ -5,6 +5,7 @@ import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
 import org.constellation.domain.observation.Observation
+import org.constellation.primitives.Transaction
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
@@ -88,7 +89,9 @@ class ConsensusManagerTest
 
       val someObseravation = mock[Observation]
       someObseravation.hash shouldReturn "someOb"
-      consensus.getOwnTransactionsToReturn shouldReturnF Seq("someTx")
+      val someTransaction = mock[Transaction]
+      someTransaction.hash shouldReturn "someTx"
+      consensus.getOwnTransactionsToReturn shouldReturnF Seq(someTransaction)
       consensus.getOwnObservationsToReturn shouldReturnF Seq(someObseravation)
       dao.transactionService.returnToPending(*) shouldReturnF List.empty
       dao.observationService.returnToPending(*) shouldReturnF List.empty
