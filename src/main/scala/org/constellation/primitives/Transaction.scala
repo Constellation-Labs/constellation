@@ -42,7 +42,11 @@ object TransactionCacheData {
   def apply(tx: Transaction): TransactionCacheData = TransactionCacheData(transaction = tx)
 }
 
-case class Transaction(edge: Edge[TransactionEdgeData], lastTxRef: LastTransactionRef, isDummy: Boolean = false) {
+case class Transaction(
+  edge: Edge[TransactionEdgeData],
+  lastTxRef: LastTransactionRef,
+  isDummy: Boolean = false
+) {
 
   def src: Address = Address(edge.parents.head.hash)
 
@@ -65,6 +69,8 @@ case class Transaction(edge: Edge[TransactionEdgeData], lastTxRef: LastTransacti
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
     edge = edge.withSignatureFrom(keyPair)
   )
+
+  val ordinal: Long = lastTxRef.ordinal + 1L
 }
 
 case class TransactionGossip(tx: Transaction, path: Set[Id]) {

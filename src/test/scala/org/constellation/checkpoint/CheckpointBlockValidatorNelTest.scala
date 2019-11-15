@@ -300,7 +300,6 @@ class ValidationSpec
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
           .foreach(cb => cb.store(CheckpointCache(Some(cb))))
 
-        println(dao.metrics)
         assert(checkpointBlockValidator.simpleValidation(cb7).unsafeRunSync().isValid)
       }
     }

@@ -1,10 +1,11 @@
 package org.constellation.consensus
 
-import cats.effect.IO
+import cats.effect.{Blocker, IO}
 import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
 import org.constellation.domain.observation.Observation
+import org.constellation.primitives.Transaction
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
@@ -39,6 +40,7 @@ class ConsensusManagerTest
   val dao: DAO = TestHelpers.prepareMockedDAO()
 
   implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded))
+  implicit val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -55,7 +57,7 @@ class ConsensusManagerTest
       dao.cluster,
       dao,
       conf,
-      IO.contextShift(ConstellationExecutionContext.unbounded),
+      Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
   }
@@ -87,7 +89,9 @@ class ConsensusManagerTest
 
       val someObseravation = mock[Observation]
       someObseravation.hash shouldReturn "someOb"
-      consensus.getOwnTransactionsToReturn shouldReturnF Seq("someTx")
+      val someTransaction = mock[Transaction]
+      someTransaction.hash shouldReturn "someTx"
+      consensus.getOwnTransactionsToReturn shouldReturnF Seq(someTransaction)
       consensus.getOwnObservationsToReturn shouldReturnF Seq(someObseravation)
       dao.transactionService.returnToPending(*) shouldReturnF List.empty
       dao.observationService.returnToPending(*) shouldReturnF List.empty

@@ -94,7 +94,7 @@ object ChannelMessage extends StrictLogging {
           var metadata: Option[ChannelMetadata] = None
           while (retries < 30 && metadata.isEmpty) {
             retries += 1
-            logger.info(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
+            logger.debug(s"Polling genesis creation attempt $retries for $genesisHashChannelId")
             Thread.sleep(1000)
             metadata = dao.channelService.lookup(genesisHashChannelId).unsafeRunSync()
           }

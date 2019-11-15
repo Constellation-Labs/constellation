@@ -315,7 +315,7 @@ object Simulation {
   }
 
   def disableCheckpointFormation(apis: Seq[APIClient]): Seq[Response[String]] = {
-    val responses = apis.map(_.deleteNonBlockingEmptyString("random"))
+    val responses = apis.map(_.deleteNonBlockingEmptyString("checkpointFormation"))
     Future.sequence(responses).get()
   }
 
@@ -413,8 +413,8 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-//    enableRandomTransactions(apis)
-//    logger.info("Starting random transactions")
+    enableRandomTransactions(apis)
+    logger.info("Starting random transactions")
 
     setReady(apis)
 

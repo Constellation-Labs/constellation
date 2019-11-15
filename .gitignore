@@ -16,3 +16,6 @@ terraform/docker-highmem-*
 .dag
 *.log
 /logs
+.metals/
+.bloop/
+project/metals.sbt

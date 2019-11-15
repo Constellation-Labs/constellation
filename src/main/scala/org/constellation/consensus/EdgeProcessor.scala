@@ -6,10 +6,11 @@ import java.nio.file.{NoSuchFileException, Path}
 import better.files.File
 import cats.data.{EitherT, NonEmptyList}
 import cats.data.Validated.{Invalid, Valid}
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -93,6 +94,7 @@ object EdgeProcessor extends StrictLogging {
   ) = {
 
     implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.bounded
+    implicit val cs: ContextShift[IO] = IO.contextShift(ec)
 
     val transactions = dao.transactionService
       .pullForConsensus(ConfigUtil.constellation.getInt("consensus.maxTransactionThreshold"))
@@ -226,7 +228,8 @@ case class SnapshotInfo(
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
   tips: Map[String, TipData] = Map(),
-  snapshotCache: Seq[CheckpointCache] = Seq()
+  snapshotCache: Seq[CheckpointCache] = Seq(),
+  lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
 )
 
 case object GetMemPool

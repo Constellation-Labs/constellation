@@ -1,4 +1,5 @@
 package org.constellation
+
 import java.security.KeyPair
 import java.util.UUID
 
@@ -8,7 +9,7 @@ import cats.implicits._
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.CheckpointService
+import org.constellation.checkpoint.{CheckpointService, CheckpointAcceptanceService}
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
@@ -110,9 +111,15 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
     val cs = mock[CheckpointService[IO]]
     dao.checkpointService shouldReturn cs
+  
+    val cas = mock[CheckpointAcceptanceService[IO]]
+    dao.checkpointAcceptanceService shouldReturn cas
 
     val os = mock[ObservationService[IO]]
     dao.observationService shouldReturn os
+
+    val snapS = mock[SnapshotService[IO]]
+    dao.snapshotService shouldReturn snapS
 
     val keyPair = KeyUtils.makeKeyPair()
     dao.keyPair shouldReturn keyPair

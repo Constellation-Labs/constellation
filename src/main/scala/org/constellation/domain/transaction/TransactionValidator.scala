@@ -129,3 +129,14 @@ case class HashDuplicateFound(txHash: String) extends TransactionValidationError
 object HashDuplicateFound {
   def apply(tx: Transaction) = new HashDuplicateFound(tx.hash)
 }
+
+case class PreviousTransactionHasNotBeenAccepted(txHash: String, previousHash: String)
+    extends TransactionValidationError {
+
+  def errorMessage: String =
+    s"Transaction tx=$txHash has a reference to previous tx=${previousHash} which has not been accepted yet"
+}
+
+object PreviousTransactionHasNotBeenAccepted {
+  def apply(tx: Transaction) = new PreviousTransactionHasNotBeenAccepted(tx.hash, tx.lastTxRef.hash)
+}

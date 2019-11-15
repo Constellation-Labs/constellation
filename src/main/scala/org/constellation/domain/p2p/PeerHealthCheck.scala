@@ -37,10 +37,11 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
 
   def check(): F[Unit] =
     for {
-      _ <- logger.info("Checking for dead peers")
+      _ <- logger.debug("Checking for dead peers")
       peers <- cluster.getPeerInfo
       statuses <- peers.values.toList.traverse(pd => checkPeer(pd.client).map(pd -> _))
-      _ <- logger.info(s"Found dead peers: ${statuses.count(_._2 == PeerUnresponsive)}")
+      unresponsivePeers = statuses.count(_._2 == PeerUnresponsive)
+      _ <- if (unresponsivePeers > 0) logger.info(s"Found dead peers: ${unresponsivePeers}") else Sync[F].unit
       _ <- markOffline(statuses)
     } yield ()
 }

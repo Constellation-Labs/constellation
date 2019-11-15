@@ -6,43 +6,50 @@ import cats.effect._
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import constellation._
-import io.chrisdavenport.log4cats.Logger
-import org.constellation.DAO
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
 
-class TransactionService[F[_]: Concurrent: Logger](transactionChainService: TransactionChainService[F], dao: DAO)
+class TransactionService[F[_]: Concurrent](val transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
 
-  override def metricRecordPrefix: Option[String] = "Transaction".some
+  private val logger = Slf4jLogger.getLogger[F]
 
-  protected[domain] val pending = new PendingTransactionsMemPool[F](Semaphore.in[IO, F](1).unsafeRunSync())
+  private val pendingSemaphore = ConstellationExecutionContext.createSemaphore()
+  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService, pendingSemaphore)
+
+  override def metricRecordPrefix: Option[String] = "Transaction".some
 
   override def accept(tx: TransactionCacheData, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(tx, cpc)
-//      .flatMap(_ => transactionChainService.observeTransaction(tx.transaction.src.address, tx.transaction.hash))
+      .flatMap(_ => transactionChainService.acceptTransaction(tx.transaction))
       .void
       .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
-      .flatTap(_ => Logger[F].debug(s"Accepting transaction=${tx.hash}"))
+      .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
-    count(status = ConsensusStatus.Pending).flatMap {
-      case 0L => createDummyTransactions(1)
-      case _  => super.pullForConsensus(maxCount)
+    super.pullForConsensus(maxCount).flatMap { txs =>
+      if (txs.isEmpty) createDummyTransactions(1) else txs.pure[F]
     }
 
   def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
     List
-      .fill(count)(
+      .fill(count) {
+        val keyPair = KeyUtils.makeKeyPair()
         TransactionService
-          .createDummyTransaction(dao.selfAddressStr, KeyUtils.makeKeyPair().getPublic.toId.address, dao.keyPair)(
+          .createDummyTransaction(
+            keyPair.getPublic.toId.address,
+            KeyUtils.makeKeyPair().getPublic.toId.address,
+            keyPair
+          )(
             transactionChainService
           )
           .map(TransactionCacheData(_))
-      )
+      }
       .sequence
       .flatMap(_.traverse(tx => inConsensus.put(tx.hash, tx)))
 
@@ -62,6 +69,9 @@ class TransactionService[F[_]: Concurrent: Logger](transactionChainService: Tran
 }
 
 object TransactionService {
+
+  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO) =
+    new TransactionService[F](transactionChainService, dao)
 
   def createTransaction[F[_]: Concurrent](
     src: String,

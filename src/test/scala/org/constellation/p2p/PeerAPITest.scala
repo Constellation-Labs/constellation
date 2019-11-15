@@ -34,6 +34,7 @@ import org.mockito.captor.ArgCaptor
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.constellation.TestHelpers
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -96,6 +97,7 @@ class PeerAPITest
         status shouldEqual StatusCodes.Accepted
       }
     }
+
     "should handle reply message" in {
       Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         status shouldEqual StatusCodes.OK
@@ -337,16 +339,12 @@ class PeerAPITest
     val metrics = new Metrics(1)(dao)
     dao.metrics shouldReturn metrics
 
-//    val ipManager = IPManager[IO]()
-//    val cluster = Cluster[IO](() => metrics, ipManager, dao)
-//    dao.cluster shouldReturn cluster
-//    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
     dao.peerInfo shouldReturnF Map()
 
     dao.snapshotService shouldReturn mock[SnapshotService[IO]]
     dao.observationService shouldReturn mock[ObservationService[IO]]
     dao.checkpointAcceptanceService shouldReturn mock[CheckpointAcceptanceService[IO]]
-    dao.checkpointAcceptanceService.acceptWithNodeCheck(any[FinishedCheckpoint]) shouldReturn IO({
+    dao.checkpointAcceptanceService.acceptWithNodeCheck(any[FinishedCheckpoint])(any) shouldReturn IO({
       Thread.sleep(100)
     })
     dao

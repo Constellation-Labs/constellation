@@ -3,7 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Concurrent, ContextShift, IO, Timer}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, Sync, Timer}
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
@@ -161,7 +161,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         ConstellationExecutionContext.bounded,
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
-    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster)(
+    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService)(
       Concurrent(IO.ioConcurrentEffect),
       ioTimer,
       ioTimer.clock,
@@ -245,7 +245,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       cluster,
       this,
       ConfigUtil.config,
-      IO.contextShift(ConstellationExecutionContext.unbounded),
+      Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)

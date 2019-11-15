@@ -94,16 +94,23 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
   def unsafeCount: Int = messages.size
 
 }
-// TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case class PendingDownloadException(id: Id)
     extends Exception(s"Node [${id.short}] is not ready to accept blocks from others.")
+
+// TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case object MissingCheckpointBlockException extends Exception("CheckpointBlock object is empty.")
+
 case class MissingHeightException(cb: CheckpointBlock)
     extends Exception(s"CheckpointBlock ${cb.baseHash} height is missing for soeHash ${cb.soeHash}.")
+
 case class PendingAcceptance(cbBaseHash: String)
     extends Exception(s"CheckpointBlock: $cbBaseHash is already pending acceptance phase.")
+
 case class CheckpointAcceptBlockAlreadyStored(cb: CheckpointBlock)
     extends Exception(s"CheckpointBlock: ${cb.baseHash} is already stored.")
+
+case class MissingTransactionReference(cb: CheckpointBlock)
+    extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing transaction reference.")
 
 trait EdgeDAO {
 

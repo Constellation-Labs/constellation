@@ -9,7 +9,7 @@ import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.{Config, ConfigFactory}
@@ -235,7 +235,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
-                  val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc).map { result =>
+                  val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+
+                  val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc)(cs).map { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>
@@ -286,7 +288,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     }
   private val blockBuildingRoundRoute =
     createRoute(ConsensusRoute.pathPrefix)(
-      () => new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.backend).createBlockBuildingRoundRoutes()
+      () =>
+        new ConsensusRoute(dao.consensusManager, dao.snapshotService, dao.transactionService, dao.backend)
+          .createBlockBuildingRoundRoutes()
     )
 
   private[p2p] def mixedEndpoints(socketAddress: InetSocketAddress) =

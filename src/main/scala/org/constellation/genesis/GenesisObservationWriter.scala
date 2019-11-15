@@ -26,10 +26,10 @@ class GenesisObservationWriter[F[_]: Concurrent](
   def write(genesisObservation: GenesisObservation): EitherT[F, GenesisObservationWriterException, Unit] =
     for {
       _ <- EitherT(writeToDisk(genesisObservation))
-      _ <- EitherT.liftF(logger.info("Genesis observation saved on disk"))
+      _ <- EitherT.liftF(logger.debug("Genesis observation saved on disk"))
 
       result <- sendToCloudIfRequired(genesisObservation)
-      _ <- EitherT.liftF(logger.info(s"Genesis observation files saved on cloud : ${result.size}"))
+      _ <- EitherT.liftF(logger.debug(s"Genesis observation files saved on cloud : ${result.size}"))
     } yield ()
 
   private def writeToDisk(genesis: GenesisObservation): F[Either[GenesisObservationWriterException, File]] =

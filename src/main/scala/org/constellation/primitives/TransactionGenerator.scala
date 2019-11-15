@@ -60,12 +60,13 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     } yield ()
 
   private def generateTransactions(peers: Seq[(Id, PeerData)], numberOfTransaction: Int) = {
-    val transaction = for {
-      transaction <- generateTransaction(peers)
-      _ <- dao.metrics.incrementMetricAsync("signaturesPerformed")
-      _ <- dao.metrics.incrementMetricAsync("randomTransactionsGenerated")
-      _ <- dao.metrics.incrementMetricAsync("sentTransactions")
-      _ <- putTransaction(transaction)
+    def createTransaction() =
+      for {
+        transaction <- generateTransaction(peers)
+        _ <- dao.metrics.incrementMetricAsync("signaturesPerformed")
+        _ <- dao.metrics.incrementMetricAsync("randomTransactionsGenerated")
+        _ <- dao.metrics.incrementMetricAsync("sentTransactions")
+        _ <- putTransaction(transaction)
 
 //      transactionCacheData <- observeTransaction(transaction)
 //      _ <- Logger[F].debug(
@@ -78,9 +79,9 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 //      _ <- dao.metrics.incrementMetricAsync("transactionGossipingSent")
 //      lightPeers <- peerDataNodeTypeLight()
 //      _ <- if (lightPeers.nonEmpty) broadcastLightNode(lightPeers, transaction) else Sync[F].unit
-    } yield ()
+      } yield ()
 
-    List.fill(numberOfTransaction)(transaction).sequence
+    List.range(1, numberOfTransaction).traverse(_ => createTransaction())
   }
 
   private def broadcastLightNode(lightPeers: Map[Id, PeerData], tx: Transaction) = {

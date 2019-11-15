@@ -93,7 +93,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
         ip = peerData.client.hostName
         _ <- ipManager.addKnownIP(ip)
-        _ <- Logger[F].info(s"Added $ip to known peers.")
+        _ <- Logger[F].debug(s"Added $ip to known peers.")
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),

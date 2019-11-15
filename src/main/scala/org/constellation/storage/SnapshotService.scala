@@ -61,6 +61,7 @@ class SnapshotService[F[_]: Concurrent](
         .map(checkpointService.fullData)
         .sequence
         .map(_.flatten)
+      lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
     } yield
       SnapshotInfo(
         s,
@@ -69,7 +70,8 @@ class SnapshotService[F[_]: Concurrent](
         snapshotHashes = hashes,
         addressCacheData = addressCacheData,
         tips = tips,
-        snapshotCache = snapshotCache
+        snapshotCache = snapshotCache,
+        lastAcceptedTransactionRef = lastAcceptedTransactionRef
       )
 
   def retainOldData(): F[Unit] =
@@ -90,6 +92,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
+      _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
@@ -145,7 +148,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(
         Sync[F].delay(
           logger.debug(
-            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightDelayInterval}"
+            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
           )
         )
       )

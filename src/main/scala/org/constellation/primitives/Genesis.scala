@@ -170,7 +170,7 @@ object Genesis extends StrictLogging {
       .value
       .map {
         case Left(value) => logger.error(s"Cannot write genesis observation ${value.exceptionMessage}")
-        case Right(_)    => logger.info("Genesis observation saved successfully")
+        case Right(_)    => logger.debug("Genesis observation saved successfully")
       }
       .unsafeRunSync()
   }
@@ -180,6 +180,6 @@ object Genesis extends StrictLogging {
       cb =>
         cb.transactions
           .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-          .map(tcd => dao.transactionService.put(tcd, ConsensusStatus.Accepted))
+          .map(tcd => dao.transactionService.accept(tcd))
     }.toList.sequence.void.unsafeRunSync()
 }
