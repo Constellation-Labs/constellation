@@ -20,7 +20,7 @@ import scala.concurrent.duration._
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
   cluster: Cluster[F],
-  snapshotSelector: SnapshotSelector[F, List[RecentSnapshot]],
+  snapshotSelector: SnapshotSelector[F],
   contextShift: ContextShift[F],
   dao: DAO
 ) extends StrictLogging {
@@ -29,14 +29,18 @@ class SnapshotBroadcastService[F[_]: Concurrent](
 
   val clusterCheckPending = new AtomicBoolean(false)
 
-  def broadcastSnapshot(hash: String, height: Long): F[Unit] =
+  def broadcastSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double]): F[Unit] =
     for {
-      ownRecent <- updateRecentSnapshots(hash, height)
+      ownRecent <- updateRecentSnapshots(hash, height, publicReputation)
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       responses <- peers.values.toList
         .traverse(
           _.client
-            .postNonBlockingF[F, SnapshotVerification]("snapshot/verify", SnapshotCreated(hash, height), 5 second)(
+            .postNonBlockingF[F, SnapshotVerification](
+              "snapshot/verify",
+              SnapshotCreated(hash, height, publicReputation),
+              5 second
+            )(
               contextShift
             )
             .map(_.some)
@@ -103,9 +107,10 @@ class SnapshotBroadcastService[F[_]: Concurrent](
         Sync[F].unit
       )
 
-  def updateRecentSnapshots(hash: String, height: Long): F[List[RecentSnapshot]] =
+  def updateRecentSnapshots(hash: String, height: Long, publicReputation: Map[Id, Double]): F[List[RecentSnapshot]] =
     recentSnapshots.modify { snaps =>
-      val updated = (RecentSnapshot(hash, height) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
+      val updated =
+        (RecentSnapshot(hash, height, publicReputation) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
       (updated, updated)
     }
 
@@ -113,7 +118,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     responses.nonEmpty && ((responses.count(r => r.nonEmpty && r.get.status == VerificationStatus.SnapshotInvalid) * 100) / responses.size) >= dao.processingConfig.maxInvalidSnapshotRate
 }
 
-case class RecentSnapshot(hash: String, height: Long)
+case class RecentSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double])
 
 case class SnapshotVerification(id: Id, status: VerificationStatus, recentSnapshot: List[RecentSnapshot])
 

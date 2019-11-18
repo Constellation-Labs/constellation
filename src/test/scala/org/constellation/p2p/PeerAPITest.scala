@@ -139,13 +139,13 @@ class PeerAPITest
     }
 
     "snapshot/verify endpoint" - {
-      val request = SnapshotCreated("snap1", 2)
+      val request = SnapshotCreated("snap1", 2, Map.empty)
       val path = "/snapshot/verify"
 
       "should return correct state" in {
         val recent = List(
-          RecentSnapshot("snap2", 4),
-          RecentSnapshot("snap1", 2)
+          RecentSnapshot("snap2", 4, Map.empty),
+          RecentSnapshot("snap1", 2, Map.empty)
         )
 
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
@@ -166,7 +166,7 @@ class PeerAPITest
       }
 
       "should return height above state when given height is above current" in {
-        val recent = List(RecentSnapshot("snap2", 1))
+        val recent = List(RecentSnapshot("snap2", 1, Map.empty))
         dao.processingConfig shouldReturn ProcessingConfig()
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
 
@@ -182,12 +182,15 @@ class PeerAPITest
 
       "should return list of recent snapshots" in {
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(
-          RecentSnapshot("snap2", 4),
-          RecentSnapshot("snap1", 2)
+          RecentSnapshot("snap2", 4, Map.empty),
+          RecentSnapshot("snap1", 2, Map.empty)
         )
         Get(path) ~> peerAPI.commonEndpoints ~> check {
           status shouldEqual StatusCodes.OK
-          responseAs[List[RecentSnapshot]] shouldBe List(RecentSnapshot("snap2", 4), RecentSnapshot("snap1", 2))
+          responseAs[List[RecentSnapshot]] shouldBe List(
+            RecentSnapshot("snap2", 4, Map.empty),
+            RecentSnapshot("snap1", 2, Map.empty)
+          )
         }
       }
 

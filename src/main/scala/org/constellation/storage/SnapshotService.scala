@@ -14,6 +14,8 @@ import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.schema.Id
+import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
@@ -26,6 +28,7 @@ class SnapshotService[F[_]: Concurrent](
   observationService: ObservationService[F],
   rateLimiting: RateLimiting[F],
   consensusManager: ConsensusManager[F],
+  trustManager: TrustManager[F],
   dao: DAO
 )(implicit C: ContextShift[F])
     extends StrictLogging {
@@ -163,7 +166,14 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(removeLeavingPeers())
 
       created <- EitherT.liftF(
-        Sync[F].pure(SnapshotCreated(nextSnapshot.lastSnapshot, nextHeightInterval - snapshotHeightInterval))
+        trustManager.getPredictedReputation.map(
+          predictedReputation =>
+            SnapshotCreated(
+              nextSnapshot.lastSnapshot,
+              nextHeightInterval - snapshotHeightInterval,
+              predictedReputation
+            )
+        )
       )
     } yield created
 
@@ -452,6 +462,7 @@ object SnapshotService {
     observationService: ObservationService[F],
     rateLimiting: RateLimiting[F],
     consensusManager: ConsensusManager[F],
+    trustManager: TrustManager[F],
     dao: DAO
   )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
@@ -463,6 +474,7 @@ object SnapshotService {
       observationService,
       rateLimiting,
       consensusManager,
+      trustManager,
       dao
     )
 }
@@ -478,4 +490,4 @@ object SnapshotIllegalState extends SnapshotError
 case class SnapshotIOError(cause: Throwable) extends SnapshotError
 case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError
 
-case class SnapshotCreated(hash: String, height: Long)
+case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])

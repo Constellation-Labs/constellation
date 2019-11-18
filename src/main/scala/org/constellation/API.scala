@@ -141,14 +141,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
-        path("trust") {
-          complete(TrustData(Map(Id("foo") -> 2.2, Id("bar") -> 4.8)))
+        pathPrefix("cluster") {
+          path("info") {
+            APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
+          }
         } ~
-          pathPrefix("cluster") {
-            path("info") {
-              APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
-            }
-          } ~
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
           } ~

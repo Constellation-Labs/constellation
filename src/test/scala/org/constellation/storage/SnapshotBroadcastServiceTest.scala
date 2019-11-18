@@ -30,7 +30,7 @@ class SnapshotBroadcastServiceTest
 
   var dao: DAO = _
   val healthChecker = mock[HealthChecker[IO]]
-  val snapshotSelector = mock[SnapshotSelector[IO, List[RecentSnapshot]]]
+  val snapshotSelector = mock[SnapshotSelector[IO]]
   var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
 
   before {
@@ -66,7 +66,7 @@ class SnapshotBroadcastServiceTest
         .raiseError[SnapshotVerification](new SocketTimeoutException("timeout"))
 
       snapshotSelector.selectSnapshotFromBroadcastResponses(*, *) shouldReturn None
-      val response = snapshotBroadcastService.broadcastSnapshot("snap1", 2)
+      val response = snapshotBroadcastService.broadcastSnapshot("snap1", 2, Map.empty)
       response.unsafeRunSync()
 
       healthChecker.startReDownload(*, *).wasNever(called)
@@ -107,7 +107,7 @@ class SnapshotBroadcastServiceTest
     "should return only recent snapshots in reversed order" in {
 
       (1 to 4).toList
-        .traverse(i => snapshotBroadcastService.updateRecentSnapshots(i.toString, 0))
+        .traverse(i => snapshotBroadcastService.updateRecentSnapshots(i.toString, 0, Map.empty))
         .unsafeRunSync()
 
       snapshotBroadcastService.getRecentSnapshots

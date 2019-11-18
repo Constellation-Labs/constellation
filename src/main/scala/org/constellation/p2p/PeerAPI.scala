@@ -145,7 +145,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
                   }
                   SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
-                case list if list.contains(RecentSnapshot(s.hash, s.height)) =>
+                case list if list.contains(RecentSnapshot(s.hash, s.height, s.publicReputation)) =>
                   SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
                 case _ =>
                   (IO
@@ -362,7 +362,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               .flatMap(
                 predicted =>
                   if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(_ => TrustData(_))
-                  else IO.pure(TrustData(predicted))
+                  else TrustData(predicted).pure[IO]
               )
           )(complete(_))
         }

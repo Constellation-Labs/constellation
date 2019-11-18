@@ -1,25 +1,60 @@
 package org.constellation.trust
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, Sync}
+import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.domain.observation.{Observation, ObservationEvent}
 import org.constellation.schema.Id
-import org.constellation.domain.trust.{TrustData, TrustDataInternal}
-import org.constellation.primitives.concurrency.SingleRef
+import org.constellation.domain.trust.TrustDataInternal
 
-object TrustManager {
+class TrustManager[F[_]: Concurrent](nodeId: Id) {
 
-  def calculateReputation(snapshots: List[StoredSnapshot]): Map[Id, Double] =
-    snapshots
-      .flatMap(s => s.checkpointCache.flatMap(cpc => cpc.checkpointBlock.map(c => c.observations.toList)))
-      .flatten
-      .groupBy(o => o.signedObservationData.data.id)
-      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
+  private val storedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
 
-  def calculateScoringMap(scores: List[TrustDataInternal]): Map[Id, Int] =
+  private val predictedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
+
+  def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
+    for {
+      reputation <- storedReputation.get
+      scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
+      scoringMap = calculateScoringMap(scores)
+      idxMap = scoringMap.map(_.swap)
+
+      idMappedScores = SelfAvoidingWalk
+        .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId), calculateTrustNodes(scores, nodeId, scoringMap))
+        .edges
+        .map(e => idxMap(e.dst) -> e.trust)
+        .toMap
+
+      _ <- storedReputation.modify(_ => (idMappedScores, ()))
+      _ <- predictedReputation.modify(_ => (idMappedScores, ()))
+    } yield ()
+
+  def getPredictedReputation: F[Map[Id, Double]] = predictedReputation.get
+
+  def getStoredReputation: F[Map[Id, Double]] = storedReputation.get
+
+  def updateStoredReputation(o: Observation): F[Unit] = {
+    val score = observationScoring(o.signedObservationData.data.event)
+    val id = o.signedObservationData.data.id
+
+    storedReputation.modify { reputation =>
+      val updated = Math.max(reputation.getOrElse(id, 0d) - score, -1d)
+      (reputation + (id -> updated), ())
+    }
+  }
+
+//  private def calculateReputation(snapshots: List[StoredSnapshot]): Map[Id, Double] =
+//    snapshots
+//      .flatMap(_.checkpointCache.flatMap(_.checkpointBlock.flatMap(_.observations.toList)))
+//      .groupBy(_.signedObservationData.data.id)
+//      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
+
+  private def calculateScoringMap(scores: List[TrustDataInternal]): Map[Id, Int] =
     scores.map(_.id).sortBy { _.hex }.zipWithIndex.toMap
 
-  def calculateTrustNodes(
+  private def calculateTrustNodes(
     scores: List[TrustDataInternal],
     currentNodeId: Id,
     scoringMap: Map[Id, Int]
@@ -32,46 +67,22 @@ object TrustManager {
             TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)
         }.toSeq)
     }
+
+  private def observationScoring(event: ObservationEvent): Double = {
+    import org.constellation.domain.observation._
+
+    event match {
+      case _: CheckpointBlockWithMissingParents => 0.1
+      case _: CheckpointBlockWithMissingSoe     => 0.1
+      case _: RequestTimeoutOnConsensus         => 0.1
+      case _: RequestTimeoutOnResolving         => 0.1
+      case _: SnapshotMisalignment              => 0.1
+      case _: CheckpointBlockInvalid            => 0.1
+      case _                                    => 0d
+    }
+  }
 }
 
-class TrustManager[F[_]: Concurrent](currentNodeId: Id) {
-
-  /**
-    * Reputation based on current node observations
-    */
-  private val storedReputation: SingleRef[F, Map[Id, Double]] = SingleRef(Map.empty)
-
-  /**
-    * Reputation based on current node observations with conjunction of cluster views
-    */
-  private val predictedReputation: SingleRef[F, Map[Id, Double]] = SingleRef(Map.empty)
-
-  import TrustManager._
-
-  def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
-    getRecentFinalSnapshots
-      .map(snaps => peerTrustScores :+ TrustDataInternal(currentNodeId, TrustManager.calculateReputation(snaps)))
-      .map { scores =>
-        val scoringMap = calculateScoringMap(scores)
-        val idxMap = scoringMap.map(_.swap)
-
-        SelfAvoidingWalk
-          .runWalkFeedbackUpdateSingleNode(
-            scoringMap(currentNodeId),
-            calculateTrustNodes(scores, currentNodeId, scoringMap)
-          )
-          .edges
-          .map { e =>
-            idxMap(e.dst) -> e.trust
-          }
-          .toMap
-      }
-      .flatMap(idMappedScores => predictedReputation.set(idMappedScores))
-
-  def getRecentFinalSnapshots: F[List[StoredSnapshot]] = ??? // TODO: wkoszycki which Snapshots should be loaded ?
-
-  def getPredictedReputation: F[Map[Id, Double]] = predictedReputation.getUnsafe
-
-  def getStoredReputation: F[Map[Id, Double]] = storedReputation.getUnsafe
-
+object TrustManager {
+  def apply[F[_]: Concurrent](nodeId: Id): TrustManager[F] = new TrustManager[F](nodeId)
 }

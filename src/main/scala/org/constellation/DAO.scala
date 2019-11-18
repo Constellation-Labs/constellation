@@ -35,6 +35,7 @@ import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
+import org.constellation.trust.TrustManager
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
 import scala.concurrent.Future
@@ -113,11 +114,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     rateLimiting = new RateLimiting[IO]
 
+    trustManager = TrustManager[IO](id)
+
     transactionChainService = TransactionChainService[IO]
     transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
-    observationService = new ObservationService[IO](this)
+    observationService = new ObservationService[IO](trustManager, this)
 
     val merkleService =
       new CheckpointMerkleService[IO](this, transactionService, messageService, notificationService, observationService)
@@ -207,6 +210,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       observationService,
       rateLimiting,
       consensusManager,
+      trustManager,
       this
     )
 

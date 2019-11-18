@@ -3,11 +3,12 @@ package org.constellation.snapshot
 import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.schema.Id
+import org.constellation.storage.VerificationStatus.VerificationStatus
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
 import org.constellation.util.SnapshotDiff
 
-class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
-    extends SnapshotSelector[F, List[RecentSnapshot]] {
+class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
+    extends SnapshotSelector[F] {
 
   /**
     * Selects snapshots at given height and validates against current, if the current snapshot is incorrect highest one will be chosen.
@@ -17,25 +18,22 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHe
     *         Some(..) downloadInfo with recentSnapshots list downloaded from highest node based on majority of hashes and id election.
     */
   def selectSnapshotFromRecent(
-    peersSnapshots: List[NodeSnapshots],
+    peersSnapshots: Map[Id, List[RecentSnapshot]],
     ownSnapshots: List[RecentSnapshot]
-  ): Option[(SnapshotDiff, SnapshotSelectionInput)] =
+  ): Option[(SnapshotDiff, List[RecentSnapshot])] =
     (peersSnapshots, ownSnapshots) match {
-      case (Nil, _) => None
+      case (m, _) if m.isEmpty => None
       case (_, Nil) =>
         val nel = peersSnapshots.filter(_._2.nonEmpty)
         if (nel.isEmpty) None
         else {
-          val clusterWithCorrectState = selectMostRecentCorrectSnapshot(nel)
-          (
-            createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
-            clusterWithCorrectState._1
-          ).some
+          val state = selectMostRecentCorrectSnapshot(nel)
+          (createDiff(state._1, ownSnapshots, state._2), state._1).some
         }
       case (_, _) =>
         val highestSnapshot = ownSnapshots.maxBy(_.height)
         val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(highestSnapshot, peersSnapshots)
-        val nel = (peersSnapshots :+ (thisNodeId, ownSnapshots)).filter(_._2.nonEmpty)
+        val nel = (peersSnapshots + (nodeId -> ownSnapshots)).filter(_._2.nonEmpty)
         if (nel.isEmpty) None
         else {
           val clusterWithCorrectState = selectMostRecentCorrectSnapshot(nel)
@@ -64,36 +62,36 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHe
   def selectSnapshotFromBroadcastResponses(
     responses: List[Option[SnapshotVerification]],
     ownSnapshots: List[RecentSnapshot]
-  ): Option[(SnapshotDiff, SnapshotSelectionInput)] = {
-    val flat = responses.flatten
-    val grouped = flat.groupBy(_.status)
+  ): Option[(SnapshotDiff, List[RecentSnapshot])] = {
+    val grouped = responses.flatten.groupBy(_.status)
 
-    val invalid = grouped.getOrElse(VerificationStatus.SnapshotInvalid, List.empty)
-    val correct = grouped.getOrElse(VerificationStatus.SnapshotCorrect, List.empty)
-    // +1 because this node treat it as correct
-    val maybeSelected = (invalid.size, correct.size + 1) match {
-      case (i, c) if i > c =>
-        selectMostRecentCorrectSnapshot(invalid.map(s => (s.id, s.recentSnapshot))).some
+    def getByStatus(status: VerificationStatus) =
+      grouped.getOrElse(status, List.empty).map(s => (s.id -> s.recentSnapshot)).toMap
+
+    val invalid = getByStatus(VerificationStatus.SnapshotInvalid)
+    val correct = getByStatus(VerificationStatus.SnapshotCorrect)
+
+    val maybeSelected = (invalid.size, correct.size + 1) match { // +1 because own node treats it as correct too
+      case (i, c) if i > c => selectMostRecentCorrectSnapshot(invalid).some
       case (i, c) if i < c => None
       case (i, c) if i == c =>
         val combined = invalid ++ correct
         val highestSnapshot = ownSnapshots.maxBy(_.height)
-        val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(
+        val correctSnapshotAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(
           highestSnapshot,
-          combined.map(x => (x.id, x.recentSnapshot))
+          combined
         )
-        val info =
-          ((invalid ++ correct).map(s => (s.id, s.recentSnapshot)) :+ (thisNodeId, ownSnapshots)).filter(_._2.nonEmpty)
+        val info = (invalid ++ correct + (nodeId -> ownSnapshots)).filter(_._2.nonEmpty)
+
         if (info.nonEmpty) {
           val clusterWithCorrectState = selectMostRecentCorrectSnapshot(info)
-          if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+
+          if (correctSnapshotAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
                 highestSnapshot,
                 clusterWithCorrectState._1
               )) None
           else clusterWithCorrectState.some
-        } else {
-          None
-        }
+        } else None
     }
 
     maybeSelected.map { s =>
@@ -109,10 +107,10 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHe
     */
   private[snapshot] def selectCorrectRecentSnapshotAtGivenHeight(
     ownSnapshot: RecentSnapshot,
-    clusterState: List[NodeSnapshots]
-  ): (RecentSnapshot, List[Id]) =
-    (clusterState
-      .flatMap(n => n._2.find(_.height == ownSnapshot.height).map((n._1, _))) :+ (thisNodeId, ownSnapshot))
+    clusterState: Map[Id, List[RecentSnapshot]]
+  ): (RecentSnapshot, List[Id]) = // TODO: mwadon - refactor
+    (clusterState.toList
+      .flatMap(n => n._2.find(_.height == ownSnapshot.height).map((n._1, _))) :+ (nodeId, ownSnapshot))
       .groupBy(_._2)
       .toList
       .maxBy(t => (t._2.size, t._2.map(_._1.hex)))
@@ -124,9 +122,9 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](thisNodeId: Id, snapshotHe
     * @return elected majority state and list of nodes associated with that state
     */
   private[snapshot] def selectMostRecentCorrectSnapshot(
-    clusterState: List[NodeSnapshots]
-  ): (List[RecentSnapshot], List[Id]) = {
-    val x = clusterState
+    clusterState: Map[Id, List[RecentSnapshot]]
+  ): (List[RecentSnapshot], List[Id]) = { // TODO: mwadon - refactor
+    val x = clusterState.toList
       .map(r => (r, r._2.maxBy(_.height)))
       .groupBy(_._2)
       .toList
