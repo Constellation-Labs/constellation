@@ -3,7 +3,7 @@ package org.constellation.trust
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.Config
-import org.constellation.ConfigUtil
+import org.constellation.{ConfigUtil, DAO}
 import org.constellation.schema.Id
 import org.constellation.domain.trust.{TrustData, TrustDataInternal}
 import org.constellation.p2p.Cluster
@@ -15,7 +15,8 @@ import scala.concurrent.duration._
 class TrustDataPollingScheduler(
   config: Config,
   trustManager: TrustManager[IO],
-  cluster: Cluster[IO]
+  cluster: Cluster[IO],
+  dao: DAO
 ) extends PeriodicIO("TrustDataPollingScheduler") {
 
   override def trigger(): IO[Unit] =
@@ -30,7 +31,14 @@ class TrustDataPollingScheduler(
         )
       )
       .flatMap(trustManager.handleTrustScoreUpdate)
+      .flatTap(_ => dao.metrics.incrementMetricAsync[IO]("trustDataPollingRound"))
 
   schedule(ConfigUtil.getDurationFromConfig("constellation.trust.pull-trust-interval", 60 seconds, config))
 
+}
+
+object TrustDataPollingScheduler {
+
+  def apply(config: Config, trustManager: TrustManager[IO], cluster: Cluster[IO], dao: DAO) =
+    new TrustDataPollingScheduler(config, trustManager, cluster, dao)
 }

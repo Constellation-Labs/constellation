@@ -28,7 +28,7 @@ import org.constellation.rollback.RollbackService
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
-import org.constellation.trust.TrustManager
+import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
@@ -163,6 +163,8 @@ trait EdgeDAO {
   val messageService: MessageService[IO]
   val channelService = new ChannelService[IO]()
   val soeService = new SOEService[IO]()
+
+  var trustDataPollingScheduler: TrustDataPollingScheduler = _
 
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
 

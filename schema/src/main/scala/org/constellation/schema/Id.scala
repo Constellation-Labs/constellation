@@ -4,7 +4,7 @@ import java.security.PublicKey
 
 import com.google.common.hash.Hashing
 import org.constellation.keytool.KeyUtils
-import org.constellation.keytool.KeyUtils._
+import org.constellation.keytool.KeyUtils.hexToPublicKey
 
 case class Id(hex: String) {
 

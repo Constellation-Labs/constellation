@@ -14,6 +14,8 @@ class ObservationService[F[_]: Concurrent: Logger](trustManager: TrustManager[F]
 
   override def metricRecordPrefix: Option[String] = "Observation".some
 
+  // TODO: updateStoredReputation in `put` but firstly add memoization which observations have been taken into reputation
+
   override def accept(o: Observation, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(o)
