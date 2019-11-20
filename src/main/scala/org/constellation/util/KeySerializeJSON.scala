@@ -2,10 +2,19 @@ package org.constellation.util
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
+import org.constellation.domain.observation.{
+  CheckpointBlockInvalid,
+  CheckpointBlockWithMissingParents,
+  CheckpointBlockWithMissingSoe,
+  RequestTimeoutOnConsensus,
+  RequestTimeoutOnResolving,
+  SnapshotMisalignment
+}
 import org.constellation.keytool.KeyUtils.{hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex}
 import org.constellation.schema.Id
 import org.json4s.JsonAST.JString
-import org.json4s.{CustomKeySerializer, CustomSerializer, Formats, JObject}
+import org.json4s.native.Serialization
+import org.json4s.{CustomKeySerializer, CustomSerializer, Formats, JObject, ShortTypeHints}
 
 trait KeySerializeJSON {
 

@@ -115,6 +115,7 @@ object EdgeProcessor extends StrictLogging {
         if (maybeTips.isEmpty) {
           dao.metrics.incrementMetric("attemptFormCheckpointNoGenesisTips")
         }
+
         maybeTips.foreach { pulledTip =>
           val checkpointBlock =
             CheckpointBlock.createCheckpointBlock(transactions, pulledTip.tipSoe.soe.map { soe =>

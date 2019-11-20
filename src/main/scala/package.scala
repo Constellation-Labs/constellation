@@ -12,6 +12,14 @@ import cats.effect.Sync
 import cats.implicits._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
+import org.constellation.domain.observation.{
+  CheckpointBlockInvalid,
+  CheckpointBlockWithMissingParents,
+  CheckpointBlockWithMissingSoe,
+  RequestTimeoutOnConsensus,
+  RequestTimeoutOnResolving,
+  SnapshotMisalignment
+}
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.schema.Id
@@ -21,7 +29,7 @@ import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
 import org.json4s.JsonAST.{JInt, JString}
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.native.{Serialization, parseJsonOpt}
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue}
+import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -80,7 +88,17 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new EnumNameSerializer(EdgeHashType) +
     new EnumNameSerializer(NodeState) +
     new EnumNameSerializer(VerificationStatus) +
-    new EnumNameSerializer(NodeType)
+    new EnumNameSerializer(NodeType) +
+    ShortTypeHints(
+      List(
+        classOf[CheckpointBlockWithMissingParents],
+        classOf[CheckpointBlockWithMissingSoe],
+        classOf[RequestTimeoutOnConsensus],
+        classOf[RequestTimeoutOnResolving],
+        classOf[SnapshotMisalignment],
+        classOf[CheckpointBlockInvalid]
+      )
+    )
 
   def caseClassToJson(message: Any): String =
     compactRender(Extraction.decompose(message))

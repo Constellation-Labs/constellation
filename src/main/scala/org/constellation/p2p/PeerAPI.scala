@@ -333,6 +333,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               maybePeer =>
                 maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
                   pd =>
+                    // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
                     dao.observationService
                       .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
                       .void

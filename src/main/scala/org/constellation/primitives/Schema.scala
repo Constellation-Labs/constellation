@@ -192,7 +192,11 @@ object Schema {
     *
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq()) extends Signable
+  case class CheckpointEdgeData(
+    hashes: Seq[String],
+    messageHashes: Seq[String] = Seq(),
+    observationsHashes: Seq[String]
+  ) extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 
