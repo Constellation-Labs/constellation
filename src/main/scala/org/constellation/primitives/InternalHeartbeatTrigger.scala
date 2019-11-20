@@ -33,7 +33,7 @@ class InternalHeartbeatTrigger[T](nodeActor: ActorRef, periodSeconds: Int = 10)(
           val newChannelName = "channel_ " + dao.threadSafeMessageMemPool.activeChannels.size
           val channelOpen = ChannelOpen(newChannelName)
           val genesis =
-            ChannelMessage.create(channelOpen.json, Genesis.CoinBaseHash, newChannelName)(dao.keyPair)
+            ChannelMessage.create(channelOpen.json, Genesis.Coinbase, newChannelName)(dao.keyPair)
           val genesisHash = genesis.signedMessageData.hash
           testChannels :+= genesisHash
           dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHash) = newChannelName

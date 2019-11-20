@@ -79,10 +79,8 @@ object Simulation {
   }
 
   def genesis(apis: Seq[APIClient]): GenesisObservation = {
-    val ids = apis.map {
-      _.id
-    }
-    apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
+    val balances = fakeBalances(apis)
+    apis.head.postBlocking[GenesisObservation]("genesis/create", balances)
   }
 
   def addPeer(
@@ -119,6 +117,10 @@ object Simulation {
   }
 
   def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
+
+  def fakeBalances(apis: Seq[APIClient]): Seq[AccountBalance] =
+    apis
+      .map(api => AccountBalance(api.id.address, 999))
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
     apis.filter {

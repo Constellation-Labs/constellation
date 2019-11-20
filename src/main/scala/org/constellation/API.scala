@@ -521,8 +521,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         pathPrefix("genesis") {
           path("create") {
-            entity(as[Set[Id]]) { ids =>
-              complete(Genesis.createGenesisAndInitialDistribution(dao.selfAddressStr, ids, dao.keyPair))
+            entity(as[Seq[AccountBalance]]) { balances =>
+              val go = Genesis.createGenesisAndInitialDistribution(
+                dao.selfAddressStr,
+                Option(balances).getOrElse(Seq.empty),
+                dao.keyPair
+              )
+              complete(go)
             }
           } ~
             path("accept") {

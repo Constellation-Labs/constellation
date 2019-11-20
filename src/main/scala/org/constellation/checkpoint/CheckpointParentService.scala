@@ -18,7 +18,7 @@ class CheckpointParentService[F[_]: Sync](
 
   def parentSOEBaseHashes(cb: CheckpointBlock): F[List[String]] =
     cb.parentSOEHashes.toList.traverse { soeHash =>
-      if (soeHash == Genesis.CoinBaseHash) {
+      if (soeHash == Genesis.Coinbase) {
         Sync[F].pure[Option[String]](None)
       } else {
         soeService.lookup(soeHash).flatMap { parent =>
