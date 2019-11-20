@@ -40,6 +40,8 @@ object Schema {
 
     val broadcastStates: Set[Schema.NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
 
+    val offlineStates: Set[Schema.NodeState.Value] = Set(Offline)
+
     val validDuringDownload: Set[Schema.NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
     val validForDownload: Set[Schema.NodeState.Value] = Set(PendingDownload, Ready)

@@ -7,7 +7,8 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.observation.{Observation, ObservationEvent}
 import org.constellation.schema.Id
 import org.constellation.domain.trust.TrustDataInternal
-import org.constellation.p2p.Cluster
+import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.primitives.Schema.NodeState
 
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 
@@ -40,10 +41,15 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   def getPredictedReputation: F[Map[Id, Double]] = predictedReputation.get
 
-  def getStoredReputation: F[Map[Id, Double]] =
+  def getStoredReputation: F[Map[Id, Double]] = {
+
+    def filterFn(peers: Map[Id, PeerData])(id: Id): Boolean =
+      peers.get(id).exists(p => NodeState.offlineStates.contains(p.peerMetadata.nodeState))
+
     cluster.getPeerInfo.flatMap { peers =>
-      storedReputation.get.map(peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ _.filterKeys(peers.contains)) // TODO: filter out offline peers as well
+      storedReputation.get.map(peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ _.filterKeys(filterFn(peers)))
     }
+  }
 
   def updateStoredReputation(o: Observation): F[Unit] = {
     val score = observationScoring(o.signedObservationData.data.event)
