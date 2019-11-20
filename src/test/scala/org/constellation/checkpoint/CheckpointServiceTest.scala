@@ -14,6 +14,7 @@ import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.util.AccountBalance
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -41,7 +42,11 @@ class CheckpointServiceTest
       kp = makeKeyPair()
       dao = TestHelpers.prepareRealDao(readyFacilitators)
 
-      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+      val go = Genesis.createGenesisObservation(
+        Seq(
+          AccountBalance(dao.selfAddressStr, 30)
+        )
+      )
       Genesis.acceptGenesis(go, setAsTips = true)
 
       val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
@@ -50,7 +55,7 @@ class CheckpointServiceTest
         startingTips,
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 10, dao.keyPair)
             .unsafeRunSync
         )
       )
@@ -59,7 +64,7 @@ class CheckpointServiceTest
         startingTips,
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 10, dao.keyPair)
             .unsafeRunSync
         )
       )
@@ -67,7 +72,7 @@ class CheckpointServiceTest
         Seq(cb1.soe, cb2.soe),
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 10, dao.keyPair)
             .unsafeRunSync
         )
       )
