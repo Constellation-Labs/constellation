@@ -44,7 +44,7 @@ class CheckpointServiceTest
 
       val go = Genesis.createGenesisObservation(
         Seq(
-          AccountBalance(dao.selfAddressStr, 30)
+          AccountBalance(dao.selfAddressStr, 75L + 75L + 75L)
         )
       )
       Genesis.acceptGenesis(go, setAsTips = true)
@@ -55,7 +55,7 @@ class CheckpointServiceTest
         startingTips,
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 10, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
             .unsafeRunSync
         )
       )
@@ -64,7 +64,7 @@ class CheckpointServiceTest
         startingTips,
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 10, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
             .unsafeRunSync
         )
       )
@@ -72,7 +72,7 @@ class CheckpointServiceTest
         Seq(cb1.soe, cb2.soe),
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 10, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
             .unsafeRunSync
         )
       )
