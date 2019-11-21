@@ -1,17 +1,14 @@
 package org.constellation.primitives
 
-import java.security.KeyPair
-
-import cats.effect.{IO, _}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
 import org.constellation.util.AccountBalance
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 object Genesis extends StrictLogging {
 
@@ -27,17 +24,17 @@ object Genesis extends StrictLogging {
     TypedEdgeHash(Coinbase, EdgeHashType.CheckpointHash)
   )
 
-  def createDistributionTransactions[F[_]: Sync](
+  private def createDistributionTransactions[F[_]: Concurrent](
     allocAccountBalances: Seq[AccountBalance]
-  )(implicit dao: DAO): F[Seq[Transaction]] =
+  )(implicit dao: DAO): F[List[Transaction]] = LiftIO[F].liftIO {
     allocAccountBalances.toList
       .traverse(ab => dao.transactionService.createTransaction(Coinbase, ab.accountHash, ab.balance, CoinbaseKey))
-      .asInstanceOf[F[Seq[Transaction]]]
+  }
 
-  def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =
+  private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(transactions, GenesisTips)(CoinbaseKey)
 
-  def createDistributionBlock(genesisSOE: SignedObservationEdge): CheckpointBlock =
+  private def createEmptyBlockForGenesis(genesisSOE: SignedObservationEdge): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(
       Seq.empty,
       Seq(
@@ -49,13 +46,15 @@ object Genesis extends StrictLogging {
   def createGenesisObservation(
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
   )(implicit dao: DAO): GenesisObservation = {
+    implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+
     // TODO: Get rid of unsafeRunSync
     val txs = createDistributionTransactions[IO](allocAccountBalances).unsafeRunSync()
     val genesis = createGenesisBlock(txs)
     GenesisObservation(
       genesis,
-      createDistributionBlock(genesis.soe),
-      createDistributionBlock(genesis.soe)
+      createEmptyBlockForGenesis(genesis.soe),
+      createEmptyBlockForGenesis(genesis.soe)
     )
   }
 
@@ -63,30 +62,6 @@ object Genesis extends StrictLogging {
     val genesisObservation = createGenesisObservation(dao.nodeConfig.allocAccountBalances)
     acceptGenesis(genesisObservation)
   }
-
-  /**
-    * Build genesis tips and example distribution among initial nodes
-    *
-    * @param ids: Initial node public keys
-    * @return : Resolved edges for state update
-    */
-  // TODO: Get rid of this after fixing unit tests
-  def createGenesisAndInitialDistributionDirect(
-    selfAddressStr: String,
-    ids: Set[Id],
-    keyPair: KeyPair,
-    allocAccountBalances: Seq[AccountBalance] = Seq.empty
-  )(implicit dao: DAO): GenesisObservation =
-    createGenesisObservation()
-
-  // TODO: Get rid of this after fixing unit tests
-  def createGenesisAndInitialDistribution(
-    selfAddressStr: String,
-    allocAccountBalances: Seq[AccountBalance] = Seq.empty,
-    keyPair: KeyPair
-  )(
-    implicit dao: DAO
-  ): GenesisObservation = createGenesisObservation(allocAccountBalances)
 
   // TODO: Make async
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true)(implicit dao: DAO): Unit = {
