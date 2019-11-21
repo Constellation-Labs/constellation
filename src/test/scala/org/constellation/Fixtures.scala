@@ -25,7 +25,7 @@ object Fixtures {
   val kp1: KeyPair = KeyUtils.makeKeyPair()
 
   def tx: Transaction =
-    TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+    TransactionService.createAndSetTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -65,14 +65,14 @@ object Fixtures {
 
   def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction =
     TransactionService
-      .createTransaction[IO](data.selfAddressStr, src.address, amt, data.keyPair)(
+      .createAndSetTransaction[IO](data.selfAddressStr, src.address, amt, data.keyPair)(
         TransactionChainService[IO]
       )
       .unsafeRunSync
 
   def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) =
     TransactionService
-      .createTransaction[IO](srcAddressString, destinationAddressString, amt, keyPair)(
+      .createAndSetTransaction[IO](srcAddressString, destinationAddressString, amt, keyPair)(
         TransactionChainService[IO]
       )
       .unsafeRunSync

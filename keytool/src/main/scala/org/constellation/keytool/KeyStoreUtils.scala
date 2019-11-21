@@ -1,6 +1,6 @@
 package org.constellation.keytool
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io._
 import java.security.cert.Certificate
 import java.security.{KeyPair, KeyStore, PrivateKey}
 
@@ -24,6 +24,23 @@ object KeyStoreUtils {
       // TODO: Check if file exists
       new FileOutputStream(file)
     })
+
+  def readFromFileStream[F[_]: Sync, T](dataPath: String, streamParser: FileInputStream => F[T]) =
+    reader(dataPath)
+      .use(
+        stream =>
+          for {
+            data <- streamParser(stream)
+          } yield data
+      )
+      .attemptT
+
+  /* TODO: Move to org.constellation.schema */
+  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) = Sync[F].delay{
+    val parsedHeader = new BufferedReader(new InputStreamReader(stream)).readLine()
+      if (parsedHeader.nonEmpty) Some(parser(parsedHeader))
+      else None
+  }
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {

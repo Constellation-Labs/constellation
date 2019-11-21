@@ -64,7 +64,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
     normalized: Boolean = true,
     dummy: Boolean = false
   ): F[Transaction] =
-    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
+    TransactionService.createAndSetTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
 
 }
 
@@ -73,14 +73,13 @@ object TransactionService {
   def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO) =
     new TransactionService[F](transactionChainService, dao)
 
-  def createTransaction[F[_]: Concurrent](
-    src: String,
-    dst: String,
-    amount: Long,
-    keyPair: KeyPair,
-    normalized: Boolean = true,
-    dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+  def createTransactionEdge(
+                             src: String,
+                             dst: String,
+                             amount: Long,
+                             keyPair: KeyPair,
+                             normalized: Boolean = true
+                           ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amount = amountToUse)
@@ -95,11 +94,23 @@ object TransactionService {
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
+    Edge(oe, soe, txData)
+  }
+
+  def createAndSetTransaction[F[_]: Concurrent](
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true,
+    dummy: Boolean = false
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+    val soe = createTransactionEdge(src, dst, amount, keyPair, normalized)
+    transactionChainService.setLastTransaction(soe, dummy)
   }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
-    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
+    createAndSetTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
 }
