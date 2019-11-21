@@ -76,7 +76,7 @@ object MyStyles extends StyleSheet.Inline {
     marginBottom(0.5.em),
     marginLeft.auto,
     marginRight.auto,
-    border.inset,
+    borderStyle.inset,
     borderWidth(2.px),
     borderColor(Color(commentGrey))
   )

@@ -40,7 +40,7 @@ class TransactionChainServiceTest
     "should return last transaction ref if address is known" in {}
   }
 
-  "setLastTransaction" - {
+  "createAndSetLastTransaction" - {
     "should return new transaction" in {
       val tx = createTransaction("unknown", "bb").unsafeRunSync
       val createdTx = service.setLastTransaction(tx.edge, false).unsafeRunSync
@@ -53,7 +53,7 @@ class TransactionChainServiceTest
     src: String,
     dst: String
   ): IO[Transaction] = {
-    val txData = TransactionEdgeData(1L)
+    val txData = TransactionEdgeData(1L, LastTransactionRef("", 0L))
 
     val oe = ObservationEdge(
       Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash(dst, EdgeHashType.AddressHash)),

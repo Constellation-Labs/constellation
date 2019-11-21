@@ -1,6 +1,6 @@
 package org.constellation.storage
 
-import cats.effect.{Concurrent, Sync}
+import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.primitives.Schema.{Address, AddressCacheData}
 import org.constellation.primitives.Transaction
@@ -10,7 +10,7 @@ class AddressService[F[_]: Concurrent]() {
 
   private val locks = new MultiLock[F, String]()
 
-  private val memPool = new StorageService[F, AddressCacheData]("address_mem_pool".some)
+  private val memPool = new StorageService[F, AddressCacheData]("address_mem_pool".some, None)
 
   def toMap: F[Map[String, AddressCacheData]] = memPool.toMap()
 

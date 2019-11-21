@@ -46,25 +46,24 @@ class HealthCheckerTest
       majorState
     )(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
-      Slf4jLogger.getLogger[IO],
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
   describe("compareSnapshotState util function") {
     it("should return empty list to be deleted but not below given height") {
-      val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i))
-      val majorState = (List(7, 6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i)), Set(Id("node1")))
+      val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i, Map.empty))
+      val majorState = (List(7, 6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i, Map.empty)), Set(Id("node1")))
 
       val diff = healthChecker.compareSnapshotState(majorState, ownSnapshots).unsafeRunSync()
 
       diff.snapshotsToDelete shouldBe List()
-      diff.snapshotsToDownload shouldBe List(RecentSnapshot("7", 7))
+      diff.snapshotsToDownload shouldBe List(RecentSnapshot("7", 7, Map.empty))
       diff.peers.size shouldBe 1
     }
 
     it("should return no diff") {
-      val ownSnapshots = List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i))
-      val majorState = (List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i)), Set[Id]())
+      val ownSnapshots = List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i, Map.empty))
+      val majorState = (List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i, Map.empty)), Set[Id]())
 
       val diff = healthChecker.compareSnapshotState(majorState, ownSnapshots).unsafeRunSync()
 
@@ -79,43 +78,50 @@ class HealthCheckerTest
       concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
 
       val cluster = List(
-        (Id("1"), List(RecentSnapshot("snap4", 4), RecentSnapshot("snap2", 2), RecentSnapshot("snap0", 0))),
+        (
+          Id("1"),
+          List(
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
+          )
+        ),
         (
           Id("2"),
           List(
-            RecentSnapshot("snap4", 6),
-            RecentSnapshot("snap4", 4),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap4", 6, Map.empty),
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
           Id("3"),
           List(
-            RecentSnapshot("snap4", 6),
-            RecentSnapshot("snap4", 4),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap4", 6, Map.empty),
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
           Id("4"),
           List(
-            RecentSnapshot("snap8", 8),
-            RecentSnapshot("snap6", 6),
-            RecentSnapshot("snap4", 4),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap8", 8, Map.empty),
+            RecentSnapshot("snap6", 6, Map.empty),
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
           Id("5"),
           List(
-            RecentSnapshot("snap8", 8),
-            RecentSnapshot("snap6", 6),
-            RecentSnapshot("snap4", 4),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap8", 8, Map.empty),
+            RecentSnapshot("snap6", 6, Map.empty),
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
@@ -131,14 +137,21 @@ class HealthCheckerTest
       concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
 
       val cluster = List(
-        (Id("1"), List(RecentSnapshot("snap4", 4), RecentSnapshot("snap2", 2), RecentSnapshot("snap0", 0))),
+        (
+          Id("1"),
+          List(
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
+          )
+        ),
         (
           Id("2"),
           List(
-            RecentSnapshot("snap4", 6),
-            RecentSnapshot("snap4", 4),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap4", 6, Map.empty),
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         )
       )
@@ -150,29 +163,36 @@ class HealthCheckerTest
       concurrentTipService.clearStaleTips(*) shouldReturn IO.unit
 
       val cluster = List(
-        (Id("1"), List(RecentSnapshot("snap4", 4), RecentSnapshot("snap2", 2), RecentSnapshot("snap0", 0))),
         (
-          Id("2"),
+          Id("1"),
           List(
-            RecentSnapshot("snap4", 4),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
           Id("2"),
           List(
-            RecentSnapshot("snap4", 6),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap4", 4, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
           Id("2"),
           List(
-            RecentSnapshot("snap4", 6),
-            RecentSnapshot("snap2", 2),
-            RecentSnapshot("snap0", 0)
+            RecentSnapshot("snap4", 6, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
+          )
+        ),
+        (
+          Id("2"),
+          List(
+            RecentSnapshot("snap4", 6, Map.empty),
+            RecentSnapshot("snap2", 2, Map.empty),
+            RecentSnapshot("snap0", 0, Map.empty)
           )
         ),
         (
@@ -210,14 +230,14 @@ class HealthCheckerTest
   describe("shouldDownload function") {
 
     val height = 2
-    val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i))
+    val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i, Map.empty))
     val interval = healthChecker.snapshotHeightRedownloadDelayInterval
 
     it("should return true when there are snaps to delete and to download") {
       val diff =
         SnapshotDiff(
-          List(RecentSnapshot("someSnap", height)),
-          List(RecentSnapshot("someSnap", height)),
+          List(RecentSnapshot("someSnap", height, Map.empty)),
+          List(RecentSnapshot("someSnap", height, Map.empty)),
           List(Id("peer"))
         )
 
@@ -225,21 +245,21 @@ class HealthCheckerTest
     }
     it("should return true when there are snaps to delete and nothing to download") {
       val diff =
-        SnapshotDiff(List(RecentSnapshot("someSnap", height)), List.empty, List(Id("peer")))
+        SnapshotDiff(List(RecentSnapshot("someSnap", height, Map.empty)), List.empty, List(Id("peer")))
 
       healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
     }
 
     it("should return false when height is too small") {
       val diff =
-        SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height)), List(Id("peer")))
+        SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height, Map.empty)), List(Id("peer")))
 
       healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
     }
 
     it("should return true when height below interval") {
       val diff =
-        SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height + (interval * 2))), List(Id("peer")))
+        SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height + (interval * 2), Map.empty)), List(Id("peer")))
       healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
     }
   }

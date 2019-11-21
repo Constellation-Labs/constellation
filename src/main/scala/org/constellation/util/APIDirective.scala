@@ -2,9 +2,10 @@ package org.constellation.util
 
 import java.net.InetSocketAddress
 
-import cats.effect.IO
 import akka.http.scaladsl.server.{Directive1, Directives}
-import org.constellation.ConstellationExecutionContext.{bounded, callbacks, unbounded}
+import cats.effect.IO
+import cats.implicits._
+import org.constellation.ConstellationExecutionContext.unbounded
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -28,6 +29,11 @@ object APIDirective {
     ec: ExecutionContext = unbounded
   ): Directive1[Try[A]] =
     Directives.onComplete(eval(ioa, ec))
+
+  def onHandleEither[A](
+    ioeithera: IO[Either[Throwable, A]],
+    ec: ExecutionContext = unbounded
+  ): Directive1[Try[A]] = onHandle(ioeithera, ec).map(_.toEither.flatten.toTry)
 
   def extractIP(
     socketAddress: InetSocketAddress

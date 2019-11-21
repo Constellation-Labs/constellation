@@ -1,18 +1,21 @@
 package org.constellation.checkpoint
 
-import cats.data.{Ior, NonEmptyList, ValidatedNel}
+import cats.data.{Ior, NonEmptyList, Validated, ValidatedNel}
 import cats.effect.{IO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
-import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.{ConfigUtil, DAO}
+import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
+import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.Schema.CheckpointCache
-import org.constellation.primitives.{CheckpointBlock, Transaction}
+import org.constellation.primitives.{CheckpointBlock, Transaction, TransactionCacheData}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.{HashSignature, Metrics}
 
 object CheckpointBlockValidator {
+
+  private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
 
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
   type AddressBalance = Map[String, Long]
@@ -79,18 +82,18 @@ object CheckpointBlockValidator {
     ): Option[CheckpointCache] =
       tips match {
         case Nil => None
-        case CheckpointCache(Some(cb), children, height) :: _
+        case CheckpointCache(cb, children, height) :: _
             if cb.transactions.toSet.intersect(ancestryTransactions.keySet).nonEmpty =>
           val conflictingCBBaseHash = ancestryTransactions(
             cb.transactions.toSet.intersect(ancestryTransactions.keySet).head
           )
           Some(
             selectBlockToPreserve(
-              Seq(CheckpointCache(Some(cb), children, height)) ++ inputTips
-                .filter(ccd => ccd.checkpointBlock.exists(_.baseHash == conflictingCBBaseHash))
+              Seq(CheckpointCache(cb, children, height)) ++ inputTips
+                .filter(ccd => ccd.checkpointBlock.baseHash == conflictingCBBaseHash)
             )
           )
-        case CheckpointCache(Some(cb), _, _) :: tail =>
+        case CheckpointCache(cb, _, _) :: tail =>
           detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
       }
     detect(inputTips)
@@ -101,7 +104,7 @@ object CheckpointBlockValidator {
 
   def selectBlockToPreserve(blocks: Iterable[CheckpointCache]): CheckpointCache =
     blocks.maxBy(
-      cb => (cb.children, cb.checkpointBlock.map(b => (b.signatures.size, b.baseHash)))
+      cb => (cb.children, (cb.checkpointBlock.signatures.size, cb.checkpointBlock.baseHash))
     )
 
 }
@@ -174,18 +177,20 @@ class CheckpointBlockValidator[F[_]: Sync](
         )
 
     def validateBalance(address: String, t: Iterable[Transaction]): F[ValidationResult[List[Transaction]]] =
-      lookup(address).map { a =>
-        val diff = a - t.map(_.amount).sum
+      lookup(address).map { balance =>
         val amount = t.map(_.amount).sum
+        val diff = balance - amount
 
-        if (diff >= 0L) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
+        val isNodeAddress = dao.id.address == address
+        val necessaryAmount = if (isNodeAddress) stakingAmount else 0L
+
+        if (diff >= necessaryAmount) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
       }
 
     t.groupBy(_.src.address)
       .toList
       .traverse(a => validateBalance(a._1, a._2))
       .map(_.combineAll)
-
   }
 
   def isInSnapshot(c: CheckpointBlock): F[Boolean] =
@@ -217,6 +222,12 @@ class CheckpointBlockValidator[F[_]: Sync](
       isInSnapshot(cb).ifM(Sync[F].pure(Map.empty[String, Long].rightIor), validate)
     z
   }
+
+  def singleTransactionValidation(tx: Transaction): F[ValidationResult[Transaction]] =
+    for {
+      transactionValidation <- validateTransactions(Iterable(tx))
+      balanceValidation <- validateSourceAddressBalances(Iterable(tx))
+    } yield transactionValidation.product(balanceValidation).map(_._1.map(_ => tx).head)
 
   def validateCheckpointBlock(cb: CheckpointBlock): F[ValidationResult[CheckpointBlock]] = {
     val preTreeResult =

@@ -11,7 +11,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
 import org.constellation.consensus.Consensus.{FacilitatorId, RoundData, RoundId}
 import org.constellation.consensus.ConsensusManager.{
-  BroadcastLightTransactionProposal,
+  BroadcastConsensusDataProposal,
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
@@ -45,13 +45,13 @@ class ConsensusRemoteSender[F[_]: Concurrent](
       "NotifyFacilitators"
     )
 
-  def broadcastLightTransactionProposal(cmd: BroadcastLightTransactionProposal): F[Unit] =
+  def broadcastConsensusDataProposal(cmd: BroadcastConsensusDataProposal): F[Unit] =
     sendToAll(
       ConsensusRoute.proposalFullPath,
       cmd.roundId,
       cmd.peers.toList,
-      cmd.transactionsProposal,
-      "BroadcastLightTransactionProposal"
+      cmd.consensusDataProposal,
+      "BroadcastConsensusDataProposal"
     ).void
 
   def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): F[Unit] =

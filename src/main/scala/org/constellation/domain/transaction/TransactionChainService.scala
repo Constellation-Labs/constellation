@@ -1,16 +1,16 @@
 package org.constellation.domain.transaction
 
-import cats.effect.{Concurrent, Sync}
+import java.security.KeyPair
+
+import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.consensus.{Snapshot, SnapshotInfo}
+import org.constellation.consensus.SnapshotInfo
+import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
 
 class TransactionChainService[F[_]: Concurrent] {
-
-  val logger = Slf4jLogger.getLogger[F]
 
   // TODO: Make sure to clean-up those properly
   private[domain] val lastTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)
@@ -32,12 +32,21 @@ class TransactionChainService[F[_]: Concurrent] {
 
   def setLastTransaction(edge: Edge[TransactionEdgeData], isDummy: Boolean): F[Transaction] = {
     val address = edge.observationEdge.parents.head.hash
-
     lastTransactionRef.modify { m =>
       val ref = m.getOrElse(address, LastTransactionRef.empty)
       val tx = Transaction(edge, ref, isDummy)
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
     }
+  }
+
+  def createAndSetLastTransaction(src: String, dst: String, amount: Long, keyPair: KeyPair, isDummy: Boolean, fee: Option[Long] = None, normalized: Boolean = false): F[Transaction] = {
+    lastTransactionRef.modify { m =>
+    val ref = m.getOrElse(src, LastTransactionRef.empty)
+    val edge: Edge[TransactionEdgeData] = createTransactionEdge(src, dst, ref, amount, keyPair, fee, normalized)
+    val address = edge.observationEdge.parents.head.hash
+    val tx = Transaction(edge, ref, isDummy)
+    (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
+  }
   }
 
   def applySnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =

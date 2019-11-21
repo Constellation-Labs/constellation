@@ -1,14 +1,17 @@
 package org.constellation.util
 
+import java.security.KeyPair
 import java.util.concurrent.ForkJoinPool
 
+import cats.effect.{IO, Sync}
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.PeerMetadata
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.{ConstellationNode, PeerMetadata}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
@@ -78,12 +81,18 @@ object Simulation {
       .exists(_.forall(gbmd => gbmd.metrics("numValidBundles").toInt >= 1))
   }
 
-  def genesis(apis: Seq[APIClient]): GenesisObservation = {
-    val ids = apis.map {
-      _.id
-    }
-    apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
+  def genesis(apis: Seq[APIClient], startingAcctBalances: Seq[AccountBalance] = Nil): GenesisObservation = {
+    val balances = fakeBalances(apis) ++ startingAcctBalances
+    apis.head.postBlocking[GenesisObservation]("genesis/create", balances)
   }
+
+  def balanceForAddress(apis: Seq[APIClient], address: String): Seq[String] = {
+    val responses = apis.map(a => a.getString(s"balance/$address", timeout = 5.seconds))
+    Future.sequence(responses).get().map(_.body.getOrElse(""))
+  }
+
+  def getLastTxRefForAddress(api: APIClient, address: String): LastTransactionRef =
+    api.getBlocking[LastTransactionRef]("prevTxRef", timeout = 5.seconds)
 
   def addPeer(
     api: APIClient,
@@ -119,6 +128,10 @@ object Simulation {
   }
 
   def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
+
+  def fakeBalances(apis: Seq[APIClient]): Seq[AccountBalance] =
+    apis
+      .map(api => AccountBalance(api.id.address, 999))
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
     apis.filter {
@@ -378,6 +391,7 @@ object Simulation {
   def run(
     apis: Seq[APIClient],
     addPeerRequests: Seq[PeerMetadata],
+    startingBalances: Seq[AccountBalance] = Nil,
     attemptSetExternalIP: Boolean = false,
     useRegistrationFlow: Boolean = false,
     useStartFlowOnly: Boolean = false,
@@ -405,7 +419,7 @@ object Simulation {
     assert(checkPeersHealthy(apis))
     logger.info("Peer validation passed")
 
-    val goe = genesis(apis)
+    val goe = genesis(apis, startingBalances)
     apis.foreach {
       _.post("genesis/accept", goe)
     }
@@ -413,12 +427,12 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-    enableRandomTransactions(apis)
-    logger.info("Starting random transactions")
-
     setReady(apis)
 
     if (!useStartFlowOnly) {
+
+      enableRandomTransactions(apis)
+      logger.info("Starting random transactions")
 
       assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 

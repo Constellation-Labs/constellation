@@ -115,6 +115,7 @@ object EdgeProcessor extends StrictLogging {
         if (maybeTips.isEmpty) {
           dao.metrics.incrementMetric("attemptFormCheckpointNoGenesisTips")
         }
+
         maybeTips.foreach { pulledTip =>
           val checkpointBlock =
             CheckpointBlock.createCheckpointBlock(transactions, pulledTip.tipSoe.soe.map { soe =>
@@ -123,7 +124,7 @@ object EdgeProcessor extends StrictLogging {
 
           val cache =
             CheckpointCache(
-              Some(checkpointBlock),
+              checkpointBlock,
               height = dao.checkpointAcceptanceService.calculateHeight(checkpointBlock).unsafeRunSync()
             )
 
@@ -157,7 +158,7 @@ object EdgeProcessor extends StrictLogging {
             cb => dao.checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid
           )
           .traverse { finalCB =>
-            val cache = CheckpointCache(finalCB.some)
+            val cache = CheckpointCache(finalCB)
             dao.checkpointAcceptanceService.accept(cache).unsafeRunSync()
             processSignedBlock(
               cache,
@@ -323,7 +324,7 @@ object Snapshot extends StrictLogging {
     snapshotsHash.traverse(hash => Sync[F].delay(File(snapshotPath, hash)))
 
   private def shouldSendSnapshotsToCloud(snapshotsPath: String): Boolean =
-    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
+    ConfigUtil.isEnabledCloudStorage
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit

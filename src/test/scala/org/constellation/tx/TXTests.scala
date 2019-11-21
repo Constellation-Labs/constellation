@@ -31,7 +31,7 @@ class TXTests extends FlatSpec {
       val channelOpenRequest = ChannelOpen(i.toString)
       val genesisMessageStr = channelOpenRequest.json
       val msg =
-        create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(Fixtures.kp)
+        create(genesisMessageStr, Genesis.Coinbase, channelOpenRequest.name)(Fixtures.kp)
       val hash = msg.signedMessageData.hash
 
       Distance.calculate(hash, Fixtures.id)
@@ -42,7 +42,7 @@ class TXTests extends FlatSpec {
 
     val channelOpenRequest = ChannelOpen("channel", Some(SensorData.jsonSchema))
     val genesisMessageStr = channelOpenRequest.json
-    val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(Fixtures.kp)
+    val msg = create(genesisMessageStr, Genesis.Coinbase, channelOpenRequest.name)(Fixtures.kp)
     val hash = msg.signedMessageData.hash
     val md = ChannelMetadata(channelOpenRequest, ChannelMessageMetadata(msg))
 

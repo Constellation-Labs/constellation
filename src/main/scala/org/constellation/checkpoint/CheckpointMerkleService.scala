@@ -46,7 +46,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       obs <- merkle.checkpointBlock.observationsMerkleRoot.fold(List[Observation]().pure[F])(fetchBatchObservations)
     } yield
       CheckpointCache(
-        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications, obs).some,
+        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications, obs),
         merkle.children,
         merkle.height
       )
@@ -105,8 +105,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       observationService,
       (o: Observation) => o,
-      (s: List[String]) =>
-        ??? // TODO: wkoszycki Resolving in this place indicates IllegallState thus should be removed totally
+      (s: List[String]) => LiftIO[F].liftIO(DataResolver.resolveBatchObservationsDefaults(s)(contextShift)(dao = dao))
     )
 
   def fetchMessages(merkleRoot: String): F[List[ChannelMessage]] =

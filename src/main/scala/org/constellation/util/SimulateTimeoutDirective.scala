@@ -8,7 +8,7 @@ import scala.util.Random
 
 trait SimulateTimeoutDirective extends BasicDirectives {
 
-  private val maxMillisTimeout = 5000
+  private val maxMillisTimeout = 60000
 
   def withSimulateTimeout(enabled: Boolean)(implicit ec: ExecutionContext): Directive0 =
     extractRequestContext.flatMap { ctx =>

@@ -41,6 +41,7 @@ class ConsensusManagerTest
 
   implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded))
   implicit val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

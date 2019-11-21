@@ -12,6 +12,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 abstract class PeriodicIO(taskName: String) extends StrictLogging {
 
   val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
+  val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.bounded
   val executionNumber: AtomicLong = new AtomicLong(0)
 
   def trigger(): IO[Unit]
@@ -32,7 +33,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
       .flatMap(
         _ =>
           IO.contextShift(timerPool)
-            .evalOn(ConstellationExecutionContext.bounded)(trigger().handleErrorWith { ex =>
+            .evalOn(taskPool)(trigger().handleErrorWith { ex =>
               IO(logger.error(s"Error when executing periodic task: $taskName due: ${ex.getMessage}", ex))
             })
       )

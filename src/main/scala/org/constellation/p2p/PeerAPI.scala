@@ -12,13 +12,14 @@ import akka.util.Timeout
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
-import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
+import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
+import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
@@ -41,7 +42,7 @@ case class PeerUnregister(host: String, port: Int, id: Id)
 object PeerAPI {
 
   case class EdgeResponse(
-    soe: Option[SignedObservationEdgeCache] = None,
+    soe: Option[SignedObservationEdge] = None,
     cb: Option[CheckpointCache] = None
   )
 
@@ -55,7 +56,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging
-    with SimulateTimeoutDirective {
+    with SimulateTimeoutDirective
+    with TokenAuthenticator {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -73,12 +75,20 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
   val snapshotHeightRedownloadDelayInterval =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-  private val config: Config = ConfigFactory.load()
+
+  private val authEnabled: Boolean = ConfigUtil.getAuthEnabled
+
   private def signEndpoints(socketAddress: InetSocketAddress) =
     post {
       path("status") {
         entity(as[SetNodeStatus]) { sns =>
-          APIDirective.handle(dao.cluster.setNodeStatus(sns.id, sns.nodeStatus))(_ => complete(StatusCodes.OK))
+          APIDirective.handle {
+            if (sns.nodeStatus == NodeState.Offline) {
+              dao.cluster.markOfflinePeer(sns.id)
+            } else {
+              dao.cluster.setNodeStatus(sns.id, sns.nodeStatus)
+            }
+          }(_ => complete(StatusCodes.OK))
         }
       } ~
         path("sign") {
@@ -96,7 +106,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 s"Received peer registration request $request on $ip"
               )
               logger.debug("Parsed host, sending peer manager request")
-              APIDirective.handle(dao.cluster.pendingRegistration(ip, request))(
+              APIDirective.handle(dao.cluster.pendingRegistration(ip, request, isJoiningPeer = true))(
                 _ => complete(StatusCodes.OK)
               )
             }
@@ -143,7 +153,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
                   }
                   SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
-                case list if list.contains(RecentSnapshot(s.hash, s.height)) =>
+                case list if list.contains(RecentSnapshot(s.hash, s.height, s.publicReputation)) =>
                   SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
                 case _ =>
                   (IO
@@ -178,23 +188,25 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   .lookup(dao.selfAddressStr)
                   .unsafeRunSync()
                   .map { _.balance }
-                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 10)) {
 
-              val tx = dao.transactionService
-                .createTransaction(
+              val tx = dao.transactionChainService
+                .createAndSetLastTransaction(
                   dao.selfAddressStr,
                   sendRequest.dst,
                   sendRequest.amountActual,
                   dao.keyPair,
-                  normalized = false
+                  false,
+                  normalized = sendRequest.normalized
                 )
-                .unsafeRunSync()
-              logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+                .flatMap { tx =>
+                  logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+                  dao.metrics.incrementMetric("faucetRequest")
+                  dao.transactionService.put(TransactionCacheData(tx))
+                }
+                .map(_.hash)
 
-              dao.transactionService.put(TransactionCacheData(tx)).unsafeRunAsync(_ => ())
-              dao.metrics.incrementMetric("faucetRequest")
-
-              complete(Some(tx.hash))
+              APIDirective.handle(tx)(complete(_))
             } else {
               logger.warn(s"Invalid faucet request $sendRequest")
               dao.metrics.incrementMetric("faucetInvalidRequest")
@@ -228,7 +240,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             APIDirective.extractIP(socketAddress) { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
-                  val baseHash = fc.checkpointCacheData.checkpointBlock.map(_.baseHash)
+                  val baseHash = fc.checkpointCacheData.checkpointBlock.baseHash
                   logger.debug(
                     s"Handle finished checkpoint for cb: ${baseHash} and replyTo: $replyToOpt"
                   )
@@ -236,39 +248,38 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
                   val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+                  val bcs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
                   val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc)(cs).map { result =>
                     replyToOpt
                       .map(URI.create)
                       .map { u =>
                         logger.debug(
-                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
-                            .map(_.baseHash)} performed $result"
+                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock.baseHash} performed $result"
                         )
                         makeCallback(u, FinishedCheckpointResponse(true))
                       }
                   }
 
-                  APIDirective.handle(dao.snapshotService.getNextHeightInterval) { res =>
+                  val io = dao.snapshotService.getNextHeightInterval.flatMap { res =>
                     (res, fc.checkpointCacheData.height) match {
                       case (_, None) =>
-                        logger.warn(s"Missing height when accepting block $baseHash")
-                        complete(StatusCodes.BadRequest)
-                      case (2, _) =>
-                        callback.unsafeToFuture()
-                        complete(StatusCodes.Accepted)
+                        IO { logger.warn(s"Missing height when accepting block $baseHash") } >>
+                          StatusCodes.BadRequest.pure[IO]
+                      case (2, _) => // TODO: hardcoded snapshot interval
+                        callback.start(bcs) >> complete(StatusCodes.Accepted).pure[IO]
                       case (nextHeight, Some(Height(min, max))) if nextHeight > min =>
-                        logger.debug(
-                          s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock
-                            .map(_.baseHash)} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
-                        )
-                        complete(StatusCodes.Conflict)
+                        IO {
+                          logger.debug(
+                            s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock.baseHash} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
+                          )
+                        } >> StatusCodes.Conflict.pure[IO]
                       case (_, _) =>
-                        callback.unsafeToFuture()
-                        complete(StatusCodes.Accepted)
+                        callback.start(bcs) >> StatusCodes.Accepted.pure[IO]
                     }
                   }
 
+                  APIDirective.handle(io)(complete(_))
                 }
               }
             }
@@ -331,6 +342,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               maybePeer =>
                 maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
                   pd =>
+                    // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
                     dao.observationService
                       .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
                       .void
@@ -353,23 +365,40 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               .ifM(getInfo, IO.pure(none[Array[Byte]]))
           )(complete(_))
         }
-      }
+      } ~
+        path("trust") {
+          APIDirective.handle(
+            dao.trustManager.getPredictedReputation.flatMap { predicted =>
+              if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
+              else TrustData(predicted).pure[IO]
+            }
+          )(complete(_))
+        }
+
     }
 
   def routes(socketAddress: InetSocketAddress): Route =
     APIDirective.extractIP(socketAddress) { ip =>
       decodeRequest {
         encodeResponse {
-          // rejectBannedIP {
-          signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
-            withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
-              enforceKnownIP(ip) {
-                postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
-              }
+          if (authEnabled) {
+            authenticateBasic(realm = "basic realm", basicTokenAuthenticator) { _ =>
+              peerApiRoutes(socketAddress, ip)
             }
+          } else {
+            peerApiRoutes(socketAddress, ip)
+          }
         }
       }
     }
+
+  private def peerApiRoutes(socketAddress: InetSocketAddress, ip: String): Route =
+    signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
+      withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
+        enforceKnownIP(ip) {
+          postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
+        }
+      }
 
   private[p2p] def makeCallback(u: URI, entity: AnyRef): Future[Response[Unit]] =
     APIClient(u.getHost, u.getPort)(dao.backend, dao)

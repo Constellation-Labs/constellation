@@ -1,6 +1,5 @@
 package org.constellation.p2p
 
-import cats.Parallel
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -12,14 +11,12 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus._
 import org.constellation.p2p.Cluster.Peers
-import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.rollback.CannotLoadSnapshotInfoFile
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.util.Logging.logThread
+import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
@@ -266,6 +263,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     for {
       _ <- setSnapshot(snapshot)
       _ <- acceptSnapshotCacheData(snapshot)
+      _ <- storeSnapshotInfo
       _ <- setDownloadFinishedTime()
     } yield ()
 
@@ -293,6 +291,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     LiftIO[F].liftIO(dao.snapshotService.setSnapshot(snapshotInfo))
 
+  private def storeSnapshotInfo: F[Unit] =
+    LiftIO[F].liftIO(dao.snapshotService.writeSnapshotInfoToDisk.value.void)
+
   private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): F[Unit] =
     LiftIO[F]
       .liftIO(
@@ -305,7 +306,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           f.traverse { h =>
             Sync[F].delay(
               logger.debug(
-                s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.get.baseHash}"
+                s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.baseHash}"
               )
             ) >> checkpointAcceptanceService.accept(h).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
@@ -321,9 +322,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   private def filter(buffer: List[FinishedCheckpoint], info: SnapshotInfo) = {
     val alreadyAccepted =
-      (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.get.baseHash)).distinct
+      (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.baseHash)).distinct
     buffer.filterNot(
-      f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.get.baseHash)
+      f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.baseHash)
     )
   }
 

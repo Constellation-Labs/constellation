@@ -5,20 +5,29 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height}
+import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height, SignedObservationEdge}
 import org.constellation.primitives.{CheckpointBlock, Genesis}
 import org.constellation.storage.SOEService
 
 class CheckpointParentService[F[_]: Sync](
-  soeService: SOEService[F],
+  val soeService: SOEService[F],
   checkpointService: CheckpointService[F],
   dao: DAO
 ) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
+  def parentBaseHashesDirect(cb: CheckpointBlock): List[String] =
+    cb.parentSOEHashes.toList.traverse { soeHash =>
+      if (soeHash == Genesis.Coinbase) {
+        none[String]
+      } else {
+        cb.checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap(_.baseHash)
+      }
+    }.getOrElse(List.empty)
+
   def parentSOEBaseHashes(cb: CheckpointBlock): F[List[String]] =
     cb.parentSOEHashes.toList.traverse { soeHash =>
-      if (soeHash == Genesis.CoinBaseHash) {
+      if (soeHash == Genesis.Coinbase) {
         Sync[F].pure[Option[String]](None)
       } else {
         soeService.lookup(soeHash).flatMap { parent =>
@@ -32,7 +41,7 @@ class CheckpointParentService[F[_]: Sync](
                   if (parentDirect.isEmpty) dao.metrics.incrementMetricAsync("parentDirectTipReferenceMissing")
                   else Sync[F].unit
               )
-          } else Sync[F].delay(parent.map { _.signedObservationEdge.baseHash })
+          } else Sync[F].delay(parent.map(_.baseHash))
         }
       }
     }.map(_.flatten)
@@ -66,7 +75,7 @@ class CheckpointParentService[F[_]: Sync](
           if (cbs.exists(_.isEmpty)) dao.metrics.incrementMetricAsync("validationParentCBLookupMissing")
           else Sync[F].unit
       )
-      .map(_.flatMap(_.flatMap(_.checkpointBlock)))
+      .map(_.flatMap(_.map(_.checkpointBlock)))
 
   def incrementChildrenCount(checkpointBlock: CheckpointBlock): F[List[Option[CheckpointCacheMetadata]]] =
     parentSOEBaseHashes(checkpointBlock).flatMap(_.traverse { hash =>

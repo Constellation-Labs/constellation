@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.schema.Id
 import org.constellation.util._
@@ -32,29 +33,36 @@ object Schema {
       Offline =
       Value
 
-    val all: Set[Schema.NodeState.Value] = values.toSet
+    val all: Set[NodeState.Value] = values.toSet
 
-    val readyStates: Set[Schema.NodeState.Value] = Set(NodeState.Ready, NodeState.SnapshotCreation)
+    val readyStates: Set[NodeState.Value] = Set(NodeState.Ready, NodeState.SnapshotCreation)
 
     val initial: Set[NodeState] = Set(Offline, PendingDownload)
 
-    val broadcastStates: Set[Schema.NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
+    val broadcastStates: Set[NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
 
-    val validDuringDownload: Set[Schema.NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
+    val offlineStates: Set[NodeState.Value] = Set(Offline)
 
-    val validForDownload: Set[Schema.NodeState.Value] = Set(PendingDownload, Ready)
+    val validDuringDownload: Set[NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
-    val validForRedownload: Set[Schema.NodeState.Value] = Set(Ready)
+    val validForDownload: Set[NodeState.Value] = Set(PendingDownload, Ready)
 
-    val validForSnapshotCreation: Set[Schema.NodeState.Value] = Set(Ready, Leaving)
+    val validForRedownload: Set[NodeState.Value] = Set(Ready)
 
-    val validForTransactionGeneration: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForSnapshotCreation: Set[NodeState.Value] = Set(Ready, Leaving)
 
-    val validForOwnConsensus: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForTransactionGeneration: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    val validForConsensusParticipation: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForOwnConsensus: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    val validForLettingOthersDownload: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
+    val validForConsensusParticipation: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+
+    val validForLettingOthersDownload: Set[NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
+
+    val validForCheckpointAcceptance: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+
+    val validForCheckpointPendingAcceptance: Set[NodeState.Value] =
+      Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
     def canActAsDownloadSource(current: NodeState): Boolean = validForLettingOthersDownload.contains(current)
 
@@ -69,6 +77,11 @@ object Schema {
     def canStartOwnConsensus(current: NodeState): Boolean = validForOwnConsensus.contains(current)
 
     def canParticipateConsensus(current: NodeState): Boolean = validForConsensusParticipation.contains(current)
+
+    def canAcceptCheckpoint(current: NodeState): Boolean = validForCheckpointAcceptance.contains(current)
+
+    def canAwaitForCheckpointAcceptance(current: NodeState): Boolean =
+      validForCheckpointPendingAcceptance.contains(current)
 
   }
 
@@ -181,8 +194,9 @@ object Schema {
     */
   case class TransactionEdgeData(
     amount: Long,
-    salt: Long = Random.nextLong(),
-    fee: Option[Long] = None
+    lastTxRef: LastTransactionRef,
+    fee: Option[Long] = None,
+    salt: Long = Random.nextLong()
   ) extends Signable
 
   /**
@@ -190,7 +204,11 @@ object Schema {
     *
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq()) extends Signable
+  case class CheckpointEdgeData(
+    hashes: Seq[String],
+    messageHashes: Seq[String] = Seq(),
+    observationsHashes: Seq[String]
+  ) extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 
@@ -253,7 +271,7 @@ object Schema {
     height: Option[Height] = None
   )
   case class CheckpointCache(
-    checkpointBlock: Option[CheckpointBlock] = None,
+    checkpointBlock: CheckpointBlock,
     children: Int = 0,
     height: Option[Height] = None
   ) {
@@ -268,8 +286,6 @@ object Schema {
    */
 
   }
-
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 

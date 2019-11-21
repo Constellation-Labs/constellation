@@ -2,6 +2,7 @@ import E2E._
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
+envVars in Test := Map("CL_STOREPASS" -> "storepass", "CL_KEYPASS" -> "keypass")
 enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
@@ -96,7 +97,9 @@ lazy val keyToolSharedDependencies = Seq(
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "org.bouncycastle" % "bcprov-jdk15on" % "1.63",
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
-  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc()
+  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
 )
 
 lazy val schemaSharedDependencies = Seq(
@@ -107,8 +110,6 @@ lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
   "com.roundeights" %% "hasher" % "1.2.0",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
@@ -144,7 +145,7 @@ lazy val coreDependencies = Seq(
 //Test dependencies
 lazy val testDependencies = Seq(
   "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.8",
+  "org.scalatest" %% "scalatest" % "3.0.6",
   "org.scalactic" %% "scalactic" % "3.0.8",
   "org.scalamock" %% "scalamock" % "4.4.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,

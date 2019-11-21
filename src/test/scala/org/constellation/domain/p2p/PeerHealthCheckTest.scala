@@ -1,16 +1,14 @@
 package org.constellation.domain.p2p
 
-import akka.http.scaladsl.model.StatusCodes
-import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.effect.{ContextShift, IO, Timer}
 import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
 import org.constellation.util.APIClient
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.concurrent.ExecutionContext
@@ -23,6 +21,7 @@ class PeerHealthCheckTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
   var cluster: Cluster[IO] = _
@@ -50,6 +49,7 @@ class PeerHealthCheckTest
     peerHealthCheck = PeerHealthCheck(cluster)
     cluster.removePeer(*) shouldReturnF Unit
     cluster.markOfflinePeer(*) shouldReturnF Unit
+    cluster.broadcastOfflineNodeState(*) shouldReturnF Unit
   }
 
   "check" - {
@@ -82,6 +82,27 @@ class PeerHealthCheckTest
       peerHealthCheck.check().unsafeRunSync
 
       cluster.markOfflinePeer(*).was(called)
+    }
+
+    "should broadcast offline state if peer is unhealthy" in {
+      cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
+      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("ERROR")
+      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
+
+      peerHealthCheck.check().unsafeRunSync
+
+      cluster.broadcastOfflineNodeState(*).was(called)
+    }
+
+    "should broadcast offline state if peer returned error" in {
+      cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
+      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
+      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response
+        .error[String]("ERROR", 400, "400")
+
+      peerHealthCheck.check().unsafeRunSync
+
+      cluster.broadcastOfflineNodeState(*).was(called)
     }
   }
 }

@@ -1,6 +1,6 @@
 package org.constellation.domain.p2p
 
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Concurrent, ContextShift, Sync, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -10,7 +10,7 @@ import org.constellation.util.APIClient
 
 import scala.concurrent.duration._
 
-class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: ContextShift[F]) {
+class PeerHealthCheck[F[_]: Concurrent: Timer](cluster: Cluster[F])(implicit C: ContextShift[F]) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   private def checkPeer(peer: APIClient): F[PeerHealthCheckStatus] =
@@ -24,17 +24,6 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
       }
       .handleErrorWith(_ => PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F])
 
-  private def markOffline(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
-    statuses.traverse {
-      case (pd, healthCheckStatus) =>
-        healthCheckStatus match {
-          case PeerUnresponsive =>
-            logger.info(s"Marking dead peer: ${pd.client.id.short} (${pd.client.hostName}) as offline") >>
-              cluster.markOfflinePeer(pd)
-          case _ => Sync[F].unit
-        }
-    }.void
-
   def check(): F[Unit] =
     for {
       _ <- logger.debug("Checking for dead peers")
@@ -44,10 +33,31 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
       _ <- if (unresponsivePeers > 0) logger.info(s"Found dead peers: ${unresponsivePeers}") else Sync[F].unit
       _ <- markOffline(statuses)
     } yield ()
+
+  def ensureOffline(apiClient: APIClient, attempts: Int = 3): F[Boolean] =
+    checkPeer(apiClient).flatMap {
+      case PeerUnresponsive =>
+        if (attempts > 0) Timer[F].sleep(5.seconds) >> ensureOffline(apiClient, attempts - 1) else true.pure[F]
+      case _ => false.pure[F]
+    }
+
+  private def markOffline(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
+    statuses.filter { case (_, status) => status == PeerUnresponsive }.filterA {
+      case (pd, _) => ensureOffline(pd.client)
+    }.flatMap(_.traverse {
+        case (pd, _) =>
+          for {
+            _ <- logger.info(s"Marking dead peer: ${pd.client.id.short} (${pd.client.hostName}) as offline")
+            _ <- cluster.markOfflinePeer(pd.peerMetadata.id)
+            _ <- logger.info(s"Broadcasting dead peer: ${pd.client.id.short} (${pd.client.hostName})")
+            _ <- cluster.broadcastOfflineNodeState(pd.client.id)
+          } yield ()
+      })
+      .void
 }
 
 object PeerHealthCheck {
-  def apply[F[_]: Concurrent](cluster: Cluster[F])(implicit C: ContextShift[F]) = new PeerHealthCheck[F](cluster)
+  def apply[F[_]: Concurrent: Timer](cluster: Cluster[F])(implicit C: ContextShift[F]) = new PeerHealthCheck[F](cluster)
 
   sealed trait PeerHealthCheckStatus
   object PeerAvailable extends PeerHealthCheckStatus

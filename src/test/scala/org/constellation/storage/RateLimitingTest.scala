@@ -17,6 +17,9 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
+  // TODO: Uncomment with re-enabling RateLimiting
+  /*
+
   "update" - {
     "it should increment counter for all source addresses in provided txs" in {
       val rl = RateLimiting[IO]()
@@ -58,9 +61,9 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
       val tx7 = Fixtures.makeTransaction("c", "z", 5L, Fixtures.tempKey)
 
       val cb1 = mock[CheckpointCache]
-      cb1.checkpointBlock shouldReturn mock[CheckpointBlock].some
-      cb1.checkpointBlock.get.baseHash shouldReturn "cb1"
-      cb1.checkpointBlock.get.transactions shouldReturn List(tx4, tx5, tx6, tx7)
+      cb1.checkpointBlock shouldReturn mock[CheckpointBlock]
+      cb1.checkpointBlock.baseHash shouldReturn "cb1"
+      cb1.checkpointBlock.transactions shouldReturn List(tx4, tx5, tx6, tx7)
 
       cs.fullData("cb1") shouldReturnF cb1.some
 
@@ -77,9 +80,9 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
       rl.update(txs).unsafeRunSync
 
       val cb1 = mock[CheckpointCache]
-      cb1.checkpointBlock shouldReturn mock[CheckpointBlock].some
-      cb1.checkpointBlock.get.baseHash shouldReturn "cb1"
-      cb1.checkpointBlock.get.transactions shouldReturn txs.take(55)
+      cb1.checkpointBlock shouldReturn mock[CheckpointBlock]
+      cb1.checkpointBlock.baseHash shouldReturn "cb1"
+      cb1.checkpointBlock.transactions shouldReturn txs.take(55)
 
       cs.fullData("cb1") shouldReturnF cb1.some
 
@@ -127,4 +130,6 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
       rl.available(Address("unknown")).unsafeRunSync shouldBe left
     }
   }
+
+ */
 }

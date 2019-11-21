@@ -5,15 +5,14 @@ import java.util.concurrent.TimeUnit
 import akka.util.Timeout
 import better.files.File
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
-import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
+import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage.RecentSnapshot
-import org.constellation.util.{APIClient, Metrics, Simulation}
+import org.constellation.util.{APIClient, AccountBalance, Metrics, Simulation}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -23,9 +22,6 @@ class E2ETest extends E2E {
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
   val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
-  private val updatePasswordReq = UpdatePassword(
-    Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
-  )
   private val totalNumNodes = 4
 
   private val n1 = createNode(randomizePorts = false)
@@ -38,17 +34,18 @@ class E2ETest extends E2E {
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
   private val storeData = false
 
-  private def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
-    apiClients.map { client =>
-      val response = client.postSync("password/update", updatePasswordReq)
-      client.setPassword(updatePasswordReq.password)
-      response
-    }
+  private def sendTo(node: ConstellationNode, dst: String, amount: Long = 100L) = {
+    val client = node.getAPIClientForNode(node)
+    client.postBlocking[SendToAddress]("send", SendToAddress(dst, amount))
+  }
+
+  private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
-
-    assert(Simulation.run(initialAPIs, addPeerRequests))
+    logger.info("API addresses: " + apis.map(_.id.address))
+    val startingAcctBalances: List[AccountBalance] = List(AccountBalance(sendToAddress, 100L))
+    assert(Simulation.run(initialAPIs, addPeerRequests, startingAcctBalances))
 
     val metadatas =
       n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
@@ -109,8 +106,6 @@ class E2ETest extends E2E {
     val allAPIs: Seq[APIClient] = allNodes.map {
       _.getAPIClient()
     } //apis :+ downloadAPI
-    val updatePasswordResponses = updatePasswords(allAPIs)
-    assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(Simulation.healthy(allAPIs))
     //  Thread.sleep(1000*1000)
 
@@ -140,18 +135,18 @@ class E2ETest extends E2E {
       delay = 10000
     )
 
-    Simulation.awaitConditionMet(
-      "Snapshot hashes differs across cluster",
-      allAPIs.toList
-        .traverse(
-          a => a.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")(contextShift)
-        )
-        .unsafeRunSync()
-        .distinct
-        .size == 1,
-      maxRetries = 30,
-      delay = 5000
-    )
+//    Simulation.awaitConditionMet(
+//      "Snapshot hashes differs across cluster",
+//      allAPIs.toList
+//        .traverse(
+//          a => a.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")(contextShift)
+//        )
+//        .unsafeRunSync()
+//        .distinct
+//        .size == 1,
+//      maxRetries = 30,
+//      delay = 5000
+//    )
 
     val storedSnapshots = allAPIs.map {
       _.simpleDownload()
@@ -170,8 +165,8 @@ class E2ETest extends E2E {
     // TODO: This is flaky and fails randomly sometimes
     val snaps = storedSnapshots.toSet.map { x: Seq[StoredSnapshot] => // May need to temporarily ignore messages for partitioning changes?
       x.map {
-        _.checkpointCache.flatMap {
-          _.checkpointBlock.map(_.baseHash) // TODO: wkoszycki explain the reason behind CheckpointCache data distinct doesn't work, related to #640
+        _.checkpointCache.map {
+          _.checkpointBlock.baseHash // TODO: wkoszycki explain the reason behind CheckpointCache data distinct doesn't work, related to #640
         }
       }.toSet
     }
