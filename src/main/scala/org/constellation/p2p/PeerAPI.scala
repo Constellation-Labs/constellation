@@ -364,16 +364,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               else TrustData(predicted).pure[IO]
             }
           )(complete(_))
-        } ~
-        path("storedReputation") {
-          APIDirective.handle(
-            dao.trustManager.getStoredReputation.map(TrustData)
-          )(complete(_))
-        } ~
-        path("predictedReputation") {
-          APIDirective.handle(
-            dao.trustManager.getPredictedReputation.map(TrustData)
-          )(complete(_))
         }
 
     }

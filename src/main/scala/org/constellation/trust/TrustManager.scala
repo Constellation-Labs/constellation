@@ -44,10 +44,12 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
   def getStoredReputation: F[Map[Id, Double]] = {
 
     def filterFn(peers: Map[Id, PeerData])(id: Id): Boolean =
-      peers.get(id).exists(p => NodeState.offlineStates.contains(p.peerMetadata.nodeState))
+      !peers.get(id).exists(p => NodeState.offlineStates.contains(p.peerMetadata.nodeState))
 
     cluster.getPeerInfo.flatMap { peers =>
-      storedReputation.get.map(peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ _.filterKeys(filterFn(peers)))
+      storedReputation.get.map(
+        reputation => peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ reputation.filterKeys(filterFn(peers))
+      )
     }
   }
 

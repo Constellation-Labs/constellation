@@ -382,6 +382,24 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               )
             )
 
+          } ~
+          path("trust") {
+            APIDirective.handle(
+              dao.trustManager.getPredictedReputation.flatMap { predicted =>
+                if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
+                else TrustData(predicted).pure[IO]
+              }
+            )(complete(_))
+          } ~
+          path("storedReputation") {
+            APIDirective.handle(
+              dao.trustManager.getStoredReputation.map(TrustData)
+            )(complete(_))
+          } ~
+          path("predictedReputation") {
+            APIDirective.handle(
+              dao.trustManager.getPredictedReputation.map(TrustData)
+            )(complete(_))
           }
       }
     }
