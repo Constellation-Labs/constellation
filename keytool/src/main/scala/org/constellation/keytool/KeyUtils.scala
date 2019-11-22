@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.bouncycastle.jce.ECNamedCurveTable
 import org.bouncycastle.jce.interfaces.ECPrivateKey
 import org.bouncycastle.jce.spec.{ECNamedCurveParameterSpec, ECPublicKeySpec}
-import org.spongycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.apache.commons.codec.binary.Base64.decodeBase64
 import org.bouncycastle.asn1.{ASN1Integer, ASN1Object, ASN1Sequence, sec}
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
@@ -43,7 +43,7 @@ object KeyUtils extends StrictLogging {
 
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security
-    val provider = new org.spongycastle.jce.provider.BouncyCastleProvider()
+    val provider = new org.bouncycastle.jce.provider.BouncyCastleProvider()
     val ret = Security.insertProviderAt(provider, 1)
     logger.debug(s"Insert provider return $ret")
     provider

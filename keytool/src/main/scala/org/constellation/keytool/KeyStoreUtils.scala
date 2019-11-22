@@ -20,7 +20,6 @@ object KeyStoreUtils {
 
   private def writer[F[_]: Sync](keyStorePath: String): Resource[F, FileOutputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
-      println(keyStorePath)
       val file = new File(keyStorePath)
       // TODO: Check if file exists
       new FileOutputStream(file)
@@ -127,7 +126,6 @@ object KeyStoreUtils {
     storePassword: Array[Char],
     keyPassword: Array[Char]
   ): EitherT[F, Throwable, KeyStore] = {
-    println("here")
     writer(withExtension(path))
       .use(
         stream =>

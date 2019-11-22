@@ -1,4 +1,5 @@
-package org.constellation.util
+package org.constellation.util.wallet
+
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import better.files.File
@@ -8,7 +9,7 @@ import org.scalatest._
 
 class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val keyTool = KeyTool
-  val keystorePath = "src/test/resources/wallet-client-test-kp.p12"
+  val savedKeystorePath = "src/test/resources/wallet-client-test-save-kp.p12"
   val alias = "alias"
   val storepass = "storepass"
   val keypass = "keypass"
@@ -20,7 +21,7 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
     "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
 
   val keyToolArgs = List(
-    s"--keystore=${keystorePath}",
+    s"--keystore=${savedKeystorePath}",
     s"--alias=${alias}",
     s"--storepass=${storepass}",
     s"--keypass=${keypass}"
@@ -29,18 +30,19 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
   "KeyStoreUtils" should "load keypair successfully" in {
     val loadKp =
       for {
-        lkp <- KeyStoreUtils.keyPairFromStorePath[IO](keystorePath, alias, storepass.toCharArray, keypass.toCharArray)
+        lkp <- KeyStoreUtils
+          .keyPairFromStorePath[IO](savedKeystorePath, alias, storepass.toCharArray, keypass.toCharArray)
       } yield lkp
     val kp = loadKp.value.unsafeRunSync().right.get
     assert(kp.getPublic.isInstanceOf[PublicKey] && kp.getPrivate.isInstanceOf[PrivateKey])
   }
 
-  "ignore" should "KeyTool create new keypair and save to disk" in {
+  "KeyTool" should "create new keypair and save to disk" in {
     val genKeyLoop = for {
       kp <- keyTool.run(keyToolArgs)
     } yield kp
     val genKeyLoopF = genKeyLoop.unsafeToFuture()
-    genKeyLoopF.map(_ => assert(File(keystorePath).nonEmpty))
+    genKeyLoopF.map(_ => assert(File(savedKeystorePath).nonEmpty))
   }
 
   "keyPairFromPemStr" should "generate keypair from PEM strings" in {

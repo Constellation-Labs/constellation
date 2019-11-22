@@ -1,4 +1,4 @@
-package org.constellation.util
+package org.constellation.util.wallet
 import better.files.File
 import cats.effect.IO
 import org.constellation.keytool.KeyStoreUtils
@@ -7,8 +7,6 @@ import org.scalatest._
 
 class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val walletClient = WalletClient
-  val generateAddress = GenerateAddress
-  val exportKeysDecrypted = ExportDecryptedKeys
   val keystorePath = "src/test/resources/wallet-client-test-kp.p12"
   val alias = "alias"
   val storepass = "storepass"
@@ -22,10 +20,13 @@ class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
   val addressStringStorePath = "src/test/resources/address.txt"
   val decryptedPrivKeyStorePath = "src/test/resources/decrypted_keystore"
   val decryptedPubKeyStorePath = "src/test/resources/decrypted_keystore.pub"
+
   val privateKeyStr =
     "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
+
   val pubKeyStr =
     "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
+
   val args = List(
     s"--keystore=${keystorePath}",
     s"--alias=${alias}",
@@ -44,56 +45,6 @@ class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     } yield cliParams
     val cli = parseCliRes.value.unsafeRunSync().right.get
     assert(cli.isInstanceOf[WalletCliConfig])
-  }
-
-  "Generate Address" should "load CLI params successfully" in {
-    val testArgs = List(
-      s"--pub_key_str=${pubKeyStr}",
-      s"--store_path=${addressStringStorePath}"
-    )
-    val parseCliRes = for {
-      cliParams <- generateAddress.loadCliParams[IO](testArgs)
-    } yield cliParams
-    val cli = parseCliRes.value.unsafeRunSync().right.get
-    assert(cli.isInstanceOf[GenerateAddressConfig])
-  }
-
-  "Export Decrypted Keys" should "load CLI params successfully" in {
-    val testArgs = List(
-      s"--keystore=${keystorePath}",
-      s"--alias=${alias}",
-      s"--storepass=${storepass}",
-      s"--keypass=${keypass}",
-      s"--priv_store_path=${decryptedPrivKeyStorePath}",
-      s"--pub_store_path=${decryptedPubKeyStorePath}"
-    )
-    val parseCliRes = for {
-      cliParams <- exportKeysDecrypted.loadCliParams[IO](testArgs)
-    } yield cliParams
-    val cli = parseCliRes.value.unsafeRunSync().right.get
-    assert(cli.isInstanceOf[ExportKeysDecryptedConfig])
-  }
-
-  "Export Decrypted Keys" should "create address from provided pubkey.pem and store output" in {
-    val testArgs = List(
-      s"--keystore=${keystorePath}",
-      s"--alias=${alias}",
-      s"--storepass=${storepass}",
-      s"--keypass=${keypass}",
-      s"--priv_store_path=${decryptedPrivKeyStorePath}",
-      s"--pub_store_path=${decryptedPubKeyStorePath}"
-    )
-
-    val exportKeysLoop = for {
-      _ <- exportKeysDecrypted.run(testArgs)
-    } yield ()
-    val generatedAddressF = exportKeysLoop.unsafeToFuture()
-    generatedAddressF.map(
-      _ =>
-        assert(
-          File(decryptedPrivKeyStorePath).nonEmpty && File(decryptedPubKeyStorePath).nonEmpty
-        )
-    )
   }
 
   "Wallet Client" should "return None loading prevTx from empty file" in {
@@ -177,17 +128,5 @@ class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     } yield ()
     val newTxF = newTxLoop.unsafeToFuture()
     newTxF.map(_ => assert(File(storePath).nonEmpty))
-  }
-
-  "Generate Address" should "create address from provided pubkey.pem and store output" in {
-    val testArgs = List(
-      s"--pub_key_str=${pubKeyStr}",
-      s"--store_path=${addressStringStorePath}"
-    )
-    val generateAddressLoop = for {
-    _ <- generateAddress.run(testArgs)
-    } yield ()
-    val generatedAddressF = generateAddressLoop.unsafeToFuture()
-    generatedAddressF.map(_ => assert(File(addressStringStorePath).nonEmpty))
   }
 }
