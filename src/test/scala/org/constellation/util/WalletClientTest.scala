@@ -1,27 +1,14 @@
 package org.constellation.util
-import java.io.{BufferedReader, FileInputStream, InputStreamReader}
-import java.security.{PrivateKey, PublicKey}
-
 import better.files.File
-import constellation._
-import cats.data.EitherT
 import cats.effect.IO
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import javax.xml.bind.DatatypeConverter
-import org.constellation.Fixtures
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionService}
-import org.constellation.keytool.{KeyStoreUtils, KeyTool, KeyUtils}
+import org.constellation.keytool.KeyStoreUtils
 import org.constellation.primitives.Transaction
-import org.constellation.util.WalletClient
 import org.scalatest._
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
 class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
-//  implicit val logger = Slf4jLogger.getLogger[IO]
   val walletClient = WalletClient
-  val generateAddressString = GenerateAddressString
+  val generateAddress = GenerateAddress
+  val exportKeysDecrypted = ExportDecryptedKeys
   val keystorePath = "src/test/resources/wallet-client-test-kp.p12"
   val alias = "alias"
   val storepass = "storepass"
@@ -33,6 +20,8 @@ class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
   val destination = "receiverAddress"
   val storePath = "src/test/resources/new-tx.txt"
   val addressStringStorePath = "src/test/resources/address.txt"
+  val decryptedPrivKeyStorePath = "src/test/resources/decrypted_keystore"
+  val decryptedPubKeyStorePath = "src/test/resources/decrypted_keystore.pub"
   val privateKeyStr =
     "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
   val pubKeyStr =
@@ -55,6 +44,56 @@ class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     } yield cliParams
     val cli = parseCliRes.value.unsafeRunSync().right.get
     assert(cli.isInstanceOf[WalletCliConfig])
+  }
+
+  "Generate Address" should "load CLI params successfully" in {
+    val testArgs = List(
+      s"--pub_key_str=${pubKeyStr}",
+      s"--store_path=${addressStringStorePath}"
+    )
+    val parseCliRes = for {
+      cliParams <- generateAddress.loadCliParams[IO](testArgs)
+    } yield cliParams
+    val cli = parseCliRes.value.unsafeRunSync().right.get
+    assert(cli.isInstanceOf[GenerateAddressConfig])
+  }
+
+  "Export Decrypted Keys" should "load CLI params successfully" in {
+    val testArgs = List(
+      s"--keystore=${keystorePath}",
+      s"--alias=${alias}",
+      s"--storepass=${storepass}",
+      s"--keypass=${keypass}",
+      s"--priv_store_path=${decryptedPrivKeyStorePath}",
+      s"--pub_store_path=${decryptedPubKeyStorePath}"
+    )
+    val parseCliRes = for {
+      cliParams <- exportKeysDecrypted.loadCliParams[IO](testArgs)
+    } yield cliParams
+    val cli = parseCliRes.value.unsafeRunSync().right.get
+    assert(cli.isInstanceOf[ExportKeysDecryptedConfig])
+  }
+
+  "Export Decrypted Keys" should "create address from provided pubkey.pem and store output" in {
+    val testArgs = List(
+      s"--keystore=${keystorePath}",
+      s"--alias=${alias}",
+      s"--storepass=${storepass}",
+      s"--keypass=${keypass}",
+      s"--priv_store_path=${decryptedPrivKeyStorePath}",
+      s"--pub_store_path=${decryptedPubKeyStorePath}"
+    )
+
+    val exportKeysLoop = for {
+      _ <- exportKeysDecrypted.run(testArgs)
+    } yield ()
+    val generatedAddressF = exportKeysLoop.unsafeToFuture()
+    generatedAddressF.map(
+      _ =>
+        assert(
+          File(decryptedPrivKeyStorePath).nonEmpty && File(decryptedPubKeyStorePath).nonEmpty
+        )
+    )
   }
 
   "Wallet Client" should "return None loading prevTx from empty file" in {
@@ -140,13 +179,13 @@ class WalletClientTest extends AsyncFlatSpecLike with Matchers with BeforeAndAft
     newTxF.map(_ => assert(File(storePath).nonEmpty))
   }
 
-  "Generate Address String" should "create address from provided pubkey.pem and store output" in {
+  "Generate Address" should "create address from provided pubkey.pem and store output" in {
     val testArgs = List(
       s"--pub_key_str=${pubKeyStr}",
       s"--store_path=${addressStringStorePath}"
     )
     val generateAddressLoop = for {
-    _ <- generateAddressString.run(testArgs)
+    _ <- generateAddress.run(testArgs)
     } yield ()
     val generatedAddressF = generateAddressLoop.unsafeToFuture()
     generatedAddressF.map(_ => assert(File(addressStringStorePath).nonEmpty))

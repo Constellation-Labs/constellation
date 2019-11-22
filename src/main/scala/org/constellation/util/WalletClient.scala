@@ -7,8 +7,8 @@ import java.security._
 import org.bouncycastle.jce.ECNamedCurveTable
 import org.bouncycastle.jce.interfaces.ECPrivateKey
 import org.bouncycastle.jce.spec.ECPublicKeySpec
-import org.constellation.util.GenerateAddressString.addressWriter
-import org.constellation.util.WalletClient.loadCliParams
+import org.constellation.util.GenerateAddress.{addressWriter, loadCliParams}
+import org.constellation.util.WalletClient.{loadCliParams, loadKeyPairFrom}
 import org.spongycastle.openssl.jcajce.JcaPEMKeyConverter
 import org.spongycastle.openssl.{PEMKeyPair, PEMParser}
 
@@ -74,33 +74,6 @@ object WalletClient extends IOApp {
     }
   }
 
-  def toASN1Obj(keyPair: KeyPair): ASN1ObjectInstance = {
-    val privateKeyInfo: PrivateKeyInfo = PrivateKeyInfo.getInstance(ASN1Sequence.getInstance(keyPair.getPrivate.getEncoded))
-    val isEC = privateKeyInfo.getPrivateKeyAlgorithm().getAlgorithm().equals(X9ObjectIdentifiers.id_ecPublicKey)
-    if (! isEC) {
-      throw new Exception ("not EC key")
-    } else {
-      val getASN1: ASN1ObjectInstance = new ASN1ObjectInstance(privateKeyInfo)
-      getASN1
-    }
-  }
-
-  def dumpPrivateKeyPem(keyPair: KeyPair, outputDir: String) = {
-    val aSN1Obj: ASN1ObjectInstance = toASN1Obj(keyPair)
-    val decryptedKeyOutput = new FileOutputStream(outputDir)
-    val pemWriter = new PemWriter(new OutputStreamWriter(decryptedKeyOutput))
-    val privPemObj = new PemObject("EC PRIVATE KEY", aSN1Obj.getEncoded("DER"))
-    pemWriter.writeObject(privPemObj)
-    pemWriter.close()
-  }
-
-  def parsePrivPem(path: String): PrivateKey = {
-    val reader = new FileReader(path)
-    val pemParser = new PEMParser(reader)
-    val pemKeyPair = pemParser.readObject().asInstanceOf[PEMKeyPair]
-    new JcaPEMKeyConverter().getKeyPair(pemKeyPair).getPrivate
-  }
-
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, WalletCliConfig] = {
     val builder = OParser.builder[WalletCliConfig]
     val cliParser = {
@@ -137,12 +110,7 @@ object WalletClient extends IOApp {
   }
 }
 
-class ASN1ObjectInstance(pKI: PrivateKeyInfo) extends ASN1Object {
-  def toASN1Primitive = pKI.parsePrivateKey().toASN1Primitive
-  override def getEncoded(str: String): Array[Byte] = super.getEncoded(str)
-}
-
-object GenerateAddressString extends IOApp {
+object GenerateAddress extends IOApp {
   val addressWriter: String => FileOutputStream => IO[Unit] =
     KeyStoreUtils.storeTypeToFileStream[IO, String](SerExt(_).json)
 
@@ -154,8 +122,8 @@ object GenerateAddressString extends IOApp {
     } yield address
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, PublicKeyToAddressStringConfig] = {
-    val builder = OParser.builder[PublicKeyToAddressStringConfig]
+  def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, GenerateAddressConfig] = {
+    val builder = OParser.builder[GenerateAddressConfig]
     val cliParser = {
       import builder._
       OParser.sequence(
@@ -167,16 +135,62 @@ object GenerateAddressString extends IOApp {
       )
     }
     EitherT.fromEither[F] {
-      OParser.parse(cliParser, args, PublicKeyToAddressStringConfig()).toRight(new RuntimeException("Address CLI params are missing"))
+      OParser.parse(cliParser, args, GenerateAddressConfig()).toRight(new RuntimeException("GenerateAddress CLI params are missing"))
     }
   }
 }
 
-case class PublicKeyToAddressStringConfig(
+object ExportDecryptedKeys extends IOApp {
+  def run(args: List[String]): IO[ExitCode] = {
+    for {
+      cliParams <- loadCliParams[IO](args)
+      kp <- KeyStoreUtils
+        .keyPairFromStorePath[IO](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
+      _ = KeyUtils.dumpKeyPemDecrypted(kp.getPrivate, cliParams.privStorePath)
+      _ = KeyUtils.dumpKeyPemDecrypted(kp.getPublic, cliParams.pubStorePath)
+    } yield kp
+  }.fold[ExitCode](throw _, _ => ExitCode.Success)
+
+  def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, ExportKeysDecryptedConfig] = {
+    val builder = OParser.builder[ExportKeysDecryptedConfig]
+    val cliParser = {
+      import builder._
+      OParser.sequence(
+        programName("address-generator"),
+        opt[String]("keystore").required
+          .action((x, c) => c.copy(keystore = x)),
+        opt[String]("alias").required
+          .action((x, c) => c.copy(alias = x)),
+        opt[String]("storepass").required
+          .action((x, c) => c.copy(storepass = x.toCharArray)),
+        opt[String]("keypass").required
+          .action((x, c) => c.copy(keypass = x.toCharArray)).required,
+        opt[String]("priv_store_path").required
+          .action((x, c) => c.copy(privStorePath = x)),
+          opt[String]("pub_store_path").required
+          .action((x, c) => c.copy(pubStorePath = x))
+      )
+    }
+    EitherT.fromEither[F] {
+      OParser.parse(cliParser, args, ExportKeysDecryptedConfig()).toRight(new RuntimeException("ExportKeysDecrypted CLI params are missing"))
+    }
+  }
+}
+
+case class ExportKeysDecryptedConfig (
+                                       keystore: String = null,
+                                       alias: String = null,
+                                       storepass: Array[Char] = null,
+                                       keypass: Array[Char] = null,
+                                       privStorePath: String = null,
+                                       pubStorePath: String = null
+                                     )
+
+
+case class GenerateAddressConfig(
     pubKeyStr: String = null,
     storePath: String = null
   )
-
 
 case class WalletCliConfig(
   keystore: String = null,
