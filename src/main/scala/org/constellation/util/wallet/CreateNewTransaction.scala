@@ -21,7 +21,7 @@ object CreateNewTransaction extends IOApp {
     KeyStoreUtils.parseFileOfTypeOp[IO, Transaction](ParseExt(_).x[Transaction])
 
   val transactionWriter: Transaction => FileOutputStream => IO[Unit] =
-    KeyStoreUtils.storeTypeToFileStream[IO, Transaction](SerExt(_).json)
+    KeyStoreUtils.storeTypeWithFileStream[IO, Transaction](SerExt(_).json)
 
   def run(args: List[String]): IO[ExitCode] = {
     for {

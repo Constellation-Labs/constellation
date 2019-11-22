@@ -9,7 +9,7 @@ import scopt.OParser
 
 object GenerateAddress extends IOApp {
   val addressWriter: String => FileOutputStream => IO[Unit] =
-    KeyStoreUtils.storeTypeToFileStream[IO, String](SerExt(_).json)
+    KeyStoreUtils.storeTypeWithFileStream[IO, String](SerExt(_).json)
 
   def run(args: List[String]): IO[ExitCode] = {
     for {

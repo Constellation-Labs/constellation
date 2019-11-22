@@ -48,7 +48,7 @@ object KeyStoreUtils {
     else Some(parser(parsedHeader))
   }
 
-  def storeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay {
+  def storeTypeWithFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay {
     val bufferedWriter = new BufferedWriter(new OutputStreamWriter(stream))
     bufferedWriter.write(serializer(obj))
     bufferedWriter.close()
