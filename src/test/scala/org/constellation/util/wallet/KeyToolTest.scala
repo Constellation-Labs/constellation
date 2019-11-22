@@ -4,15 +4,16 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 
 import better.files.File
 import cats.effect.IO
+import org.constellation.Fixtures
 import org.constellation.keytool.{KeyStoreUtils, KeyTool, KeyUtils}
 import org.scalatest._
 
 class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val keyTool = KeyTool
   val savedKeystorePath = "src/test/resources/wallet-client-test-save-kp.p12"
-  val alias = "alias"
-  val storepass = "storepass"
-  val keypass = "keypass"
+//  val alias = "alias"
+//  val storepass = "storepass"
+//  val keypass = "keypass"
 
   val privateKeyStr =
     "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
@@ -22,16 +23,16 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
 
   val keyToolArgs = List(
     s"--keystore=${savedKeystorePath}",
-    s"--alias=${alias}",
-    s"--storepass=${storepass}",
-    s"--keypass=${keypass}"
+    s"--alias=${Fixtures.alias}",
+    s"--storepass=${Fixtures.storepass}",
+    s"--keypass=${Fixtures.keypass}"
   )
 
   "KeyStoreUtils" should "load keypair successfully" in {
     val loadKp =
       for {
         lkp <- KeyStoreUtils
-          .keyPairFromStorePath[IO](savedKeystorePath, alias, storepass.toCharArray, keypass.toCharArray)
+          .keyPairFromStorePath[IO](savedKeystorePath, Fixtures.alias, Fixtures.storepass.toCharArray, Fixtures.keypass.toCharArray)
       } yield lkp
     val kp = loadKp.value.unsafeRunSync().right.get
     assert(kp.getPublic.isInstanceOf[PublicKey] && kp.getPrivate.isInstanceOf[PrivateKey])

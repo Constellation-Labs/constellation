@@ -1,18 +1,16 @@
 package org.constellation.util.wallet
 import better.files.File
 import cats.effect.IO
+import org.constellation.Fixtures
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
 class GenerateAddressTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val generateAddress = GenerateAddress
   val addressStringStorePath = "src/test/resources/address.txt"
 
-  val pubKeyStr =
-    "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
-
   "Generate Address" should "load CLI params successfully" in {
     val testArgs = List(
-      s"--pub_key_str=${pubKeyStr}",
+      s"--pub_key_str=${Fixtures.pubKeyStr}",
       s"--store_path=${addressStringStorePath}"
     )
     val parseCliRes = for {
@@ -24,7 +22,7 @@ class GenerateAddressTest extends AsyncFlatSpecLike with Matchers with BeforeAnd
 
   "Generate Address" should "create address from provided pubkey.pem and store output" in {
     val testArgs = List(
-      s"--pub_key_str=${pubKeyStr}",
+      s"--pub_key_str=${Fixtures.pubKeyStr}",
       s"--store_path=${addressStringStorePath}"
     )
     val generateAddressLoop = for {

@@ -145,29 +145,12 @@ object KeyUtils extends StrictLogging {
     result
   }
 
-//  def getPrivateKeyFromString(privateKeyStr: String) = {
-//    val kf = KeyFactory.getInstance(KeyUtils.ECDSA, KeyUtils.insertProvider)
-//    val encoded = decodeBase64(privateKeyStr)
-//    val keySpec = new PKCS8EncodedKeySpec(encoded)
-//    kf.generatePrivate(keySpec)
-//  }
-
-//    def keyPairFromPrivateStr(privateKeyStr: String): KeyPair = {
-//      val privKey = getPrivateKeyFromString(privateKeyStr)
-//      val ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1")
-//      val Q = ecSpec.getG.multiply(privKey.asInstanceOf[ECPrivateKey].getD)
-//      val pubSpec = new ECPublicKeySpec(Q, ecSpec)
-//      val pubKey = kf.generatePublic(pubSpec)
-//      new KeyPair(pubKey, privKey)
-//    }
-
   def keyPairFromPemStr(privateKeyStr: String, publicKeyStr: String): KeyPair = {
     val kf = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)
     val privKey = pemToPrivateKey(privateKeyStr, kf)
     val pubKey = pemToPublicKey(publicKeyStr,kf)
     new KeyPair(pubKey, privKey)
   }
-
 
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
 
@@ -257,8 +240,8 @@ object KeyUtils extends StrictLogging {
     keyHashToAddress(keyHash)
   }
 
-  def dumpKeyPemDecrypted(key: Key, storePath: String) = {
-    val pemObj = new PemObject("EC PRIVATE KEY", key.getEncoded())
+  def storeKeyPemDecrypted(key: Key, storePath: String) = {
+    val pemObj = new PemObject("EC KEY", key.getEncoded())
     val decryptedKeyOutput = new FileOutputStream(storePath)
     val pemWriter = new PemWriter(new OutputStreamWriter(decryptedKeyOutput))
     pemWriter.writeObject(pemObj)

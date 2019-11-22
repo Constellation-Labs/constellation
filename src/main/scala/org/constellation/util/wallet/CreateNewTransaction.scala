@@ -13,8 +13,7 @@ import scopt.OParser
 
 import scala.util.Try
 
-object WalletClient extends IOApp {
-
+object CreateNewTransaction extends IOApp {
   /*
   Note: these vals need type annotation to compile
    */
@@ -28,9 +27,9 @@ object WalletClient extends IOApp {
     for {
       cliParams <- loadCliParams[IO](args)
       kp <- loadKeyPairFrom[IO](cliParams)
-      prevTransactionOp <- KeyStoreUtils.readFromFileStream[IO, Option[Transaction]](cliParams.addressPath,
+      prevTransactionOp <- KeyStoreUtils.readFromFileStream[IO, Option[Transaction]](cliParams.accountPath,
                                                                                      transactionParser)
-      transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
+      transactionEdge = TransactionService.createTransactionEdge(
         KeyUtils.publicKeyToAddressString(kp.getPublic),
         cliParams.destination,
         cliParams.amount.toDouble.toLong,
@@ -42,7 +41,7 @@ object WalletClient extends IOApp {
     } yield transaction
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  //todo add case for storepass keypass as env variables
+  //todo add case for storepass keypass via env
   def loadKeyPairFrom[F[_]: Sync](cliParams: WalletCliConfig): EitherT[F, Throwable, KeyPair] =
     if (cliParams.privateKeyStr == null)
       KeyStoreUtils
@@ -68,10 +67,11 @@ object WalletClient extends IOApp {
         opt[String]("storepass").required
           .action((x, c) => c.copy(storepass = x.toCharArray)),
         opt[String]("keypass").required
-          .action((x, c) => c.copy(keypass = x.toCharArray)) required,
-        opt[String]("address_path")
+          .action((x, c) => c.copy(keypass = x.toCharArray))
+          .required,
+        opt[String]("account_path")
           .optional()
-          .action((x, c) => c.copy(addressPath = x)),
+          .action((x, c) => c.copy(accountPath = x)),
         opt[String]("amount").required
           .action((x, c) => c.copy(amount = x)),
         opt[String]("fee").required
@@ -97,7 +97,7 @@ case class WalletCliConfig(
   alias: String = null,
   storepass: Array[Char] = null,
   keypass: Array[Char] = null,
-  addressPath: String = null,
+  accountPath: String = null,
   amount: String = null,
   fee: String = null,
   destination: String = null,

@@ -54,6 +54,16 @@ object Fixtures {
 
   def bufferedFileReader(path: String) = new BufferedReader(new InputStreamReader(new FileInputStream(path)))
 
+  val privateKeyStr =
+    "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
+
+  val pubKeyStr =
+    "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
+
+  val keystorePath = "src/test/resources/wallet-client-test-kp.p12"
+  val alias = "alias"
+  val storepass = "storepass"
+  val keypass = "keypass"
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
