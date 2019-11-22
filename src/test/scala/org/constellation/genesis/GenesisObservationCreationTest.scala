@@ -36,7 +36,7 @@ class GenesisObservationCreationTest extends FreeSpec with ArgumentMatchersSugar
 
     }
 
-    "should create 2 empty child blocks from genesis" in {
+    "should create 2 child blocks from genesis with 1 empty transaction" in {
       val balances = Seq(
         AccountBalance("a", 10L),
         AccountBalance("b", 30L)
@@ -45,8 +45,8 @@ class GenesisObservationCreationTest extends FreeSpec with ArgumentMatchersSugar
 
       val genesisHash = go.genesis.soe.hash
 
-      go.initialDistribution.transactions.size shouldBe 0
-      go.initialDistribution2.transactions.size shouldBe 0
+      go.initialDistribution.transactions.size shouldBe 1
+      go.initialDistribution2.transactions.size shouldBe 1
       go.initialDistribution.checkpoint.edge.observationEdge.parents.foreach(parent => {
         parent.hash shouldBe genesisHash
       })
@@ -62,13 +62,13 @@ class GenesisObservationCreationTest extends FreeSpec with ArgumentMatchersSugar
       go.genesis.transactions.size shouldBe 0
     }
 
-    "should create 2 empty child blocks from genesis" in {
+    "should create 2 child blocks from genesis with 1 empty transaction" in {
       val go = Genesis.createGenesisObservation(Seq.empty)
 
       val genesisHash = go.genesis.soe.hash
 
-      go.initialDistribution.transactions.size shouldBe 0
-      go.initialDistribution2.transactions.size shouldBe 0
+      go.initialDistribution.transactions.size shouldBe 1
+      go.initialDistribution2.transactions.size shouldBe 1
       go.initialDistribution.checkpoint.edge.observationEdge.parents.foreach(parent => {
         parent.hash shouldBe genesisHash
       })

@@ -3,6 +3,7 @@ package org.constellation.primitives
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
@@ -34,36 +35,42 @@ object Genesis extends StrictLogging {
   private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(transactions, GenesisTips)(CoinbaseKey)
 
-  private def createEmptyBlockForGenesis(genesisSOE: SignedObservationEdge): CheckpointBlock =
-    CheckpointBlock.createCheckpointBlock(
-      Seq.empty,
-      Seq(
-        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
-        TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
-      )
-    )(CoinbaseKey)
+  private def createEmptyBlockFromGenesis[F[_]: Concurrent](
+    genesisSOE: SignedObservationEdge
+  )(implicit dao: DAO): F[CheckpointBlock] = LiftIO[F].liftIO {
+    val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.address
+    val dummyTransactionDst = KeyUtils.makeKeyPair.getPublic.toId.address
 
+    dao.transactionService.createDummyTransaction(dummyTransactionSrc, dummyTransactionDst, CoinbaseKey).map { tx =>
+      CheckpointBlock.createCheckpointBlock(
+        Seq(tx),
+        Seq(
+          TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
+          TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
+        )
+      )(CoinbaseKey)
+    }
+  }
+
+  // TODO: Make F[Unit]
   def createGenesisObservation(
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
   )(implicit dao: DAO): GenesisObservation = {
     implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-
-    // TODO: Get rid of unsafeRunSync
-    val txs = createDistributionTransactions[IO](allocAccountBalances).unsafeRunSync()
-    val genesis = createGenesisBlock(txs)
-    GenesisObservation(
-      genesis,
-      createEmptyBlockForGenesis(genesis.soe),
-      createEmptyBlockForGenesis(genesis.soe)
-    )
-  }
+    for {
+      genesis <- createDistributionTransactions[IO](allocAccountBalances)
+        .map(createGenesisBlock)
+      emptyA <- createEmptyBlockFromGenesis[IO](genesis.soe)
+      emptyB <- createEmptyBlockFromGenesis[IO](genesis.soe)
+    } yield GenesisObservation(genesis, emptyA, emptyB)
+  }.unsafeRunSync() // TODO: Get rid of unsafeRunSync and fix all the unit tests
 
   def start()(implicit dao: DAO): Unit = {
     val genesisObservation = createGenesisObservation(dao.nodeConfig.allocAccountBalances)
     acceptGenesis(genesisObservation)
   }
 
-  // TODO: Make async
+  // TODO: Make F[Unit]
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 

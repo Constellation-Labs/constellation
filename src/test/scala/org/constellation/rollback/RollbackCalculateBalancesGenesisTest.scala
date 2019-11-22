@@ -1,11 +1,9 @@
 package org.constellation.rollback
 
-import constellation._
-import org.constellation.{DAO, TestHelpers}
-import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Genesis
 import org.constellation.util.AccountBalance
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.constellation.{DAO, TestHelpers}
+import org.mockito.ArgumentMatchersSugar
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class RollbackCalculateBalancesGenesisTest
@@ -41,8 +39,8 @@ class RollbackCalculateBalancesGenesisTest
     }
     "should have transactions for each account" in {
       val balances = rollbackAccountBalances.calculate(genesisObservationWithInitialBalances)
-
-      balances.right.get.size shouldBe initialBalances.size
+      val genesisEmptyBlocksBalancesSize = 2 * 2 // 2 empty accounts participated in 2 empty transactions
+      balances.right.get.size shouldBe initialBalances.size + genesisEmptyBlocksBalancesSize
     }
     "should return right balance for distribution address" in {
       val balances = rollbackAccountBalances.calculate(genesisObservationWithInitialBalances)

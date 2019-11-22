@@ -3,15 +3,14 @@ package org.constellation.domain.transaction
 import java.security.KeyPair
 
 import cats.effect._
-import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
+import org.constellation.domain.consensus.ConsensusService
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 class TransactionService[F[_]: Concurrent](val transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
@@ -65,6 +64,9 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
     dummy: Boolean = false
   ): F[Transaction] =
     TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
+
+  def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
+    TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
 }
 
