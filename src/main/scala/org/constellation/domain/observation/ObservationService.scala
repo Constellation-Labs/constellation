@@ -20,6 +20,5 @@ class ObservationService[F[_]: Concurrent: Logger](trustManager: TrustManager[F]
     super
       .accept(o)
       .flatTap(_ => trustManager.updateStoredReputation(o))
-      .flatTap(_ => trustManager.getStoredReputation.flatMap(rep => Concurrent[F].delay { println(rep) }))
       .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAccepted"))
 }

@@ -108,13 +108,12 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
   private[snapshot] def selectCorrectRecentSnapshotAtGivenHeight(
     ownSnapshot: RecentSnapshot,
     clusterState: Map[Id, List[RecentSnapshot]]
-  ): (RecentSnapshot, List[Id]) = // TODO: mwadon - refactor
-    (clusterState.toList
-      .flatMap(n => n._2.find(_.height == ownSnapshot.height).map((n._1, _))) :+ (nodeId, ownSnapshot))
-      .groupBy(_._2)
-      .toList
-      .maxBy(t => (t._2.size, t._2.map(_._1.hex)))
-      .map(x => x.map(_._1))
+  ): (RecentSnapshot, List[Id]) =
+    (clusterState.mapFilter(_.find(_.height == ownSnapshot.height)) + (nodeId -> ownSnapshot)).groupBy {
+      case (_, snapshot) => snapshot
+    }.mapValues(_.keys.toList).maxBy {
+      case (snapshot, ids) => (weightByTrustProposers(List(snapshot), ids), ids.map(_.hex))
+    }
 
   /**
     *  Selects correct cluster state based on most recent (highest) snapshots, on multiple results election is made by popularity and id sorting
@@ -123,15 +122,19 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
     */
   private[snapshot] def selectMostRecentCorrectSnapshot(
     clusterState: Map[Id, List[RecentSnapshot]]
-  ): (List[RecentSnapshot], List[Id]) = { // TODO: mwadon - refactor
-    val x = clusterState.toList
-      .map(r => (r, r._2.maxBy(_.height)))
-      .groupBy(_._2)
-      .toList
-      .maxBy(t => (t._1.height, t._2.size, t._2.map(_._1._1.hex)))
-      ._2
+  ): (List[RecentSnapshot], List[Id]) =
+    clusterState.groupBy { case (_, snapshots) => snapshots.maxBy(_.height) }
+      .mapValues(m => (m.values.head, m.keys))
+      .values
+      .maxBy {
+        case (snapshots, ids) => (snapshots.head.height, weightByTrustProposers(snapshots, ids.toList), ids.map(_.hex))
+      }
+      .map(_.toList)
 
-    (x.head._1._2, x.map(_._1._1))
+  def weightByTrustProposers(snapshots: List[RecentSnapshot], ids: List[Id]): Double = {
+    val proposedTrustViews = snapshots.map(_.publicReputation).combineAll
+
+    ids.map(proposedTrustViews).sum
   }
 
   private def isBelowInterval(ownSnapshots: RecentSnapshot, snapshotsToDownload: List[RecentSnapshot]) =
