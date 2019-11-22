@@ -6,7 +6,6 @@ import org.constellation.storage.{RecentSnapshot, SnapshotVerification, Verifica
 
 class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
     extends SnapshotSelector {
-
   /**
     * Selects snapshots at given height and validates against current, if the current snapshot is incorrect highest one will be chosen.
     * @param peersSnapshots cluster recent snapshots

@@ -6,8 +6,15 @@ import java.util.Base64
 
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.StrictLogging
+import org.bouncycastle.jce.ECNamedCurveTable
+import org.bouncycastle.jce.interfaces.ECPrivateKey
+import org.bouncycastle.jce.spec.{ECNamedCurveParameterSpec, ECPublicKeySpec}
 import org.spongycastle.jce.provider.BouncyCastleProvider
-
+import org.apache.commons.codec.binary.Base64.decodeBase64
+import org.bouncycastle.asn1.{ASN1Integer, ASN1Sequence, sec}
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
+import org.bouncycastle.asn1.sec.ECPrivateKey.getInstance
+import org.bouncycastle.jcajce.provider.asymmetric.ec.{BCECPrivateKey, BCECPublicKey}
 /**
   * Need to compare this to:
   * https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/core/ECKey.java
@@ -39,7 +46,7 @@ object KeyUtils extends StrictLogging {
 
   val provider: BouncyCastleProvider = insertProvider()
 
-  private val ECDSA = "ECDsA"
+  val ECDSA = "ECDsA"
   private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
   private val secp256k = "secp256k1"
   val DefaultSignFunc = "SHA512withECDSA"
@@ -65,9 +72,9 @@ object KeyUtils extends StrictLogging {
   // Utilities for getting around conversion errors / passing around parameters
   // through strange APIs that might take issue with your strings
 
-  def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
+  def base64(bytes: Array[Byte]): String = java.util.Base64.getEncoder.encodeToString(bytes)
 
-  def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+  def fromBase64(b64Str: String): Array[Byte] = java.util.Base64.getDecoder.decode(b64Str)
 
   def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
@@ -133,7 +140,43 @@ object KeyUtils extends StrictLogging {
     result
   }
 
+//  def getPrivateKeyFromString(privateKeyStr: String) = {
+//    val kf = KeyFactory.getInstance(KeyUtils.ECDSA, KeyUtils.insertProvider)
+//    val encoded = decodeBase64(privateKeyStr)
+//    val keySpec = new PKCS8EncodedKeySpec(encoded)
+//    kf.generatePrivate(keySpec)
+//  }
+
+//    def keyPairFromPrivateStr(privateKeyStr: String): KeyPair = {
+//      val privKey = getPrivateKeyFromString(privateKeyStr)
+//      val ecSpec = ECNamedCurveTable.getParameterSpec("secp256k1")
+//      val Q = ecSpec.getG.multiply(privKey.asInstanceOf[ECPrivateKey].getD)
+//      val pubSpec = new ECPublicKeySpec(Q, ecSpec)
+//      val pubKey = kf.generatePublic(pubSpec)
+//      new KeyPair(pubKey, privKey)
+//    }
+
+  def keyPairFromPemStr(privateKeyStr: String, publicKeyStr: String): KeyPair = {
+    val kf = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)
+    val privKey = pemToPrivateKey(privateKeyStr, kf)
+    val pubKey = pemToPublicKey(publicKeyStr,kf)
+    new KeyPair(pubKey, privKey)
+  }
+
+
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+
+  def pemToPublicKey(publicKeyStr: String, kf: KeyFactory = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)) = {
+    val encodedPub = decodeBase64(publicKeyStr)
+    val pubKeySpec = new X509EncodedKeySpec(encodedPub)
+    kf.generatePublic(pubKeySpec)
+  }
+
+  def pemToPrivateKey(privateKeyStr: String, kf: KeyFactory = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)) = {
+    val encodedPriv = decodeBase64(privateKeyStr)
+    val privKeySpec = new PKCS8EncodedKeySpec(encodedPriv)
+    kf.generatePrivate(privKeySpec)
+  }
 
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)

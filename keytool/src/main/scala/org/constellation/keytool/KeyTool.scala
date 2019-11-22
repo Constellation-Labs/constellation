@@ -5,9 +5,6 @@ import cats.effect.{ExitCode, IO, IOApp, Sync}
 import scopt.OParser
 
 object KeyTool extends IOApp {
-
-  def print(thing: String): IO[Unit] = IO { println(thing) }
-
   def run(args: List[String]): IO[ExitCode] = {
     for {
       cliParams <- loadCliParams[IO](args)

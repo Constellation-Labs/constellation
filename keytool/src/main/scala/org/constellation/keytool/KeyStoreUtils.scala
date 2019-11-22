@@ -36,7 +36,6 @@ object KeyStoreUtils {
       )
       .attemptT
 
-  /* TODO: Move to org.constellation.schema */
   def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: FileOutputStream => F[Unit]) = // keyPairToStorePath
     writer(path)
       .use(
@@ -44,15 +43,13 @@ object KeyStoreUtils {
       )
       .attemptT
 
-  /* TODO: Move to org.constellation.schema */
-  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) = Sync[F].delay{
+  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) = Sync[F].delay {
     val parsedHeader = new BufferedReader(new InputStreamReader(stream)).readLine()
-    if (parsedHeader == null) None//todo something better than a null check
+    if (parsedHeader == null) None //todo something better than a null check
     else Some(parser(parsedHeader))
   }
 
-  /* TODO: Move to org.constellation.schema */
-  def storeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay{
+  def storeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay {
     val bufferedWriter = new BufferedWriter(new OutputStreamWriter(stream))
     bufferedWriter.write(serializer(obj))
     bufferedWriter.close()
