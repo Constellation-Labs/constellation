@@ -1,7 +1,8 @@
 package org.constellation
 
+import java.io.{BufferedReader, FileInputStream, InputStreamReader}
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 import java.util.Random
 
 import cats.effect.{ContextShift, IO}
@@ -9,7 +10,7 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
 import org.constellation.schema.Id
 import org.constellation.util.{APIClient, SignHelp}
@@ -26,6 +27,33 @@ object Fixtures {
 
   def tx: Transaction =
     TransactionService.createAndSetTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+
+  def createAndStoreTx(amount: Long, destination: String, storePath: String, kp: KeyPair = KeyUtils.makeKeyPair()) ={
+    val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
+      KeyUtils.publicKeyToAddressString(kp.getPublic),
+      destination,
+      amount,
+      kp
+    )
+    val transaction = Transaction(transactionEdge, LastTransactionRef.empty)
+    transaction.jsonSave(storePath)
+  }
+
+  def loadKeyPairUnsafe(keystorePath: String,
+                        alias: String,
+                        keypass: Array[Char],
+                        storepass: Array[Char],
+                        keyStoreType: String = "PKCS12") = {
+    val kpFileStream = new FileInputStream(keystorePath)
+    val keyStore = KeyStore.getInstance(keyStoreType)
+    keyStore.load(kpFileStream, storepass)
+    val privateKey = keyStore.getKey(alias, keypass).asInstanceOf[PrivateKey]
+    val publicKey = keyStore.getCertificate(alias).getPublicKey
+    new KeyPair(publicKey, privateKey)
+  }
+
+  def bufferedFileReader(path: String) = new BufferedReader(new InputStreamReader(new FileInputStream(path)))
+
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()

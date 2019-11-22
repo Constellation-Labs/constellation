@@ -20,6 +20,7 @@ object KeyStoreUtils {
 
   private def writer[F[_]: Sync](keyStorePath: String): Resource[F, FileOutputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
+      println(keyStorePath)
       val file = new File(keyStorePath)
       // TODO: Check if file exists
       new FileOutputStream(file)
@@ -36,10 +37,25 @@ object KeyStoreUtils {
       .attemptT
 
   /* TODO: Move to org.constellation.schema */
+  def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: FileOutputStream => F[Unit]) = // keyPairToStorePath
+    writer(path)
+      .use(
+        stream => bufferedWriter(stream)
+      )
+      .attemptT
+
+  /* TODO: Move to org.constellation.schema */
   def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) = Sync[F].delay{
     val parsedHeader = new BufferedReader(new InputStreamReader(stream)).readLine()
-      if (parsedHeader.nonEmpty) Some(parser(parsedHeader))
-      else None
+    if (parsedHeader == null) None//todo something better than a null check
+    else Some(parser(parsedHeader))
+  }
+
+  /* TODO: Move to org.constellation.schema */
+  def storeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay{
+    val bufferedWriter = new BufferedWriter(new OutputStreamWriter(stream))
+    bufferedWriter.write(serializer(obj))
+    bufferedWriter.close()
   }
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
@@ -113,7 +129,8 @@ object KeyStoreUtils {
     alias: String,
     storePassword: Array[Char],
     keyPassword: Array[Char]
-  ): EitherT[F, Throwable, KeyStore] =
+  ): EitherT[F, Throwable, KeyStore] = {
+    println("here")
     writer(withExtension(path))
       .use(
         stream =>
@@ -127,6 +144,8 @@ object KeyStoreUtils {
       )
       .attemptT
 
+  }
+
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
     alias: String
@@ -136,6 +155,20 @@ object KeyStoreUtils {
       keyPair <- reader(path)
         .evalMap(unlockKeyStore[F](env.storepass))
         .evalMap(unlockKeyPair[F](alias, env.keypass))
+        .use(_.pure[F])
+        .attemptT
+    } yield keyPair
+
+  def keyPairFromStorePath[F[_]: Sync](
+    path: String,
+    alias: String,
+    storepass: Array[Char],
+    keypass: Array[Char]
+  ): EitherT[F, Throwable, KeyPair] =
+    for {
+      keyPair <- reader(path)
+        .evalMap(unlockKeyStore[F](storepass))
+        .evalMap(unlockKeyPair[F](alias, keypass))
         .use(_.pure[F])
         .attemptT
     } yield keyPair
