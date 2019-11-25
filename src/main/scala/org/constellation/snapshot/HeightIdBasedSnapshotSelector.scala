@@ -134,7 +134,7 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
   def weightByTrustProposers(snapshots: List[RecentSnapshot], ids: List[Id]): Double = {
     val proposedTrustViews = snapshots.map(_.publicReputation).combineAll
 
-    ids.map(proposedTrustViews).sum
+    ids.map(proposedTrustViews.getOrElse(_, 0d)).sum
   }
 
   private def isBelowInterval(ownSnapshots: RecentSnapshot, snapshotsToDownload: List[RecentSnapshot]) =

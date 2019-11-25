@@ -76,7 +76,9 @@ class HeightIdBasedSnapshotSelectorTest
       )
 
     snapshotSelector
-      .selectCorrectRecentSnapshotAtGivenHeight(own, Map(peer1, peer2)) shouldBe (own, List(peer1._1, thisNode))
+      .selectCorrectRecentSnapshotAtGivenHeight(own, Map(peer1, peer2)) shouldBe (peer2._2.head, List(
+      peer2._1
+    ))
   }
 
   test("selectCorrectRecentSnapshotAtGivenHeight should sort by id when having equal clusters") {
