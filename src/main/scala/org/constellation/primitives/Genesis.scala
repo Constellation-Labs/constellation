@@ -125,12 +125,13 @@ object Genesis extends StrictLogging {
   }
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
-    Seq(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2).flatMap {
-      cb =>
-        cb.transactions
-          .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-          .map(tcd => dao.transactionService.accept(tcd))
-    }.toList.sequence.void
-    // TODO: Get rid of unsafeRunSync
-      .unsafeRunSync()
+    List(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2)
+      .flatMap(
+        cb =>
+          cb.transactions
+            .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
+      )
+      .traverse(dao.transactionService.accept(_))
+      .void
+      .unsafeRunSync() // TODO: Get rid of unsafeRunSync
 }
