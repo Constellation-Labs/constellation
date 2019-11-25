@@ -8,12 +8,13 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.genesis.GenesisObservationWriterProperties
+import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.util.AccountBalance
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -41,7 +42,11 @@ class CheckpointServiceTest
       kp = makeKeyPair()
       dao = TestHelpers.prepareRealDao(readyFacilitators)
 
-      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+      val go = Genesis.createGenesisObservation(
+        Seq(
+          AccountBalance(dao.selfAddressStr, 75L + 75L + 75L)
+        )
+      )
       Genesis.acceptGenesis(go, setAsTips = true)
 
       val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
@@ -107,7 +112,7 @@ class CheckpointServiceTest
       kp = makeKeyPair()
       dao = TestHelpers.prepareRealDao(readyFacilitators)
 
-      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
+      val go = Genesis.createGenesisObservation(Seq.empty)
       Genesis.acceptGenesis(go, setAsTips = true)
 
       val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
@@ -158,7 +163,7 @@ class CheckpointServiceTest
 
     "should store genesis observation on disk during acceptance step" in {
       Genesis.acceptGenesis(
-        Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair),
+        Genesis.createGenesisObservation(Seq.empty),
         setAsTips = true
       )
 

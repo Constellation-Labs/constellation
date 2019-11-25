@@ -8,8 +8,8 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
-import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.server.directives.Credentials
+import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
@@ -521,8 +521,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
         pathPrefix("genesis") {
           path("create") {
-            entity(as[Set[Id]]) { ids =>
-              complete(Genesis.createGenesisAndInitialDistribution(dao.selfAddressStr, ids, dao.keyPair))
+            entity(as[Seq[AccountBalance]]) { balances =>
+              val go = Genesis.createGenesisObservation(balances)
+              complete(go)
             }
           } ~
             path("accept") {
