@@ -15,6 +15,7 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
+import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
@@ -123,6 +124,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
           ConsensusStage.ACCEPTING_MAJORITY_CB
         )
       )
+      _ <- storeProposal(proposal)
       receivedAllConsensusDataProposals <- consensusDataProposals.modify { curr =>
         val merged = if (curr.contains(proposal.facilitatorId)) {
           val old = curr(proposal.facilitatorId)
@@ -144,6 +146,17 @@ class Consensus[F[_]: Concurrent: ContextShift](
           .set(ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS)
           .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
       else Sync[F].unit
+    } yield ()
+
+  private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
+    for {
+      leftTxs <- proposal.transactions.toList.filterA(tx => transactionService.contains(tx.hash).map(!_))
+      leftObs <- proposal.observations.toList.filterA(ob => observationService.contains(ob.hash).map(!_))
+
+      _ <- leftTxs.traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
+      _ <- leftObs.traverse(observationService.put(_, ConsensusStatus.Unknown, None))
+
+      // TODO: store messages and notifications
     } yield ()
 
   def unionConsensusDataProposals(stageState: StageState): F[Unit] = {
@@ -462,7 +475,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         roundData.roundId,
         FacilitatorId(dao.id),
         CheckpointBlock.createCheckpointBlock(
-          transactions,
+          proposals.flatMap(_._2.transactions).toSeq,
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
           messages,

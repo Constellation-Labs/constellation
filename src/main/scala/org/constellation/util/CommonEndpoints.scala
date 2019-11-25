@@ -145,7 +145,7 @@ trait CommonEndpoints extends Json4sSupport {
   }
 
   val batchEndpoints: Route = post {
-    path("batch") {
+    pathPrefix("batch") {
       path("transactions") {
         entity(as[List[String]]) { ids =>
           dao.metrics.incrementMetric(Metrics.batchTransactionsEndpoint)
