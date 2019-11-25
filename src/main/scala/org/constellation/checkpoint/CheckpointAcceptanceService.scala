@@ -3,7 +3,7 @@ package org.constellation.checkpoint
 import cats.Applicative
 import cats.data.OptionT
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Concurrent, ContextShift, Fiber, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, Fiber, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -26,7 +26,9 @@ import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
-class CheckpointAcceptanceService[F[_]: Concurrent](
+import scala.concurrent.duration._
+
+class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   addressService: AddressService[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
@@ -317,7 +319,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent](
           knownError.raiseError[F, Unit]
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>
-          Concurrent[F].start(resolveMissingReferences(cb)) >>
+          Concurrent[F].start(Timer[F].sleep(6.seconds) >> resolveMissingReferences(cb)) >>
           error.raiseError[F, Unit]
       case otherError =>
         acceptLock.release >>

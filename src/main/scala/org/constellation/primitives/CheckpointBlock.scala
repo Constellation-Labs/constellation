@@ -80,6 +80,7 @@ case class CheckpointBlock(
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
+  // TODO: remove that store method
   def store(cache: CheckpointCache)(implicit dao: DAO): Unit = {
     /*
           transactions.foreach { rt =>
@@ -118,11 +119,12 @@ object CheckpointBlock {
     transactions: Seq[Transaction],
     tips: Seq[SignedObservationEdge],
     messages: Seq[ChannelMessage] = Seq.empty,
-    peers: Seq[PeerNotification] = Seq.empty
+    peers: Seq[PeerNotification] = Seq.empty,
+    observations: Seq[Observation] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock =
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
-    }, messages, peers)
+    }, messages, peers, observations)
 
   def createCheckpointBlock(
     transactions: Seq[Transaction],
@@ -133,9 +135,11 @@ object CheckpointBlock {
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
-      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map {
-        _.signedMessageData.hash
-      })
+      CheckpointEdgeData(
+        transactions.map(_.hash).sorted,
+        messages.map(_.signedMessageData.hash).sorted,
+        observations.map(_.hash).sorted
+      )
 
     val observationEdge = ObservationEdge(
       tips.toList,

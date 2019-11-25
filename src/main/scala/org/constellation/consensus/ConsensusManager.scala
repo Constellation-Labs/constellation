@@ -113,7 +113,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
         Sync[F].raiseError[Unit](
           NotAllPeersParticipate(roundId, roundData._1.transactions, roundData._1.observations)
         )
-      _ <- roundInfo.consensus.addTransactionProposal(
+      _ <- roundInfo.consensus.addConsensusDataProposal(
         ConsensusDataProposal(
           roundData._1.roundId,
           FacilitatorId(dao.id),
@@ -161,18 +161,15 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
 
   def createRoundData(roundId: RoundId): F[(RoundData, Seq[(ChannelMessage, Int)])] =
     for {
-      transactions <- transactionService
-        .pullForConsensus(maxTransactionThreshold)
+      transactions <- transactionService.pullForConsensus(maxTransactionThreshold)
       _ <- logger.info(s"Pulled for new consensus: ${transactions.size}")
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
       tips <- concurrentTipService.pull(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty)
-        Sync[F]
-          .raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
+        Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
       _ <- if (tips.get.peers.isEmpty)
-        Sync[F]
-          .raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
+        Sync[F].raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
       messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
       observations <- observationService.pullForConsensus(maxObservationThreshold)
@@ -233,7 +230,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
     for {
       _ <- resolveMissingParents(roundData)
       _ <- withLock(roundData.roundId.toString, passMissed(roundData.roundId, roundInfo.consensus))
-      _ <- roundInfo.consensus.startTransactionProposal()
+      _ <- roundInfo.consensus.startConsensusDataProposal()
     } yield ()
 
   def addMissed(roundId: RoundId, roundCommand: ConsensusProposal): F[Unit] =
@@ -249,7 +246,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
       _ <- missed.traverse {
-        case proposal: ConsensusDataProposal => consensus.addTransactionProposal(proposal)
+        case proposal: ConsensusDataProposal => consensus.addConsensusDataProposal(proposal)
         case proposal: SelectedUnionBlock    => consensus.addSelectedBlockProposal(proposal)
         case proposal: UnionBlockProposal    => consensus.addBlockProposal(proposal)
       }
@@ -405,10 +402,10 @@ object ConsensusManager {
   def generateRoundId: RoundId =
     RoundId(java.util.UUID.randomUUID().toString)
 
-  case class BroadcastLightTransactionProposal(
+  case class BroadcastConsensusDataProposal(
     roundId: RoundId,
     peers: Set[PeerData],
-    transactionsProposal: ConsensusDataProposal
+    consensusDataProposal: ConsensusDataProposal
   )
 
   case object OwnRoundAlreadyInProgress extends ConsensusStartError("Node has already start own consensus")

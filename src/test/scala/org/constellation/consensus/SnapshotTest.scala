@@ -36,7 +36,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
     )
 
     dao.snapshotBroadcastService
-      .updateRecentSnapshots(snaps.head.snapshot.hash, 2)
+      .updateRecentSnapshots(snaps.head.snapshot.hash, 2, Map.empty)
       .unsafeRunSync()
 
     Snapshot.isOverDiskCapacity(ConfigUtil.snapshotSizeDiskLimit - 4096) shouldBe false

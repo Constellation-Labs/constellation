@@ -19,6 +19,8 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
+import org.constellation.schema.Id
+import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
@@ -143,7 +145,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
                   }
                   SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
-                case list if list.contains(RecentSnapshot(s.hash, s.height)) =>
+                case list if list.contains(RecentSnapshot(s.hash, s.height, s.publicReputation)) =>
                   SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
                 case _ =>
                   (IO
@@ -331,6 +333,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               maybePeer =>
                 maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
                   pd =>
+                    // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
                     dao.observationService
                       .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
                       .void
@@ -353,7 +356,16 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               .ifM(getInfo, IO.pure(none[Array[Byte]]))
           )(complete(_))
         }
-      }
+      } ~
+        path("trust") {
+          APIDirective.handle(
+            dao.trustManager.getPredictedReputation.flatMap { predicted =>
+              if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
+              else TrustData(predicted).pure[IO]
+            }
+          )(complete(_))
+        }
+
     }
 
   def routes(socketAddress: InetSocketAddress): Route =

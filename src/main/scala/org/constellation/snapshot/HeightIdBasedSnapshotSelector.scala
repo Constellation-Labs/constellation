@@ -1,11 +1,14 @@
 package org.constellation.snapshot
 
+import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.schema.Id
+import org.constellation.storage.VerificationStatus.VerificationStatus
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
+import org.constellation.util.SnapshotDiff
 
-class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
-    extends SnapshotSelector {
+class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
+    extends SnapshotSelector[F] {
 
   /**
     * Selects snapshots at given height and validates against current, if the current snapshot is incorrect highest one will be chosen.
@@ -15,25 +18,22 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
     *         Some(..) downloadInfo with recentSnapshots list downloaded from highest node based on majority of hashes and id election.
     */
   def selectSnapshotFromRecent(
-    peersSnapshots: List[NodeSnapshots],
+    peersSnapshots: Map[Id, List[RecentSnapshot]],
     ownSnapshots: List[RecentSnapshot]
-  ): Option[DownloadInfo] =
+  ): Option[(SnapshotDiff, List[RecentSnapshot])] =
     (peersSnapshots, ownSnapshots) match {
-      case (Nil, _) => None
+      case (m, _) if m.isEmpty => None
       case (_, Nil) =>
         val nel = peersSnapshots.filter(_._2.nonEmpty)
         if (nel.isEmpty) None
         else {
-          val clusterWithCorrectState = selectMostRecentCorrectSnapshot(nel)
-          DownloadInfo(
-            createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
-            clusterWithCorrectState._1
-          ).some
+          val state = selectMostRecentCorrectSnapshot(nel)
+          (createDiff(state._1, ownSnapshots, state._2), state._1).some
         }
       case (_, _) =>
         val highestSnapshot = ownSnapshots.maxBy(_.height)
         val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(highestSnapshot, peersSnapshots)
-        val nel = (peersSnapshots :+ (thisNodeId, ownSnapshots)).filter(_._2.nonEmpty)
+        val nel = (peersSnapshots + (nodeId -> ownSnapshots)).filter(_._2.nonEmpty)
         if (nel.isEmpty) None
         else {
           val clusterWithCorrectState = selectMostRecentCorrectSnapshot(nel)
@@ -43,7 +43,7 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
               ))
             None
           else {
-            DownloadInfo(
+            (
               createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
               clusterWithCorrectState._1
             ).some
@@ -62,40 +62,40 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
   def selectSnapshotFromBroadcastResponses(
     responses: List[Option[SnapshotVerification]],
     ownSnapshots: List[RecentSnapshot]
-  ): Option[DownloadInfo] = {
-    val flat = responses.flatten
-    val grouped = flat.groupBy(_.status)
+  ): Option[(SnapshotDiff, List[RecentSnapshot])] = {
+    val grouped = responses.flatten.groupBy(_.status)
 
-    val invalid = grouped.getOrElse(VerificationStatus.SnapshotInvalid, List.empty)
-    val correct = grouped.getOrElse(VerificationStatus.SnapshotCorrect, List.empty)
-    // +1 because this node treat it as correct
-    val maybeSelected = (invalid.size, correct.size + 1) match {
-      case (i, c) if i > c =>
-        selectMostRecentCorrectSnapshot(invalid.map(s => (s.id, s.recentSnapshot))).some
+    def getByStatus(status: VerificationStatus) =
+      grouped.getOrElse(status, List.empty).map(s => (s.id -> s.recentSnapshot)).toMap
+
+    val invalid = getByStatus(VerificationStatus.SnapshotInvalid)
+    val correct = getByStatus(VerificationStatus.SnapshotCorrect)
+
+    val maybeSelected = (invalid.size, correct.size + 1) match { // +1 because own node treats it as correct too
+      case (i, c) if i > c => selectMostRecentCorrectSnapshot(invalid).some
       case (i, c) if i < c => None
       case (i, c) if i == c =>
         val combined = invalid ++ correct
         val highestSnapshot = ownSnapshots.maxBy(_.height)
-        val correctSnapAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(
+        val correctSnapshotAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(
           highestSnapshot,
-          combined.map(x => (x.id, x.recentSnapshot))
+          combined
         )
-        val info =
-          ((invalid ++ correct).map(s => (s.id, s.recentSnapshot)) :+ (thisNodeId, ownSnapshots)).filter(_._2.nonEmpty)
+        val info = (invalid ++ correct + (nodeId -> ownSnapshots)).filter(_._2.nonEmpty)
+
         if (info.nonEmpty) {
           val clusterWithCorrectState = selectMostRecentCorrectSnapshot(info)
-          if (correctSnapAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+
+          if (correctSnapshotAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
                 highestSnapshot,
                 clusterWithCorrectState._1
               )) None
           else clusterWithCorrectState.some
-        } else {
-          None
-        }
+        } else None
     }
 
     maybeSelected.map { s =>
-      DownloadInfo(createDiff(s._1, ownSnapshots, s._2), s._1)
+      (createDiff(s._1, ownSnapshots, s._2), s._1)
     }
   }
 
@@ -107,14 +107,13 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
     */
   private[snapshot] def selectCorrectRecentSnapshotAtGivenHeight(
     ownSnapshot: RecentSnapshot,
-    clusterState: List[NodeSnapshots]
+    clusterState: Map[Id, List[RecentSnapshot]]
   ): (RecentSnapshot, List[Id]) =
-    (clusterState
-      .flatMap(n => n._2.find(_.height == ownSnapshot.height).map((n._1, _))) :+ (thisNodeId, ownSnapshot))
-      .groupBy(_._2)
-      .toList
-      .maxBy(t => (t._2.size, t._2.map(_._1.hex)))
-      .map(x => x.map(_._1))
+    (clusterState.mapFilter(_.find(_.height == ownSnapshot.height)) + (nodeId -> ownSnapshot)).groupBy {
+      case (_, snapshot) => snapshot
+    }.mapValues(_.keys.toList).maxBy {
+      case (snapshot, ids) => (weightByTrustProposers(List(snapshot), ids), ids.map(_.hex))
+    }
 
   /**
     *  Selects correct cluster state based on most recent (highest) snapshots, on multiple results election is made by popularity and id sorting
@@ -122,16 +121,20 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
     * @return elected majority state and list of nodes associated with that state
     */
   private[snapshot] def selectMostRecentCorrectSnapshot(
-    clusterState: List[NodeSnapshots]
-  ): (List[RecentSnapshot], List[Id]) = {
-    val x = clusterState
-      .map(r => (r, r._2.maxBy(_.height)))
-      .groupBy(_._2)
-      .toList
-      .maxBy(t => (t._1.height, t._2.size, t._2.map(_._1._1.hex)))
-      ._2
+    clusterState: Map[Id, List[RecentSnapshot]]
+  ): (List[RecentSnapshot], List[Id]) =
+    clusterState.groupBy { case (_, snapshots) => snapshots.maxBy(_.height) }
+      .mapValues(m => (m.values.head, m.keys))
+      .values
+      .maxBy {
+        case (snapshots, ids) => (snapshots.head.height, weightByTrustProposers(snapshots, ids.toList), ids.map(_.hex))
+      }
+      .map(_.toList)
 
-    (x.head._1._2, x.map(_._1._1))
+  def weightByTrustProposers(snapshots: List[RecentSnapshot], ids: List[Id]): Double = {
+    val proposedTrustViews = snapshots.map(_.publicReputation).combineAll
+
+    ids.map(proposedTrustViews.getOrElse(_, 0d)).sum
   }
 
   private def isBelowInterval(ownSnapshots: RecentSnapshot, snapshotsToDownload: List[RecentSnapshot]) =
@@ -140,4 +143,17 @@ class HeightIdBasedSnapshotSelector(thisNodeId: Id, snapshotHeightRedownloadDela
       case nonEmpty => nonEmpty.map(_.height).max
     })
 
+  private[snapshot] def createDiff(
+    major: List[RecentSnapshot],
+    ownSnapshots: List[RecentSnapshot],
+    peers: List[Id]
+  ): SnapshotDiff =
+    SnapshotDiff(
+      ownSnapshots.diff(major).sortBy(_.height).reverse,
+      major.diff(ownSnapshots).sortBy(_.height).reverse,
+      peers
+    )
+
 }
+
+case class DownloadInfo(diff: SnapshotDiff, recentStateToSet: List[RecentSnapshot])

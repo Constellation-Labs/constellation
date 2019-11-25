@@ -35,6 +35,7 @@ import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
+import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
 import scala.concurrent.Future
@@ -117,7 +118,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
-    observationService = new ObservationService[IO](this)
+    ipManager = IPManager[IO]()
+    cluster = Cluster[IO](() => metrics, ipManager, this)
+
+    trustManager = TrustManager[IO](id, cluster)
+
+    observationService = new ObservationService[IO](trustManager, this)
 
     val merkleService =
       new CheckpointMerkleService[IO](this, transactionService, messageService, notificationService, observationService)
@@ -141,9 +147,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       )
     )
     addressService = new AddressService[IO]()
-
-    ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, this)
 
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
@@ -181,7 +184,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
 
     val snapshotSelector =
-      new HeightIdBasedSnapshotSelector(
+      new HeightIdBasedSnapshotSelector[IO](
         this.id,
         ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
       )
@@ -207,6 +210,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       observationService,
       rateLimiting,
       consensusManager,
+      trustManager,
       this
     )
 
@@ -249,6 +253,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
+
+    trustDataPollingScheduler = TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, this)
 
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)

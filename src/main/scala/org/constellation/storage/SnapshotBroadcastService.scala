@@ -7,6 +7,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.schema.Id
@@ -19,7 +20,7 @@ import scala.concurrent.duration._
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
   cluster: Cluster[F],
-  snapshotSelector: SnapshotSelector,
+  snapshotSelector: SnapshotSelector[F],
   contextShift: ContextShift[F],
   dao: DAO
 ) extends StrictLogging {
@@ -28,14 +29,18 @@ class SnapshotBroadcastService[F[_]: Concurrent](
 
   val clusterCheckPending = new AtomicBoolean(false)
 
-  def broadcastSnapshot(hash: String, height: Long): F[Unit] =
+  def broadcastSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double]): F[Unit] =
     for {
-      ownRecent <- updateRecentSnapshots(hash, height)
+      ownRecent <- updateRecentSnapshots(hash, height, publicReputation)
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       responses <- peers.values.toList
         .traverse(
           _.client
-            .postNonBlockingF[F, SnapshotVerification]("snapshot/verify", SnapshotCreated(hash, height), 5 second)(
+            .postNonBlockingF[F, SnapshotVerification](
+              "snapshot/verify",
+              SnapshotCreated(hash, height, publicReputation),
+              5 second
+            )(
               contextShift
             )
             .map(_.some)
@@ -50,9 +55,9 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
           healthChecker
-            .startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1)))
+            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
             .flatMap(
-              _ => recentSnapshots.set(d.recentStateToSet)
+              _ => recentSnapshots.set(d._2)
             )
       )
     } yield ()
@@ -61,16 +66,16 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     val verify = for {
       ownRecent <- getRecentSnapshots
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
-      responses <- collectSnapshot(peers)
+      responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
       maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
       _ <- maybeDownload.fold(Sync[F].unit)(
         d =>
           healthChecker
-            .startReDownload(d.diff, peers.filter(p => d.diff.peers.contains(p._1)))
+            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
             .flatMap(
               _ =>
                 recentSnapshots
-                  .set(d.recentStateToSet)
+                  .set(d._2)
             )
       )
     } yield ()
@@ -102,22 +107,18 @@ class SnapshotBroadcastService[F[_]: Concurrent](
         Sync[F].unit
       )
 
-  def updateRecentSnapshots(hash: String, height: Long): F[List[RecentSnapshot]] =
+  def updateRecentSnapshots(hash: String, height: Long, publicReputation: Map[Id, Double]): F[List[RecentSnapshot]] =
     recentSnapshots.modify { snaps =>
-      val updated = (RecentSnapshot(hash, height) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
+      val updated =
+        (RecentSnapshot(hash, height, publicReputation) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
       (updated, updated)
     }
-
-  private def collectSnapshot(peers: Map[Id, PeerData]): F[List[(Id, List[RecentSnapshot])]] =
-    peers.toList.traverse(
-      p => (p._1, p._2.client.getNonBlockingF[F, List[RecentSnapshot]]("snapshot/recent")(contextShift)).sequence
-    )
 
   def shouldRunClusterCheck(responses: List[Option[SnapshotVerification]]): Boolean =
     responses.nonEmpty && ((responses.count(r => r.nonEmpty && r.get.status == VerificationStatus.SnapshotInvalid) * 100) / responses.size) >= dao.processingConfig.maxInvalidSnapshotRate
 }
 
-case class RecentSnapshot(hash: String, height: Long)
+case class RecentSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double])
 
 case class SnapshotVerification(id: Id, status: VerificationStatus, recentSnapshot: List[RecentSnapshot])
 

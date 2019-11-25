@@ -48,7 +48,10 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
             dao.cluster
               .compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
-              .flatMap(_ => dao.snapshotBroadcastService.broadcastSnapshot(created.hash, created.height))
+              .flatMap(
+                _ =>
+                  dao.snapshotBroadcastService.broadcastSnapshot(created.hash, created.height, created.publicReputation)
+              )
         }
       } yield (),
       IO.unit

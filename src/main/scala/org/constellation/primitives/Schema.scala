@@ -40,6 +40,8 @@ object Schema {
 
     val broadcastStates: Set[Schema.NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
 
+    val offlineStates: Set[Schema.NodeState.Value] = Set(Offline)
+
     val validDuringDownload: Set[Schema.NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
     val validForDownload: Set[Schema.NodeState.Value] = Set(PendingDownload, Ready)
@@ -190,7 +192,11 @@ object Schema {
     *
     * @param hashes : TX edge hashes
     */
-  case class CheckpointEdgeData(hashes: Seq[String], messageHashes: Seq[String] = Seq()) extends Signable
+  case class CheckpointEdgeData(
+    hashes: Seq[String],
+    messageHashes: Seq[String] = Seq(),
+    observationsHashes: Seq[String]
+  ) extends Signable
 
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 

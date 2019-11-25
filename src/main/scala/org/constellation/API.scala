@@ -23,6 +23,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{ChangePeerState, Download, SetStateResult}
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -381,6 +382,24 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               )
             )
 
+          } ~
+          path("trust") {
+            APIDirective.handle(
+              dao.trustManager.getPredictedReputation.flatMap { predicted =>
+                if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
+                else TrustData(predicted).pure[IO]
+              }
+            )(complete(_))
+          } ~
+          path("storedReputation") {
+            APIDirective.handle(
+              dao.trustManager.getStoredReputation.map(TrustData)
+            )(complete(_))
+          } ~
+          path("predictedReputation") {
+            APIDirective.handle(
+              dao.trustManager.getPredictedReputation.map(TrustData)
+            )(complete(_))
           }
       }
     }

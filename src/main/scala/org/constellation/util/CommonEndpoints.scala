@@ -67,6 +67,11 @@ trait CommonEndpoints extends Json4sSupport {
           dao.snapshotBroadcastService.getRecentSnapshots
         )(complete(_))
       } ~
+      path("snapshot" / "reputation") {
+        APIDirective.handle(
+          dao.snapshotBroadcastService.getRecentSnapshots
+        )(complete(_))
+      } ~
       path("snapshot" / "nextHeight") {
         APIDirective.handle(
           dao.snapshotService.getNextHeightInterval.map((dao.id, _))

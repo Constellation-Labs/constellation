@@ -28,6 +28,7 @@ import org.constellation.rollback.RollbackService
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
+import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
@@ -130,6 +131,7 @@ trait EdgeDAO {
 
   var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _
+  var trustManager: TrustManager[IO] = _
   var transactionService: TransactionService[IO] = _
   var transactionChainService: TransactionChainService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
@@ -152,18 +154,16 @@ trait EdgeDAO {
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
   var genesisObservationWriter: GenesisObservationWriter[IO] = _
-
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _
   var consensusWatcher: ConsensusWatcher = _
   var consensusScheduler: ConsensusScheduler = _
+  var trustDataPollingScheduler: TrustDataPollingScheduler = _
+
   val notificationService = new NotificationService[IO]()
-  val messageService: MessageService[IO]
   val channelService = new ChannelService[IO]()
   val soeService = new SOEService[IO]()
-
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
-
   val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
 
   var genesisBlock: Option[CheckpointBlock] = None

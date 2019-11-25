@@ -11,7 +11,7 @@ import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
 import org.constellation.consensus.ConsensusManager.{
-  BroadcastLightTransactionProposal,
+  BroadcastConsensusDataProposal,
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
@@ -26,7 +26,6 @@ import org.constellation.storage._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class Consensus[F[_]: Concurrent: ContextShift](
@@ -52,7 +51,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   implicit val shadowDAO: DAO = dao
 
-  private[consensus] val transactionProposals: SingleRef[F, Map[FacilitatorId, ConsensusDataProposal]] =
+  private[consensus] val consensusDataProposals: SingleRef[F, Map[FacilitatorId, ConsensusDataProposal]] =
     SingleRef(Map.empty[FacilitatorId, ConsensusDataProposal])
   private[consensus] val checkpointBlockProposals: SingleRef[F, Map[FacilitatorId, CheckpointBlock]] =
     SingleRef(Map.empty[FacilitatorId, CheckpointBlock])
@@ -61,7 +60,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] val stage: SingleRef[F, ConsensusStage] = SingleRef(ConsensusStage.STARTING)
 
-  def startTransactionProposal(): F[Unit] =
+  def startConsensusDataProposal(): F[Unit] =
     for {
       transactions <- transactionService
         .pullForConsensus(ConfigUtil.constellation.getInt("consensus.maxTransactionThreshold"))
@@ -86,11 +85,11 @@ class Consensus[F[_]: Concurrent: ContextShift](
         observations
       )
       _ <- calculationContext.blockOn(remoteCall)(
-        remoteSender.broadcastLightTransactionProposal(
-          BroadcastLightTransactionProposal(roundData.roundId, roundData.peers, proposal)
+        remoteSender.broadcastConsensusDataProposal(
+          BroadcastConsensusDataProposal(roundData.roundId, roundData.peers, proposal)
         )
       )
-      _ <- addTransactionProposal(proposal)
+      _ <- addConsensusDataProposal(proposal)
     } yield ()
 
   def addBlockProposal(proposal: UnionBlockProposal): F[Unit] =
@@ -114,7 +113,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       else Sync[F].unit
     } yield ()
 
-  def addTransactionProposal(proposal: ConsensusDataProposal): F[Unit] =
+  def addConsensusDataProposal(proposal: ConsensusDataProposal): F[Unit] =
     for {
       _ <- verifyStage(
         Set(
@@ -124,7 +123,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
           ConsensusStage.ACCEPTING_MAJORITY_CB
         )
       )
-      receivedAllTransactionProposals <- transactionProposals.modify { curr =>
+      receivedAllConsensusDataProposals <- consensusDataProposals.modify { curr =>
         val merged = if (curr.contains(proposal.facilitatorId)) {
           val old = curr(proposal.facilitatorId)
           old.copy(
@@ -135,22 +134,22 @@ class Consensus[F[_]: Concurrent: ContextShift](
         } else
           proposal
         val updated = curr + (proposal.facilitatorId -> merged)
-        (updated, receivedAllTransactionProposals(updated.size))
+        (updated, receivedAllConsensusDataProposals(updated.size))
       }
       _ <- logger.debug(
-        s"[${dao.id.short}] ${roundData.roundId} received transaction proposal $receivedAllTransactionProposals"
+        s"[${dao.id.short}] ${roundData.roundId} received consensus data proposal $receivedAllConsensusDataProposals"
       )
-      _ <- if (receivedAllTransactionProposals)
+      _ <- if (receivedAllConsensusDataProposals)
         stage
           .set(ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS)
-          .flatMap(_ => unionTransactionProposals(StageState.FINISHED))
+          .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
       else Sync[F].unit
     } yield ()
 
-  def unionTransactionProposals(stageState: StageState): F[Unit] = {
+  def unionConsensusDataProposals(stageState: StageState): F[Unit] = {
     val action = stageState match {
-      case StageState.BEHIND => mergeTxProposalsAndBroadcastBlock()
-      case _                 => validateAndMergeTransactionProposals()
+      case StageState.BEHIND => mergeConsensusDataProposalsAndBroadcastBlock()
+      case _                 => validateAndMergeConsensusDataProposals()
     }
     verifyStage(
       Set(
@@ -201,6 +200,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     } yield ()
 
   private[consensus] def acceptMajorityCheckpointBlock(proposals: Map[FacilitatorId, CheckpointBlock]): F[Unit] = {
+
     val sameBlocks = proposals
       .groupBy(_._2.soeHash)
       .maxBy(_._2.size)
@@ -327,8 +327,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val uniques = proposals.groupBy(_._2.baseHash).size
 
     val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
-    val selectedCheckpointBlock =
-      SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
+    val selectedCheckpointBlock = SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
 
     for {
       _ <- stage.set(ConsensusStage.WAITING_FOR_SELECTED_BLOCKS)
@@ -338,6 +337,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
+
       _ <- calculationContext.blockOn(remoteCall)(
         remoteSender.broadcastSelectedUnionBlock(
           BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
@@ -421,10 +421,10 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
     } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
 
-  private[consensus] def mergeTxProposalsAndBroadcastBlock(): F[Unit] =
+  private[consensus] def mergeConsensusDataProposalsAndBroadcastBlock(): F[Unit] =
     for {
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
-      proposals <- transactionProposals.get
+      proposals <- consensusDataProposals.get
 
       transactions <- prepareConsensusBatchData[Transaction, TransactionCacheData](
         "transactions",
@@ -457,6 +457,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         .toSet
         .union(roundData.peers.flatMap(_.notification))
         .toSeq
+
       proposal = UnionBlockProposal(
         roundData.roundId,
         FacilitatorId(dao.id),
@@ -477,17 +478,17 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- addBlockProposal(proposal)
     } yield ()
 
-  private[consensus] def validateAndMergeTransactionProposals(): F[Unit] =
+  private[consensus] def validateAndMergeConsensusDataProposals(): F[Unit] =
     for {
-      proposals <- transactionProposals.getUnsafe
+      proposals <- consensusDataProposals.getUnsafe
       validationResult <- validateReceivedProposals(
         proposals,
-        "transactionProposals",
+        "consensusDataProposals",
         countSelfAsPeer = roundStartedByMe
       )
       _ <- validationResult match {
         case Left(exception) => consensusManager.handleRoundError(exception)
-        case Right(_)        => mergeTxProposalsAndBroadcastBlock()
+        case Right(_)        => mergeConsensusDataProposalsAndBroadcastBlock()
       }
     } yield ()
 
@@ -507,10 +508,10 @@ class Consensus[F[_]: Concurrent: ContextShift](
       )
 
   private[consensus] def getOwnTransactionsToReturn: F[Seq[Transaction]] =
-    transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.transactions).getOrElse(Seq.empty))
+    consensusDataProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.transactions).getOrElse(Seq.empty))
 
   private[consensus] def getOwnObservationsToReturn: F[Seq[Observation]] =
-    transactionProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.observations).getOrElse(Seq.empty))
+    consensusDataProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.observations).getOrElse(Seq.empty))
 
   private def roundStartedByMe: Boolean = roundData.facilitatorId.id == dao.id
 
@@ -520,7 +521,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
   private[consensus] def receivedAllCheckpointBlockProposals(size: Int): Boolean =
     size == roundData.peers.size + 1
 
-  private[consensus] def receivedAllTransactionProposals(size: Int): Boolean = {
+  private[consensus] def receivedAllConsensusDataProposals(size: Int): Boolean = {
     val extraMessage = if (roundStartedByMe) 1 else 0
     size == roundData.peers.size + extraMessage
   }
@@ -542,9 +543,9 @@ class Consensus[F[_]: Concurrent: ContextShift](
         getOwnTransactionsToReturn.flatMap(
           txs =>
             getOwnObservationsToReturn.map(
-              exs =>
+              obs =>
                 Left(
-                  NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, exs)
+                  NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, obs)
                 )
             )
         )
@@ -586,7 +587,7 @@ object Consensus {
 
   case class AcceptMajorityCheckpointBlock(roundId: RoundId)
 
-  case class StartTransactionProposal(roundId: RoundId)
+  case class StartConsensusDataProposal(roundId: RoundId)
 
   case class ConsensusDataProposal(
     roundId: RoundId,

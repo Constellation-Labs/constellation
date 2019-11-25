@@ -4,20 +4,18 @@ import java.security.KeyPair
 import java.util.concurrent.atomic.AtomicInteger
 
 import cats.data.EitherT
-import cats.effect.{Async, Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Async, Concurrent, LiftIO}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
 import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.schema.Id
 import org.constellation.storage.AddressService
 import org.constellation.util.Distance
-import org.constellation.util.Logging._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
