@@ -23,7 +23,6 @@ object KeyStoreUtils {
     Resource.fromAutoCloseable(Sync[F].delay {
       val file = new File(keyStorePath)
       // TODO: Check if file exists
-      println("writer")
       new FileOutputStream(file)
     })
 

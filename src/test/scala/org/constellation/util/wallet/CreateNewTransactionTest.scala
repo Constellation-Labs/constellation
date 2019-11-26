@@ -15,6 +15,7 @@ class CreateNewTransactionTest extends AsyncFlatSpecLike with Matchers with Befo
   val fee = "0.007297"
   val destination = "receiverAddress"
   val storePath = "src/test/resources/new-tx.txt"
+  val envArgs = "true"
   val args = List(
     s"--keystore=${Fixtures.keystorePath}",
     s"--alias=${Fixtures.alias}",
@@ -109,6 +110,25 @@ class CreateNewTransactionTest extends AsyncFlatSpecLike with Matchers with Befo
       s"--store_path=${storePath}",
       s"--priv_key_str=${Fixtures.privateKeyStr}",
       s"--pub_key_str=${Fixtures.pubKeyStr}"
+    )
+
+    val newTxLoop = for {
+      _ <- walletClient.run(testArgs)
+    } yield ()
+    val newTxF = newTxLoop.unsafeToFuture()
+    newTxF.map(_ => assert(File(storePath).nonEmpty))
+  }
+
+  "Wallet Client" should "read env args and process new transaction with previous tx and keypair on disk" in {
+    val testArgs = List(
+      s"--keystore=${Fixtures.keystorePath}",
+      s"--alias=${Fixtures.alias}",
+      s"--account_path=${emptyAccountPath}",
+      s"--amount=${amount}",
+      s"--fee=${fee}",
+      s"--destination=${destination}",
+      s"--store_path=${storePath}",
+      s"--env_args=${envArgs}"
     )
 
     val newTxLoop = for {

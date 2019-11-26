@@ -40,20 +40,22 @@ object CreateNewTransaction extends IOApp {
     } yield transaction
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  //todo add case for storepass keypass via env
   def loadKeyPairFrom[F[_]: Sync](cliParams: WalletCliConfig): EitherT[F, Throwable, KeyPair] =
-    Option(cliParams.privateKeyStr)
-      .fold(
-        KeyStoreUtils
-          .keyPairFromStorePath[F](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
-      )(
-        privateKeyStr =>
-          EitherT
-            .rightT(KeyUtils.keyPairFromPemStr(privateKeyStr, cliParams.pubKeyStr))
-            .leftMap { _: Exception =>
-              new Throwable("Couldn't load KeyPair with PrivateKey provided")
-          }
-      )
+    if (Option(cliParams.loadFromEnvArgs).nonEmpty)
+      KeyStoreUtils.keyPairFromStorePath(cliParams.keystore, cliParams.alias)
+    else
+      Option(cliParams.privateKeyStr)
+        .fold(
+          KeyStoreUtils
+            .keyPairFromStorePath[F](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
+        )(
+          privateKeyStr =>
+            EitherT
+              .rightT(KeyUtils.keyPairFromPemStr(privateKeyStr, cliParams.pubKeyStr))
+              .leftMap { _: Exception =>
+                new Throwable("Couldn't load KeyPair with PrivateKey provided")
+            }
+        )
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, WalletCliConfig] = {
     val builder = OParser.builder[WalletCliConfig]
@@ -65,13 +67,11 @@ object CreateNewTransaction extends IOApp {
           .action((x, c) => c.copy(keystore = x)),
         opt[String]("alias").required
           .action((x, c) => c.copy(alias = x)),
-        opt[String]("storepass").required
+        opt[String]("storepass").optional()
           .action((x, c) => c.copy(storepass = x.toCharArray)),
-        opt[String]("keypass").required
-          .action((x, c) => c.copy(keypass = x.toCharArray))
-          .required,
-        opt[String]("account_path")
-          .optional()
+        opt[String]("keypass").optional()
+          .action((x, c) => c.copy(keypass = x.toCharArray)).optional(),
+        opt[String]("account_path").optional()
           .action((x, c) => c.copy(accountPath = x)),
         opt[String]("amount").required
           .action((x, c) => c.copy(amount = x)),
@@ -84,7 +84,9 @@ object CreateNewTransaction extends IOApp {
         opt[String]("priv_key_str").optional
           .action((x, c) => c.copy(privateKeyStr = x)),
         opt[String]("pub_key_str").optional
-          .action((x, c) => c.copy(pubKeyStr = x))
+          .action((x, c) => c.copy(pubKeyStr = x)),
+        opt[String]("env_args").optional
+          .action((x, c) => c.copy(loadFromEnvArgs = x))
       )
     }
     EitherT.fromEither[F] {
@@ -104,5 +106,6 @@ case class WalletCliConfig(
   destination: String = null,
   storePath: String = null,
   privateKeyStr: String = null,
-  pubKeyStr: String = null
+  pubKeyStr: String = null,
+  loadFromEnvArgs: String = null
 )

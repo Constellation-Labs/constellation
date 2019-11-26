@@ -231,7 +231,6 @@ object KeyUtils extends StrictLogging {
     val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
     keyHashToAddress(keyHash)
   }
-
 }
 
 /*
