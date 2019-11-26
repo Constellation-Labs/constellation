@@ -2,7 +2,7 @@ package org.constellation.checkpoint
 
 import cats.Applicative
 import cats.data.OptionT
-import cats.effect.concurrent.Semaphore
+import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Concurrent, ContextShift, Fiber, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import constellation._
@@ -20,7 +20,7 @@ import org.constellation.domain.transaction.{LastTransactionRef, TransactionChai
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
-import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
+import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.{Metrics, PeerApiClient}
@@ -46,9 +46,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   val contextShift: ContextShift[IO] =
     IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
-  val awaitingForAcceptance: SingleRef[F, Set[CheckpointCache]] = SingleRef(Set())
-  val pendingAcceptance: SingleRef[F, Set[String]] = SingleRef(Set())
-  val pendingAcceptanceFromOthers: SingleRef[F, Set[String]] = SingleRef(Set())
+  val awaitingForAcceptance: Ref[F, Set[CheckpointCache]] = Ref.unsafe(Set())
+  val pendingAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val pendingAcceptanceFromOthers: Ref[F, Set[String]] = Ref.unsafe(Set())
   val maxDepth: Int = 10
 
   val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
@@ -108,14 +108,14 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           peers <- obtainPeers
           _ <- resolveMissingParents(cb, peers)
           _ <- accept(checkpoint.checkpointCacheData, checkpoint.facilitators)
-          _ <- pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash))
+          _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
         } yield ()
 
         acceptance.recoverWith {
           case ex: PendingAcceptance =>
             acceptErrorHandler(ex)
           case error =>
-            pendingAcceptanceFromOthers.update(_.filterNot(_ == cb.baseHash)) >> acceptErrorHandler(error)
+            pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ())) >> acceptErrorHandler(error)
         }
 
     }
@@ -202,7 +202,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
           _ <- isCheckpointBlockAllowedForAcceptance[F](cb)(transactionService.transactionChainService).ifM(
             logConditions(cb, true) >> Sync[F].unit,
-            logConditions(cb, false) >> awaitingForAcceptance.unsafeModify(
+            logConditions(cb, false) >> awaitingForAcceptance.modify(
               s => (s + checkpoint, ())
             ) >> MissingTransactionReference(cb).raiseError[F, Unit]
           )
@@ -251,7 +251,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           _ <- snapshotService.updateAcceptedCBSinceSnapshot(cb)
           _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
           _ <- incrementMetricIfDummy(cb)
-          _ <- pendingAcceptance.update(_.filterNot(_ == cb.baseHash))
+          _ <- pendingAcceptance.modify(pa => (pa.filterNot(_ == cb.baseHash), ()))
           _ <- acceptLock.release
           awaiting <- awaitingForAcceptance.modify { s =>
             val ret = s.filterNot(_.checkpointBlock.map(_.baseHash).getOrElse("unknown") == cb.baseHash)
@@ -273,16 +273,18 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       case ex @ (PendingAcceptance(_) | MissingCheckpointBlockException) =>
         acceptErrorHandler(ex)
       case error =>
-        pendingAcceptance.update(_.filterNot(_ == checkpoint.checkpointBlock.get.baseHash)) >> acceptErrorHandler(error)
+        pendingAcceptance.modify(pa => (pa.filterNot(_ == checkpoint.checkpointBlock.get.baseHash), ())) >> acceptErrorHandler(
+          error
+        )
     }
   }
 
-  private[checkpoint] def syncPending(storage: SingleRef[F, Set[String]], baseHash: String): F[Unit] =
-    storage.update { hashes =>
+  private[checkpoint] def syncPending(storage: Ref[F, Set[String]], baseHash: String): F[Unit] =
+    storage.modify { hashes =>
       if (hashes.contains(baseHash)) {
         throw PendingAcceptance(baseHash)
       } else {
-        hashes + baseHash
+        (hashes + baseHash, ())
       }
     }
 

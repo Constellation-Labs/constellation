@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
 import org.constellation.domain.exception.InvalidNodeState
-import cats.effect.concurrent.Semaphore
+import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.config.Config
@@ -13,7 +13,7 @@ import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType, SignedObservationEdgeCache}
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
+import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage._
@@ -52,14 +52,11 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
   val timeout: Long =
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
 
-  private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-    Semaphore.in[IO, F](1).unsafeRunSync()
-  }
-  private[consensus] val consensuses: SingleRef[F, Map[RoundId, ConsensusInfo[F]]] = SingleRef(
+  private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
+  private[consensus] val consensuses: Ref[F, Map[RoundId, ConsensusInfo[F]]] = Ref.unsafe(
     Map.empty[RoundId, ConsensusInfo[F]]
   )
-  private[consensus] val ownConsensus: SingleRef[F, Option[OwnConsensus[F]]] = SingleRef(None)
+  private[consensus] val ownConsensus: Ref[F, Option[OwnConsensus[F]]] = Ref.unsafe(None)
   private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] =
     new StorageService("ConsensusProposal".some, 2.some)
 
@@ -74,7 +71,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
     } yield maybe
 
   def getActiveMinHeight: F[Option[Long]] =
-    consensuses.getUnsafe.map(_.flatMap(_._2.tipMinHeight).toList match {
+    consensuses.get.map(_.flatMap(_._2.tipMinHeight).toList match {
       case Nil  => None
       case list => Some(list.min)
     })
@@ -104,7 +101,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
         roundData._1.tipsSOE.minHeight,
         System.currentTimeMillis()
       )
-      _ <- ownConsensus.updateUnsafe(d => d.map(o => o.copy(consensusInfo = roundInfo.some)))
+      _ <- ownConsensus.modify(d => (d.map(o => o.copy(consensusInfo = roundInfo.some)), ()))
       _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
         .map(_.peerMetadata.id.short)}")
       responses <- remoteSender.notifyFacilitators(roundData._1)
@@ -150,7 +147,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
       state <- cluster.getNodeState
       _ <- if (NodeState.canStartOwnConsensus(state)) Sync[F].unit
       else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForOwnConsensus, state))
-      own <- ownConsensus.getUnsafe
+      own <- ownConsensus.get
       roundId <- if (own.isDefined) Sync[F].raiseError[RoundId](OwnRoundAlreadyInProgress)
       else
         ownConsensus.modify { _ =>
@@ -222,7 +219,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
         roundData.tipsSOE.minHeight,
         System.currentTimeMillis()
       )
-      _ <- consensuses.updateUnsafe(r => r + (roundData.roundId -> roundInfo))
+      _ <- consensuses.modify(r => (r + (roundData.roundId -> roundInfo), ()))
       _ <- logger.debug(s"[${dao.id.short}] Participate in round ${updatedRoundData.roundId}")
     } yield (roundInfo, updatedRoundData)
 
@@ -257,14 +254,16 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(
         s"[${dao.id.short}] Terminating all consensuses"
       )
-      _ <- consensuses.set(Map.empty[RoundId, ConsensusInfo[F]])
-      _ <- ownConsensus.set(None)
+      _ <- consensuses.modify(_ => (Map.empty[RoundId, ConsensusInfo[F]], ()))
+      _ <- ownConsensus.modify(_ => (None, ()))
     } yield ()
 
   def stopBlockCreationRound(cmd: StopBlockCreationRound): F[Unit] =
     for {
-      _ <- consensuses.update(curr => curr - cmd.roundId)
-      _ <- ownConsensus.update(curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) None else curr)
+      _ <- consensuses.modify(curr => (curr - cmd.roundId, ()))
+      _ <- ownConsensus.modify(
+        curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) (None, ()) else (curr, ())
+      )
       _ <- transactionService.returnToPending(cmd.transactionsToReturn.map(_.hash)) // TODO: wkoszycki temporally discard transactions/observations
       _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
       _ <- transactionService.clearInConsensus(cmd.transactionsToReturn.map(_.hash))
@@ -297,9 +296,9 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
 
   def cleanUpLongRunningConsensus: F[Unit] =
     for {
-      runningConsensuses <- consensuses.getUnsafe
+      runningConsensuses <- consensuses.get
       currentTime <- Sync[F].delay(System.currentTimeMillis())
-      ownRound <- ownConsensus.getUnsafe.map(_.flatMap(o => o.consensusInfo.map(i => o.roundId -> i)))
+      ownRound <- ownConsensus.get.map(_.flatMap(o => o.consensusInfo.map(i => o.roundId -> i)))
       toClean = (runningConsensuses ++ ownRound.toMap).filter(r => (currentTime - r._2.startTime) > timeout).toList
       stopData <- toClean.traverse(
         r =>

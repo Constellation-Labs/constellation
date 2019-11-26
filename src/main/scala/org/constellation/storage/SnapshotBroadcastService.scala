@@ -2,6 +2,7 @@ package org.constellation.storage
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -9,7 +10,6 @@ import org.constellation.DAO
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.schema.Id
 import org.constellation.snapshot.SnapshotSelector
 import org.constellation.storage.VerificationStatus.VerificationStatus
@@ -25,7 +25,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
   dao: DAO
 ) extends StrictLogging {
 
-  private val recentSnapshots: SingleRef[F, List[RecentSnapshot]] = SingleRef(List.empty[RecentSnapshot])
+  private val recentSnapshots: Ref[F, List[RecentSnapshot]] = Ref.unsafe(List.empty[RecentSnapshot])
 
   val clusterCheckPending = new AtomicBoolean(false)
 
@@ -57,7 +57,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
           healthChecker
             .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
             .flatMap(
-              _ => recentSnapshots.set(d._2)
+              _ => recentSnapshots.modify(_ => (d._2, ()))
             )
       )
     } yield ()
@@ -73,9 +73,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
           healthChecker
             .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
             .flatMap(
-              _ =>
-                recentSnapshots
-                  .set(d._2)
+              _ => recentSnapshots.modify(_ => (d._2, ()))
             )
       )
     } yield ()
@@ -93,7 +91,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     }
   }
 
-  def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.getUnsafe
+  def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.get
 
   def runClusterCheck: F[Unit] =
     cluster.getNodeState
@@ -102,7 +100,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
         getRecentSnapshots
           .flatMap(healthChecker.checkClusterConsistency)
           .flatMap(
-            maybeUpdate => maybeUpdate.fold(Sync[F].unit)(recentSnapshots.set)
+            maybeUpdate => maybeUpdate.fold(Sync[F].unit)(a => recentSnapshots.modify(_ => (a, ())))
           ),
         Sync[F].unit
       )

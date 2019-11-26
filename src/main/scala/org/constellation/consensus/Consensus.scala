@@ -1,5 +1,6 @@
 package org.constellation.consensus
 
+import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -21,7 +22,6 @@ import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives._
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.PeerApiClient
@@ -52,14 +52,14 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   implicit val shadowDAO: DAO = dao
 
-  private[consensus] val consensusDataProposals: SingleRef[F, Map[FacilitatorId, ConsensusDataProposal]] =
-    SingleRef(Map.empty[FacilitatorId, ConsensusDataProposal])
-  private[consensus] val checkpointBlockProposals: SingleRef[F, Map[FacilitatorId, CheckpointBlock]] =
-    SingleRef(Map.empty[FacilitatorId, CheckpointBlock])
-  private[consensus] val selectedCheckpointBlocks: SingleRef[F, Map[FacilitatorId, CheckpointBlock]] =
-    SingleRef(Map.empty[FacilitatorId, CheckpointBlock])
+  private[consensus] val consensusDataProposals: Ref[F, Map[FacilitatorId, ConsensusDataProposal]] =
+    Ref.unsafe(Map.empty[FacilitatorId, ConsensusDataProposal])
+  private[consensus] val checkpointBlockProposals: Ref[F, Map[FacilitatorId, CheckpointBlock]] =
+    Ref.unsafe(Map.empty[FacilitatorId, CheckpointBlock])
+  private[consensus] val selectedCheckpointBlocks: Ref[F, Map[FacilitatorId, CheckpointBlock]] =
+    Ref.unsafe(Map.empty[FacilitatorId, CheckpointBlock])
 
-  private[consensus] val stage: SingleRef[F, ConsensusStage] = SingleRef(ConsensusStage.STARTING)
+  private[consensus] val stage: Ref[F, ConsensusStage] = Ref.unsafe(ConsensusStage.STARTING)
 
   def startConsensusDataProposal(): F[Unit] =
     for {
@@ -109,7 +109,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(s"[${dao.id.short}] ${roundData.roundId} received block proposal $receivedAllBlockProposals")
       _ <- if (receivedAllBlockProposals)
         stage
-          .set(ConsensusStage.RESOLVING_MAJORITY_CB)
+          .modify(_ => (ConsensusStage.RESOLVING_MAJORITY_CB, ()))
           .flatMap(_ => validateAndMergeBlockProposals())
       else Sync[F].unit
     } yield ()
@@ -145,7 +145,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- storeProposal(proposal).flatMap { _ =>
         if (receivedAllConsensusDataProposals)
           stage
-            .set(ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS)
+            .modify(_ => (ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS, ()))
             .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
         else Sync[F].unit
       }
@@ -175,7 +175,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def validateAndMergeBlockProposals(): F[Unit] =
     for {
-      proposals <- checkpointBlockProposals.getUnsafe
+      proposals <- checkpointBlockProposals.get
       validationResult <- validateReceivedProposals(proposals, "blockProposals")
       _ <- validationResult match {
         case Left(exception) => consensusManager.handleRoundError(exception)
@@ -185,7 +185,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def validateAndAcceptMajorityBlockProposals(): F[Unit] =
     for {
-      proposals <- selectedCheckpointBlocks.getUnsafe
+      proposals <- selectedCheckpointBlocks.get
       _ <- logger.debug("validate majority block proposal")
       validationResult <- validateReceivedProposals(proposals, "majorityProposals", 100)
       _ <- validationResult match {
@@ -207,7 +207,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       )
       _ <- if (receivedAllSelectedProposals)
         stage
-          .set(ConsensusStage.ACCEPTING_MAJORITY_CB)
+          .modify(_ => (ConsensusStage.ACCEPTING_MAJORITY_CB, ()))
           .flatTap(_ => validateAndAcceptMajorityBlockProposals())
       else Sync[F].unit
     } yield ()
@@ -343,7 +343,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val selectedCheckpointBlock = SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
 
     for {
-      _ <- stage.set(ConsensusStage.WAITING_FOR_SELECTED_BLOCKS)
+      _ <- stage.modify(_ => (ConsensusStage.WAITING_FOR_SELECTED_BLOCKS, ()))
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockProposalCount_" + proposals.size
       )
@@ -506,7 +506,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def validateAndMergeConsensusDataProposals(): F[Unit] =
     for {
-      proposals <- consensusDataProposals.getUnsafe
+      proposals <- consensusDataProposals.get
       validationResult <- validateReceivedProposals(
         proposals,
         "consensusDataProposals",

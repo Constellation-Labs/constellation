@@ -3,19 +3,21 @@ package org.constellation.domain.transaction
 import cats.effect.{Bracket, Concurrent}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
+import org.constellation.ConstellationExecutionContext
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.PendingMemPool
 
 class PendingTransactionsMemPool[F[_]: Concurrent](
-  transactionChainService: TransactionChainService[F],
-  semaphore: Semaphore[F]
-) extends PendingMemPool[F, String, TransactionCacheData](semaphore) {
+  transactionChainService: TransactionChainService[F]
+) extends PendingMemPool[F, String, TransactionCacheData] {
+
+  private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
 
   // TODO: Rethink - use queue
   def pull(maxCount: Int): F[Option[List[TransactionCacheData]]] =
-    Bracket[F, Throwable].bracket(ref.acquire)(
+    Bracket[F, Throwable].bracket(semaphore.acquire)(
       _ =>
-        ref.getUnsafe
+        ref.get
           .flatMap(
             txs =>
               if (txs.isEmpty) {
@@ -25,11 +27,11 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
                   val (toUse, _) = sorted.splitAt(maxCount)
                   val hashesToUse = toUse.map(_.hash)
                   val leftTxs = txs.filterKeys(!hashesToUse.contains(_))
-                  ref.unsafeModify(_ => (leftTxs, Option(toUse).filter(_.nonEmpty)))
+                  ref.modify(_ => (leftTxs, Option(toUse).filter(_.nonEmpty)))
                 }
               }
           )
-    )(_ => ref.release)
+    )(_ => semaphore.release)
 
   private def sortAndFilterForPull(txs: List[TransactionCacheData]): F[List[TransactionCacheData]] =
     txs
@@ -56,6 +58,6 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
 
 object PendingTransactionsMemPool {
 
-  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], semaphore: Semaphore[F]) =
-    new PendingTransactionsMemPool[F](transactionChainService, semaphore)
+  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F]) =
+    new PendingTransactionsMemPool[F](transactionChainService)
 }

@@ -3,6 +3,7 @@ package org.constellation.p2p
 import java.time.LocalDateTime
 
 import cats.data.OptionT
+import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import cats.syntax._
@@ -14,7 +15,6 @@ import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -53,8 +53,8 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 ) {
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
-  private val nodeState: SingleRef[F, NodeState] = SingleRef[F, NodeState](initialState)
-  private val peers: SingleRef[F, Map[Id, PeerData]] = SingleRef[F, Map[Id, PeerData]](Map.empty)
+  private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
+  private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
 
   implicit val shadedDao: DAO = dao
 
@@ -75,7 +75,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def updatePeerNotifications(notifications: List[PeerNotification]): F[Unit] =
     logThread(
       for {
-        p <- peers.getUnsafe
+        p <- peers.get
         peerUpdate = notifications.flatMap { n =>
           p.get(n.id).map { p =>
             p.copy(notification = p.notification.diff(Seq(n)))
@@ -276,7 +276,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def deregister(ip: String, port: Int, id: Id): F[Unit] =
     logThread(
       for {
-        p <- peers.getUnsafe
+        p <- peers.get
         _ <- p.get(id).traverse { peer =>
           updatePeerInfo(
             peer.copy(
@@ -292,7 +292,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def forgetPeer(pd: PeerData): F[Unit] =
     logThread(
       for {
-        p <- peers.getUnsafe
+        p <- peers.get
         pm = pd.peerMetadata
         _ <- ipManager.removeKnownIP(pm.host)
         _ <- p.get(pm.id).traverse { peer =>
@@ -308,7 +308,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def markOfflinePeer(pd: PeerData): F[Unit] =
     logThread(
       for {
-        p <- peers.getUnsafe
+        p <- peers.get
         pm = pd.peerMetadata
         _ <- ipManager.removeKnownIP(pm.host)
         _ <- p
@@ -326,7 +326,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def removePeer(pd: PeerData): F[Unit] =
     logThread(
       for {
-        p <- peers.getUnsafe
+        p <- peers.get
         pm = pd.peerMetadata
 
         _ <- ipManager.removeKnownIP(pm.host)
