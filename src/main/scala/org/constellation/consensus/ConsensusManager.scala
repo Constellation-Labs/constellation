@@ -254,8 +254,23 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(
         s"[${dao.id.short}] Terminating all consensuses"
       )
-      _ <- consensuses.modify(_ => (Map.empty[RoundId, ConsensusInfo[F]], ()))
-      _ <- ownConsensus.modify(_ => (None, ()))
+      runningConsensuses <- consensuses.get
+      ownRound <- ownConsensus.get.map(_.flatMap(o => o.consensusInfo.map(i => o.roundId -> i)))
+      toClean = (runningConsensuses ++ ownRound.toMap)
+      _ <- cleanUpConsensuses(toClean)
+    } yield ()
+
+  def cleanUpConsensuses(consensuses: Map[RoundId, ConsensusInfo[F]]): F[Unit] =
+    for {
+      stopData <- consensuses.toList.traverse { r =>
+        r._2.consensus.getOwnTransactionsToReturn
+          .flatMap(txs => r._2.consensus.getOwnObservationsToReturn.map(exs => (r._1, txs, exs)))
+      }
+      _ <- if (stopData.nonEmpty)
+        logger.warn(s"Cleaning consensuses with roundId: ${stopData.map(_._1)}")
+      else
+        Sync[F].unit
+      _ <- stopData.traverse(s => stopBlockCreationRound(StopBlockCreationRound(s._1, None, s._2, s._3)))
     } yield ()
 
   def stopBlockCreationRound(cmd: StopBlockCreationRound): F[Unit] =
@@ -264,7 +279,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
       _ <- ownConsensus.modify(
         curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) (None, ()) else (curr, ())
       )
-      _ <- transactionService.returnToPending(cmd.transactionsToReturn.map(_.hash)) // TODO: wkoszycki temporally discard transactions/observations
+      _ <- transactionService.returnToPending(cmd.transactionsToReturn.map(_.hash))
       _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
       _ <- transactionService.clearInConsensus(cmd.transactionsToReturn.map(_.hash))
       _ <- observationService.clearInConsensus(cmd.observationsToReturn.map(_.hash))
@@ -299,15 +314,8 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
       runningConsensuses <- consensuses.get
       currentTime <- Sync[F].delay(System.currentTimeMillis())
       ownRound <- ownConsensus.get.map(_.flatMap(o => o.consensusInfo.map(i => o.roundId -> i)))
-      toClean = (runningConsensuses ++ ownRound.toMap).filter(r => (currentTime - r._2.startTime) > timeout).toList
-      stopData <- toClean.traverse(
-        r =>
-          r._2.consensus.getOwnTransactionsToReturn
-            .flatMap(txs => r._2.consensus.getOwnObservationsToReturn.map(exs => (r._1, txs, exs)))
-      )
-      _ <- if (stopData.nonEmpty) logger.warn(s"Cleaning timeout consensuses with roundId: ${stopData.map(_._1)}")
-      else Sync[F].unit
-      _ <- stopData.traverse(s => stopBlockCreationRound(StopBlockCreationRound(s._1, None, s._2, s._3)))
+      toClean = (runningConsensuses ++ ownRound.toMap).filter(r => (currentTime - r._2.startTime) > timeout)
+      _ <- cleanUpConsensuses(toClean)
     } yield ()
 
   def handleRoundError(cmd: ConsensusException): F[Unit] =

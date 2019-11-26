@@ -53,11 +53,16 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
                 logger.info(s"${Console.YELLOW}Last accepted: ${last} | Txs head: ${txs.headOption
                   .map(_.transaction.lastTxRef)} hash=${txs.headOption.map(_.transaction.hash)}${Console.RESET}")
               }
-              .map(txs.headOption.map(_.transaction.lastTxRef).contains)
-              .ifM(
-                txs.pure[F],
-                List.empty[TransactionCacheData].pure[F]
-              )
+              .map { last =>
+                val ordinal = last.ordinal
+                val left = txs.filter(_.transaction.lastTxRef.ordinal >= ordinal) // TODO: get rid of >=
+                (last, left)
+              }
+              .map {
+                case (last, t) =>
+                  if (t.headOption.map(_.transaction.lastTxRef).contains(last)) t
+                  else List.empty[TransactionCacheData]
+              }
         }
       }
       .map(
