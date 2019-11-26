@@ -124,7 +124,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
           ConsensusStage.ACCEPTING_MAJORITY_CB
         )
       )
-      _ <- storeProposal(proposal)
+
       receivedAllConsensusDataProposals <- consensusDataProposals.modify { curr =>
         val merged = if (curr.contains(proposal.facilitatorId)) {
           val old = curr(proposal.facilitatorId)
@@ -141,21 +141,21 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received consensus data proposal $receivedAllConsensusDataProposals"
       )
-      _ <- if (receivedAllConsensusDataProposals)
-        stage
-          .set(ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS)
-          .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
-      else Sync[F].unit
+
+      _ <- storeProposal(proposal).flatMap { _ =>
+        if (receivedAllConsensusDataProposals)
+          stage
+            .set(ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS)
+            .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
+        else Sync[F].unit
+      }
     } yield ()
 
   private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
     for {
-      leftTxs <- proposal.transactions.toList.filterA(tx => transactionService.contains(tx.hash).map(!_))
-      leftObs <- proposal.observations.toList.filterA(ob => observationService.contains(ob.hash).map(!_))
-
-      _ <- leftTxs.traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
-      _ <- leftObs.traverse(observationService.put(_, ConsensusStatus.Unknown, None))
-
+      _ <- proposal.transactions.toList
+        .traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
+      _ <- proposal.observations.toList.traverse(observationService.put(_, ConsensusStatus.Unknown, None))
       // TODO: store messages and notifications
     } yield ()
 
@@ -384,6 +384,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
       )
       hashesToResolve = toResolve.map(_._1._1)
+      _ <- logger.debug(s"Hashes to resolve: ${hashesToResolve}")
       resolved <- LiftIO[F].liftIO(
         dataResolver.resolveBatchDataByDistance[T](
           hashesToResolve,
@@ -439,18 +440,30 @@ class Consensus[F[_]: Concurrent: ContextShift](
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- consensusDataProposals.get
 
-      transactions <- prepareConsensusBatchData[Transaction, TransactionCacheData](
-        "transactions",
-        proposals,
-        allPeers, { p =>
-          p.transactions.map(_.hash)
-        },
-        roundData.transactions.map(_.hash), { s =>
-          transactionService.lookup(s).map(_.map(_.transaction))
-        }, { tcd =>
-          tcd.transaction
-        }
-      )
+      txsContains <- proposals.values
+        .flatMap(_.transactions.toList)
+        .toList
+        .traverse(tx => transactionService.contains(tx.hash))
+
+      _ <- logger.info(s"${roundData.roundId} Txs contains: ${txsContains.zip(
+        proposals.values
+          .flatMap(_.transactions.toList)
+          .toList
+          .map(_.hash)
+      )}")
+
+//      transactions <- prepareConsensusBatchData[Transaction, TransactionCacheData](
+//        "transactions",
+//        proposals,
+//        allPeers, { p =>
+//          p.transactions.map(_.hash)
+//        },
+//        roundData.transactions.map(_.hash), { s =>
+//          transactionService.lookup(s).map(_.map(_.transaction))
+//        }, { tcd =>
+//          tcd.transaction
+//        }
+//      )
 
       messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
         "message",

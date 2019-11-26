@@ -7,6 +7,7 @@ import org.constellation.domain.observation.{
   CheckpointBlockInvalid,
   CheckpointBlockWithMissingParents,
   CheckpointBlockWithMissingSoe,
+  Observation,
   ObservationData,
   RequestTimeoutOnConsensus,
   RequestTimeoutOnResolving,
@@ -65,6 +66,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[RequestTimeoutOnResolving])
     kryo.register(classOf[SnapshotMisalignment])
     kryo.register(classOf[CheckpointBlockInvalid])
+    kryo.register(classOf[Observation])
 
     kryo.register(classOf[Set[String]])
 
