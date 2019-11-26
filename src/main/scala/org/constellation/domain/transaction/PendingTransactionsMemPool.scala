@@ -3,6 +3,7 @@ package org.constellation.domain.transaction
 import cats.effect.{Bracket, Concurrent}
 import cats.effect.concurrent.Semaphore
 import cats.implicits._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.PendingMemPool
@@ -10,6 +11,8 @@ import org.constellation.storage.PendingMemPool
 class PendingTransactionsMemPool[F[_]: Concurrent](
   transactionChainService: TransactionChainService[F]
 ) extends PendingMemPool[F, String, TransactionCacheData] {
+
+  val logger = Slf4jLogger.getLogger[F]
 
   private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
 
@@ -26,8 +29,10 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
                 sortAndFilterForPull(txs.values.toList).flatMap { sorted =>
                   val (toUse, _) = sorted.splitAt(maxCount)
                   val hashesToUse = toUse.map(_.hash)
-                  val leftTxs = txs.filterKeys(!hashesToUse.contains(_))
-                  ref.modify(_ => (leftTxs, Option(toUse).filter(_.nonEmpty)))
+                  ref.modify { txsA =>
+                    val leftTxs = txsA.filterKeys(!hashesToUse.contains(_))
+                    (leftTxs, Option(toUse).filter(_.nonEmpty))
+                  }
                 }
               }
           )
@@ -44,6 +49,10 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
           case (hash, txs) =>
             transactionChainService
               .getLastAcceptedTransactionRef(hash)
+              .flatTap { last =>
+                logger.info(s"${Console.YELLOW}Last accepted: ${last} | Txs head: ${txs.headOption
+                  .map(_.transaction.lastTxRef)} hash=${txs.headOption.map(_.transaction.hash)}${Console.RESET}")
+              }
               .map(txs.headOption.map(_.transaction.lastTxRef).contains)
               .ifM(
                 txs.pure[F],

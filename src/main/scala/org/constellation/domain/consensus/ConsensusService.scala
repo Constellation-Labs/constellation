@@ -29,6 +29,7 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
     "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "acceptedUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "unknownUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
+    "pendingUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
     "merklePoolUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync()
   )
 
@@ -122,7 +123,8 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
   def accept(a: A, cpc: Option[CheckpointCache] = None): F[Unit] =
     put(a, ConsensusStatus.Accepted, cpc) >>
       withLock("inConsensusUpdate", inConsensus.remove(a.hash)) >>
-      withLock("unknownUpdate", unknown.remove(a.hash))
+      withLock("unknownUpdate", unknown.remove(a.hash)) >>
+      withLock("pendingUpdate", pending.remove(a.hash))
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService remove with hash=${a.hash} - with checkpoint hash=${cpc

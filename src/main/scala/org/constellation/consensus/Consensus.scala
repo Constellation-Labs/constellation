@@ -153,9 +153,20 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
     for {
-      _ <- proposal.transactions.toList
-        .traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
-      _ <- proposal.observations.toList.traverse(observationService.put(_, ConsensusStatus.Unknown, None))
+      existingTxs <- proposal.transactions.toList
+        .traverse(tx => transactionService.lookup(tx.hash))
+        .map(_.flatten.map(_.hash).toList)
+      leftTxs = proposal.transactions.toList.filterNot(tx => existingTxs.contains(tx.hash))
+
+      _ <- leftTxs.traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
+
+      existingObs <- proposal.observations.toList
+        .traverse(tx => observationService.lookup(tx.hash))
+        .map(_.flatten.map(_.hash).toList)
+      leftObs = proposal.observations.toList.filterNot(o => existingObs.contains(o.hash))
+
+      _ <- leftObs.traverse(o => observationService.put(o, ConsensusStatus.Unknown))
+
       // TODO: store messages and notifications
     } yield ()
 
