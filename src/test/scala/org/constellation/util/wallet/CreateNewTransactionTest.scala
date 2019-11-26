@@ -15,7 +15,6 @@ class CreateNewTransactionTest extends AsyncFlatSpecLike with Matchers with Befo
   val fee = "0.007297"
   val destination = "receiverAddress"
   val storePath = "src/test/resources/new-tx.txt"
-  val envArgs = "true"
   val args = List(
     s"--keystore=${Fixtures.keystorePath}",
     s"--alias=${Fixtures.alias}",
@@ -128,7 +127,7 @@ class CreateNewTransactionTest extends AsyncFlatSpecLike with Matchers with Befo
       s"--fee=${fee}",
       s"--destination=${destination}",
       s"--store_path=${storePath}",
-      s"--env_args=${envArgs}"
+      s"--env_args=${Fixtures.envArgs}"
     )
 
     val newTxLoop = for {

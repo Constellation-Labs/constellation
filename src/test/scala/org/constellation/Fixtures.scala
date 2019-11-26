@@ -64,6 +64,7 @@ object Fixtures {
   val alias = "alias"
   val storepass = "storepass"
   val keypass = "keypass"
+  val envArgs = "true"
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()

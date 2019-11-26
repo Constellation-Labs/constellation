@@ -5,6 +5,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 import better.files.File
 import cats.effect.IO
 import org.constellation.Fixtures
+import org.constellation.Fixtures._
 import org.constellation.keytool.{KeyStoreUtils, KeyTool, KeyUtils}
 import org.scalatest._
 
@@ -14,8 +15,7 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
   val keyToolArgs = List(
     s"--keystore=${savedKeystorePath}",
     s"--alias=${Fixtures.alias}",
-    s"--storepass=${Fixtures.storepass}",
-    s"--keypass=${Fixtures.keypass}"
+    s"--storepass=${Fixtures.storepass}"
   )
 
   "KeyStoreUtils" should "load keypair successfully" in {
@@ -31,6 +31,21 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
   "KeyTool" should "create new keypair and save to disk" in {
     val genKeyLoop = for {
       kp <- keyTool.run(keyToolArgs)
+    } yield kp
+    val genKeyLoopF = genKeyLoop.unsafeToFuture()
+    genKeyLoopF.map(_ => assert(File(savedKeystorePath).nonEmpty))
+  }
+
+  "KeyTool" should "create new keypair and save to disk with env args" in {
+    val args = List(
+      s"--keystore=${savedKeystorePath}",
+      s"--alias=${Fixtures.alias}",
+      s"--storepass=${Fixtures.storepass}",
+      s"--keypass=${Fixtures.keypass}",
+      s"--env_args=${Fixtures.envArgs}"
+    )
+    val genKeyLoop = for {
+      kp <- keyTool.run(args)
     } yield kp
     val genKeyLoopF = genKeyLoop.unsafeToFuture()
     genKeyLoopF.map(_ => assert(File(savedKeystorePath).nonEmpty))
