@@ -1,25 +1,17 @@
 package org.constellation.keytool
 
-import java.io.{FileOutputStream, FileReader, OutputStreamWriter}
+import java.io.{FileOutputStream, OutputStreamWriter}
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.security.{KeyFactory, SecureRandom, _}
-import java.util.Base64
 
+import cats.effect.{Resource, Sync}
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.StrictLogging
-import org.bouncycastle.jce.ECNamedCurveTable
-import org.bouncycastle.jce.interfaces.ECPrivateKey
-import org.bouncycastle.jce.spec.{ECNamedCurveParameterSpec, ECPublicKeySpec}
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.apache.commons.codec.binary.Base64.decodeBase64
-import org.bouncycastle.asn1.{ASN1Integer, ASN1Object, ASN1Sequence, sec}
-import org.bouncycastle.asn1.pkcs.PrivateKeyInfo
-import org.bouncycastle.asn1.sec.ECPrivateKey.getInstance
-import org.bouncycastle.asn1.x9.X9ObjectIdentifiers
-import org.bouncycastle.jcajce.provider.asymmetric.ec.{BCECPrivateKey, BCECPublicKey}
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
-import org.spongycastle.openssl.{PEMKeyPair, PEMParser}
-import org.spongycastle.openssl.jcajce.JcaPEMKeyConverter
+import cats.implicits._
+
 /**
   * Need to compare this to:
   * https://github.com/bitcoinj/bitcoinj/blob/master/core/src/main/java/org/bitcoinj/core/ECKey.java
@@ -241,7 +233,7 @@ object KeyUtils extends StrictLogging {
   }
 
   def storeKeyPemDecrypted(key: Key, storePath: String) = {
-    val pemObj = new PemObject("EC KEY", key.getEncoded())
+    val pemObj = new PemObject("EC KEY", key.getEncoded)
     val decryptedKeyOutput = new FileOutputStream(storePath)
     val pemWriter = new PemWriter(new OutputStreamWriter(decryptedKeyOutput))
     pemWriter.writeObject(pemObj)

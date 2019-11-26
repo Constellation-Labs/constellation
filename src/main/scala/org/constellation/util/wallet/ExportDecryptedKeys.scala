@@ -1,8 +1,11 @@
 package org.constellation.util.wallet
+import java.security.Key
+
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import scopt.OParser
+import cats.implicits._
 
 object ExportDecryptedKeys extends IOApp {
   def run(args: List[String]): IO[ExitCode] = {
@@ -10,8 +13,8 @@ object ExportDecryptedKeys extends IOApp {
       cliParams <- loadCliParams[IO](args)
       kp <- KeyStoreUtils
         .keyPairFromStorePath[IO](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
-      _ = KeyUtils.storeKeyPemDecrypted(kp.getPrivate, cliParams.privStorePath)
-      _ = KeyUtils.storeKeyPemDecrypted(kp.getPublic, cliParams.pubStorePath)
+      _ <- KeyUtils.storeKeyPemDecrypted(kp.getPrivate, cliParams.privStorePath).pure[IO].attemptT
+      _ <- KeyUtils.storeKeyPemDecrypted(kp.getPublic, cliParams.pubStorePath).pure[IO].attemptT
     } yield kp
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 

@@ -2,11 +2,12 @@ package org.constellation.keytool
 
 import java.io._
 import java.security.cert.Certificate
-import java.security.{KeyPair, KeyStore, PrivateKey}
+import java.security.{Key, KeyPair, KeyStore, PrivateKey}
 
 import cats.data.EitherT
 import cats.effect._
 import cats.implicits._
+import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
@@ -27,28 +28,20 @@ object KeyStoreUtils {
 
   def readFromFileStream[F[_]: Sync, T](dataPath: String, streamParser: FileInputStream => F[T]) =
     reader(dataPath)
-      .use(
-        stream =>
-          for {
-            data <- streamParser(stream)
-          } yield data
-      )
+      .use(streamParser)
       .attemptT
 
-  def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: FileOutputStream => F[Unit]) = // keyPairToStorePath
+  def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: FileOutputStream => F[Unit]) =
     writer(path)
-      .use(
-        stream => bufferedWriter(stream)
-      )
+      .use(bufferedWriter)
       .attemptT
 
   def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) = Sync[F].delay {
     val parsedHeader = new BufferedReader(new InputStreamReader(stream)).readLine()
-    if (parsedHeader == null) None //todo something better than a null check
-    else Some(parser(parsedHeader))
+    Option(parsedHeader).map(parser)
   }
 
-  def storeTypeWithFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay {
+  def writerForTypeWithFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay {
     val bufferedWriter = new BufferedWriter(new OutputStreamWriter(stream))
     bufferedWriter.write(serializer(obj))
     bufferedWriter.close()
@@ -138,7 +131,6 @@ object KeyStoreUtils {
           } yield keyStore
       )
       .attemptT
-
   }
 
   def keyPairFromStorePath[F[_]: Sync](
@@ -159,12 +151,9 @@ object KeyStoreUtils {
     alias: String,
     storepass: Array[Char],
     keypass: Array[Char]
-  ): EitherT[F, Throwable, KeyPair] =
-    for {
-      keyPair <- reader(path)
+  ): EitherT[F, Throwable, KeyPair] = reader(path)
         .evalMap(unlockKeyStore[F](storepass))
         .evalMap(unlockKeyPair[F](alias, keypass))
         .use(_.pure[F])
         .attemptT
-    } yield keyPair
 }

@@ -7,11 +7,12 @@ import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import constellation._
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionService}
+import org.constellation.keytool.KeyStoreUtils.{reader, storeType}
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.primitives.Transaction
 import scopt.OParser
 
-import scala.util.Try
+import cats.effect._
 
 object CreateNewTransaction extends IOApp {
   /*
@@ -21,7 +22,7 @@ object CreateNewTransaction extends IOApp {
     KeyStoreUtils.parseFileOfTypeOp[IO, Transaction](ParseExt(_).x[Transaction])
 
   val transactionWriter: Transaction => FileOutputStream => IO[Unit] =
-    KeyStoreUtils.storeTypeWithFileStream[IO, Transaction](SerExt(_).json)
+    KeyStoreUtils.writerForTypeWithFileStream[IO, Transaction](SerExt(_).json)
 
   def run(args: List[String]): IO[ExitCode] = {
     for {
@@ -43,16 +44,16 @@ object CreateNewTransaction extends IOApp {
 
   //todo add case for storepass keypass via env
   def loadKeyPairFrom[F[_]: Sync](cliParams: WalletCliConfig): EitherT[F, Throwable, KeyPair] =
-    if (cliParams.privateKeyStr == null)
-      KeyStoreUtils
-        .keyPairFromStorePath[F](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
-    else {
-      val kp = KeyUtils.keyPairFromPemStr(cliParams.privateKeyStr, cliParams.pubKeyStr)
-      val eitherLoadOrThrow =
-        Try(Right(kp)).getOrElse(Left(new Throwable("Couldn't load KeyPair with PrivateKey provided")))
-
-      EitherT(Sync[F].delay { eitherLoadOrThrow })
-    }
+    Option(cliParams.privateKeyStr)
+      .fold(
+        KeyStoreUtils
+          .keyPairFromStorePath[F](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
+      )(
+        privateKeyStr =>
+          EitherT
+            .rightT(KeyUtils.keyPairFromPemStr(privateKeyStr, cliParams.pubKeyStr))
+            .leftMap { _: Exception => new Throwable("Couldn't load KeyPair with PrivateKey provided") }
+      )
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, WalletCliConfig] = {
     val builder = OParser.builder[WalletCliConfig]

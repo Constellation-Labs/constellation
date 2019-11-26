@@ -11,16 +11,6 @@ import org.scalatest._
 class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val keyTool = KeyTool
   val savedKeystorePath = "src/test/resources/wallet-client-test-save-kp.p12"
-//  val alias = "alias"
-//  val storepass = "storepass"
-//  val keypass = "keypass"
-
-  val privateKeyStr =
-    "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
-
-  val pubKeyStr =
-    "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
-
   val keyToolArgs = List(
     s"--keystore=${savedKeystorePath}",
     s"--alias=${Fixtures.alias}",
@@ -47,6 +37,6 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
   }
 
   "keyPairFromPemStr" should "generate keypair from PEM strings" in {
-    assert(KeyUtils.keyPairFromPemStr(privateKeyStr, pubKeyStr).isInstanceOf[KeyPair])
+    assert(KeyUtils.keyPairFromPemStr(Fixtures.privateKeyStr, Fixtures.pubKeyStr).isInstanceOf[KeyPair])
   }
 }
