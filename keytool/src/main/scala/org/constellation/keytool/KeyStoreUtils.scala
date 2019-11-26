@@ -23,6 +23,7 @@ object KeyStoreUtils {
     Resource.fromAutoCloseable(Sync[F].delay {
       val file = new File(keyStorePath)
       // TODO: Check if file exists
+      println("writer")
       new FileOutputStream(file)
     })
 
@@ -36,16 +37,27 @@ object KeyStoreUtils {
       .use(bufferedWriter)
       .attemptT
 
-  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) = Sync[F].delay {
-    val parsedHeader = new BufferedReader(new InputStreamReader(stream)).readLine()
-    Option(parsedHeader).map(parser)
-  }
+  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) =
+    Resource
+      .fromAutoCloseable(Sync[F].delay {
+        new BufferedReader(new InputStreamReader(stream))
+      })
+      .use(inStream => Option(inStream.readLine()).map(parser).pure[F])
 
-  def writerForTypeWithFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) = Sync[F].delay {
-    val bufferedWriter = new BufferedWriter(new OutputStreamWriter(stream))
-    bufferedWriter.write(serializer(obj))
-    bufferedWriter.close()
-  }
+  def writeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) =
+    Resource
+      .fromAutoCloseable(Sync[F].delay {
+        new BufferedWriter(new OutputStreamWriter(stream))
+      })
+      .use(outStream => outStream.write(serializer(obj)).pure[F])
+
+  def storeKeyPemDecrypted[F[_]: Sync](key: Key)(stream: FileOutputStream): F[Unit] =
+    Resource
+      .fromAutoCloseable(Sync[F].delay { new PemWriter(new OutputStreamWriter(stream)) })
+      .use { pemWriter =>
+        val pemObj = new PemObject("EC KEY", key.getEncoded)
+        pemWriter.writeObject(pemObj).pure[F]
+      }
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {
@@ -118,7 +130,7 @@ object KeyStoreUtils {
     alias: String,
     storePassword: Array[Char],
     keyPassword: Array[Char]
-  ): EitherT[F, Throwable, KeyStore] = {
+  ): EitherT[F, Throwable, KeyStore] =
     writer(withExtension(path))
       .use(
         stream =>
@@ -131,7 +143,6 @@ object KeyStoreUtils {
           } yield keyStore
       )
       .attemptT
-  }
 
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
@@ -151,9 +162,10 @@ object KeyStoreUtils {
     alias: String,
     storepass: Array[Char],
     keypass: Array[Char]
-  ): EitherT[F, Throwable, KeyPair] = reader(path)
-        .evalMap(unlockKeyStore[F](storepass))
-        .evalMap(unlockKeyPair[F](alias, keypass))
-        .use(_.pure[F])
-        .attemptT
+  ): EitherT[F, Throwable, KeyPair] =
+    reader(path)
+      .evalMap(unlockKeyStore[F](storepass))
+      .evalMap(unlockKeyPair[F](alias, keypass))
+      .use(_.pure[F])
+      .attemptT
 }

@@ -8,6 +8,7 @@ class ExportDecryptedKeysTest extends AsyncFlatSpecLike with Matchers with Befor
   val exportKeysDecrypted = ExportDecryptedKeys
   val decryptedPrivKeyStorePath = "src/test/resources/decrypted_keystore"
   val decryptedPubKeyStorePath = "src/test/resources/decrypted_keystore.pub"
+
   val testArgs = List(
     s"--keystore=${Fixtures.keystorePath}",
     s"--alias=${Fixtures.alias}",
@@ -26,7 +27,7 @@ class ExportDecryptedKeysTest extends AsyncFlatSpecLike with Matchers with Befor
     assert(cli.isInstanceOf[ExportKeysDecryptedConfig])
   }
 
-  "Export Decrypted Keys" should "create address from provided pubkey.pem and store output" in {
+  "Export Decrypted Keys" should "store decrypted keys in .pem format" in {
     val testArgs = List(
       s"--keystore=${Fixtures.keystorePath}",
       s"--alias=${Fixtures.alias}",

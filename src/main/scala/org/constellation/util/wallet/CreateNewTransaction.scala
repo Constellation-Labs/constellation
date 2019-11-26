@@ -7,14 +7,12 @@ import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import constellation._
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionService}
-import org.constellation.keytool.KeyStoreUtils.{reader, storeType}
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.primitives.Transaction
 import scopt.OParser
 
-import cats.effect._
-
 object CreateNewTransaction extends IOApp {
+
   /*
   Note: these vals need type annotation to compile
    */
@@ -22,7 +20,7 @@ object CreateNewTransaction extends IOApp {
     KeyStoreUtils.parseFileOfTypeOp[IO, Transaction](ParseExt(_).x[Transaction])
 
   val transactionWriter: Transaction => FileOutputStream => IO[Unit] =
-    KeyStoreUtils.writerForTypeWithFileStream[IO, Transaction](SerExt(_).json)
+    KeyStoreUtils.writeTypeToFileStream[IO, Transaction](SerExt(_).json)
 
   def run(args: List[String]): IO[ExitCode] = {
     for {
@@ -52,7 +50,9 @@ object CreateNewTransaction extends IOApp {
         privateKeyStr =>
           EitherT
             .rightT(KeyUtils.keyPairFromPemStr(privateKeyStr, cliParams.pubKeyStr))
-            .leftMap { _: Exception => new Throwable("Couldn't load KeyPair with PrivateKey provided") }
+            .leftMap { _: Exception =>
+              new Throwable("Couldn't load KeyPair with PrivateKey provided")
+          }
       )
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, WalletCliConfig] = {

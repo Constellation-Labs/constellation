@@ -232,13 +232,6 @@ object KeyUtils extends StrictLogging {
     keyHashToAddress(keyHash)
   }
 
-  def storeKeyPemDecrypted(key: Key, storePath: String) = {
-    val pemObj = new PemObject("EC KEY", key.getEncoded)
-    val decryptedKeyOutput = new FileOutputStream(storePath)
-    val pemWriter = new PemWriter(new OutputStreamWriter(decryptedKeyOutput))
-    pemWriter.writeObject(pemObj)
-    pemWriter.close()
-  }
 }
 
 /*

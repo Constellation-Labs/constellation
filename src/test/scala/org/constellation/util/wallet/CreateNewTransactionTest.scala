@@ -5,6 +5,7 @@ import org.constellation.Fixtures
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.primitives.Transaction
 import org.scalatest._
+import constellation._
 
 class CreateNewTransactionTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val walletClient = CreateNewTransaction
