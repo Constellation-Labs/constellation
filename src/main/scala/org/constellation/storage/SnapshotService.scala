@@ -200,37 +200,13 @@ class SnapshotService[F[_]: Concurrent](
     } yield pulled
 
   def getSnapshotInfoSerialized: F[Option[Array[Byte]]] =
-    getSnapshotInfo
-      .flatTap(info => logger.info(s"${Console.MAGENTA}FoundSnapshotInfo: ${info}${Console.RESET}").pure[F])
-      .flatMap { info =>
-        LiftIO[F].liftIO(
-          info.acceptedCBSinceSnapshot.toList.traverse {
-            dao.checkpointService.fullData(_)
-          }.map(cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some)
-        )
-      }
+    getSnapshotInfo.flatMap { info =>
+      LiftIO[F].liftIO(
+        info.acceptedCBSinceSnapshot.toList.traverse {
+          dao.checkpointService.fullData(_)
+        }.map(cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some)
       )
-      _ <- applySnapshot()
-      _ <- EitherT.liftF(lastSnapshotHeight.modify(_ => (nextHeightInterval.toInt, ())))
-      _ <- EitherT.liftF(acceptedCBSinceSnapshot.modify(a => (a.filterNot(hashesForNextSnapshot.contains), ())))
-      _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
-      _ <- EitherT.liftF(updateMetricsAfterSnapshot())
-
-      _ <- EitherT.liftF(snapshot.modify(_ => (nextSnapshot, ())))
-
-      _ <- EitherT.liftF(removeLeavingPeers())
-
-      created <- EitherT.liftF(
-        trustManager.getPredictedReputation.map(
-          predictedReputation =>
-            SnapshotCreated(
-              nextSnapshot.lastSnapshot,
-              nextHeightInterval - snapshotHeightInterval,
-              predictedReputation
-            )
-        )
-      )
-    } yield created
+    }
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
     acceptedCBSinceSnapshot.get.flatMap { accepted =>
