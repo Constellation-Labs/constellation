@@ -14,10 +14,19 @@ import org.constellation.util.AccountBalances.AccountBalances
 class RollbackService[F[_]: Concurrent: Logger](
   dao: DAO,
   rollbackBalances: RollbackAccountBalances,
-  snapshotService: SnapshotService[F]
+  snapshotService: SnapshotService[F],
+  rollbackLoader: RollbackLoader
 )(implicit C: ContextShift[F]) {
 
   type RollbackData = (Seq[StoredSnapshot], SnapshotInfo, GenesisObservation)
+
+  def validateAndRestoreFromSnapshotInfoOnly(): EitherT[F, RollbackException, Unit] =
+    for {
+      snapshotInfo <- EitherT.fromEither[F](rollbackLoader.loadSnapshotInfoFromFile())
+      _ <- EitherT.liftF(Logger[F].info("SnapshotInfo file loaded"))
+      _ <- EitherT.liftF(acceptSnapshotInfo(snapshotInfo))
+      _ <- EitherT.liftF(Logger[F].info("SnapshotInfo restored"))
+    } yield ()
 
   def validateAndRestore(): EitherT[F, RollbackException, Unit] =
     for {
@@ -25,7 +34,7 @@ class RollbackService[F[_]: Concurrent: Logger](
       _ <- restore(rollbackData)
     } yield ()
 
-  def validate(rollbackLoader: RollbackLoader = new RollbackLoader()): EitherT[F, RollbackException, RollbackData] =
+  def validate(): EitherT[F, RollbackException, RollbackData] =
     for {
       snapshots <- EitherT.fromEither[F](rollbackLoader.loadSnapshotsFromFile())
       _ <- EitherT.liftF(Logger[F].info("Snapshots files loaded"))

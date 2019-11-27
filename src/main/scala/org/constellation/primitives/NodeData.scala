@@ -62,6 +62,9 @@ trait NodeData {
   def snapshotPath: File =
     File(s"tmp/${id.medium}/snapshots").createDirectoryIfNotExists()
 
+  def snapshotInfoPath: File =
+    File(s"tmp/${id.medium}/snapshot_info").createFileIfNotExists()
+
   def genesisObservationPath: File =
     File(s"tmp/${id.medium}/genesis").createDirectoryIfNotExists()
 

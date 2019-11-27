@@ -5,11 +5,19 @@ import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class RollbackLoaderTest extends FreeSpec with ArgumentMatchersSugar with BeforeAndAfter with Matchers {
 
-  private val existingFolder: String = "src/test/resources/rollback_data"
-  private val notExistingFolder: String = "src/test/resources/not_exists_rollback_data"
+  private val existingFolder: String = "src/test/resources/rollback_data/"
+  private val notExistingFolder: String = "src/test/resources/not_exists_rollback_data/"
 
-  private val loaderForExistingFolder = new RollbackLoader(rollbackDataDirectory = existingFolder)
-  private val loaderForNotExistingFolder = new RollbackLoader(rollbackDataDirectory = notExistingFolder)
+  private val loaderForExistingFolder = new RollbackLoader(
+    existingFolder + "snapshots",
+    existingFolder + "rollback_info",
+    existingFolder + "rollback_genesis"
+  )
+  private val loaderForNotExistingFolder = new RollbackLoader(
+    notExistingFolder + "snapshots",
+    notExistingFolder + "rollback_info",
+    notExistingFolder + "rollback_genesis"
+  )
 
   "Snapshots Loader" - {
     "should load snapshots if those exists" in {
