@@ -8,7 +8,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.marshalling.Marshaller._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, path, _}
-import akka.http.scaladsl.server.directives.Credentials
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
@@ -22,6 +21,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
+import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
@@ -114,7 +114,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     with ServeUI
     with CommonEndpoints
     with ConfigEndpoints
-    with StrictLogging {
+    with StrictLogging
+    with TokenAuthenticator {
 
   import dao._
 
@@ -132,11 +133,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         }
     }
 
-  val config: Config = ConfigFactory.load()
-
-  private val authEnabled = config.getBoolean("auth.enabled")
-  private val authId: String = config.getString("auth.id")
-  private var authPassword: String = config.getString("auth.password")
+  private val authEnabled: Boolean = ConfigUtil.getAuthEnabled
 
   val getEndpoints: Route =
     extractClientIP { clientIP =>
@@ -476,14 +473,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             }
           }
         } ~
-        pathPrefix("password") {
-          path("update") {
-            entity(as[UpdatePassword]) { pu =>
-              authPassword = pu.password
-              complete(StatusCodes.OK)
-            }
-          }
-        } ~
         path("ready") {
           def changeStateToReady: IO[SetStateResult] = dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready)
 
@@ -624,18 +613,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
     }
   }
 
-  private def myUserPassAuthenticator(credentials: Credentials): Option[String] =
-    credentials match {
-      case p @ Credentials.Provided(id) if id == authId && p.verify(authPassword) =>
-        Some(id)
-      case _ => None
-    }
-
   def routes(socketAddress: InetSocketAddress): Route =
     APIDirective.extractIP(socketAddress) { ip =>
       if (authEnabled) {
-        noAuthRoutes ~ authenticateBasic(realm = "secure site", myUserPassAuthenticator) { user =>
-          mainRoutes(socketAddress)
+        authenticateBasic(realm = "basic realm", basicTokenAuthenticator) { _ =>
+          noAuthRoutes ~ mainRoutes(socketAddress)
         }
       } else {
         noAuthRoutes ~ mainRoutes(socketAddress)

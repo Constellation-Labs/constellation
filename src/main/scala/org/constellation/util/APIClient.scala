@@ -7,7 +7,7 @@ import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.MetricsResult
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.json4s.Formats
 
 import scala.concurrent.Future
@@ -21,11 +21,9 @@ object APIClient {
     dao: DAO = null
   ): APIClient = {
 
-    val config = ConfigFactory.load()
-
-    val authEnabled = config.getBoolean("auth.enabled")
-    val authId = config.getString("auth.id")
-    val authPassword = config.getString("auth.password")
+    val authEnabled = ConfigUtil.getAuthEnabled
+    val authId = ConfigUtil.getAuthId
+    val authPassword = ConfigUtil.getAuthPassword
 
     new APIClient(host, port, peerHTTPPort, internalPeerHost, authEnabled, authId, authPassword)(
       backend,
