@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import org.constellation.domain.exception.InvalidNodeState
 import cats.effect.concurrent.{Ref, Semaphore}
-import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -21,9 +21,10 @@ import org.constellation.util.{Distance, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 import scala.util.Try
 
-class ConsensusManager[F[_]: Concurrent: ContextShift](
+class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   transactionService: TransactionService[F],
   concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],
@@ -251,6 +252,10 @@ class ConsensusManager[F[_]: Concurrent: ContextShift](
 
   def terminateConsensuses(): F[Unit] =
     for {
+      _ <- logger.debug(
+        s"[${dao.id.short}] Terminating all consensuses - waiting"
+      )
+      _ <- Timer[F].sleep(5 seconds)
       _ <- logger.debug(
         s"[${dao.id.short}] Terminating all consensuses"
       )

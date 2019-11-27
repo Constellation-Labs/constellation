@@ -86,6 +86,18 @@ resource "google_compute_instance" "default" {
   }
 
   provisioner "file" {
+    source = "logback.xml"
+    destination = "/tmp/logback.xml"
+
+    connection {
+      host = self.network_interface.0.access_config.0.nat_ip
+      type = "ssh"
+      user = var.ssh_user
+      timeout = "90s"
+    }
+  }
+
+  provisioner "file" {
     content = templatefile("modules/instance/templates/filebeat.yml.tpl", { es_ip = var.grafana_ip })
     destination = "/tmp/filebeat.yml"
 
