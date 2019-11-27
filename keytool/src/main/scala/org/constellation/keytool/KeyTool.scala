@@ -15,11 +15,14 @@ object KeyTool extends IOApp {
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
   def makeKeyPairWith[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyPair] = {
-    if (Option(cliParams.loadFromEnvArgs).isDefined)
+    if (Option(cliParams.loadFromEnvArgs).nonEmpty) {
       KeyStoreUtils.keyPairFromStorePath[F](cliParams.keystore, cliParams.alias)
+    }
     else KeyStoreUtils.keyPairFromStorePath[F](
       path = cliParams.keystore,
-      alias = cliParams.alias
+      alias = cliParams.alias,
+      storepass = cliParams.storepass,
+      keypass = cliParams.keypass
     )
   }
 

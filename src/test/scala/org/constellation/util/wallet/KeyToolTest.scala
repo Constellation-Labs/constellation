@@ -15,7 +15,8 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
   val keyToolArgs = List(
     s"--keystore=${savedKeystorePath}",
     s"--alias=${Fixtures.alias}",
-    s"--storepass=${Fixtures.storepass}"
+    s"--storepass=${Fixtures.storepass}",
+    s"--keypass=${Fixtures.keypass}"
   )
 
   "KeyStoreUtils" should "load keypair successfully" in {
