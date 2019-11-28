@@ -1,12 +1,14 @@
 package org.constellation.keytool
 
-import java.security.KeyPair
+import java.security.{KeyPair, KeyStore}
 
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
+import org.constellation.keytool.KeyStoreUtils.loadEnvPasswords
 import scopt.OParser
 
 object KeyTool extends IOApp {
+
   def run(args: List[String]): IO[ExitCode] = {
     for {
       cliParams <- loadCliParams[IO](args)
@@ -14,17 +16,19 @@ object KeyTool extends IOApp {
     } yield keyStore
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  def makeKeyPairWith[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyPair] = {
+  def makeKeyPairWith[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
     if (Option(cliParams.loadFromEnvArgs).nonEmpty) {
-      KeyStoreUtils.keyPairFromStorePath[F](cliParams.keystore, cliParams.alias)
-    }
-    else KeyStoreUtils.keyPairFromStorePath[F](
-      path = cliParams.keystore,
-      alias = cliParams.alias,
-      storepass = cliParams.storepass,
-      keypass = cliParams.keypass
-    )
-  }
+      KeyStoreUtils.keyPairToStorePath[F](
+        path = cliParams.keystore,
+        alias = cliParams.alias
+      )
+    } else
+      KeyStoreUtils.keyPairToStorePath[F](
+        path = cliParams.keystore,
+        alias = cliParams.alias,
+        storePassword = cliParams.storepass,
+        keyPassword = cliParams.keypass
+      )
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
     val builder = OParser.builder[CliConfig]

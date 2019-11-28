@@ -143,6 +143,15 @@ object KeyStoreUtils {
       )
       .attemptT
 
+  def keyPairToStorePath[F[_]: Sync](
+    path: String,
+    alias: String
+  ): EitherT[F, Throwable, KeyStore] =
+    for {
+      env <- loadEnvPasswords
+      keyStore <- keyPairToStorePath(path, alias, env.storepass, env.keypass)
+    } yield keyStore
+
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
     alias: String
