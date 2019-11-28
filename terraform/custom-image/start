@@ -9,7 +9,7 @@ java "-Dcom.sun.management.jmxremote" \
 "-Dlogback.configurationFile=/home/ubuntu/constellation/logback.xml" \
 "-XX:+HeapDumpOnOutOfMemoryError" \
 "-Xms1024M" \
-"-Xmx3G" \
+"-Xmx8G" \
 "-Xss256K" \
 -Djava.rmi.server.hostname=$(cat external_host_ip) \
 -agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=n \
