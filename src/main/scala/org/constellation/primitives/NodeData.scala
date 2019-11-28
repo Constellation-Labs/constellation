@@ -63,10 +63,10 @@ trait NodeData {
     File(s"tmp/${id.medium}/snapshots").createDirectoryIfNotExists()
 
   def snapshotInfoPath: File =
-    File(s"tmp/${id.medium}/snapshot_info").createFileIfNotExists()
+    File(s"tmp/${id.medium}/snapshot_info")
 
   def genesisObservationPath: File =
-    File(s"tmp/${id.medium}/genesis").createDirectoryIfNotExists()
+    File(s"tmp/${id.medium}/genesis/genesisObservation")
 
   def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)

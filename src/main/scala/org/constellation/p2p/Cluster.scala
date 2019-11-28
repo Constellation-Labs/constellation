@@ -14,7 +14,13 @@ import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
-import org.constellation.rollback.CannotLoadSnapshotInfoFile
+import org.constellation.rollback.{
+  CannotLoadGenesisObservationFile,
+  CannotLoadSnapshotInfoFile,
+  CannotLoadSnapshotInfoFile,
+  CannotLoadSnapshotsFiles
+}
+
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -404,13 +410,20 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- Timer[F].sleep(15.seconds)
 
         _ <- LiftIO[F]
-          .liftIO(dao.rollbackService.validateAndRestoreFromSnapshotInfoOnly().value)
+          .liftIO(dao.rollbackService.validateAndRestore().value)
           .flatMap(
             _.fold(
               {
-                case CannotLoadSnapshotInfoFile(path) =>
-                  Logger[F].warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
-                case _ => Logger[F].error(s"Rollback from SnapshotInfo failed.")
+                err =>
+                  err match {
+                    case CannotLoadSnapshotInfoFile(path) =>
+                      Logger[F].warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
+                    case CannotLoadSnapshotsFiles(path) =>
+                      Logger[F].warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
+                    case CannotLoadGenesisObservationFile(path) =>
+                      Logger[F].warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
+                    case _ => Logger[F].error(s"Rollback from SnapshotInfo failed: ${err}")
+                  }
               },
               _ => Logger[F].warn(s"Performed rollback based on saved SnapshotInfo.")
             )
@@ -521,7 +534,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       for {
         _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
-        _ <- LiftIO[F].liftIO(dao.snapshotService.writeSnapshotInfoToDisk)
+        _ <- LiftIO[F].liftIO(dao.snapshotService.writeSnapshotInfoToDisk.value.void)
 
         _ <- broadcastLeaveRequest()
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)

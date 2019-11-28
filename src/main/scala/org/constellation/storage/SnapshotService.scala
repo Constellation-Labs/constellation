@@ -85,7 +85,6 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
-      _ <- EitherT.liftF(writeSnapshotInfoToDisk)
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
@@ -101,21 +100,24 @@ class SnapshotService[F[_]: Concurrent](
       )
     } yield created
 
-  def writeSnapshotInfoToDisk: F[Unit] =
-    Resource
-      .fromAutoCloseable(Sync[F].delay {
-        new FileOutputStream(dao.snapshotInfoPath.pathAsString)
-      })
-      .use { stream =>
-        getSnapshotInfoSerialized
-          .flatMap(
-            _.fold(
-              logger.error("Cannot write SnapshotInfo to disk").pure[F]
-            )(
-              arrayByte => Sync[F].delay(stream.write(arrayByte))
+  def writeSnapshotInfoToDisk: EitherT[F, SnapshotInfoIOError, Unit] =
+    EitherT.liftF {
+      getSnapshotInfoWithFullData.flatMap { info =>
+        if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
+        else {
+          val path = dao.snapshotInfoPath.pathAsString
+          Resource
+            .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
+            .use(
+              stream =>
+                Sync[F].delay {
+                  stream.write(KryoSerializer.serializeAnyRef(info))
+                  logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
+                }
             )
-          )
+        }
       }
+    }.leftMap(SnapshotInfoIOError)
 
   def getSnapshotInfo: F[SnapshotInfo] =
     for {
@@ -199,12 +201,13 @@ class SnapshotService[F[_]: Concurrent](
       _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", pulled.size.toString)
     } yield pulled
 
-  def getSnapshotInfoSerialized: F[Option[Array[Byte]]] =
+  def getSnapshotInfoWithFullData: F[SnapshotInfo] =
     getSnapshotInfo.flatMap { info =>
       LiftIO[F].liftIO(
         info.acceptedCBSinceSnapshot.toList.traverse {
           dao.checkpointService.fullData(_)
-        }.map(cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some)
+
+        }.map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
       )
     }
 
@@ -328,10 +331,11 @@ class SnapshotService[F[_]: Concurrent](
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
-      writeSnapshotToDisk(currentSnapshot)
-        .flatMap(
-          _ => applyAfterSnapshot(currentSnapshot)
-        )
+      for {
+        _ <- writeSnapshotToDisk(currentSnapshot)
+        _ <- writeSnapshotInfoToDisk
+        _ <- applyAfterSnapshot(currentSnapshot)
+      } yield ()
 
     snapshot.get.attemptT
       .leftMap(SnapshotUnexpectedError)
@@ -510,7 +514,7 @@ object SnapshotService {
     )
 }
 
-sealed trait SnapshotError
+sealed trait SnapshotError extends Throwable
 
 object MaxCBHashesInMemory extends SnapshotError
 object NodeNotReadyForSnapshots extends SnapshotError
@@ -520,5 +524,7 @@ object NoBlocksWithinHeightInterval extends SnapshotError
 object SnapshotIllegalState extends SnapshotError
 case class SnapshotIOError(cause: Throwable) extends SnapshotError
 case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError
+
+case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError
 
 case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])
