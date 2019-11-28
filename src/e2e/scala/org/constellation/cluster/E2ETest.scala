@@ -23,9 +23,6 @@ class E2ETest extends E2E {
   implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
   val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
-  private val updatePasswordReq = UpdatePassword(
-    Option(System.getenv("DAG_PASSWORD")).getOrElse("updatedPassword")
-  )
   private val totalNumNodes = 4
 
   private val n1 = createNode(randomizePorts = false)
@@ -37,13 +34,6 @@ class E2ETest extends E2E {
   private val initialAPIs = apis
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
   private val storeData = false
-
-  private def updatePasswords(apiClients: Seq[APIClient]): Seq[Response[String]] =
-    apiClients.map { client =>
-      val response = client.postSync("password/update", updatePasswordReq)
-      client.setPassword(updatePasswordReq.password)
-      response
-    }
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
@@ -109,8 +99,6 @@ class E2ETest extends E2E {
     val allAPIs: Seq[APIClient] = allNodes.map {
       _.getAPIClient()
     } //apis :+ downloadAPI
-    val updatePasswordResponses = updatePasswords(allAPIs)
-    assert(updatePasswordResponses.forall(_.code == StatusCodes.Ok))
     assert(Simulation.healthy(allAPIs))
     //  Thread.sleep(1000*1000)
 

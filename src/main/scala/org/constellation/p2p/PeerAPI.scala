@@ -12,14 +12,13 @@ import akka.util.Timeout
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
-import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
+import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
-import org.constellation.schema.Id
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -57,7 +56,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     with CommonEndpoints
     with IPEnforcer
     with StrictLogging
-    with SimulateTimeoutDirective {
+    with SimulateTimeoutDirective
+    with TokenAuthenticator {
 
   implicit val serialization: Serialization.type = native.Serialization
 
@@ -75,7 +75,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
   val snapshotHeightRedownloadDelayInterval =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-  private val config: Config = ConfigFactory.load()
+
+  private val authEnabled: Boolean = ConfigUtil.getAuthEnabled
+
   private def signEndpoints(socketAddress: InetSocketAddress) =
     post {
       path("status") {
@@ -372,16 +374,24 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     APIDirective.extractIP(socketAddress) { ip =>
       decodeRequest {
         encodeResponse {
-          // rejectBannedIP {
-          signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
-            withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
-              enforceKnownIP(ip) {
-                postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
-              }
+          if (authEnabled) {
+            authenticateBasic(realm = "basic realm", basicTokenAuthenticator) { _ =>
+              peerApiRoutes(socketAddress, ip)
             }
+          } else {
+            peerApiRoutes(socketAddress, ip)
+          }
         }
       }
     }
+
+  private def peerApiRoutes(socketAddress: InetSocketAddress, ip: String): Route =
+    signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
+      withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
+        enforceKnownIP(ip) {
+          postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
+        }
+      }
 
   private[p2p] def makeCallback(u: URI, entity: AnyRef): Future[Response[Unit]] =
     APIClient(u.getHost, u.getPort)(dao.backend, dao)
