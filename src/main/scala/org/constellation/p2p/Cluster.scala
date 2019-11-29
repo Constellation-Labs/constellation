@@ -409,25 +409,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
         _ <- Timer[F].sleep(15.seconds)
 
-        _ <- LiftIO[F]
-          .liftIO(dao.rollbackService.validateAndRestore().value)
-          .flatMap(
-            _.fold(
-              {
-                err =>
-                  err match {
-                    case CannotLoadSnapshotInfoFile(path) =>
-                      Logger[F].warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
-                    case CannotLoadSnapshotsFiles(path) =>
-                      Logger[F].warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
-                    case CannotLoadGenesisObservationFile(path) =>
-                      Logger[F].warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
-                    case _ => Logger[F].error(s"Rollback from SnapshotInfo failed: ${err}")
-                  }
-              },
-              _ => Logger[F].warn(s"Performed rollback based on saved SnapshotInfo.")
-            )
-          )
+        _ <- attemptRollback()
 
         _ <- if (dao.peersInfoPath.nonEmpty && dao.seedsPath.isEmpty) {
           Logger[F].warn(
@@ -509,6 +491,26 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       _ <- attemptRejoin(lastKnownPeers)
     } yield ()
   }
+
+  def attemptRollback(): F[Unit] =
+    LiftIO[F]
+      .liftIO(dao.rollbackService.validateAndRestore().value)
+      .flatMap(
+        _.fold(
+          { err =>
+            err match {
+              case CannotLoadSnapshotInfoFile(path) =>
+                Logger[F].warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
+              case CannotLoadSnapshotsFiles(path) =>
+                Logger[F].warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
+              case CannotLoadGenesisObservationFile(path) =>
+                Logger[F].warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
+              case _ => Logger[F].error(s"Rollback failed: ${err}")
+            }
+          },
+          _ => Logger[F].warn(s"Performed rollback.")
+        )
+      )
 
   def addToPeer(hp: HostPort): F[Response[Unit]] =
     logThread(
