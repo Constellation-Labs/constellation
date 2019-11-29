@@ -536,8 +536,6 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       for {
         _ <- Logger[F].info("Trying to gracefully leave the cluster")
 
-        _ <- LiftIO[F].liftIO(dao.snapshotService.writeSnapshotInfoToDisk.value.void)
-
         _ <- broadcastLeaveRequest()
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
