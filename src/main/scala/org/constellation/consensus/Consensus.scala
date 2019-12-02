@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
-import cats.effect.concurrent.Ref
-import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
+import cats.effect.concurrent.{Ref, Semaphore}
+import cats.effect.{Blocker, Bracket, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
@@ -29,7 +29,7 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 
-class Consensus[F[_]: Concurrent: ContextShift: Timer](
+class Consensus[F[_]: Concurrent: ContextShift](
   roundData: RoundData,
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   dataResolver: DataResolver,
@@ -52,6 +52,8 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
 
   implicit val shadowDAO: DAO = dao
 
+  val updateSemaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
+
   private[consensus] val consensusDataProposals: Ref[F, Map[FacilitatorId, ConsensusDataProposal]] =
     Ref.unsafe(Map.empty[FacilitatorId, ConsensusDataProposal])
   private[consensus] val checkpointBlockProposals: Ref[F, Map[FacilitatorId, CheckpointBlock]] =
@@ -60,6 +62,9 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
     Ref.unsafe(Map.empty[FacilitatorId, CheckpointBlock])
 
   private[consensus] val stage: Ref[F, ConsensusStage] = Ref.unsafe(ConsensusStage.STARTING)
+
+  private def withLock[R](thunk: => F[R]): F[R] =
+    Bracket[F, Throwable].bracket(updateSemaphore.acquire)(_ => thunk)(_ => updateSemaphore.release)
 
   def startConsensusDataProposal(): F[Unit] =
     for {
@@ -110,7 +115,6 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
       _ <- if (receivedAllBlockProposals)
         stage
           .modify(_ => (ConsensusStage.RESOLVING_MAJORITY_CB, ()))
-          .flatMap(_ => Timer[F].sleep(1 second))
           .flatMap(_ => validateAndMergeBlockProposals())
       else Sync[F].unit
     } yield ()
@@ -126,7 +130,9 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
         )
       )
 
-      receivedAllConsensusDataProposals <- consensusDataProposals.modify { curr =>
+      _ <- storeProposal(proposal)
+
+      receivedAllConsensusDataProposals <- withLock(consensusDataProposals.modify { curr =>
         val merged = if (curr.contains(proposal.facilitatorId)) {
           val old = curr(proposal.facilitatorId)
           old.copy(
@@ -139,19 +145,16 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
           proposal
         val updated = curr + (proposal.facilitatorId -> merged)
         (updated, receivedAllConsensusDataProposals(updated.size))
-      }
+      })
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received consensus data proposal $receivedAllConsensusDataProposals"
       )
 
-      _ <- storeProposal(proposal).flatMap { _ =>
-        if (receivedAllConsensusDataProposals)
-          stage
-            .modify(_ => (ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS, ()))
-            .flatMap(_ => Timer[F].sleep(1 second))
-            .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
-        else Sync[F].unit
-      }
+      _ <- if (receivedAllConsensusDataProposals)
+        stage
+          .modify(_ => (ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS, ()))
+          .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
+      else Sync[F].unit
     } yield ()
 
   private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
@@ -189,7 +192,7 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
 
   private[consensus] def validateAndMergeBlockProposals(): F[Unit] =
     for {
-      proposals <- checkpointBlockProposals.get
+      proposals <- withLock(checkpointBlockProposals.get)
       validationResult <- validateReceivedProposals(proposals, "blockProposals")
       _ <- validationResult match {
         case Left(exception) => consensusManager.handleRoundError(exception)
@@ -199,7 +202,7 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
 
   private[consensus] def validateAndAcceptMajorityBlockProposals(): F[Unit] =
     for {
-      proposals <- selectedCheckpointBlocks.get
+      proposals <- withLock(selectedCheckpointBlocks.get)
       _ <- logger.debug("validate majority block proposal")
       validationResult <- validateReceivedProposals(proposals, "majorityProposals", 100)
       _ <- validationResult match {
@@ -212,10 +215,10 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
     for {
       _ <- verifyStage(Set(ConsensusStage.ACCEPTING_MAJORITY_CB))
 
-      receivedAllSelectedProposals <- selectedCheckpointBlocks.modify { curr =>
+      receivedAllSelectedProposals <- withLock(selectedCheckpointBlocks.modify { curr =>
         val updated = curr + (proposal.facilitatorId -> proposal.checkpointBlock)
         (updated, receivedAllSelectedUnionBlocks(updated.size))
-      }
+      })
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} received selected proposal $receivedAllSelectedProposals"
       )
@@ -452,7 +455,7 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
   private[consensus] def mergeConsensusDataProposalsAndBroadcastBlock(): F[Unit] =
     for {
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
-      proposals <- consensusDataProposals.modify(m => (m, m))
+      proposals <- withLock(consensusDataProposals.get)
 
       txsContains <- proposals.values
         .flatMap(_.transactions.toList)
@@ -520,7 +523,7 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
 
   private[consensus] def validateAndMergeConsensusDataProposals(): F[Unit] =
     for {
-      proposals <- consensusDataProposals.modify(m => (m, m))
+      proposals <- withLock(consensusDataProposals.get)
       validationResult <- validateReceivedProposals(
         proposals,
         "consensusDataProposals",
@@ -548,10 +551,10 @@ class Consensus[F[_]: Concurrent: ContextShift: Timer](
       )
 
   private[consensus] def getOwnTransactionsToReturn: F[Seq[Transaction]] =
-    consensusDataProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.transactions).getOrElse(Seq.empty))
+    withLock(consensusDataProposals.get).map(_.get(FacilitatorId(dao.id)).map(_.transactions).getOrElse(Seq.empty))
 
   private[consensus] def getOwnObservationsToReturn: F[Seq[Observation]] =
-    consensusDataProposals.get.map(_.get(FacilitatorId(dao.id)).map(_.observations).getOrElse(Seq.empty))
+    withLock(consensusDataProposals.get).map(_.get(FacilitatorId(dao.id)).map(_.observations).getOrElse(Seq.empty))
 
   private def roundStartedByMe: Boolean = roundData.facilitatorId.id == dao.id
 
