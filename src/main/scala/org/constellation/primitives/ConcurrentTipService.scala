@@ -3,7 +3,7 @@ package org.constellation.primitives
 import java.util.concurrent.TimeUnit
 
 import akka.util.Timeout
-import cats.effect.concurrent.Semaphore
+import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
@@ -11,7 +11,7 @@ import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Height, SignedObservationEdge}
-import org.constellation.primitives.concurrency.{SingleLock, SingleRef}
+import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics
@@ -45,22 +45,19 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
     tipsRef.get.map(tips => tips.filter(_._2.height.min < min)).flatMap { toRemove =>
       Logger[F]
         .debug(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
-        .flatMap(_ => tipsRef.update(curr => curr -- toRemove.keySet))
+        .flatMap(_ => tipsRef.modify(curr => (curr -- toRemove.keySet, ())))
     }
 
-  private val conflictingTips: SingleRef[F, Map[String, CheckpointBlock]] = SingleRef(Map.empty)
-  private val tipsRef: SingleRef[F, Map[String, TipData]] = SingleRef(Map.empty)
-  private val semaphore: Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-    Semaphore.in[IO, F](1).unsafeRunSync()
-  }
+  private val conflictingTips: Ref[F, Map[String, CheckpointBlock]] = Ref.unsafe(Map.empty)
+  private val tipsRef: Ref[F, Map[String, TipData]] = Ref.unsafe(Map.empty)
+  private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
 
   private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
 
   implicit var shortTimeout: Timeout = Timeout(3, TimeUnit.SECONDS)
 
   def set(newTips: Map[String, TipData]): F[Unit] =
-    tipsRef.set(newTips)
+    tipsRef.modify(_ => (newTips, ()))
 
   def toMap: F[Map[String, TipData]] =
     tipsRef.get
@@ -68,27 +65,18 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
   def size: F[Int] =
     tipsRef.get.map(_.size)
 
-  def sizeUnsafe: F[Int] =
-    tipsRef.getUnsafe.map(_.size)
-
   def get(key: String): F[Option[TipData]] =
     tipsRef.get.map(_.get(key))
 
-  def getUnsafe(key: String): F[Option[TipData]] =
-    tipsRef.getUnsafe.map(_.get(key))
-
   def remove(key: String)(implicit metrics: Metrics): F[Unit] =
-    tipsRef.update(_ - key).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
-
-  def removeUnsafe(key: String)(implicit metrics: Metrics): F[Unit] =
-    tipsRef.updateUnsafe(_ - key).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
+    tipsRef.modify(t => (t - key, ())).flatTap(_ => metrics.incrementMetricAsync("checkpointTipsRemoved"))
 
   def markAsConflict(key: String)(implicit metrics: Metrics): F[Unit] =
     logThread(
       get(key).flatMap { m =>
         if (m.isDefined)
           remove(key)
-            .flatMap(_ => conflictingTips.update(_ + (key -> m.get.checkpointBlock)))
+            .flatMap(_ => conflictingTips.modify(c => (c + (key -> m.get.checkpointBlock), ())))
             .flatTap(_ => Logger[F].warn(s"Marking tip as conflicted tipHash: $key"))
         else Sync[F].unit
       },
@@ -105,14 +93,14 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
         l =>
           l.distinct.traverse { h =>
             for {
-              tipData <- getUnsafe(h)
-              size <- sizeUnsafe
+              tipData <- get(h)
+              size <- size
               reuseTips = size < maxWidth
               aboveMinimumTip = size > numFacilitatorPeers
               _ <- tipData match {
                 case None => Sync[F].unit
                 case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
-                  removeUnsafe(block.baseHash)(dao.metrics)
+                  remove(block.baseHash)(dao.metrics)
                 case Some(TipData(block, numUses, tipHeight)) =>
                   putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
                     .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
@@ -134,7 +122,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
           case err: TipThresholdException =>
             dao.metrics
               .incrementMetricAsync("memoryExceeded_thresholdMetCheckpoints")
-              .flatMap(_ => sizeUnsafe)
+              .flatMap(_ => size)
               .flatMap(s => dao.metrics.updateMetricAsync("activeTips", s))
               .flatMap(_ => Sync[F].raiseError[Unit](err))
         },
@@ -144,19 +132,19 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
 
   def putConflicting(k: String, v: CheckpointBlock): F[Unit] = {
     val unsafePut = for {
-      size <- conflictingTips.getUnsafe.map(_.size)
+      size <- conflictingTips.get.map(_.size)
       _ <- dao.metrics
         .updateMetricAsync("conflictingTips", size)
-      _ <- conflictingTips.updateUnsafe(_ + (k -> v))
+      _ <- conflictingTips.modify(c => (c + (k -> v), ()))
     } yield ()
 
     logThread(withLock("conflictingPut", unsafePut), "concurrentTipService_putConflicting")
   }
 
   private def putUnsafe(k: String, v: TipData)(implicit metrics: Metrics): F[Unit] =
-    sizeUnsafe.flatMap(
+    size.flatMap(
       size =>
-        if (size < sizeLimit) tipsRef.updateUnsafe(curr => curr + (k -> v))
+        if (size < sizeLimit) tipsRef.modify(curr => (curr + (k -> v), ()))
         else Sync[F].raiseError[Unit](TipThresholdException(v.checkpointBlock, sizeLimit))
     )
 

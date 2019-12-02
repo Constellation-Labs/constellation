@@ -1,9 +1,9 @@
 package org.constellation.storage
 
+import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.storage.algebra.StorageAlgebra
 import org.constellation.util.Metrics
 
@@ -25,7 +25,7 @@ class StorageService[F[_]: Concurrent, V](
     cache.build[String, V]()
   }
 
-  private val queueRef: SingleRef[F, Queue[V]] = SingleRef[F, Queue[V]](Queue[V]())
+  private val queueRef: Ref[F, Queue[V]] = Ref.unsafe[F, Queue[V]](Queue[V]())
   private val maxQueueSize = 20
 
   if (metricName.isDefined) {
@@ -48,11 +48,11 @@ class StorageService[F[_]: Concurrent, V](
     Sync[F].delay(lruCache.put(key, v)).map(_ => v)
 
   def put(key: String, v: V): F[V] =
-    queueRef.update {
-      case q if q.size >= maxQueueSize => q.dequeue._2
-      case q                           => q
+    queueRef.modify {
+      case q if q.size >= maxQueueSize => (q.dequeue._2, ())
+      case q                           => (q, ())
     } >>
-      queueRef.update(_.enqueue(v)) >>
+      queueRef.modify(q => (q.enqueue(v), ())) >>
       putToCache(key, v)
 
   def lookup(key: String): F[Option[V]] =

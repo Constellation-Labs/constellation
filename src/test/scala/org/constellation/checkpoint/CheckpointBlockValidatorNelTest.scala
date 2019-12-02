@@ -5,6 +5,7 @@ import java.security.KeyPair
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
+import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -15,7 +16,6 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage._
@@ -103,7 +103,7 @@ class CheckpointBlockValidatorNelTest
     dao.metrics shouldReturn metrics
 
     val cbNotInSnapshot = Seq(leftBlock.baseHash, rightBlock.baseHash, leftParent.baseHash, rightParent.baseHash)
-    snapService.acceptedCBSinceSnapshot shouldReturn SingleRef[IO, Seq[String]](cbNotInSnapshot)
+    snapService.acceptedCBSinceSnapshot shouldReturn Ref.unsafe[IO, Seq[String]](cbNotInSnapshot)
   }
 
   test("it should detect no internal conflict and return None") {

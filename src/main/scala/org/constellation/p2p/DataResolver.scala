@@ -65,6 +65,17 @@ class DataResolver extends StrictLogging {
       getPeersForResolving(dao).flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId)(contextToReturn))
     else List.empty[TransactionCacheData].pure[IO]
 
+  def resolveBatchObservationsDefaults(
+    hashes: List[String],
+    priorityClient: Option[PeerApiClient] = None,
+    roundId: Option[RoundId] = None
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Observation]] =
+    if (hashes.nonEmpty)
+      getPeersForResolving(dao).flatMap(resolveBatchObservations(hashes, _, priorityClient, roundId)(contextToReturn))
+    else List.empty[Observation].pure[IO]
+
   def resolveTransaction(
     hash: String,
     pool: List[PeerApiClient],
@@ -111,6 +122,27 @@ class DataResolver extends StrictLogging {
                 .put(tcd, ConsensusStatus.Unknown)
                 .flatTap(
                   _ => IO.delay(logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}"))
+                )
+            }
+        )
+
+  def resolveBatchObservations(
+    hashes: List[String],
+    pool: List[PeerApiClient],
+    priorityClient: Option[PeerApiClient],
+    roundId: Option[RoundId] = None
+  )(
+    contextToReturn: ContextShift[IO]
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Observation]] =
+    IO.delay(logger.debug(s"Start resolving observations = ${hashes} for round = $roundId")) *>
+      resolveBatchData[Observation](hashes, "observations", pool ++ priorityClient)(contextToReturn)
+        .flatMap(
+          obs =>
+            obs.traverse { o =>
+              dao.observationService
+                .put(o, ConsensusStatus.Unknown)
+                .flatTap(
+                  _ => IO.delay(logger.debug(s"Stored resolved observations = ${o.hash} for roundId = ${roundId}"))
                 )
             }
         )

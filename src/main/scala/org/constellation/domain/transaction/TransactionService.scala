@@ -17,8 +17,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  private val pendingSemaphore = ConstellationExecutionContext.createSemaphore()
-  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService, pendingSemaphore)
+  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService)
 
   override def metricRecordPrefix: Option[String] = "Transaction".some
 

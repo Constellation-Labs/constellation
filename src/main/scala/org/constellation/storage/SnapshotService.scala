@@ -3,6 +3,7 @@ package org.constellation.storage
 import java.nio.file.Path
 
 import cats.data.EitherT
+import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -13,7 +14,6 @@ import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
-import org.constellation.primitives.concurrency.SingleRef
 import org.constellation.schema.Id
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
@@ -35,12 +35,12 @@ class SnapshotService[F[_]: Concurrent](
 
   implicit val shadowDao: DAO = dao
 
-  val acceptedCBSinceSnapshot: SingleRef[F, Seq[String]] = SingleRef(Seq())
-  val syncBuffer: SingleRef[F, Map[String, FinishedCheckpoint]] = SingleRef(Map.empty)
-  val snapshot: SingleRef[F, Snapshot] = SingleRef(Snapshot.snapshotZero)
+  val acceptedCBSinceSnapshot: Ref[F, Seq[String]] = Ref.unsafe(Seq())
+  val syncBuffer: Ref[F, Map[String, FinishedCheckpoint]] = Ref.unsafe(Map.empty)
+  val snapshot: Ref[F, Snapshot] = Ref.unsafe(Snapshot.snapshotZero)
 
-  val totalNumCBsInSnapshots: SingleRef[F, Long] = SingleRef(0L)
-  val lastSnapshotHeight: SingleRef[F, Int] = SingleRef(0)
+  val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
+  val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
@@ -91,25 +91,27 @@ class SnapshotService[F[_]: Concurrent](
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- retainOldData()
-      _ <- snapshot.set(snapshotInfo.snapshot)
-      _ <- lastSnapshotHeight.set(snapshotInfo.lastSnapshotHeight)
+      _ <- snapshot.modify(_ => (snapshotInfo.snapshot, ()))
+      _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- concurrentTipService.set(snapshotInfo.tips)
-      _ <- acceptedCBSinceSnapshot.set(snapshotInfo.acceptedCBSinceSnapshot)
+      _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
-      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
+      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
           h.checkpointBlock.get.transactions.toList
-            .map(
+            .traverse(
               tx =>
                 transactionService
-                  .accept(TransactionCacheData(tx))
+                  .accept(TransactionCacheData(tx), Some(h))
                   .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
-            )
-            .sequence
-      }.sequence
+            ) >>
+          h.checkpointBlock.get.observations.toList
+            .traverse(obs => observationService.accept(obs, Some(h)))
+            .flatTap(_ => dao.metrics.incrementMetricAsync("observationAccepted"))
+      }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
         (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
@@ -156,12 +158,12 @@ class SnapshotService[F[_]: Concurrent](
         )
       )
       _ <- applySnapshot()
-      _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
-      _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
+      _ <- EitherT.liftF(lastSnapshotHeight.modify(_ => (nextHeightInterval.toInt, ())))
+      _ <- EitherT.liftF(acceptedCBSinceSnapshot.modify(a => (a.filterNot(hashesForNextSnapshot.contains), ())))
       _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
-      _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+      _ <- EitherT.liftF(snapshot.modify(_ => (nextSnapshot, ())))
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
@@ -182,7 +184,7 @@ class SnapshotService[F[_]: Concurrent](
       if (accepted.contains(cb.baseHash)) {
         dao.metrics.incrementMetricAsync("checkpointAcceptedButAlreadyInAcceptedCBSinceSnapshot")
       } else {
-        acceptedCBSinceSnapshot.update(_ :+ cb.baseHash).flatTap { _ =>
+        acceptedCBSinceSnapshot.modify(a => (a :+ cb.baseHash, ())).flatTap { _ =>
           dao.metrics.updateMetricAsync("acceptedCBSinceSnapshot", accepted.size + 1)
         }
       }
@@ -202,7 +204,7 @@ class SnapshotService[F[_]: Concurrent](
         Right(())
     }.flatMap { e =>
       val tap = if (e.isLeft) {
-        acceptedCBSinceSnapshot.update(accepted => accepted.slice(0, 100)) >>
+        acceptedCBSinceSnapshot.modify(accepted => (accepted.slice(0, 100), ())) >>
           dao.metrics.incrementMetricAsync[F]("memoryExceeded_acceptedCBSinceSnapshot") >>
           acceptedCBSinceSnapshot.get.flatMap { accepted =>
             dao.metrics.updateMetricAsync[F]("acceptedCBSinceSnapshot", accepted.size.toString)
@@ -354,7 +356,7 @@ class SnapshotService[F[_]: Concurrent](
     val applyAfter = for {
       _ <- acceptSnapshot(currentSnapshot)
 
-      _ <- totalNumCBsInSnapshots.update(_ + currentSnapshot.checkpointBlocks.size)
+      _ <- totalNumCBsInSnapshots.modify(t => (t + currentSnapshot.checkpointBlocks.size, ()))
       _ <- totalNumCBsInSnapshots.get.flatTap { total =>
         dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString)
       }
