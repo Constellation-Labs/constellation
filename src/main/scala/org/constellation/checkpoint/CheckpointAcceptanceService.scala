@@ -321,7 +321,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           knownError.raiseError[F, Unit]
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>
-          Concurrent[F].start(Timer[F].sleep(6.seconds) >> resolveMissingReferences(cb)) >>
+//          Concurrent[F].start(Timer[F].sleep(6.seconds) >> resolveMissingReferences(cb)) >>
           error.raiseError[F, Unit]
       case otherError =>
         acceptLock.release >>
