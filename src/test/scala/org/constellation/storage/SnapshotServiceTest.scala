@@ -43,6 +43,7 @@ class SnapshotServiceTest
     val rateLimiting = mock[RateLimiting[IO]]
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
+    val soeService = mock[SOEService[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -54,6 +55,7 @@ class SnapshotServiceTest
       rateLimiting,
       consensusManager,
       trustManager,
+      soeService,
       dao
     )
   }
@@ -100,9 +102,9 @@ class SnapshotServiceTest
       val go = RandomData.go()(dao)
       val cb1 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
       val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
-      val cbs = Seq(CheckpointCache(cb1.some, 0, None), CheckpointCache(cb2.some, 0, None))
+      val cbs = Seq(CheckpointCache(cb1, 0, None), CheckpointCache(cb2, 0, None))
 
-      val snapshot = Snapshot("lastSnapHash", cbs.flatMap(_.checkpointBlock.map(_.baseHash)))
+      val snapshot = Snapshot("lastSnapHash", cbs.map(_.checkpointBlock.baseHash))
       val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
       snapshotService.setSnapshot(info).unsafeRunSync()
       snapshotService.applySnapshot().value.unsafeRunSync()

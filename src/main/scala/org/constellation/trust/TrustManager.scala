@@ -5,10 +5,10 @@ import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.observation.{Observation, ObservationEvent}
-import org.constellation.schema.Id
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
+import org.constellation.schema.Id
 
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 
@@ -93,7 +93,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
         )
     }
 
-  private def observationScoring(event: ObservationEvent): Double = {
+  def observationScoring(event: ObservationEvent): Double = {
     import org.constellation.domain.observation._
 
     event match {

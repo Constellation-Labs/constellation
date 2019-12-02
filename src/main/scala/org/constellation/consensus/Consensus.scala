@@ -159,17 +159,18 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
     for {
-      existingTxs <- proposal.transactions.toList
+      txs <- (roundData.transactions ++ proposal.transactions).pure[F]
+      existingTxs <- txs
         .traverse(tx => transactionService.lookup(tx.hash))
         .map(_.flatten.map(_.hash).toList)
-      leftTxs = proposal.transactions.toList.filterNot(tx => existingTxs.contains(tx.hash))
-
+      leftTxs = txs.filterNot(tx => existingTxs.contains(tx.hash))
       _ <- leftTxs.traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
 
-      existingObs <- proposal.observations.toList
+      obs = roundData.observations ++ proposal.observations
+      existingObs <- obs
         .traverse(tx => observationService.lookup(tx.hash))
         .map(_.flatten.map(_.hash).toList)
-      leftObs = proposal.observations.toList.filterNot(o => existingObs.contains(o.hash))
+      leftObs = obs.filterNot(o => existingObs.contains(o.hash))
 
       _ <- leftObs.traverse(o => observationService.put(o, ConsensusStatus.Unknown))
 
@@ -236,12 +237,13 @@ class Consensus[F[_]: Concurrent: ContextShift](
       .maxBy(_._2.size)
       ._2
 
-    val checkpointBlock = sameBlocks.head._2
+    val checkpointBlock = sameBlocks.head._2 // TODO: unsafe
     val uniques = proposals.groupBy(_._2.baseHash).size
 
     for {
       maybeHeight <- checkpointAcceptanceService.calculateHeight(checkpointBlock)
-      cache = CheckpointCache(Some(checkpointBlock), height = maybeHeight)
+      cache = CheckpointCache(checkpointBlock, height = maybeHeight)
+      _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
       _ <- dao.metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )
@@ -254,72 +256,63 @@ class Consensus[F[_]: Concurrent: ContextShift](
           s" with obs ${checkpointBlock.observations.map(_.hash)} " +
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
-      acceptedBlock <- checkpointAcceptanceService
+
+      finalResult <- checkpointAcceptanceService
         .accept(cache)
-        .map { _ =>
-          (Option(checkpointBlock), Seq.empty[String])
-        }
+        .map(_ => ConsensusFinalResult(Option(checkpointBlock)))
         .handleErrorWith {
           case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-            logger
-              .warn(error.getMessage)
-              .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
-              )
+            logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
           case error @ MissingTransactionReference(cb) =>
-            logger
-              .warn(error.getMessage)
-              .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, cb.transactions.map(_.hash)))
-              )
+            logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
+          case error @ MissingParents(cb) =>
+            logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
           case tipConflict: TipConflictException =>
-            logger
-              .error(tipConflict)(
-                s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${tipConflict.getMessage}"
-              )
-              .flatMap(
-                _ =>
-                  Sync[F]
-                    .pure[(Option[CheckpointBlock], Seq[String])]((None, tipConflict.conflictingTxs))
-              )
+            logger.error(tipConflict)(
+              s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${tipConflict.getMessage}"
+            ) >> ConsensusFinalResult(None, true, tipConflict.conflictingTxs).pure[F]
           case unknownError =>
-            logger
-              .error(unknownError)(
-                s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
-              )
-              .flatMap(
-                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
-              )
+            logger.error(unknownError)(
+              s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
+            ) >> ConsensusFinalResult(None, shouldReturnData = true).pure[F]
         }
-      _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
-      else
+
+      _ <- if (finalResult.cb.isEmpty) {
+        List.empty[Response[Unit]].pure[F]
+      } else {
         calculationContext.blockOn(remoteCall)(
           broadcastSignedBlockToNonFacilitators(
             FinishedCheckpoint(cache, proposals.keySet.map(_.id))
           )
         )
-      transactionsToReturn <- getOwnTransactionsToReturn.map(
-        txs =>
-          txs
-            .diff(acceptedBlock._1.map(_.transactions.map(_.hash)).getOrElse(Seq.empty))
-            .filterNot(acceptedBlock._2.contains)
-      )
-      observationsToReturn <- getOwnObservationsToReturn.map(
-        obs =>
-          obs
-            .diff(acceptedBlock._1.map(_.observations.map(_.hash)).getOrElse(Seq.empty))
-            .filterNot(acceptedBlock._2.contains)
-      )
+      }
+
+      transactionsToReturn <- if (finalResult.shouldReturnData) {
+        getOwnTransactionsToReturn.map(
+          txs =>
+            txs
+              .diff(finalResult.cb.map(_.transactions).getOrElse(Seq.empty))
+              .filterNot(finalResult.txsToExclude.contains)
+        )
+      } else Seq.empty[Transaction].pure[F]
+
+      observationsToReturn <- if (finalResult.shouldReturnData) {
+        getOwnObservationsToReturn.map(
+          _.diff(finalResult.cb.map(_.observations).getOrElse(Seq.empty))
+        )
+      } else Seq.empty[Observation].pure[F]
+
       _ <- consensusManager.stopBlockCreationRound(
         StopBlockCreationRound(
           roundData.roundId,
-          acceptedBlock._1,
+          finalResult.cb,
           transactionsToReturn,
           observationsToReturn
         )
       )
+
       _ <- logger.debug(
-        s"[${dao.id.short}] round stopped ${roundData.roundId} block is empty ? ${acceptedBlock._1.isEmpty}"
+        s"[${dao.id.short}] round stopped ${roundData.roundId} block is empty ? ${finalResult.cb.isEmpty}"
       )
 
     } yield ()
@@ -335,7 +328,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         .liftIO(dao.peerInfo)
         .map(info => info.values.toList.filterNot(pd => allFacilitators.contains(pd.peerMetadata.id)))
       _ <- logger.debug(
-        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash}"
+        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash}"
       )
       responses <- nonFacilitators.traverse(
         pd =>
@@ -356,11 +349,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
     val uniques = proposals.groupBy(_._2.baseHash).size
 
-    val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
+    val checkpointBlock = sameBlocks.values.reduce((a, b) => a.plusEdge(b))
     val selectedCheckpointBlock = SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
 
     for {
       _ <- stage.modify(_ => (ConsensusStage.WAITING_FOR_SELECTED_BLOCKS, ()))
+      _ <- logger.debug(s"Unique in resolve: ${proposals.groupBy(_._2.baseHash).keys}")
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockProposalCount_" + proposals.size
       )
@@ -457,31 +451,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- withLock(consensusDataProposals.get)
 
-      txsContains <- proposals.values
-        .flatMap(_.transactions.toList)
-        .toList
-        .traverse(tx => transactionService.contains(tx.hash))
-
-      _ <- logger.info(s"${roundData.roundId} Txs contains: ${txsContains.zip(
-        proposals.values
-          .flatMap(_.transactions.toList)
-          .toList
-          .map(_.hash)
-      )}")
-
-//      transactions <- prepareConsensusBatchData[Transaction, TransactionCacheData](
-//        "transactions",
-//        proposals,
-//        allPeers, { p =>
-//          p.transactions.map(_.hash)
-//        },
-//        roundData.transactions.map(_.hash), { s =>
-//          transactionService.lookup(s).map(_.map(_.transaction))
-//        }, { tcd =>
-//          tcd.transaction
-//        }
-//      )
-
       messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
         "message",
         proposals,
@@ -505,12 +474,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
         roundData.roundId,
         FacilitatorId(dao.id),
         CheckpointBlock.createCheckpointBlock(
-          proposals.flatMap(_._2.transactions).toSeq,
+          (roundData.transactions ++ proposals.flatMap(_._2.transactions)),
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
           messages,
           notifications,
-          proposals.flatMap(_._2.observations).toSeq
+          (roundData.observations ++ proposals.flatMap(_._2.observations))
         )(dao.keyPair)
       )
       _ <- calculationContext.blockOn(remoteCall)(
@@ -602,11 +571,18 @@ object Consensus {
   sealed trait ConsensusProposal {
     def roundId: RoundId
   }
+
   abstract class ConsensusException(msg: String) extends Exception(msg) {
     def roundId: RoundId
     def transactionsToReturn: Seq[Transaction]
     def observationsToReturn: Seq[Observation]
   }
+
+  case class ConsensusFinalResult(
+    cb: Option[CheckpointBlock],
+    shouldReturnData: Boolean = false,
+    txsToExclude: List[String] = List.empty[String]
+  )
 
   object ConsensusStage extends Enumeration {
     type ConsensusStage = Value

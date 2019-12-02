@@ -26,7 +26,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
       .accept(tx, cpc)
       .flatMap(_ => transactionChainService.acceptTransaction(tx.transaction))
       .void
-      .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
       .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
@@ -62,11 +62,12 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
     normalized: Boolean = true,
     dummy: Boolean = false
   ): F[Transaction] =
-    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
+    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(
+      transactionChainService
+    )
 
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
-
 }
 
 object TransactionService {
@@ -74,17 +75,18 @@ object TransactionService {
   def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO) =
     new TransactionService[F](transactionChainService, dao)
 
-  def createTransaction[F[_]: Concurrent](
+  def createTransactionEdge(
     src: String,
     dst: String,
+    lastTxRef: LastTransactionRef,
     amount: Long,
     keyPair: KeyPair,
-    normalized: Boolean = true,
-    dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+    fee: Option[Long] = None,
+    normalized: Boolean = true
+  ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
-    val txData = TransactionEdgeData(amount = amountToUse)
+    val txData = TransactionEdgeData(amountToUse, lastTxRef, fee)
 
     val oe = ObservationEdge(
       Seq(
@@ -95,12 +97,23 @@ object TransactionService {
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
-
-    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
+    Edge(oe, soe, txData)
   }
+
+  def createTransaction[F[_]: Concurrent](
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true,
+    dummy: Boolean = false
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] =
+    transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
-    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
+    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(
+      transactionChainService
+    )
 }

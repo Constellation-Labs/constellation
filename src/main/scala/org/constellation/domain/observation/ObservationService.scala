@@ -8,7 +8,7 @@ import org.constellation.domain.consensus.ConsensusService
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.trust.TrustManager
 
-class ObservationService[F[_]: Concurrent: Logger](trustManager: TrustManager[F], dao: DAO)
+class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: DAO)
     extends ConsensusService[F, Observation] {
   protected[domain] val pending = new PendingObservationsMemPool[F]()
 

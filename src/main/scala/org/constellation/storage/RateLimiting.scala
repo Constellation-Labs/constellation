@@ -4,36 +4,45 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.primitives.{Schema, Transaction}
 
 import scala.math.ceil
 
-class RateLimiting[F[_]: Concurrent: Logger]() {
+class RateLimiting[F[_]: Concurrent]() {
+  val logger = Slf4jLogger.getLogger[F]
+
   private[storage] val counter: Ref[F, Map[Schema.Address, Int]] = Ref.unsafe[F, Map[Schema.Address, Int]](Map())
   private[storage] val blacklisted: StorageService[F, Int] = new StorageService("rate_limiting_blacklist".some)
 
+  def update(txs: List[Transaction]): F[Unit] = Concurrent[F].unit
+  def reset(cbHashes: List[String])(checkpointService: CheckpointService[F]): F[Unit] = Concurrent[F].unit
+  def available(address: Schema.Address): F[Int] = Concurrent[F].pure(limits.available)
+  def blacklist(): F[Unit] = Concurrent[F].unit
+
+  /*
   def update(txs: List[Transaction]): F[Unit] =
     for {
       grouped <- txs.groupBy(_.src).mapValues(_.size).pure[F]
       _ <- counter.modify(c => (c |+| grouped, ()))
 
-//      _ <- counter.get.flatTap(c => Logger[F].debug(s"Update [rate-limiting]: $c"))
+//      _ <- counter.get.flatTap(c => logger.debug(s"Update [rate-limiting]: $c"))
       _ <- blacklist()
     } yield ()
 
   def reset(cbHashes: List[String])(checkpointService: CheckpointService[F]): F[Unit] =
     for {
       cbs <- cbHashes.map(checkpointService.fullData).sequence[F, Option[Schema.CheckpointCache]].map(_.flatten)
-      txs = cbs.flatMap(_.checkpointBlock.get.transactions.toList)
+      txs = cbs.flatMap(_.checkpointBlock.transactions.toList)
       grouped = txs.groupBy(_.src).mapValues(_.size)
 
       _ <- counter.modify(_ => (grouped, ()))
 
-//      _ <- counter.get.flatTap(c => Logger[F].debug(s"Reset [rate-limiting]: $c"))
+//      _ <- counter.get.flatTap(c => logger.debug(s"Reset [rate-limiting]: $c"))
       _ <- counter.get
         .flatMap(_.map(a => available(a._1)).toList.sequence)
-//        .flatTap(c => Logger[F].debug(s"Available [rate-limiting]: $c"))
+//        .flatTap(c => logger.debug(s"Available [rate-limiting]: $c"))
       _ <- blacklist()
     } yield ()
 
@@ -52,6 +61,8 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
       _ <- left.filter(_._2 <= 0).traverse(p => blacklisted.update(p._1.address, _ => p._2, p._2))
     } yield ()
 
+   */
+
   object limits {
     val total = 50
     val offlineTxs = 0.01
@@ -62,5 +73,5 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
 }
 
 object RateLimiting {
-  def apply[F[_]: Concurrent: Logger]() = new RateLimiting[F]()
+  def apply[F[_]: Concurrent]() = new RateLimiting[F]()
 }

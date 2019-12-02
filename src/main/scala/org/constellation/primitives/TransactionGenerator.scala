@@ -8,10 +8,11 @@ import cats.effect.{Async, Concurrent, LiftIO}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
-import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionGossiping, TransactionService}
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.schema.Id
 import org.constellation.storage.AddressService
@@ -20,13 +21,15 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
 
-class TransactionGenerator[F[_]: Concurrent: Logger](
+class TransactionGenerator[F[_]: Concurrent](
   addressService: AddressService[F],
   transactionGossiping: TransactionGossiping[F],
   transactionService: TransactionService[F],
   cluster: Cluster[F],
   dao: DAO
 ) {
+
+  val logger = Slf4jLogger.getLogger[F]
 
   private final val roundCounter = new AtomicInteger(0)
   private final val emptyRounds = ConfigUtil.constellation.getInt("transaction.generator.emptyTransactionsRounds")
@@ -67,7 +70,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
         _ <- putTransaction(transaction)
 
 //      transactionCacheData <- observeTransaction(transaction)
-//      _ <- Logger[F].debug(
+//      _ <- logger.debug(
 //        s"Rebroadcast transaction=${transactionCacheData.transaction.hash}, initial path=${transactionCacheData.path}"
 //      )
 //      peers <- selectPeers(transactionCacheData)
@@ -106,12 +109,12 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     else generateSingleAddressTransaction(peers)
 
   private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
-    transactionService.createTransaction(
+    transactionService.transactionChainService.createAndSetLastTransaction(
       dao.selfAddressStr,
       randomAddressFromPeers(peers),
       randomAmount(rangeAmount),
       dao.keyPair,
-      normalized = false
+      false
     )
 
   private def generateMultipleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
@@ -125,19 +128,25 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] =
-    transactionService
-      .createTransaction(dao.selfAddressStr, randomAddressFrom(addresses), randomAmount(rangeAmount), dao.keyPair)
+    transactionService.transactionChainService.createAndSetLastTransaction(
+      dao.selfAddressStr,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      dao.keyPair,
+      false
+    )
 
   private def generateMultipleAddressTransactionWithoutSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] = {
-    val source = getSourceAddressForTxWithoutSufficient(addresses)
-    transactionService.createTransaction(
+    val source: String = getSourceAddressForTxWithoutSufficient(addresses)
+    transactionService.transactionChainService.createAndSetLastTransaction(
       source,
       randomAddressFromPeers(peers),
       randomAmount(rangeAmount),
       keyPairForSource(source),
+      false,
       normalized = false
     )
   }
@@ -256,7 +265,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
 object TransactionGenerator {
 
-  def apply[F[_]: Concurrent: Logger](
+  def apply[F[_]: Concurrent](
     addressService: AddressService[F],
     transactionGossiping: TransactionGossiping[F],
     transactionService: TransactionService[F],

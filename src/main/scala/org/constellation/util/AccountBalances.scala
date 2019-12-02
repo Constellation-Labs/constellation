@@ -12,7 +12,7 @@ object AccountBalances {
     getGenesisAccountBalances(checkpointBlock.transactions)
 
   def getAccountBalancesFrom(snapshot: StoredSnapshot): AccountBalances =
-    getAccountBalances(snapshot.checkpointCache.flatMap(_.checkpointBlock).flatMap(_.transactions))
+    getAccountBalances(snapshot.checkpointCache.map(_.checkpointBlock).flatMap(_.transactions))
 
   def getAccountBalancesFrom(checkpointBlock: CheckpointBlock): AccountBalances =
     getAccountBalances(checkpointBlock.transactions)

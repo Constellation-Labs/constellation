@@ -46,7 +46,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       obs <- merkle.checkpointBlock.observationsMerkleRoot.fold(List[Observation]().pure[F])(fetchBatchObservations)
     } yield
       CheckpointCache(
-        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications, obs).some,
+        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications, obs),
         merkle.children,
         merkle.height
       )

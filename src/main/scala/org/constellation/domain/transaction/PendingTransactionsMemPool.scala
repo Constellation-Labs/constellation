@@ -55,7 +55,7 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
               }
               .map { last =>
                 val ordinal = last.ordinal
-                val left = txs.filter(_.transaction.lastTxRef.ordinal >= ordinal) // TODO: get rid of >=
+                val left = txs.filter(t => t.transaction.lastTxRef.ordinal >= ordinal || t.transaction.isTest) // TODO: get rid of >=
                 (last, left)
               }
               .map {
