@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
 import cats.effect.concurrent.Ref
-import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
@@ -29,7 +29,7 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
 
-class Consensus[F[_]: Concurrent: ContextShift](
+class Consensus[F[_]: Concurrent: ContextShift: Timer](
   roundData: RoundData,
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   dataResolver: DataResolver,
@@ -110,6 +110,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- if (receivedAllBlockProposals)
         stage
           .modify(_ => (ConsensusStage.RESOLVING_MAJORITY_CB, ()))
+          .flatMap(_ => Timer[F].sleep(1 second))
           .flatMap(_ => validateAndMergeBlockProposals())
       else Sync[F].unit
     } yield ()
@@ -131,7 +132,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
           old.copy(
             transactions = old.transactions ++ proposal.transactions,
             messages = old.messages ++ proposal.messages,
-            notifications = old.notifications ++ proposal.notifications
+            notifications = old.notifications ++ proposal.notifications,
+            observations = old.observations ++ proposal.observations
           )
         } else
           proposal
@@ -146,6 +148,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         if (receivedAllConsensusDataProposals)
           stage
             .modify(_ => (ConsensusStage.WAITING_FOR_BLOCK_PROPOSALS, ()))
+            .flatMap(_ => Timer[F].sleep(1 second))
             .flatMap(_ => unionConsensusDataProposals(StageState.FINISHED))
         else Sync[F].unit
       }
@@ -449,7 +452,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
   private[consensus] def mergeConsensusDataProposalsAndBroadcastBlock(): F[Unit] =
     for {
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
-      proposals <- consensusDataProposals.get
+      proposals <- consensusDataProposals.modify(m => (m, m))
 
       txsContains <- proposals.values
         .flatMap(_.transactions.toList)
@@ -517,7 +520,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def validateAndMergeConsensusDataProposals(): F[Unit] =
     for {
-      proposals <- consensusDataProposals.get
+      proposals <- consensusDataProposals.modify(m => (m, m))
       validationResult <- validateReceivedProposals(
         proposals,
         "consensusDataProposals",

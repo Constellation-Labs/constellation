@@ -415,12 +415,12 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-    enableRandomTransactions(apis)
-    logger.info("Starting random transactions")
-
     setReady(apis)
 
     if (!useStartFlowOnly) {
+
+      enableRandomTransactions(apis)
+      logger.info("Starting random transactions")
 
       assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 

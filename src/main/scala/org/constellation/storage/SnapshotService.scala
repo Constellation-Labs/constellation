@@ -97,19 +97,21 @@ class SnapshotService[F[_]: Concurrent](
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
-      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.map { h =>
+      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
         LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
           h.checkpointBlock.get.transactions.toList
-            .map(
+            .traverse(
               tx =>
                 transactionService
-                  .accept(TransactionCacheData(tx))
+                  .accept(TransactionCacheData(tx), Some(h))
                   .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
-            )
-            .sequence
-      }.sequence
+            ) >>
+          h.checkpointBlock.get.observations.toList
+            .traverse(obs => observationService.accept(obs, Some(h)))
+            .flatTap(_ => dao.metrics.incrementMetricAsync("observationAccepted"))
+      }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
         (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
