@@ -159,17 +159,18 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
     for {
-      existingTxs <- proposal.transactions.toList
+      txs <- (roundData.transactions ++ proposal.transactions).pure[F]
+      existingTxs <- txs
         .traverse(tx => transactionService.lookup(tx.hash))
         .map(_.flatten.map(_.hash).toList)
-      leftTxs = proposal.transactions.toList.filterNot(tx => existingTxs.contains(tx.hash))
-
+      leftTxs = txs.filterNot(tx => existingTxs.contains(tx.hash))
       _ <- leftTxs.traverse(tx => transactionService.put(TransactionCacheData(tx), ConsensusStatus.Unknown))
 
-      existingObs <- proposal.observations.toList
+      obs = roundData.observations ++ proposal.observations
+      existingObs <- obs
         .traverse(tx => observationService.lookup(tx.hash))
         .map(_.flatten.map(_.hash).toList)
-      leftObs = proposal.observations.toList.filterNot(o => existingObs.contains(o.hash))
+      leftObs = obs.filterNot(o => existingObs.contains(o.hash))
 
       _ <- leftObs.traverse(o => observationService.put(o, ConsensusStatus.Unknown))
 
@@ -505,12 +506,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
         roundData.roundId,
         FacilitatorId(dao.id),
         CheckpointBlock.createCheckpointBlock(
-          proposals.flatMap(_._2.transactions).toSeq,
+          (roundData.transactions ++ proposals.flatMap(_._2.transactions)).toSeq,
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
           messages,
           notifications,
-          proposals.flatMap(_._2.observations).toSeq
+          (roundData.observations ++ proposals.flatMap(_._2.observations)).toSeq
         )(dao.keyPair)
       )
       _ <- calculationContext.blockOn(remoteCall)(
