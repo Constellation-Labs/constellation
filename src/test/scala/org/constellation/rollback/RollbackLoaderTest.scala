@@ -25,11 +25,11 @@ class RollbackLoaderTest extends FreeSpec with ArgumentMatchersSugar with Before
 
       snapshots.isRight shouldBe true
     }
-    "should return error if snapshots are not exist" in {
+    "should return error if snapshots do not exist" in {
       val snapshots = loaderForNotExistingFolder.loadSnapshotsFromFile()
 
       snapshots.isLeft shouldBe true
-      snapshots.left.get shouldBe CannotLoadSnapshotsFiles
+      snapshots.left.get shouldBe a[CannotLoadSnapshotsFiles]
     }
   }
 
@@ -43,7 +43,7 @@ class RollbackLoaderTest extends FreeSpec with ArgumentMatchersSugar with Before
       val genesisObservation = loaderForNotExistingFolder.loadGenesisObservation()
 
       genesisObservation.isLeft shouldBe true
-      genesisObservation.left.get shouldBe CannotLoadGenesisObservationFile
+      genesisObservation.left.get shouldBe a[CannotLoadGenesisObservationFile]
     }
   }
 
@@ -53,11 +53,11 @@ class RollbackLoaderTest extends FreeSpec with ArgumentMatchersSugar with Before
 
       snapshotInfo.isRight shouldBe true
     }
-    "should return error if snapshots info doesn't exist" in {
+    "should return error if snapshot info doesn't exist" in {
       val snapshotInfo = loaderForNotExistingFolder.loadSnapshotInfoFromFile()
 
       snapshotInfo.isLeft shouldBe true
-      snapshotInfo.left.get shouldBe CannotLoadSnapshotInfoFile
+      snapshotInfo.left.get shouldBe a[CannotLoadSnapshotInfoFile]
     }
   }
 }
