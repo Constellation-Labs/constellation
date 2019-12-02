@@ -6,7 +6,6 @@ import cats.data.OptionT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
-import cats.syntax._
 import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
@@ -305,16 +304,16 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_forgetPeer"
     )
 
-  def markOfflinePeer(pd: PeerData): F[Unit] =
+  def markOfflinePeer(nodeId: Id): F[Unit] =
     logThread(
       for {
         p <- peers.get
-        pm = pd.peerMetadata
-        _ <- ipManager.removeKnownIP(pm.host)
-        _ <- p
-          .get(pm.id)
+        peer = p.get(nodeId).filter(pd => pd.peerMetadata.nodeState != NodeState.Offline)
+        _ <- peer
+          .traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
+        _ <- peer
           .traverse(peer => {
-            val peerData = peer.copy(peerMetadata = pm.copy(nodeState = NodeState.Offline))
+            val peerData = peer.copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
             peers.modify(p => (p + (peerData.client.id -> peerData), p))
           })
         _ <- updateMetrics()
@@ -527,9 +526,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       "cluster_leave"
     )
 
-  private def broadcastNodeState(nodeState: NodeState): F[Unit] =
+  def broadcastOfflineNodeState(nodeId: Id = dao.id): F[Unit] =
+    broadcastNodeState(NodeState.Offline, nodeId)
+
+  private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
     logThread(
-      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(dao.id, nodeState))(C)).flatTap {
+      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(nodeId, nodeState))(C)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => Logger[F].warn(s"Unable to propagate status to node ID: $id")
         }

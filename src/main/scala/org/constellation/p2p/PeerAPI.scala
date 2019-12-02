@@ -82,7 +82,13 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     post {
       path("status") {
         entity(as[SetNodeStatus]) { sns =>
-          APIDirective.handle(dao.cluster.setNodeStatus(sns.id, sns.nodeStatus))(_ => complete(StatusCodes.OK))
+          APIDirective.handle {
+            if (sns.nodeStatus == NodeState.Offline) {
+              dao.cluster.markOfflinePeer(sns.id)
+            } else {
+              dao.cluster.setNodeStatus(sns.id, sns.nodeStatus)
+            }
+          }(_ => complete(StatusCodes.OK))
         }
       } ~
         path("sign") {
