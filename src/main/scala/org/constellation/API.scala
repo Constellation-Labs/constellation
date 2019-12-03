@@ -542,7 +542,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("restore") {
-          APIDirective.onHandle(dao.rollbackService.validateAndRestore().value) {
+          APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
             case Success(value) => complete(StatusCodes.OK)
             case Failure(error) =>
               logger.error(s"Restored error ${error}")

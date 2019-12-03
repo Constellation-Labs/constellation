@@ -3,7 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Blocker, Concurrent, ContextShift, IO, Sync, Timer}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, Timer}
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
@@ -23,14 +23,14 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
+import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
-import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
-import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
+import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
@@ -260,7 +260,16 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
-    rollbackService = new RollbackService[IO](this, new RollbackAccountBalances, snapshotService)
+    rollbackService = new RollbackService[IO](
+      this,
+      new RollbackAccountBalances,
+      snapshotService,
+      new RollbackLoader(
+        snapshotPath.pathAsString,
+        snapshotInfoPath.pathAsString,
+        genesisObservationPath.pathAsString
+      )
+    )
 
     cloudStorage = new GcpStorage[IO]
 

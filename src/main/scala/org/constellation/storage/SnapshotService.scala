@@ -1,20 +1,23 @@
 package org.constellation.storage
 
+import java.io.FileOutputStream
 import java.nio.file.Path
 
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.{ConsensusManager, FinishedCheckpoint, Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.domain.observation.{Observation, ObservationService}
+import org.constellation.consensus._
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -51,6 +54,70 @@ class SnapshotService[F[_]: Concurrent](
     } yield last.hash == hash || hashes.contains(hash)
 
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
+
+  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
+    for {
+      _ <- validateMaxAcceptedCBHashesInMemory()
+      _ <- validateAcceptedCBsSinceSnapshot()
+
+      nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
+      minActiveTipHeight <- EitherT.liftF(LiftIO[F].liftIO(dao.getActiveMinHeight))
+      minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight(minActiveTipHeight))
+      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
+      blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
+      _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
+      allBlocks = blocksWithinHeightInterval.map(_.get)
+
+      hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
+      nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
+
+      _ <- EitherT.liftF(
+        Sync[F].delay(
+          logger.debug(
+            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
+          )
+        )
+      )
+      _ <- applySnapshot()
+      _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
+      _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
+      _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
+      _ <- EitherT.liftF(updateMetricsAfterSnapshot())
+
+      _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+
+      _ <- EitherT.liftF(removeLeavingPeers())
+
+      created <- EitherT.liftF(
+        trustManager.getPredictedReputation.map(
+          predictedReputation =>
+            SnapshotCreated(
+              nextSnapshot.lastSnapshot,
+              nextHeightInterval - snapshotHeightInterval,
+              predictedReputation
+            )
+        )
+      )
+    } yield created
+
+  def writeSnapshotInfoToDisk: EitherT[F, SnapshotInfoIOError, Unit] =
+    EitherT.liftF {
+      getSnapshotInfoWithFullData.flatMap { info =>
+        if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
+        else {
+          val path = dao.snapshotInfoPath.pathAsString
+          Resource
+            .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
+            .use(
+              stream =>
+                Sync[F].delay {
+                  stream.write(KryoSerializer.serializeAnyRef(info))
+                  logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
+                }
+            )
+        }
+      }
+    }.leftMap(SnapshotInfoIOError)
 
   def getSnapshotInfo: F[SnapshotInfo] =
     for {
@@ -134,50 +201,15 @@ class SnapshotService[F[_]: Concurrent](
       _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", pulled.size.toString)
     } yield pulled
 
-  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
-    for {
-      _ <- validateMaxAcceptedCBHashesInMemory()
-      _ <- validateAcceptedCBsSinceSnapshot()
+  def getSnapshotInfoWithFullData: F[SnapshotInfo] =
+    getSnapshotInfo.flatMap { info =>
+      LiftIO[F].liftIO(
+        info.acceptedCBSinceSnapshot.toList.traverse {
+          dao.checkpointService.fullData(_)
 
-      nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      minActiveTipHeight <- EitherT.liftF(LiftIO[F].liftIO(dao.getActiveMinHeight))
-      minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight(minActiveTipHeight))
-      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
-      blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
-      _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
-      allBlocks = blocksWithinHeightInterval.map(_.get)
-
-      hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
-      nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
-
-      _ <- EitherT.liftF(
-        Sync[F].delay(
-          logger.debug(
-            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
-          )
-        )
+        }.map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
       )
-      _ <- applySnapshot()
-      _ <- EitherT.liftF(lastSnapshotHeight.modify(_ => (nextHeightInterval.toInt, ())))
-      _ <- EitherT.liftF(acceptedCBSinceSnapshot.modify(a => (a.filterNot(hashesForNextSnapshot.contains), ())))
-      _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
-      _ <- EitherT.liftF(updateMetricsAfterSnapshot())
-
-      _ <- EitherT.liftF(snapshot.modify(_ => (nextSnapshot, ())))
-
-      _ <- EitherT.liftF(removeLeavingPeers())
-
-      created <- EitherT.liftF(
-        trustManager.getPredictedReputation.map(
-          predictedReputation =>
-            SnapshotCreated(
-              nextSnapshot.lastSnapshot,
-              nextHeightInterval - snapshotHeightInterval,
-              predictedReputation
-            )
-        )
-      )
-    } yield created
+    }
 
   def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
     acceptedCBSinceSnapshot.get.flatMap { accepted =>
@@ -299,10 +331,11 @@ class SnapshotService[F[_]: Concurrent](
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
-      writeSnapshotToDisk(currentSnapshot)
-        .flatMap(
-          _ => applyAfterSnapshot(currentSnapshot)
-        )
+      for {
+        _ <- writeSnapshotToDisk(currentSnapshot)
+        _ <- writeSnapshotInfoToDisk
+        _ <- applyAfterSnapshot(currentSnapshot)
+      } yield ()
 
     snapshot.get.attemptT
       .leftMap(SnapshotUnexpectedError)
@@ -481,7 +514,7 @@ object SnapshotService {
     )
 }
 
-sealed trait SnapshotError
+sealed trait SnapshotError extends Throwable
 
 object MaxCBHashesInMemory extends SnapshotError
 object NodeNotReadyForSnapshots extends SnapshotError
@@ -491,5 +524,7 @@ object NoBlocksWithinHeightInterval extends SnapshotError
 object SnapshotIllegalState extends SnapshotError
 case class SnapshotIOError(cause: Throwable) extends SnapshotError
 case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError
+
+case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError
 
 case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])
