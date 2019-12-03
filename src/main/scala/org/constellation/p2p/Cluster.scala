@@ -2,7 +2,6 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
-import cats.data.OptionT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
@@ -17,10 +16,8 @@ import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates
 import org.constellation.rollback.{
   CannotLoadGenesisObservationFile,
   CannotLoadSnapshotInfoFile,
-  CannotLoadSnapshotInfoFile,
   CannotLoadSnapshotsFiles
 }
-
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
