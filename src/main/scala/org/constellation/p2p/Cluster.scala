@@ -2,11 +2,9 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
-import cats.data.OptionT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
-import cats.syntax._
 import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
@@ -15,6 +13,11 @@ import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
+import org.constellation.rollback.{
+  CannotLoadGenesisObservationFile,
+  CannotLoadSnapshotInfoFile,
+  CannotLoadSnapshotsFiles
+}
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -403,6 +406,8 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
         _ <- Timer[F].sleep(15.seconds)
 
+        _ <- attemptRollback()
+
         _ <- if (dao.peersInfoPath.nonEmpty && dao.seedsPath.isEmpty) {
           Logger[F].warn(
             "Found existing peers in persistent storage. Node probably crashed before and will try to rejoin the cluster."
@@ -483,6 +488,26 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
       _ <- attemptRejoin(lastKnownPeers)
     } yield ()
   }
+
+  def attemptRollback(): F[Unit] =
+    LiftIO[F]
+      .liftIO(dao.rollbackService.validateAndRestore().value)
+      .flatMap(
+        _.fold(
+          { err =>
+            err match {
+              case CannotLoadSnapshotInfoFile(path) =>
+                Logger[F].warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
+              case CannotLoadSnapshotsFiles(path) =>
+                Logger[F].warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
+              case CannotLoadGenesisObservationFile(path) =>
+                Logger[F].warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
+              case _ => Logger[F].error(s"Rollback failed: ${err}")
+            }
+          },
+          _ => Logger[F].warn(s"Performed rollback.")
+        )
+      )
 
   def addToPeer(hp: HostPort): F[Response[Unit]] =
     logThread(
