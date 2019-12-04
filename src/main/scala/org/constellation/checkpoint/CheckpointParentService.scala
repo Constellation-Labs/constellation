@@ -10,11 +10,20 @@ import org.constellation.primitives.{CheckpointBlock, Genesis}
 import org.constellation.storage.SOEService
 
 class CheckpointParentService[F[_]: Sync](
-  soeService: SOEService[F],
+  val soeService: SOEService[F],
   checkpointService: CheckpointService[F],
   dao: DAO
 ) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+
+  def parentBaseHashesDirect(cb: CheckpointBlock): List[String] =
+    cb.parentSOEHashes.toList.traverse { soeHash =>
+      if (soeHash == Genesis.Coinbase) {
+        none[String]
+      } else {
+        cb.checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap(_.baseHash)
+      }
+    }.getOrElse(List.empty)
 
   def parentSOEBaseHashes(cb: CheckpointBlock): F[List[String]] =
     cb.parentSOEHashes.toList.traverse { soeHash =>
