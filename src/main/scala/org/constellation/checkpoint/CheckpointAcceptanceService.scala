@@ -82,11 +82,11 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   def acceptWithNodeCheck(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] =
     cluster.getNodeState.flatMap { nodeState =>
       (nodeState, checkpoint.checkpointCacheData.checkpointBlock) match {
-        case (NodeState.Ready, Some(cb)) => accept(checkpoint)
-        case (NodeState.DownloadCompleteAwaitingFinalSync, Some(_)) =>
+        case (_, None)                                          => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+        case (state, _) if NodeState.canAcceptCheckpoint(state) => accept(checkpoint)
+        case (state, _) if NodeState.canAwaitForCheckpointAcceptance(state) =>
           snapshotService.syncBufferAccept(checkpoint)
-        case (_, Some(_)) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
-        case (_, None)    => Sync[F].raiseError[Unit](MissingCheckpointBlockException)
+        case (_, _) => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
       }
     }
 
@@ -321,7 +321,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           knownError.raiseError[F, Unit]
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>
-//          Concurrent[F].start(Timer[F].sleep(6.seconds) >> resolveMissingReferences(cb)) >>
+          Concurrent[F].start(Timer[F].sleep(10.seconds) >> resolveMissingReferences(cb)) >>
           error.raiseError[F, Unit]
       case otherError =>
         acceptLock.release >>
@@ -451,7 +451,7 @@ object CheckpointAcceptanceService {
               .map(a => {
                 if (txs.headOption.map(_.lastTxRef).contains(a)) {
                   List.empty
-                } else txs.map(_.lastTxRef.hash)
+                } else txs.map(_.lastTxRef.hash).filterNot(_ == "")
               })
         }
       }
