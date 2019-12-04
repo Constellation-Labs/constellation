@@ -24,17 +24,6 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
       }
       .handleErrorWith(_ => PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F])
 
-  private def markOffline(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
-    statuses.traverse {
-      case (pd, healthCheckStatus) =>
-        healthCheckStatus match {
-          case PeerUnresponsive =>
-            logger.info(s"Marking dead peer: ${pd.client.id.short} (${pd.client.hostName}) as offline") >>
-              cluster.markOfflinePeer(pd)
-          case _ => Sync[F].unit
-        }
-    }.void
-
   def check(): F[Unit] =
     for {
       _ <- logger.debug("Checking for dead peers")
@@ -43,7 +32,30 @@ class PeerHealthCheck[F[_]: Concurrent](cluster: Cluster[F])(implicit C: Context
       unresponsivePeers = statuses.count(_._2 == PeerUnresponsive)
       _ <- if (unresponsivePeers > 0) logger.info(s"Found dead peers: ${unresponsivePeers}") else Sync[F].unit
       _ <- markOffline(statuses)
+      _ <- broadcastOffline(statuses)
     } yield ()
+
+  private def markOffline(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
+    statuses.traverse {
+      case (pd, healthCheckStatus) =>
+        healthCheckStatus match {
+          case PeerUnresponsive =>
+            logger.info(s"Marking dead peer: ${pd.client.id.short} (${pd.client.hostName}) as offline") >>
+              cluster.markOfflinePeer(pd.peerMetadata.id)
+          case _ => Sync[F].unit
+        }
+    }.void
+
+  private def broadcastOffline(statuses: List[(PeerData, PeerHealthCheckStatus)]): F[Unit] =
+    statuses.traverse {
+      case (pd, healthCheckStatus) =>
+        healthCheckStatus match {
+          case PeerUnresponsive =>
+            logger.info(s"Broadcasting dead peer: ${pd.client.id.short} (${pd.client.hostName})") >>
+              cluster.broadcastOfflineNodeState(pd.client.id)
+          case _ => Sync[F].unit
+        }
+    }.void
 }
 
 object PeerHealthCheck {
