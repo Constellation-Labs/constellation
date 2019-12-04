@@ -32,31 +32,36 @@ object Schema {
       Offline =
       Value
 
-    val all: Set[Schema.NodeState.Value] = values.toSet
+    val all: Set[NodeState.Value] = values.toSet
 
-    val readyStates: Set[Schema.NodeState.Value] = Set(NodeState.Ready, NodeState.SnapshotCreation)
+    val readyStates: Set[NodeState.Value] = Set(NodeState.Ready, NodeState.SnapshotCreation)
 
     val initial: Set[NodeState] = Set(Offline, PendingDownload)
 
-    val broadcastStates: Set[Schema.NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
+    val broadcastStates: Set[NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
 
-    val offlineStates: Set[Schema.NodeState.Value] = Set(Offline)
+    val offlineStates: Set[NodeState.Value] = Set(Offline)
 
-    val validDuringDownload: Set[Schema.NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
+    val validDuringDownload: Set[NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
-    val validForDownload: Set[Schema.NodeState.Value] = Set(PendingDownload, Ready)
+    val validForDownload: Set[NodeState.Value] = Set(PendingDownload, Ready)
 
-    val validForRedownload: Set[Schema.NodeState.Value] = Set(Ready)
+    val validForRedownload: Set[NodeState.Value] = Set(Ready)
 
-    val validForSnapshotCreation: Set[Schema.NodeState.Value] = Set(Ready, Leaving)
+    val validForSnapshotCreation: Set[NodeState.Value] = Set(Ready, Leaving)
 
-    val validForTransactionGeneration: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForTransactionGeneration: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    val validForOwnConsensus: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForOwnConsensus: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    val validForConsensusParticipation: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForConsensusParticipation: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    val validForLettingOthersDownload: Set[Schema.NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
+    val validForLettingOthersDownload: Set[NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
+
+    val validForCheckpointAcceptance: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+
+    val validForCheckpointPendingAcceptance: Set[NodeState.Value] =
+      Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
     def canActAsDownloadSource(current: NodeState): Boolean = validForLettingOthersDownload.contains(current)
 
@@ -71,6 +76,11 @@ object Schema {
     def canStartOwnConsensus(current: NodeState): Boolean = validForOwnConsensus.contains(current)
 
     def canParticipateConsensus(current: NodeState): Boolean = validForConsensusParticipation.contains(current)
+
+    def canAcceptCheckpoint(current: NodeState): Boolean = validForCheckpointAcceptance.contains(current)
+
+    def canAwaitForCheckpointAcceptance(current: NodeState): Boolean =
+      validForCheckpointPendingAcceptance.contains(current)
 
   }
 

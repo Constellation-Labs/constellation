@@ -264,7 +264,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       case (_, None) =>
                         logger.warn(s"Missing height when accepting block $baseHash")
                         complete(StatusCodes.BadRequest)
-                      case (2, _) =>
+                      case (2, _) => // TODO: hardcoded snapshot interval
                         callback.unsafeToFuture()
                         complete(StatusCodes.Accepted)
                       case (nextHeight, Some(Height(min, max))) if nextHeight > min =>
