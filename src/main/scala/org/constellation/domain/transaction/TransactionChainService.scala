@@ -10,8 +10,6 @@ import org.constellation.primitives.{Edge, Transaction}
 
 class TransactionChainService[F[_]: Concurrent] {
 
-  val logger = Slf4jLogger.getLogger[F]
-
   // TODO: Make sure to clean-up those properly
   private[domain] val lastTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)
   private[domain] val lastAcceptedTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)

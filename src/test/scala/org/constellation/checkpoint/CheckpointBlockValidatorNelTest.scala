@@ -12,15 +12,15 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
-import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.blacklist.BlacklistedAddresses
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService, TransactionValidator}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
-import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
@@ -44,8 +44,17 @@ class CheckpointBlockValidatorNelTest
 
   val transactionValidator: TransactionValidator[IO] = new TransactionValidator[IO](transactionService)
 
+  val blacklistAddresses: BlacklistedAddresses[IO] = BlacklistedAddresses[IO]
+  val transactionChainService: TransactionChainService[IO] = new TransactionChainService[IO]
+
   val checkpointBlockValidator: CheckpointBlockValidator[IO] =
-    new CheckpointBlockValidator[IO](addressService, snapService, checkpointParentService, transactionValidator, dao)
+    new CheckpointBlockValidator[IO](
+      addressService,
+      snapService,
+      checkpointParentService,
+      transactionValidator,
+      dao
+    )
 
   val leftBlock: CheckpointBlock = mock[CheckpointBlock]
   val leftParent: CheckpointBlock = mock[CheckpointBlock]

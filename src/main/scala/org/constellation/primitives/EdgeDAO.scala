@@ -11,19 +11,15 @@ import org.constellation.checkpoint.{
   CheckpointService
 }
 import org.constellation.consensus._
+import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema._
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
+import org.constellation.domain.transaction._
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
+import org.constellation.p2p.Cluster
+import org.constellation.primitives.Schema._
 import org.constellation.rollback.RollbackService
 import org.constellation.schema.Id
 import org.constellation.storage._
@@ -159,6 +155,7 @@ trait EdgeDAO {
   var cluster: Cluster[IO] = _
   var trustManager: TrustManager[IO] = _
   var transactionService: TransactionService[IO] = _
+  var blacklistedAddresses: BlacklistedAddresses[IO] = _
   var transactionChainService: TransactionChainService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
   var transactionGenerator: TransactionGenerator[IO] = _

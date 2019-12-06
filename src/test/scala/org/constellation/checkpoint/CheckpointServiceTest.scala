@@ -72,7 +72,10 @@ class CheckpointServiceTest
         Seq(cb1.soe, cb2.soe),
         transactions = Seq(
           dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 5L, dao.keyPair)
+            .unsafeRunSync,
+          dao.transactionService
+            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 5L, dao.keyPair)
             .unsafeRunSync
         )
       )

@@ -33,6 +33,7 @@ object Metrics {
   val snapshotCount = "snapshotCount"
   val lastSnapshotHash = "lastSnapshotHash"
   val heightEmpty = "heightEmpty"
+  val checkpointValidationSuccess = "checkpointValidationSuccess"
   val checkpointValidationFailure = "checkpointValidationFailure"
   val batchTransactionsEndpoint = "batchTransactionsEndpoint"
   val batchObservationsEndpoint = "batchObservationsEndpoint"
@@ -243,9 +244,14 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
       .flatMap(_.sequence)
       .void
 
+  private def updateBlacklistedAddressesMetrics(): IO[Unit] =
+    dao.blacklistedAddresses.get
+      .flatMap(a => updateMetricAsync[IO](s"blacklistedAddresses_size", a.size))
+
   private def updatePeriodicMetrics(): IO[Unit] =
     updateBalanceMetrics >>
       updateTransactionAcceptedMetrics() >>
+      updateBlacklistedAddressesMetrics() >>
       updateObservationServiceMetrics() >>
       updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) >>
       updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) >>
