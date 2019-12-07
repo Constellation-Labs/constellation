@@ -524,10 +524,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             }
         } ~
         path("transaction") {
-    entity(as[Transaction]) { tx =>
-      logger.info(s"send transaction to address $tx")
+    entity(as[Transaction]) { transaction =>
+      logger.info(s"send transaction to address ${transaction.src}")
 
-      val io = IO { tx }.flatMap(tx => dao.transactionService.put(TransactionCacheData(tx))).map(_.hash)
+      val io = dao.transactionService
+        .receiveTransaction(transaction)
+        .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+        .map(_.hash)
+
       APIDirective.handle(io)(complete(_))
     }
   } ~ path("send") {
@@ -547,7 +551,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
 
             APIDirective.handle(io)(complete(_))
         }
-      }~ path("restore") {
+      } ~ path("restore") {
           APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
             case Success(value) => complete(StatusCodes.OK)
             case Failure(error) =>
