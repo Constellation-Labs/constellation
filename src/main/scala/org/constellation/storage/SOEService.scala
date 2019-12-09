@@ -21,7 +21,6 @@ class SOEService[F[_]: Concurrent]() {
 
   def put(key: String, value: SignedObservationEdgeCache): F[SignedObservationEdgeCache] =
     memPool.put(key, value)
-//      .flatTap(_ => Sync[F].delay(println(s"---- ---- PUT $key to SOEService")))
 
   def update(
     key: String,
@@ -29,12 +28,10 @@ class SOEService[F[_]: Concurrent]() {
     empty: => SignedObservationEdgeCache
   ): F[SignedObservationEdgeCache] =
     memPool.update(key, updateFunc, empty)
-//      .flatTap(_ => Sync[F].delay(println(s"---- ---- UPDATE $key to SOEService")))
 
   def update(
     key: String,
     updateFunc: SignedObservationEdgeCache => SignedObservationEdgeCache
   ): F[Option[SignedObservationEdgeCache]] =
     memPool.update(key, updateFunc)
-//      .flatTap(_ => Sync[F].delay(println(s"---- ---- UPDATE no empty $key to SOEService")))
 }
