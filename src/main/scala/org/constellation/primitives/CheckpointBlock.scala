@@ -24,9 +24,6 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
       _.signedObservationEdge.baseHash
     }
 
-  def storeSOE()(implicit dao: DAO): Unit =
-    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true)).unsafeRunSync()
-
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
@@ -50,9 +47,6 @@ case class CheckpointBlock(
   notifications: Seq[PeerNotification] = Seq(),
   observations: Seq[Observation] = Seq()
 ) {
-
-  def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] =
-    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
 
   def uniqueSignatures: Boolean = signatures.groupBy(_.id).forall(_._2.size == 1)
 
@@ -79,19 +73,6 @@ case class CheckpointBlock(
   // TODO: Optimize call, should store this value instead of recalculating every time.
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
-
-  // TODO: remove that store method
-  def store(cache: CheckpointCache)(implicit dao: DAO): Unit = {
-    /*
-          transactions.foreach { rt =>
-            rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
-          }
-     */
-    // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    (cache.checkpointBlock.get.storeSOE() >> dao.checkpointService.put(cache)).unsafeRunSync()
-    dao.recentBlockTracker.put(cache)
-
-  }
 
   def plus(keyPair: KeyPair): CheckpointBlock =
     this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignatureFrom(keyPair)))

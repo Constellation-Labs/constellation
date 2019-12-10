@@ -357,9 +357,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       )
 
     for {
-      _ <- roundData.tipsSOE.soe.toList.traverse(
-        soe => soeService.put(soe.hash, SignedObservationEdgeCache(soe, resolved = true))
-      )
       filtered <- roundData.tipsSOE.soe.toList.traverse(
         t =>
           checkpointService
