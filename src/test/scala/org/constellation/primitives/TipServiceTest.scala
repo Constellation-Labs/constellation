@@ -7,7 +7,13 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointParentService, CheckpointService}
 import org.constellation.consensus.RandomData
 import org.constellation.domain.configuration.NodeConfig
-import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, TypedEdgeHash}
+import org.constellation.primitives.Schema.{
+  CheckpointCacheMetadata,
+  EdgeHashType,
+  Height,
+  SignedObservationEdgeCache,
+  TypedEdgeHash
+}
 import org.constellation.storage.SOEService
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
@@ -58,9 +64,12 @@ class TipServiceTest
 
       val go = RandomData.go
 
-      go.initialDistribution
-        .storeSOE()
-        .flatMap(_ => go.initialDistribution2.storeSOE())
+      dao.soeService
+        .put(go.initialDistribution.soeHash, SignedObservationEdgeCache(go.initialDistribution.soe, true))
+        .flatMap { _ =>
+          dao.soeService
+            .put(go.initialDistribution2.soeHash, SignedObservationEdgeCache(go.initialDistribution2.soe, true))
+        }
         .unsafeRunSync()
 
       List(go.initialDistribution, go.initialDistribution2)
@@ -83,9 +92,12 @@ class TipServiceTest
 
       val go = RandomData.go()
 
-      go.initialDistribution
-        .storeSOE()
-        .flatMap(_ => go.initialDistribution2.storeSOE())
+      dao.soeService
+        .put(go.initialDistribution.soeHash, SignedObservationEdgeCache(go.initialDistribution.soe, true))
+        .flatMap { _ =>
+          dao.soeService
+            .put(go.initialDistribution2.soeHash, SignedObservationEdgeCache(go.initialDistribution2.soe, true))
+        }
         .unsafeRunSync()
 
       List(go.initialDistribution, go.initialDistribution2)

@@ -14,7 +14,7 @@ import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
@@ -32,6 +32,7 @@ class SnapshotService[F[_]: Concurrent](
   rateLimiting: RateLimiting[F],
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
+  soeService: SOEService[F],
   dao: DAO
 )(implicit C: ContextShift[F])
     extends StrictLogging {
@@ -165,7 +166,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
+        soeService.put(h.checkpointBlock.get.soeHash, SignedObservationEdgeCache(h.checkpointBlock.get.soe, true)) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
           h.checkpointBlock.get.transactions.toList
@@ -498,6 +499,7 @@ object SnapshotService {
     rateLimiting: RateLimiting[F],
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
+    soeService: SOEService[F],
     dao: DAO
   )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
@@ -510,6 +512,7 @@ object SnapshotService {
       rateLimiting,
       consensusManager,
       trustManager,
+      soeService,
       dao
     )
 }

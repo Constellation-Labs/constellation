@@ -173,7 +173,8 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
               )
               .flatMap(_ => Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation")))
           else Sync[F].unit
-          _ <- LiftIO[F].liftIO(cb.storeSOE()(dao))
+          _ <- checkpointParentService.soeService
+            .put(cb.soeHash, SignedObservationEdgeCache(cb.soe, true)) // TODO: consider moving down
           maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
 
           height <- if (maybeHeight.isEmpty) {
@@ -183,7 +184,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           } else Sync[F].pure(maybeHeight.get)
 
           _ <- checkpointService.put(checkpoint.copy(height = maybeHeight))
-          _ <- checkpointParentService.soeService.put(cb.soeHash, SignedObservationEdgeCache(cb.soe, true))
           _ <- checkpointParentService.incrementChildrenCount(cb)
           _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
           _ <- acceptMessages(cb)
@@ -273,10 +273,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     peers: List[PeerApiClient],
     depth: Int = 1
   ): F[List[CheckpointCache]] = {
-
-    val checkError = if (depth >= maxDepth) {
-      Sync[F].raiseError[Unit](new Exception("Max depth reached when resolving data."))
-    } else Sync[F].unit
 
     val soeHashes = cb.parentSOEHashes.toList
     val existingSoeHashes = soeHashes
