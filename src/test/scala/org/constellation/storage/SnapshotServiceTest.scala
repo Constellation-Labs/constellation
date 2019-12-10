@@ -43,6 +43,7 @@ class SnapshotServiceTest
     val rateLimiting = mock[RateLimiting[IO]]
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
+    val soeService = mock[SOEService[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -54,6 +55,7 @@ class SnapshotServiceTest
       rateLimiting,
       consensusManager,
       trustManager,
+      soeService,
       dao
     )
   }

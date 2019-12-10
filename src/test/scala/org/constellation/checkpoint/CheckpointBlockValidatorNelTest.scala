@@ -215,9 +215,9 @@ class ValidationSpec
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
   dao.cluster = cluster
 
-  go.genesis.store(CheckpointCache(Some(go.genesis)))
-  go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution)))
-  go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2)))
+  dao.checkpointService.put(CheckpointCache(Some(go.genesis))).unsafeRunSync
+  dao.checkpointService.put(CheckpointCache(Some(go.initialDistribution))).unsafeRunSync
+  dao.checkpointService.put(CheckpointCache(Some(go.initialDistribution2))).unsafeRunSync
   dao.metrics = new Metrics()
   dao.snapshotService
     .setSnapshot(
@@ -263,8 +263,8 @@ class ValidationSpec
         val cbInit2 =
           CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips(genesis))
 
-        cbInit1.store(CheckpointCache(Some(cbInit1)))
-        cbInit2.store(CheckpointCache(Some(cbInit2)))
+        dao.checkpointService.put(CheckpointCache(Some(cbInit1))).unsafeRunSync
+        dao.checkpointService.put(CheckpointCache(Some(cbInit2))).unsafeRunSync
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -298,7 +298,7 @@ class ValidationSpec
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => cb.store(CheckpointCache(Some(cb))))
+          .foreach(cb => dao.checkpointService.put(CheckpointCache(Some(cb))).unsafeRunSync)
 
         assert(checkpointBlockValidator.simpleValidation(cb7).unsafeRunSync().isValid)
       }
@@ -490,8 +490,8 @@ class ValidationSpec
         val cbInit2 =
           CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips(genesis))
 
-        cbInit1.store(CheckpointCache(Some(cbInit1)))
-        cbInit2.store(CheckpointCache(Some(cbInit2)))
+        dao.checkpointService.put(CheckpointCache(Some(cbInit1))).unsafeRunSync
+        dao.checkpointService.put(CheckpointCache(Some(cbInit2))).unsafeRunSync
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -525,7 +525,7 @@ class ValidationSpec
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7).foreach { cb =>
-          cb.store(CheckpointCache(cb.some))
+          dao.checkpointService.put(CheckpointCache(cb.some)).unsafeRunSync
 //          // TODO: wkoszycki #420 enable recursive validation transactions shouldn't be required to be stored to run validation
           dao.checkpointAcceptanceService.acceptTransactions(cb).unsafeRunSync()
         }
