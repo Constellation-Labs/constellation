@@ -78,8 +78,8 @@ object Simulation {
       .exists(_.forall(gbmd => gbmd.metrics("numValidBundles").toInt >= 1))
   }
 
-  def genesis(apis: Seq[APIClient]): GenesisObservation = {
-    val balances = fakeBalances(apis)
+  def genesis(apis: Seq[APIClient], startingAcctBalances: Seq[AccountBalance] = Nil): GenesisObservation = {
+    val balances = fakeBalances(apis) ++ startingAcctBalances
     apis.head.postBlocking[GenesisObservation]("genesis/create", balances)
   }
 
@@ -380,6 +380,7 @@ object Simulation {
   def run(
     apis: Seq[APIClient],
     addPeerRequests: Seq[PeerMetadata],
+    startingBalances: Seq[AccountBalance] = Nil,
     attemptSetExternalIP: Boolean = false,
     useRegistrationFlow: Boolean = false,
     useStartFlowOnly: Boolean = false,
@@ -407,7 +408,7 @@ object Simulation {
     assert(checkPeersHealthy(apis))
     logger.info("Peer validation passed")
 
-    val goe = genesis(apis)
+    val goe = genesis(apis, startingBalances)
     apis.foreach {
       _.post("genesis/accept", goe)
     }
