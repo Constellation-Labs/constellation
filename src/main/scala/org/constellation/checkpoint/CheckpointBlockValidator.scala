@@ -1,12 +1,13 @@
 package org.constellation.checkpoint
 
-import cats.data.{Ior, NonEmptyList, ValidatedNel}
+import cats.data.{Ior, NonEmptyList, Validated, ValidatedNel}
 import cats.effect.{IO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
+import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
@@ -107,7 +108,7 @@ object CheckpointBlockValidator {
 }
 
 class CheckpointBlockValidator[F[_]: Sync](
-  addressService: AddressService[F],
+  addressService: AddressService[F],//todo this should go int TransactionValidator
   snapshotService: SnapshotService[F],
   checkpointParentService: CheckpointParentService[F],
   transactionValidator: TransactionValidator[F],
@@ -217,6 +218,13 @@ class CheckpointBlockValidator[F[_]: Sync](
       isInSnapshot(cb).ifM(Sync[F].pure(Map.empty[String, Long].rightIor), validate)
     z
   }
+
+  //todo move this?
+  def singleTransactionValidation(tx: Transaction): F[Boolean] =
+    for {
+      transactionValidation <- validateTransactions(Iterable(tx))
+      balanceValidation <- validateSourceAddressBalances(Iterable(tx))
+    } yield transactionValidation.product(balanceValidation).isValid
 
   def validateCheckpointBlock(cb: CheckpointBlock): F[ValidationResult[CheckpointBlock]] = {
     val preTreeResult =

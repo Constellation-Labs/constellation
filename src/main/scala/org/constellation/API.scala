@@ -22,6 +22,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.api.TokenAuthenticator
+import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
@@ -524,13 +525,21 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             }
         } ~
         path("transaction") {
-    entity(as[Transaction]) { transaction =>
-      logger.info(s"send transaction to address ${transaction.src}")
+          entity(as[Transaction]) { transaction =>
+            logger.info(s"send transaction to address ${transaction.src}")
+            val isValid = checkpointBlockValidator.singleTransactionValidation(transaction).unsafeRunSync()
+//            val tryIt = checkpointBlockValidator.singleTransactionValidation(transaction)
+            logger.info(s"send transaction ${transaction} isValid ${isValid}")
+            val check: IO[String] = dao.transactionService
+              .receiveTransaction(transaction)
+              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+              .map(_.hash)
 
-      val io = dao.transactionService
-        .receiveTransaction(transaction)
-        .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-        .map(_.hash)
+            val io = if (!isValid) IO {"invalid"}
+            else dao.transactionService
+              .receiveTransaction(transaction)
+              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+              .map(_.hash)
 
       APIDirective.handle(io)(complete(_))
     }

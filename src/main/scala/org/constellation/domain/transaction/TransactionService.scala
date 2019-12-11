@@ -68,6 +68,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
   def receiveTransaction(tx: Transaction): F[Transaction] = TransactionService.receiveTransaction(tx)(transactionChainService)
+
 }
 
 object TransactionService {
@@ -105,7 +106,7 @@ object TransactionService {
   ): F[Transaction] =
     createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
 
-  def receiveTransaction[F[_]: Concurrent](tx: Transaction)(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+  def receiveTransaction[F[_]: Concurrent](tx: Transaction)(transactionChainService: TransactionChainService[F]): F[Transaction] =
     transactionChainService.setLastTransaction(tx.edge, false)
-  }
+
 }
