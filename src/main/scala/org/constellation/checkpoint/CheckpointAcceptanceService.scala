@@ -103,7 +103,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
           _ <- checkPending(cb.baseHash)
           _ <- logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others")
-          peers <- obtainPeers
           _ <- accept(checkpoint.checkpointCacheData, checkpoint.facilitators)
           _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
         } yield ()

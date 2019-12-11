@@ -17,7 +17,7 @@
         <appender-ref ref="apiclient"/>
     </logger>
 
-    <logger name="org.constellation" level="info">
+    <logger name="org.constellation" level="debug">
         <appender-ref ref="console" />
     </logger>
 </configuration>
