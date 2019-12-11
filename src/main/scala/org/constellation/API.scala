@@ -524,6 +524,15 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             }
         } ~
+      path("balance") {
+        entity(as[String]) { address =>
+          logger.info(s"balance lookup for address ${address}")
+          val io: IO[String] = addressService.lookup(address).map(res => res.map(_.balance.toString).getOrElse("0"))
+          //            val tryIt = checkpointBlockValidator.singleTransactionValidation(transaction)
+
+          APIDirective.handle(io)(complete(_))
+        }
+      } ~
         path("transaction") {
           entity(as[Transaction]) { transaction =>
             logger.info(s"send transaction to address ${transaction.src}")
