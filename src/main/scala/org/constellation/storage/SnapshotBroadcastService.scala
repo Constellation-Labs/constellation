@@ -66,7 +66,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     val verify = for {
       ownRecent <- getRecentSnapshots
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
-//      responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
+      responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
 //      maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
 //      _ <- maybeDownload.fold(Sync[F].unit)(
 //        d =>

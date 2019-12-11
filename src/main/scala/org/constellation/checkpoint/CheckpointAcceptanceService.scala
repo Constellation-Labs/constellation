@@ -103,7 +103,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
           _ <- checkPending(cb.baseHash)
           _ <- logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others")
-          peers <- obtainPeers
           _ <- accept(checkpoint.checkpointCacheData, checkpoint.facilitators)
           _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
         } yield ()
@@ -205,11 +204,11 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           }
           allowedToAccept <- awaitingBlocks.toList.filterA { c =>
             c.checkpointBlock
-              .map(AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService))
+              .map(AwaitingCheckpointBlock.areParentsSOEAccepted(checkpointParentService.soeService))
               .getOrElse(false.pure[F])
           }.flatMap(_.filterA { c =>
             c.checkpointBlock
-              .map(AwaitingCheckpointBlock.areParentsSOEAccepted(checkpointParentService.soeService))
+              .map(AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService))
               .getOrElse(false.pure[F])
           })
 

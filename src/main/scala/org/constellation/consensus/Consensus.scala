@@ -292,13 +292,15 @@ class Consensus[F[_]: Concurrent: ContextShift](
                 _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, Seq.empty[String]))
               )
         }
-      _ <- if (acceptedBlock._1.isEmpty) Sync[F].pure(List.empty[Response[Unit]])
+      _ <- if (acceptedBlock._1.isEmpty)
+        Sync[F].pure(List.empty[Response[Unit]])
       else
-        calculationContext.blockOn(remoteCall)(
-          broadcastSignedBlockToNonFacilitators(
-            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
-          )
-        )
+        Sync[F].pure(List.empty[Response[Unit]])
+//        calculationContext.blockOn(remoteCall)(
+//          broadcastSignedBlockToNonFacilitators(
+//            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
+//          )
+//        )
       transactionsToReturn <- getOwnTransactionsToReturn.map(
         txs =>
           txs
@@ -458,31 +460,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
       allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
       proposals <- withLock(consensusDataProposals.get)
 
-      txsContains <- proposals.values
-        .flatMap(_.transactions.toList)
-        .toList
-        .traverse(tx => transactionService.contains(tx.hash))
-
-      _ <- logger.info(s"${roundData.roundId} Txs contains: ${txsContains.zip(
-        proposals.values
-          .flatMap(_.transactions.toList)
-          .toList
-          .map(_.hash)
-      )}")
-
-//      transactions <- prepareConsensusBatchData[Transaction, TransactionCacheData](
-//        "transactions",
-//        proposals,
-//        allPeers, { p =>
-//          p.transactions.map(_.hash)
-//        },
-//        roundData.transactions.map(_.hash), { s =>
-//          transactionService.lookup(s).map(_.map(_.transaction))
-//        }, { tcd =>
-//          tcd.transaction
-//        }
-//      )
-
       messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
         "message",
         proposals,
@@ -506,12 +483,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
         roundData.roundId,
         FacilitatorId(dao.id),
         CheckpointBlock.createCheckpointBlock(
-          (roundData.transactions ++ proposals.flatMap(_._2.transactions)).toSeq,
+          (roundData.transactions ++ proposals.flatMap(_._2.transactions)),
           roundData.tipsSOE.soe
             .map(soe => TypedEdgeHash(soe.hash, EdgeHashType.CheckpointHash, Some(soe.baseHash))),
           messages,
           notifications,
-          (roundData.observations ++ proposals.flatMap(_._2.observations)).toSeq
+          (roundData.observations ++ proposals.flatMap(_._2.observations))
         )(dao.keyPair)
       )
       _ <- calculationContext.blockOn(remoteCall)(
