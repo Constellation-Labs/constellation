@@ -512,6 +512,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("genesis") {
           path("create") {
             entity(as[Seq[AccountBalance]]) { balances =>
+              logger.info(s"genesis created with balances ${balances}")
               val go = Genesis.createGenesisObservation(balances)
               complete(go)
             }
@@ -535,14 +536,16 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
       } ~
         path("transaction") {
           entity(as[Transaction]) { transaction =>
-            logger.info(s"send transaction to address ${transaction.src}")
+            logger.info(s"send transaction to address ${transaction.hash}")
             val isValid = checkpointBlockValidator.singleTransactionValidation(transaction).unsafeRunSync()
+            //todo make transactions with same src and dst invalid, we have a bug that crashes consensus if a 'self' tx encountered
+
 //            val tryIt = checkpointBlockValidator.singleTransactionValidation(transaction)
-            logger.info(s"send transaction ${transaction} isValid ${isValid}")
-            val check: IO[String] = dao.transactionService
-              .receiveTransaction(transaction)
-              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-              .map(_.hash)
+//            logger.info(s"send transaction ${transaction} isValid ${isValid}")
+//            val check: IO[String] = dao.transactionService
+//              .receiveTransaction(transaction)
+//              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+//              .map(_.hash)
 
             val io = if (!isValid) IO {"invalid"}
             else dao.transactionService

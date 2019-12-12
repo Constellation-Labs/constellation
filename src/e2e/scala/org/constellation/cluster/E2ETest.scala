@@ -35,7 +35,7 @@ class E2ETest extends E2E {
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
   private val storeData = false
 
-  private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
+  private val sendToAddress = "DAG48nmxgpKhZzEzyc86y9oHotxxG57G8sBBwj34"
   private def sendTo(node: ConstellationNode, dst: String, amount: Long = 100L) = {
     val client = node.getAPIClientForNode(node)
     client.postBlocking[SendToAddress]("send", SendToAddress(dst, amount))
@@ -45,7 +45,7 @@ class E2ETest extends E2E {
     logger.info("API Ports: " + apis.map(_.apiPort))
     logger.info("API addresses: " + apis.map(_.id.address))
     val startingAcctBalances: List[AccountBalance] = List(AccountBalance(sendToAddress, 100L))
-    assert(Simulation.run(initialAPIs, addPeerRequests))
+    assert(Simulation.run(initialAPIs, addPeerRequests))//, startingAcctBalances))
 
     val metadatas =
       n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
