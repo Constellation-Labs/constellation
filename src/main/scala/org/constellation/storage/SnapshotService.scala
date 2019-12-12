@@ -72,7 +72,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
       allBlocks = blocksWithinHeightInterval.map(_.get)
 
-      hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
+      hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash).sorted
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
 
       _ <- EitherT.liftF(
@@ -168,17 +168,17 @@ class SnapshotService[F[_]: Concurrent](
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        soeService.put(h.checkpointBlock.get.soeHash, SignedObservationEdgeCache(h.checkpointBlock.get.soe, true)) >>
+        soeService.put(h.checkpointBlock.soeHash, SignedObservationEdgeCache(h.checkpointBlock.soe, true)) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
-          h.checkpointBlock.get.transactions.toList
+          h.checkpointBlock.transactions.toList
             .traverse(
               tx =>
                 transactionService
                   .accept(TransactionCacheData(tx), Some(h))
                   .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
             ) >>
-          h.checkpointBlock.get.observations.toList
+          h.checkpointBlock.observations.toList
             .traverse(obs => observationService.accept(obs, Some(h)))
             .flatTap(_ => dao.metrics.incrementMetricAsync("observationAccepted"))
       }
@@ -192,7 +192,7 @@ class SnapshotService[F[_]: Concurrent](
   def syncBufferAccept(cb: FinishedCheckpoint): F[Unit] =
     for {
       size <- syncBuffer.modify { curr =>
-        val updated = curr + (cb.checkpointCacheData.checkpointBlock.get.baseHash -> cb)
+        val updated = curr + (cb.checkpointCacheData.checkpointBlock.baseHash -> cb)
         (updated, updated.size)
       }
       _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", size.toString)
@@ -355,11 +355,11 @@ class SnapshotService[F[_]: Concurrent](
       .flatMap {
         case maybeBlocks
             if maybeBlocks.exists(
-              maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty)
+              maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty
             ) =>
           EitherT {
             Sync[F].delay {
-              maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty))
+              maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty)
             }.flatTap { maybeEmpty =>
               logger.error(s"Snapshot data is missing for block: ${maybeEmpty}")
             }.flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))
@@ -367,7 +367,7 @@ class SnapshotService[F[_]: Concurrent](
           }
 
         case maybeBlocks =>
-          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.map(_.baseHash))
+          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.baseHash)
           Snapshot
             .writeSnapshot(StoredSnapshot(currentSnapshot, flatten))
             .biSemiflatMap(

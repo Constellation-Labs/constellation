@@ -74,9 +74,9 @@ object Genesis extends StrictLogging {
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
-    val genesisBlock = CheckpointCache(Some(go.genesis), height = Some(Height(0, 0)))
-    val initialBlock1 = CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1)))
-    val initialBlock2 = CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1)))
+    val genesisBlock = CheckpointCache(go.genesis, height = Some(Height(0, 0)))
+    val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
+    val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
 
     (dao.soeService.put(go.genesis.soeHash, SignedObservationEdgeCache(go.genesis.soe, true)) >>
       dao.soeService
