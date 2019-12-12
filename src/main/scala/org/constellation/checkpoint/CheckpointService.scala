@@ -35,11 +35,11 @@ class CheckpointService[F[_]: Concurrent](
 
   def put(cbCache: CheckpointCache): F[CheckpointCacheMetadata] =
     merkleService
-      .storeMerkleRoots(cbCache.checkpointBlock.get)
+      .storeMerkleRoots(cbCache.checkpointBlock)
       .flatMap(
         ccm =>
           memPool
-            .put(cbCache.checkpointBlock.get.baseHash, CheckpointCacheMetadata(ccm, cbCache.children, cbCache.height))
+            .put(cbCache.checkpointBlock.baseHash, CheckpointCacheMetadata(ccm, cbCache.children, cbCache.height))
       )
 
   def applySnapshot(cbs: List[String]): F[Unit] =

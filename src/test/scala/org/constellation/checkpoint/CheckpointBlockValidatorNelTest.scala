@@ -108,7 +108,7 @@ class CheckpointBlockValidatorNelTest
 
   test("it should detect no internal conflict and return None") {
     detectInternalTipsConflict(
-      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
+      Seq(CheckpointCache(leftBlock), CheckpointCache(rightBlock))
     ) shouldBe None
   }
 
@@ -121,16 +121,16 @@ class CheckpointBlockValidatorNelTest
     leftBlock.transactions shouldReturn Seq(tx1, tx2, rightBlockTx)
 
     detectInternalTipsConflict(
-      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
-    ) shouldBe Some(CheckpointCache(Some(rightBlock)))
+      Seq(CheckpointCache(leftBlock), CheckpointCache(rightBlock))
+    ) shouldBe Some(CheckpointCache(rightBlock))
   }
   test("it should detect direct conflict with other tip") {
     val rightBlockTx = rightBlock.transactions.head
     leftBlock.transactions shouldReturn Seq(tx1, tx2, rightBlockTx)
 
     detectInternalTipsConflict(
-      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
-    ) shouldBe Some(CheckpointCache(Some(rightBlock)))
+      Seq(CheckpointCache(leftBlock), CheckpointCache(rightBlock))
+    ) shouldBe Some(CheckpointCache(rightBlock))
   }
 
   test("it should detect conflict with ancestry of other tip") {
@@ -159,8 +159,8 @@ class CheckpointBlockValidatorNelTest
 
   test("it should return correct block to preserve with greater base hash") {
     selectBlockToPreserve(
-      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
-    ) shouldBe CheckpointCache(Some(rightBlock))
+      Seq(CheckpointCache(leftBlock), CheckpointCache(rightBlock))
+    ) shouldBe CheckpointCache(rightBlock)
   }
 
   test("it should return correct block to preserve with greater number of signatures") {
@@ -169,14 +169,14 @@ class CheckpointBlockValidatorNelTest
     leftBlock.signatures shouldReturn signatures
 
     selectBlockToPreserve(
-      Seq(CheckpointCache(Some(leftBlock)), CheckpointCache(Some(rightBlock)))
-    ) shouldBe CheckpointCache(Some(leftBlock))
+      Seq(CheckpointCache(leftBlock), CheckpointCache(rightBlock))
+    ) shouldBe CheckpointCache(leftBlock)
   }
 
   test("it should return correct block to preserve with greater number of children") {
     selectBlockToPreserve(
-      Seq(CheckpointCache(Some(leftBlock), 2), CheckpointCache(Some(rightBlock)))
-    ) shouldBe CheckpointCache(Some(leftBlock), 2)
+      Seq(CheckpointCache(leftBlock, 2), CheckpointCache(rightBlock))
+    ) shouldBe CheckpointCache(leftBlock, 2)
   }
 }
 
@@ -215,9 +215,9 @@ class ValidationSpec
   val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
   dao.cluster = cluster
 
-  dao.checkpointService.put(CheckpointCache(Some(go.genesis))).unsafeRunSync
-  dao.checkpointService.put(CheckpointCache(Some(go.initialDistribution))).unsafeRunSync
-  dao.checkpointService.put(CheckpointCache(Some(go.initialDistribution2))).unsafeRunSync
+  dao.checkpointService.put(CheckpointCache(go.genesis)).unsafeRunSync
+  dao.checkpointService.put(CheckpointCache(go.initialDistribution)).unsafeRunSync
+  dao.checkpointService.put(CheckpointCache(go.initialDistribution2)).unsafeRunSync
   dao.metrics = new Metrics()
   dao.snapshotService
     .setSnapshot(
@@ -263,8 +263,8 @@ class ValidationSpec
         val cbInit2 =
           CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips(genesis))
 
-        dao.checkpointService.put(CheckpointCache(Some(cbInit1))).unsafeRunSync
-        dao.checkpointService.put(CheckpointCache(Some(cbInit2))).unsafeRunSync
+        dao.checkpointService.put(CheckpointCache(cbInit1)).unsafeRunSync
+        dao.checkpointService.put(CheckpointCache(cbInit2)).unsafeRunSync
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -298,7 +298,7 @@ class ValidationSpec
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7)
-          .foreach(cb => dao.checkpointService.put(CheckpointCache(Some(cb))).unsafeRunSync)
+          .foreach(cb => dao.checkpointService.put(CheckpointCache(cb)).unsafeRunSync)
 
         assert(checkpointBlockValidator.simpleValidation(cb7).unsafeRunSync().isValid)
       }
@@ -490,8 +490,8 @@ class ValidationSpec
         val cbInit2 =
           CheckpointBlock.createCheckpointBlockSOE(txs2.toSeq, startingTips(genesis))
 
-        dao.checkpointService.put(CheckpointCache(Some(cbInit1))).unsafeRunSync
-        dao.checkpointService.put(CheckpointCache(Some(cbInit2))).unsafeRunSync
+        dao.checkpointService.put(CheckpointCache(cbInit1)).unsafeRunSync
+        dao.checkpointService.put(CheckpointCache(cbInit2)).unsafeRunSync
 
         setupSnapshot(Seq(cbInit1, cbInit2))
 
@@ -525,7 +525,7 @@ class ValidationSpec
           CheckpointBlock.createCheckpointBlockSOE(Seq(tx7), Seq(cb3.soe, cb6.soe))
 
         Seq(cb1, cb2, cb3, cb4, cb5, cb6, cb7).foreach { cb =>
-          dao.checkpointService.put(CheckpointCache(cb.some)).unsafeRunSync
+          dao.checkpointService.put(CheckpointCache(cb)).unsafeRunSync
 //          // TODO: wkoszycki #420 enable recursive validation transactions shouldn't be required to be stored to run validation
           dao.checkpointAcceptanceService.acceptTransactions(cb).unsafeRunSync()
         }

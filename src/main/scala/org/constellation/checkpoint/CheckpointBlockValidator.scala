@@ -79,18 +79,18 @@ object CheckpointBlockValidator {
     ): Option[CheckpointCache] =
       tips match {
         case Nil => None
-        case CheckpointCache(Some(cb), children, height) :: _
+        case CheckpointCache(cb, children, height) :: _
             if cb.transactions.toSet.intersect(ancestryTransactions.keySet).nonEmpty =>
           val conflictingCBBaseHash = ancestryTransactions(
             cb.transactions.toSet.intersect(ancestryTransactions.keySet).head
           )
           Some(
             selectBlockToPreserve(
-              Seq(CheckpointCache(Some(cb), children, height)) ++ inputTips
-                .filter(ccd => ccd.checkpointBlock.exists(_.baseHash == conflictingCBBaseHash))
+              Seq(CheckpointCache(cb, children, height)) ++ inputTips
+                .filter(ccd => ccd.checkpointBlock.baseHash == conflictingCBBaseHash)
             )
           )
-        case CheckpointCache(Some(cb), _, _) :: tail =>
+        case CheckpointCache(cb, _, _) :: tail =>
           detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
       }
     detect(inputTips)
@@ -101,7 +101,7 @@ object CheckpointBlockValidator {
 
   def selectBlockToPreserve(blocks: Iterable[CheckpointCache]): CheckpointCache =
     blocks.maxBy(
-      cb => (cb.children, cb.checkpointBlock.map(b => (b.signatures.size, b.baseHash)))
+      cb => (cb.children, (cb.checkpointBlock.signatures.size, cb.checkpointBlock.baseHash))
     )
 
 }

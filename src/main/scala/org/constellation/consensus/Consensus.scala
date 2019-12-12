@@ -237,12 +237,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
       .maxBy(_._2.size)
       ._2
 
-    val checkpointBlock = sameBlocks.head._2
+    val checkpointBlock = sameBlocks.head._2 // TODO: unsafe
     val uniques = proposals.groupBy(_._2.baseHash).size
 
     for {
       maybeHeight <- checkpointAcceptanceService.calculateHeight(checkpointBlock)
-      cache = CheckpointCache(Some(checkpointBlock), height = maybeHeight)
+      cache = CheckpointCache(checkpointBlock, height = maybeHeight)
       _ <- dao.metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )
@@ -296,6 +296,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         Sync[F].pure(List.empty[Response[Unit]])
       else
         Sync[F].pure(List.empty[Response[Unit]])
+      // TODO: mwadon - uncomment
 //        calculationContext.blockOn(remoteCall)(
 //          broadcastSignedBlockToNonFacilitators(
 //            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
@@ -338,7 +339,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         .liftIO(dao.peerInfo)
         .map(info => info.values.toList.filterNot(pd => allFacilitators.contains(pd.peerMetadata.id)))
       _ <- logger.debug(
-        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.get.baseHash}"
+        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash}"
       )
       responses <- nonFacilitators.traverse(
         pd =>
