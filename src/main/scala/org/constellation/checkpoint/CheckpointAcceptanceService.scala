@@ -204,11 +204,11 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           }
           allowedToAccept <- awaitingBlocks.toList.filterA { c =>
             c.checkpointBlock
-              .map(AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService))
+              .map(AwaitingCheckpointBlock.areParentsSOEAccepted(checkpointParentService.soeService))
               .getOrElse(false.pure[F])
           }.flatMap(_.filterA { c =>
             c.checkpointBlock
-              .map(AwaitingCheckpointBlock.areParentsSOEAccepted(checkpointParentService.soeService))
+              .map(AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService))
               .getOrElse(false.pure[F])
           })
 
