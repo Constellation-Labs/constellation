@@ -9,6 +9,8 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
@@ -34,8 +36,9 @@ class SnapshotService[F[_]: Concurrent](
   trustManager: TrustManager[F],
   soeService: SOEService[F],
   dao: DAO
-)(implicit C: ContextShift[F])
-    extends StrictLogging {
+)(implicit C: ContextShift[F]) {
+
+  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   implicit val shadowDao: DAO = dao
 
@@ -73,10 +76,8 @@ class SnapshotService[F[_]: Concurrent](
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
 
       _ <- EitherT.liftF(
-        Sync[F].delay(
-          logger.debug(
-            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
-          )
+        logger.debug(
+          s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
         )
       )
       _ <- applySnapshot()
@@ -113,6 +114,7 @@ class SnapshotService[F[_]: Concurrent](
               stream =>
                 Sync[F].delay {
                   stream.write(KryoSerializer.serializeAnyRef(info))
+                }.flatTap { _ =>
                   logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
                 }
             )
@@ -265,25 +267,19 @@ class SnapshotService[F[_]: Concurrent](
 
       dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) >>
         Sync[F].pure {
-          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) {
+          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval))
+            ().asRight[SnapshotError]
+          else
+            HeightIntervalConditionNotMet.asLeft[Unit]
+        }.flatTap { e =>
+          if (e.isRight)
             logger.debug(
               s"height interval met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
-            )
-            Right(())
-          } else {
+            ) >> dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
+          else
             logger.debug(
               s"height interval not met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
-            )
-            Left(HeightIntervalConditionNotMet)
-          }
-        }.flatMap { e =>
-          val tap = if (e.isLeft) {
-            dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
-          } else {
-            dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
-          }
-
-          tap.map(_ => e)
+            ) >> dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
         }
     }
 
@@ -302,8 +298,8 @@ class SnapshotService[F[_]: Concurrent](
           h.min > height && h.min <= nextHeightInterval
         })
       }
-      _ <- Sync[F].delay(
-        logger.debug(s"blocks for snapshot between lastSnapshotHeight: $height nextHeightInterval: $nextHeightInterval")
+      _ <- logger.debug(
+        s"blocks for snapshot between lastSnapshotHeight: $height nextHeightInterval: $nextHeightInterval"
       )
     } yield blocks
 
@@ -363,8 +359,8 @@ class SnapshotService[F[_]: Concurrent](
             ) =>
           EitherT {
             Sync[F].delay {
-              val maybeEmpty =
-                maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty))
+              maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty))
+            }.flatTap { maybeEmpty =>
               logger.error(s"Snapshot data is missing for block: ${maybeEmpty}")
             }.flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))
               .map(_ => Left(SnapshotIllegalState))
@@ -380,8 +376,8 @@ class SnapshotService[F[_]: Concurrent](
                   .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
                   .map(_ => SnapshotIOError(t)),
               p =>
-                Sync[F]
-                  .delay(logger.debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}"))
+                logger
+                  .debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}")
                   .flatMap(_ => dao.metrics.incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.success))
             )
       }
