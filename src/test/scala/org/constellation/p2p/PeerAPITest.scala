@@ -71,6 +71,8 @@ class PeerAPITest
     /*
         Unfortunately ScalatestRouteTest instansiate it's own class of PeerAPI thus we can't spy on it
      */
+    // mwadon - commented out because it's not relevant anymore
+    /*
     "return accepted on finishing checkpoint and reply with callback when header is defined".ignore {
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
@@ -96,7 +98,7 @@ class PeerAPITest
       Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         status shouldEqual StatusCodes.Accepted
       }
-    }
+    }*/
 
     "should handle reply message" in {
       Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints(socketAddress) ~> check {

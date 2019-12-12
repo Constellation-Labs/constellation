@@ -238,7 +238,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             APIDirective.extractIP(socketAddress) { ip =>
               entity(as[FinishedCheckpoint]) { fc =>
                 optionalHeaderValueByName("ReplyTo") { replyToOpt =>
-                  val baseHash = fc.checkpointCacheData.checkpointBlock.map(_.baseHash)
+                  val baseHash = fc.checkpointCacheData.checkpointBlock.baseHash
                   logger.debug(
                     s"Handle finished checkpoint for cb: ${baseHash} and replyTo: $replyToOpt"
                   )
@@ -252,8 +252,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       .map(URI.create)
                       .map { u =>
                         logger.debug(
-                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock
-                            .map(_.baseHash)} performed $result"
+                          s"Making callback to: ${u.toURL} acceptance of cb: ${fc.checkpointCacheData.checkpointBlock.baseHash} performed $result"
                         )
                         makeCallback(u, FinishedCheckpointResponse(true))
                       }
@@ -269,8 +268,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                         complete(StatusCodes.Accepted)
                       case (nextHeight, Some(Height(min, max))) if nextHeight > min =>
                         logger.debug(
-                          s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock
-                            .map(_.baseHash)} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
+                          s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock.baseHash} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
                         )
                         complete(StatusCodes.Conflict)
                       case (_, _) =>

@@ -75,7 +75,7 @@ class CheckpointParentService[F[_]: Sync](
           if (cbs.exists(_.isEmpty)) dao.metrics.incrementMetricAsync("validationParentCBLookupMissing")
           else Sync[F].unit
       )
-      .map(_.flatMap(_.flatMap(_.checkpointBlock)))
+      .map(_.flatMap(_.map(_.checkpointBlock)))
 
   def incrementChildrenCount(checkpointBlock: CheckpointBlock): F[List[Option[CheckpointCacheMetadata]]] =
     parentSOEBaseHashes(checkpointBlock).flatMap(_.traverse { hash =>

@@ -166,10 +166,9 @@ class DataResolver extends StrictLogging {
         priorityClient
       )(contextToReturn).head
         .flatTap(cpc => dao.checkpointAcceptanceService.accept(cpc)(contextToReturn))
-        .flatTap(
-          cb =>
-            IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
-        ),
+        .flatTap { cb =>
+          IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}"))
+        },
       s"dataResolver_resolveCheckpoint [${hash}]",
       logger
     )

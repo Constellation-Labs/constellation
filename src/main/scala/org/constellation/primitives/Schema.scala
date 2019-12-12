@@ -269,7 +269,7 @@ object Schema {
     height: Option[Height] = None
   )
   case class CheckpointCache(
-    checkpointBlock: Option[CheckpointBlock] = None,
+    checkpointBlock: CheckpointBlock,
     children: Int = 0,
     height: Option[Height] = None
   ) {

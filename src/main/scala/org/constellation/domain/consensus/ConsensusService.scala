@@ -59,21 +59,21 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService pendingPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(c => c.checkpointBlock.map(_.baseHash))}")
+              .map(_.checkpointBlock.baseHash)}")
         )
     case ConsensusStatus.Accepted =>
       withLock("acceptedUpdate", accepted.put(a.hash, a))
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService acceptedPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(c => c.checkpointBlock.map(_.baseHash))}")
+              .map(_.checkpointBlock.baseHash)}")
         )
     case ConsensusStatus.Unknown =>
       withLock("unknownUpdate", unknown.put(a.hash, a))
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService unknownPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(c => c.checkpointBlock.map(_.baseHash))}")
+              .map(_.checkpointBlock.baseHash)}")
         )
     case _ => new Exception("Unknown consensus status").raiseError[F, A]
   }
@@ -128,7 +128,7 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService remove with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(c => c.checkpointBlock.map(_.baseHash))}")
+              .map(_.checkpointBlock.baseHash)}")
         )
 
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)

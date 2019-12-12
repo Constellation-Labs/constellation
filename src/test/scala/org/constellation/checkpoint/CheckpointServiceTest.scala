@@ -85,7 +85,7 @@ class CheckpointServiceTest
           .pure(Some(SignedObservationEdgeCache(c.soe)))
 
         peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(CheckpointCache(Some(c))))
+          .pure(Some(CheckpointCache(c)))
 
         peer.postNonBlockingIO[List[(String, TransactionCacheData)]](eqTo(s"batch/transactions"), *, *)(*)(*, *) shouldReturn IO
           .pure(
@@ -103,7 +103,7 @@ class CheckpointServiceTest
       }
 
       dao.checkpointAcceptanceService
-        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(cb3, 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
     }
@@ -138,7 +138,7 @@ class CheckpointServiceTest
           .pure(Some(SignedObservationEdgeCache(c.soe)))
 
         peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(CheckpointCache(Some(c))))
+          .pure(Some(CheckpointCache(c)))
 
         peer.postNonBlockingIO[List[(String, TransactionCacheData)]](eqTo(s"batch/transactions"), *, *)(*)(*, *) shouldReturn IO
           .pure(
@@ -156,7 +156,7 @@ class CheckpointServiceTest
       }
 
       dao.checkpointAcceptanceService
-        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
+        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(cb3, 0, Some(Height(1, 1))), Set(dao.id)))
         .unsafeRunSync()
       dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
     }
