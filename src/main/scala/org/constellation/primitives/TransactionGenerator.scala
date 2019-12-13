@@ -8,6 +8,7 @@ import cats.effect.{Async, Concurrent, LiftIO}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
@@ -20,13 +21,15 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.util.{Failure, Random, Success}
 
-class TransactionGenerator[F[_]: Concurrent: Logger](
+class TransactionGenerator[F[_]: Concurrent](
   addressService: AddressService[F],
   transactionGossiping: TransactionGossiping[F],
   transactionService: TransactionService[F],
   cluster: Cluster[F],
   dao: DAO
 ) {
+
+  val logger = Slf4jLogger.getLogger[F]
 
   private final val roundCounter = new AtomicInteger(0)
   private final val emptyRounds = ConfigUtil.constellation.getInt("transaction.generator.emptyTransactionsRounds")
@@ -67,7 +70,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
         _ <- putTransaction(transaction)
 
 //      transactionCacheData <- observeTransaction(transaction)
-//      _ <- Logger[F].debug(
+//      _ <- logger.debug(
 //        s"Rebroadcast transaction=${transactionCacheData.transaction.hash}, initial path=${transactionCacheData.path}"
 //      )
 //      peers <- selectPeers(transactionCacheData)
@@ -256,7 +259,7 @@ class TransactionGenerator[F[_]: Concurrent: Logger](
 
 object TransactionGenerator {
 
-  def apply[F[_]: Concurrent: Logger](
+  def apply[F[_]: Concurrent](
     addressService: AddressService[F],
     transactionGossiping: TransactionGossiping[F],
     transactionService: TransactionService[F],

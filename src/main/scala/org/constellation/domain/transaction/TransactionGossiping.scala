@@ -12,13 +12,13 @@ import org.constellation.util.Logging._
 
 import scala.util.Random
 
-class TransactionGossiping[F[_]: Concurrent: Logger: Clock](
+class TransactionGossiping[F[_]: Concurrent: Clock](
   transactionService: TransactionService[F],
   fanout: Int,
   dao: DAO
 ) {
 
-  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def selectPeers(tx: TransactionCacheData)(implicit random: Random): F[Set[Id]] =
     for {

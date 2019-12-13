@@ -8,6 +8,7 @@ import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
@@ -51,13 +52,15 @@ object PeerState extends Enumeration {
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
-class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManager[F], dao: DAO)(
+class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], dao: DAO)(
   implicit C: ContextShift[F]
 ) {
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
+
+  implicit val logger = Slf4jLogger.getLogger[F]
 
   implicit val shadedDao: DAO = dao
 
@@ -84,7 +87,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
             p.copy(notification = p.notification.diff(Seq(n)))
           }
         }
-        _ <- Logger[F].debug(s"Peer update: ${peerUpdate}")
+        _ <- logger.debug(s"Peer update: ${peerUpdate}")
         _ <- peerUpdate.traverse(updatePeerInfo) // TODO: bulk update
       } yield (),
       "cluster_updatePeerNotifications"
@@ -96,7 +99,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
         ip = peerData.client.hostName
         _ <- ipManager.addKnownIP(ip)
-        _ <- Logger[F].debug(s"Added $ip to known peers.")
+        _ <- logger.debug(s"Added $ip to known peers.")
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),
@@ -214,7 +217,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     logThread(
       for {
         pr <- PendingRegistration(ip, request).pure[F]
-        _ <- Logger[F].debug(s"Pending Registration request: $pr")
+        _ <- logger.debug(s"Pending Registration request: $pr")
         validExternalHost = validWithLoopbackGuard(request.host)
         peers <- peers.get
         existsNotOffline = peers.exists {
@@ -234,17 +237,17 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
 
           req.flatTap { sig =>
             if (sig.hashSignature.id != request.id) {
-              Logger[F].warn(s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}") >>
+              logger.warn(s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}") >>
                 dao.metrics.incrementMetricAsync[F]("peerKeyMismatch")
             } else Sync[F].unit
           }.flatTap { sig =>
             if (!sig.valid) {
-              Logger[F].warn(s"Invalid peer signature $request $authSignRequest $sig") >>
+              logger.warn(s"Invalid peer signature $request $authSignRequest $sig") >>
                 dao.metrics.incrementMetricAsync[F]("invalidPeerRegistrationSignature")
             } else Sync[F].unit
           }.flatTap { sig =>
             dao.metrics.incrementMetricAsync[F]("peerAddedFromRegistrationFlow") >>
-              Logger[F].debug(s"Valid peer signature $request $authSignRequest $sig")
+              logger.debug(s"Valid peer signature $request $authSignRequest $sig")
           }.flatMap {
             sig =>
               val state = withMetric(
@@ -268,7 +271,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
               }.void
 
           }.handleErrorWith { err =>
-            Logger[F].warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
+            logger.warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
               dao.metrics.incrementMetricAsync[F]("peerSignatureRequestFailed")
           }
         }
@@ -409,12 +412,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         _ <- attemptRollback()
 
         _ <- if (dao.peersInfoPath.nonEmpty && dao.seedsPath.isEmpty) {
-          Logger[F].warn(
+          logger.warn(
             "Found existing peers in persistent storage. Node probably crashed before and will try to rejoin the cluster."
           )
           rejoin()
         } else {
-          Logger[F].warn("No peers in persistent storage. Skipping rejoin.")
+          logger.warn("No peers in persistent storage. Skipping rejoin.")
         }
 
         _ <- if (dao.seedsPath.nonEmpty && dao.peersInfoPath.isEmpty) {
@@ -422,7 +425,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
             Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.bounded))
           )
         } else {
-          Logger[F].warn("No seeds configured yet. Skipping initial download.")
+          logger.warn("No seeds configured yet. Skipping initial download.")
         }
       } yield (),
       "cluster_initiatePeerReload"
@@ -431,7 +434,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def attemptRegisterSelfWithPeer(hp: HostPort): F[Unit] =
     logThread(
       for {
-        _ <- Logger[F].info(s"Attempting to register with $hp")
+        _ <- logger.info(s"Attempting to register with $hp")
         _ <- withMetric(
           APIClient(hp.host, hp.port)(dao.backend, dao)
             .postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C),
@@ -454,7 +457,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
                 client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C)
             }
             .handleErrorWith { err =>
-              Logger[F].error(s"registration request failed: $err") >>
+              logger.error(s"registration request failed: $err") >>
                 dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
                 err.raiseError[F, Response[Unit]]
             }
@@ -473,13 +476,13 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
         case hostPort :: remainingHostPorts =>
           join(hostPort)
             .handleErrorWith(err => {
-              Logger[F].error(s"Couldn't rejoin via ${hostPort.host}: ${err.getMessage}")
+              logger.error(s"Couldn't rejoin via ${hostPort.host}: ${err.getMessage}")
               attemptRejoin(remainingHostPorts)
             })
       }
 
     for {
-      _ <- Logger[F].warn("Trying to rejoin the cluster...")
+      _ <- logger.warn("Trying to rejoin the cluster...")
 
       lastKnownPeers = dao.peersInfoPath.lines.mkString
         .x[Seq[PeerMetadata]]
@@ -497,12 +500,12 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
           { err =>
             err match {
               case CannotLoadSnapshotInfoFile(path) =>
-                Logger[F].warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
+                logger.warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
               case CannotLoadSnapshotsFiles(path) =>
-                Logger[F].warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
+                logger.warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
               case CannotLoadGenesisObservationFile(path) =>
-                Logger[F].warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
-              case _ => Logger[F].error(s"Rollback failed: ${err}")
+                logger.warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
+              case _ => logger.error(s"Rollback failed: ${err}")
             }
           },
           _ => Logger[F].warn(s"Performed rollback.")
@@ -531,7 +534,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
     logThread(
       for {
-        _ <- Logger[F].info("Trying to gracefully leave the cluster")
+        _ <- logger.info("Trying to gracefully leave the cluster")
 
         _ <- broadcastLeaveRequest()
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)
@@ -559,7 +562,7 @@ class Cluster[F[_]: Concurrent: Logger: Timer: ContextShift](ipManager: IPManage
     logThread(
       broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(nodeId, nodeState))(C)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
-          case (id, e) => Logger[F].warn(s"Unable to propagate status to node ID: $id")
+          case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
         }
       }.void,
       "cluster_broadcastNodeState"
@@ -627,7 +630,7 @@ object Cluster {
 
   type Peers = Map[Id, PeerData]
 
-  def apply[F[_]: Concurrent: Logger: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
+  def apply[F[_]: Concurrent: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
     new Cluster(ipManager, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)

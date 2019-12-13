@@ -11,6 +11,7 @@ import com.amazonaws.services.s3.{AmazonS3, AmazonS3Client, AmazonS3ClientBuilde
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.storage._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 
 import scala.util.{Failure, Success, Try}
@@ -20,25 +21,27 @@ sealed trait CloudStorage[F[_]] {
   def upload(files: Seq[File]): F[List[String]]
 }
 
-class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
+class GcpStorage[F[_]: Concurrent] extends CloudStorage[F] {
+
+  val logger = Slf4jLogger.getLogger[F]
 
   override def upload(files: Seq[File]): F[List[String]] = {
     val upload = for {
       credentials <- createCredentials()
-      _ <- Logger[F].debug("Credentials created successfully")
+      _ <- logger.debug("Credentials created successfully")
 
       service <- getStorage(credentials)
-      _ <- Logger[F].debug("Service created successfully")
+      _ <- logger.debug("Service created successfully")
 
       bucket <- getBucket(service)
-      _ <- Logger[F].debug("Bucket got successfully")
+      _ <- logger.debug("Bucket got successfully")
 
       blobs <- saveToBucket(bucket, files)
-      _ <- Logger[F].debug("Files saved successfully")
+      _ <- logger.debug("Files saved successfully")
     } yield blobs.map(b => b.getName)
 
     upload.handleErrorWith(
-      err => Logger[F].error(s"Cannot upload files : GCP : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
+      err => logger.error(s"Cannot upload files : GCP : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
     )
   }
 
@@ -79,7 +82,9 @@ class GcpStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
     Sync[F].delay(ConfigUtil.get(configName))
 }
 
-class AwsStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
+class AwsStorage[F[_]: Concurrent] extends CloudStorage[F] {
+
+  val logger = Slf4jLogger.getLogger[F]
 
   override def upload(files: Seq[File]): F[List[String]] = {
     val upload = for {
@@ -87,18 +92,18 @@ class AwsStorage[F[_]: Concurrent: Logger] extends CloudStorage[F] {
       secretKey <- getSecretKey
       region <- getRegion
       service <- getService(accessKey, secretKey, region)
-      _ <- Logger[F].debug("Service created successfully")
+      _ <- logger.debug("Service created successfully")
 
       bucketName <- getBucketName
       _ <- checkBucket(service, bucketName)
-      _ <- Logger[F].debug("Bucket got successfully")
+      _ <- logger.debug("Bucket got successfully")
 
       result <- saveToBucket(service, bucketName, files)
-      _ <- Logger[F].debug("Files saved successfully")
+      _ <- logger.debug("Files saved successfully")
     } yield result.map(_._1)
 
     upload.handleErrorWith(
-      err => Logger[F].error(s"Cannot upload files : AWS : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
+      err => logger.error(s"Cannot upload files : AWS : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
     )
   }
 
