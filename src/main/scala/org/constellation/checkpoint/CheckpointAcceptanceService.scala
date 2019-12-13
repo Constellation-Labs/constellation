@@ -1,17 +1,22 @@
 package org.constellation.checkpoint
 
 import cats.effect.concurrent.{Ref, Semaphore}
-import cats.effect.{Bracket, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.domain.checkpointBlock.AwaitingCheckpointBlock
+import org.constellation.domain.blacklist.BlacklistedAddresses
+import org.constellation.domain.checkpointBlock.{
+  AwaitingCheckpointBlock,
+  CheckpointBlockBlacklistedAddressChecker,
+  CheckpointBlockDoubleSpendChecker
+}
 import org.constellation.domain.observation.{CheckpointBlockInvalid, Observation, ObservationService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.storage._
@@ -22,6 +27,7 @@ import scala.concurrent.duration._
 
 class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   addressService: AddressService[F],
+  blacklistedAddresses: BlacklistedAddresses[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
   concurrentTipService: ConcurrentTipService[F],
@@ -180,7 +186,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         _ <- checkpointParentService.incrementChildrenCount(cb)
         _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
         _ <- acceptMessages(cb)
-        _ <- acceptTransactions(cb, Some(checkpoint))
+        doubleSpendTxs <- CheckpointBlockDoubleSpendChecker.check(cb)(transactionService.transactionChainService)
+        blacklistedTxs <- CheckpointBlockBlacklistedAddressChecker.check(cb)(blacklistedAddresses)
+        _ <- acceptTransactions(cb, Some(checkpoint), doubleSpendTxs.map(_.hash))
         _ <- acceptObservations(cb, Some(checkpoint))
         _ <- updateRateLimiting(cb)
         _ <- Sync[F].delay {
@@ -199,8 +207,11 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         allowedToAccept <- awaitingBlocks.toList.filterA { c =>
           AwaitingCheckpointBlock.areParentsSOEAccepted(checkpointParentService.soeService)(c.checkpointBlock)
         }.flatMap(_.filterA { c =>
-          AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService)(c.checkpointBlock)
-        })
+            AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService)(c.checkpointBlock)
+          })
+          .flatMap(_.filterA { _ =>
+            Sync[F].pure(blacklistedTxs.isEmpty)
+          })
 
         _ <- dao.metrics.updateMetricAsync[F]("awaitingForAcceptance", awaitingBlocks.size)
         _ <- dao.metrics.updateMetricAsync[F]("allowedForAcceptance", allowedToAccept.size)
@@ -333,29 +344,44 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   def acceptObservations(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] =
     cb.observations.toList.traverse(o => observationService.accept(o, cpc)).void
 
-  def acceptTransactions(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] = {
+  def acceptTransactions(
+    cb: CheckpointBlock,
+    cpc: Option[CheckpointCache] = None,
+    txsHashToFilter: Seq[String] = Seq.empty
+  ): F[Unit] = {
     def toCacheData(tx: Transaction) = TransactionCacheData(
       tx,
       Map(cb.baseHash -> true),
       cbBaseHash = Some(cb.baseHash)
     )
 
-    val insertTX =
-      LiftIO[F].liftIO {
-        cb.transactions.toList
-          .map(tx ⇒ (tx, toCacheData(tx)))
-          .traverse {
-            case (tx, txMetadata) =>
-              dao.transactionService.accept(txMetadata, cpc) >> transferIfNotDummy(tx)
-          }
-          .void
+    cb.transactions.toList
+      .filterNot(h => txsHashToFilter.contains(h.hash))
+      .map(tx => (tx, toCacheData(tx)))
+      .traverse {
+        case (tx, txMetadata) => LiftIO[F].liftIO(dao.transactionService.accept(txMetadata, cpc)) >> transfer(tx)
       }
-
-    insertTX
+      .void
   }
 
-  private def transferIfNotDummy(transaction: Transaction): IO[Unit] =
-    if (!transaction.isDummy) dao.addressService.transfer(transaction).void else IO.unit
+  private def transfer(tx: Transaction): F[Unit] =
+    shouldTransfer(tx).ifM(
+      LiftIO[F].liftIO(dao.addressService.transfer(tx).void),
+      logger.info(s"Transaction with hash blocked = ${tx.hash} : is dummy = ${tx.isDummy}")
+    )
+
+  private def shouldTransfer(tx: Transaction): F[Boolean] =
+    for {
+      isBlacklisted <- isBlacklistedAddress(tx)
+      _ <- if (isBlacklisted) dao.metrics.incrementMetricAsync[F]("blockedBlacklistedTxs") else Sync[F].unit
+      isDummy <- isDummyTransaction(tx)
+    } yield !(isBlacklisted || isDummy)
+
+  private def isBlacklistedAddress(tx: Transaction): F[Boolean] =
+    blacklistedAddresses.contains(tx.src.address)
+
+  private def isDummyTransaction(tx: Transaction): F[Boolean] =
+    tx.isDummy.pure[F]
 
   private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
     rateLimiting.update(cb.transactions.toList)
