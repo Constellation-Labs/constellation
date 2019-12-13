@@ -250,9 +250,10 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           cbs <- t
             .flatMap(_.cbBaseHash)
             .distinct
-            .traverse(hash => checkpointService.contains(hash).map(exist => (hash, exist)))
-            .map(_.filterNot(_._2))
-            .map(_.map(_._1))
+            .filterA(checkpointService.contains(_).map(!_))
+            .flatMap {
+              _.filterA(hash => awaiting.get.map(_.map(_.checkpointBlock.baseHash).contains(hash)).map(!_))
+            }
             .flatMap {
               _.traverse { hash =>
                 LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash)(contextShift))
@@ -278,9 +279,12 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
     val resolveCheckpoints = missingSoeHashes
       .map(_.flatMap(_ => checkpointParentService.parentBaseHashesDirect(cb)))
-      .flatMap(_.traverse(hash => checkpointService.contains(hash).map(exist => (hash, exist))))
-      .map(_.filterNot(_._2))
-      .map(_.map(_._1))
+      .flatMap {
+        _.filterA(checkpointService.contains(_).map(!_))
+      }
+      .flatMap {
+        _.filterA(hash => awaiting.get.map(_.map(_.checkpointBlock.baseHash).contains(hash)).map(!_))
+      }
       .flatMap {
         _.traverse { hash =>
           LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash)(contextShift)(dao = dao))
