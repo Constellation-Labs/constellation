@@ -13,6 +13,12 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
   private[storage] val counter: Ref[F, Map[Schema.Address, Int]] = Ref.unsafe[F, Map[Schema.Address, Int]](Map())
   private[storage] val blacklisted: StorageService[F, Int] = new StorageService("rate_limiting_blacklist".some)
 
+  def update(txs: List[Transaction]): F[Unit] = Concurrent[F].unit
+  def reset(cbHashes: List[String])(checkpointService: CheckpointService[F]): F[Unit] = Concurrent[F].unit
+  def available(address: Schema.Address): F[Int] = Concurrent[F].pure(limits.available)
+  def blacklist(): F[Unit] = Concurrent[F].unit
+
+  /*
   def update(txs: List[Transaction]): F[Unit] =
     for {
       grouped <- txs.groupBy(_.src).mapValues(_.size).pure[F]
@@ -51,6 +57,8 @@ class RateLimiting[F[_]: Concurrent: Logger]() {
       left <- c.keys.toList.traverse(a => available(a).map(a -> _))
       _ <- left.filter(_._2 <= 0).traverse(p => blacklisted.update(p._1.address, _ => p._2, p._2))
     } yield ()
+
+   */
 
   object limits {
     val total = 50
