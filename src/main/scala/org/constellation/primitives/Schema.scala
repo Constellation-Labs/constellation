@@ -285,8 +285,6 @@ object Schema {
 
   }
 
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
-
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
   case class ValidPeerIPData(canonicalHostName: String, port: Int)

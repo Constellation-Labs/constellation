@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.net.SocketTimeoutException
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Concurrent, ContextShift, IO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -10,7 +10,7 @@ import org.constellation.DAO
 import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, RequestTimeoutOnResolving}
-import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
+import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdge}
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.Logging._
 import org.constellation.util.{Distance, PeerApiClient}
@@ -165,7 +165,7 @@ class DataResolver extends StrictLogging {
         pool,
         priorityClient
       )(contextToReturn).head
-        .flatTap(cpc => dao.checkpointAcceptanceService.accept(cpc)(contextToReturn))
+        .flatTap(dao.checkpointAcceptanceService.accept(_)(contextToReturn).start(contextToReturn))
         .flatTap { cb =>
           IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}"))
         },
@@ -178,7 +178,7 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(
     contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdge]] =
     getPeersForResolving(dao).flatMap(resolveSoe(hashes, _, priorityClient)(contextToReturn))
 
   def resolveSoe(
@@ -187,14 +187,14 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(
     contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdge]] =
     logThread(
-      resolveDataByDistanceFlat[SignedObservationEdgeCache](
+      resolveDataByDistanceFlat[SignedObservationEdge](
         hashes,
         "soe",
         pool,
         priorityClient
-      )(contextToReturn).flatTap(s => s.traverse(soc => dao.soeService.put(soc.signedObservationEdge.hash, soc))),
+      )(contextToReturn).flatTap(_.traverse(soe => dao.soeService.put(soe.hash, soe))),
       s"dataResolver_resolveSoe [${hashes}]",
       logger
     )

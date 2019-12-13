@@ -16,7 +16,7 @@ import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
@@ -168,7 +168,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        soeService.put(h.checkpointBlock.soeHash, SignedObservationEdgeCache(h.checkpointBlock.soe, true)) >>
+        soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
           h.checkpointBlock.transactions.toList
