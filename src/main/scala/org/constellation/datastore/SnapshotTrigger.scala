@@ -42,8 +42,9 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
           case Left(SnapshotIllegalState) =>
             handleError(SnapshotIllegalState, stateSet)
               .flatMap(_ => contextShift.shift >> dao.snapshotBroadcastService.verifyRecentSnapshots())
-          case Left(HeightIntervalConditionNotMet) =>
+          case Left(err @ HeightIntervalConditionNotMet) =>
             resetNodeState(stateSet) >>
+              IO(logger.warn(s"Snapshot attempt: ${err.message}")) >>
               dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + "_heightIntervalNotMet")
           case Left(err) =>
             handleError(err, stateSet)
@@ -64,7 +65,7 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
 
   def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] =
     resetNodeState(stateSet) >>
-      IO(logger.warn(s"Snapshot attempt error: $err"))
+      IO(logger.warn(s"Snapshot attempt error: ${err.message}"))
         .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
 
   override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)

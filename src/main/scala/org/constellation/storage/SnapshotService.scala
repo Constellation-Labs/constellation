@@ -513,17 +513,43 @@ object SnapshotService {
     )
 }
 
-sealed trait SnapshotError extends Throwable
+sealed trait SnapshotError extends Throwable {
+  def message: String
+}
 
-object MaxCBHashesInMemory extends SnapshotError
-object NodeNotReadyForSnapshots extends SnapshotError
-object NoAcceptedCBsSinceSnapshot extends SnapshotError
-object HeightIntervalConditionNotMet extends SnapshotError
-object NoBlocksWithinHeightInterval extends SnapshotError
-object SnapshotIllegalState extends SnapshotError
-case class SnapshotIOError(cause: Throwable) extends SnapshotError
-case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError
+object MaxCBHashesInMemory extends SnapshotError {
+  def message: String = "Reached maximum checkpoint block hashes in memory"
+}
 
-case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError
+object NodeNotReadyForSnapshots extends SnapshotError {
+  def message: String = "Node is not ready for creating snapshots"
+}
+
+object NoAcceptedCBsSinceSnapshot extends SnapshotError {
+  def message: String = "Node has no checkpoint blocks since last snapshot"
+}
+
+object HeightIntervalConditionNotMet extends SnapshotError {
+  def message: String = "Height interval condition has not been met"
+}
+
+object NoBlocksWithinHeightInterval extends SnapshotError {
+  def message: String = "Found no blocks within the next snapshot height interval"
+}
+
+object SnapshotIllegalState extends SnapshotError {
+  def message: String = "Snapshot illegal state"
+}
+
+case class SnapshotIOError(cause: Throwable) extends SnapshotError {
+  def message: String = s"Snapshot IO error: ${cause.getMessage}"
+}
+case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError {
+  def message: String = s"Snapshot unexpected error: ${cause.getMessage}"
+}
+
+case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError {
+  def message: String = s"SnapshotInfo IO error: ${cause.getMessage}"
+}
 
 case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])
