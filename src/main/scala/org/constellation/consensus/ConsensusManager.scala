@@ -357,9 +357,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
       resolved <- missing
         .map(_.baseHash)
-        .traverse(hash => checkpointService.contains(hash).map(exist => (hash, exist)))
-        .map(_.filterNot(_._2))
-        .map(_.map(_._1))
+        .filterA(checkpointService.contains(_).map(!_))
         .flatTap { hashes =>
           logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
         }
