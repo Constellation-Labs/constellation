@@ -4,16 +4,19 @@ import cats.data.OptionT
 import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.primitives.Schema._
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 
 import scala.util.Random
 
-class MajorityStateChooser[F[_]: Concurrent: Logger] {
+class MajorityStateChooser[F[_]: Concurrent] {
 
   type NodeSnapshots = (Id, Seq[RecentSnapshot])
   type SnapshotNodes = (RecentSnapshot, Seq[Id])
+
+  val logger = Slf4jLogger.getLogger[F]
 
   private final val differenceInSnapshotHeightToReDownloadFromLeader = 10
 
@@ -28,7 +31,7 @@ class MajorityStateChooser[F[_]: Concurrent: Logger] {
       )
       nodeId <- OptionT.fromOption[F](chooseNodeId(majorState))
       node: (Id, Seq[RecentSnapshot]) <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
-      _ <- OptionT.liftF(Logger[F].debug(s"Re-download from node : ${node}"))
+      _ <- OptionT.liftF(logger.debug(s"Re-download from node : ${node}"))
     } yield dropToCurrentState(node, majorState)
 
   private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], ownHeight: Long) =
@@ -38,7 +41,7 @@ class MajorityStateChooser[F[_]: Concurrent: Logger] {
       majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots))
 
       _ <- OptionT.liftF(
-        Logger[F].debug(
+        logger.debug(
           s"The highest snapshot : $highestSnapshot : major snapshot : $majorSnapshot : use highest = $majorSnapshot"
         )
       )

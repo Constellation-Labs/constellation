@@ -211,6 +211,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       rateLimiting,
       consensusManager,
       trustManager,
+      soeService,
       this
     )
 

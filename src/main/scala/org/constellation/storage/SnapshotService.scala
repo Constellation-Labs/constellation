@@ -9,6 +9,8 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
@@ -32,9 +34,11 @@ class SnapshotService[F[_]: Concurrent](
   rateLimiting: RateLimiting[F],
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
+  soeService: SOEService[F],
   dao: DAO
-)(implicit C: ContextShift[F])
-    extends StrictLogging {
+)(implicit C: ContextShift[F]) {
+
+  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   implicit val shadowDao: DAO = dao
 
@@ -68,14 +72,12 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
       allBlocks = blocksWithinHeightInterval.map(_.get)
 
-      hashesForNextSnapshot = allBlocks.flatMap(_.checkpointBlock.map(_.baseHash)).sorted
+      hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash).sorted
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
 
       _ <- EitherT.liftF(
-        Sync[F].delay(
-          logger.debug(
-            s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
-          )
+        logger.debug(
+          s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval - snapshotHeightInterval}"
         )
       )
       _ <- applySnapshot()
@@ -112,6 +114,7 @@ class SnapshotService[F[_]: Concurrent](
               stream =>
                 Sync[F].delay {
                   stream.write(KryoSerializer.serializeAnyRef(info))
+                }.flatTap { _ =>
                   logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
                 }
             )
@@ -165,17 +168,17 @@ class SnapshotService[F[_]: Concurrent](
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        LiftIO[F].liftIO(h.checkpointBlock.get.storeSOE()) >>
+        soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
-          h.checkpointBlock.get.transactions.toList
+          h.checkpointBlock.transactions.toList
             .traverse(
               tx =>
                 transactionService
                   .accept(TransactionCacheData(tx), Some(h))
                   .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
             ) >>
-          h.checkpointBlock.get.observations.toList
+          h.checkpointBlock.observations.toList
             .traverse(obs => observationService.accept(obs, Some(h)))
             .flatTap(_ => dao.metrics.incrementMetricAsync("observationAccepted"))
       }
@@ -189,7 +192,7 @@ class SnapshotService[F[_]: Concurrent](
   def syncBufferAccept(cb: FinishedCheckpoint): F[Unit] =
     for {
       size <- syncBuffer.modify { curr =>
-        val updated = curr + (cb.checkpointCacheData.checkpointBlock.get.baseHash -> cb)
+        val updated = curr + (cb.checkpointCacheData.checkpointBlock.baseHash -> cb)
         (updated, updated.size)
       }
       _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", size.toString)
@@ -264,25 +267,19 @@ class SnapshotService[F[_]: Concurrent](
 
       dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) >>
         Sync[F].pure {
-          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) {
+          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval))
+            ().asRight[SnapshotError]
+          else
+            HeightIntervalConditionNotMet.asLeft[Unit]
+        }.flatTap { e =>
+          if (e.isRight)
             logger.debug(
               s"height interval met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
-            )
-            Right(())
-          } else {
+            ) >> dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
+          else
             logger.debug(
               s"height interval not met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
-            )
-            Left(HeightIntervalConditionNotMet)
-          }
-        }.flatMap { e =>
-          val tap = if (e.isLeft) {
-            dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
-          } else {
-            dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
-          }
-
-          tap.map(_ => e)
+            ) >> dao.metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
         }
     }
 
@@ -301,8 +298,8 @@ class SnapshotService[F[_]: Concurrent](
           h.min > height && h.min <= nextHeightInterval
         })
       }
-      _ <- Sync[F].delay(
-        logger.debug(s"blocks for snapshot between lastSnapshotHeight: $height nextHeightInterval: $nextHeightInterval")
+      _ <- logger.debug(
+        s"blocks for snapshot between lastSnapshotHeight: $height nextHeightInterval: $nextHeightInterval"
       )
     } yield blocks
 
@@ -358,19 +355,19 @@ class SnapshotService[F[_]: Concurrent](
       .flatMap {
         case maybeBlocks
             if maybeBlocks.exists(
-              maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty)
+              maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty
             ) =>
           EitherT {
             Sync[F].delay {
-              val maybeEmpty =
-                maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.exists(_.checkpointBlock.isEmpty))
+              maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty)
+            }.flatTap { maybeEmpty =>
               logger.error(s"Snapshot data is missing for block: ${maybeEmpty}")
             }.flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))
               .map(_ => Left(SnapshotIllegalState))
           }
 
         case maybeBlocks =>
-          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.map(_.baseHash))
+          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.baseHash)
           Snapshot
             .writeSnapshot(StoredSnapshot(currentSnapshot, flatten))
             .biSemiflatMap(
@@ -379,8 +376,8 @@ class SnapshotService[F[_]: Concurrent](
                   .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
                   .map(_ => SnapshotIOError(t)),
               p =>
-                Sync[F]
-                  .delay(logger.debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}"))
+                logger
+                  .debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}")
                   .flatMap(_ => dao.metrics.incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.success))
             )
       }
@@ -498,6 +495,7 @@ object SnapshotService {
     rateLimiting: RateLimiting[F],
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
+    soeService: SOEService[F],
     dao: DAO
   )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
@@ -510,21 +508,48 @@ object SnapshotService {
       rateLimiting,
       consensusManager,
       trustManager,
+      soeService,
       dao
     )
 }
 
-sealed trait SnapshotError extends Throwable
+sealed trait SnapshotError extends Throwable {
+  def message: String
+}
 
-object MaxCBHashesInMemory extends SnapshotError
-object NodeNotReadyForSnapshots extends SnapshotError
-object NoAcceptedCBsSinceSnapshot extends SnapshotError
-object HeightIntervalConditionNotMet extends SnapshotError
-object NoBlocksWithinHeightInterval extends SnapshotError
-object SnapshotIllegalState extends SnapshotError
-case class SnapshotIOError(cause: Throwable) extends SnapshotError
-case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError
+object MaxCBHashesInMemory extends SnapshotError {
+  def message: String = "Reached maximum checkpoint block hashes in memory"
+}
 
-case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError
+object NodeNotReadyForSnapshots extends SnapshotError {
+  def message: String = "Node is not ready for creating snapshots"
+}
+
+object NoAcceptedCBsSinceSnapshot extends SnapshotError {
+  def message: String = "Node has no checkpoint blocks since last snapshot"
+}
+
+object HeightIntervalConditionNotMet extends SnapshotError {
+  def message: String = "Height interval condition has not been met"
+}
+
+object NoBlocksWithinHeightInterval extends SnapshotError {
+  def message: String = "Found no blocks within the next snapshot height interval"
+}
+
+object SnapshotIllegalState extends SnapshotError {
+  def message: String = "Snapshot illegal state"
+}
+
+case class SnapshotIOError(cause: Throwable) extends SnapshotError {
+  def message: String = s"Snapshot IO error: ${cause.getMessage}"
+}
+case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError {
+  def message: String = s"Snapshot unexpected error: ${cause.getMessage}"
+}
+
+case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError {
+  def message: String = s"SnapshotInfo IO error: ${cause.getMessage}"
+}
 
 case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])

@@ -306,7 +306,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           f.traverse { h =>
             Sync[F].delay(
               logger.debug(
-                s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.get.baseHash}"
+                s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.baseHash}"
               )
             ) >> checkpointAcceptanceService.accept(h).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
@@ -322,9 +322,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   private def filter(buffer: List[FinishedCheckpoint], info: SnapshotInfo) = {
     val alreadyAccepted =
-      (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.get.baseHash)).distinct
+      (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.baseHash)).distinct
     buffer.filterNot(
-      f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.get.baseHash)
+      f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.baseHash)
     )
   }
 

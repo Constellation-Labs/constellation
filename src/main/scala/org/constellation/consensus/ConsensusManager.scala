@@ -7,11 +7,11 @@ import cats.implicits._
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointParentService, CheckpointService}
 import org.constellation.consensus.Consensus._
 import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType, SignedObservationEdgeCache}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
@@ -348,35 +348,37 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   private[consensus] def resolveMissingParents(
     roundData: RoundData
-  )(implicit dao: DAO): F[List[CheckpointCache]] = {
-    def resolve(hash: String, peer: Option[PeerApiClient]): F[CheckpointCache] =
-      LiftIO[F].liftIO(
-        DataResolver.resolveCheckpointDefaults(hash, peer)(IO.contextShift(ConstellationExecutionContext.bounded))(
-          dao = shadowDAO
-        )
-      )
-
+  )(implicit dao: DAO): F[List[CheckpointCache]] =
     for {
-      _ <- roundData.tipsSOE.soe.toList.traverse(
-        soe => soeService.put(soe.hash, SignedObservationEdgeCache(soe, resolved = true))
-      )
-      filtered <- roundData.tipsSOE.soe.toList.traverse(
-        t =>
-          checkpointService
-            .contains(t.baseHash)
-            .map(exist => if (!exist) t.baseHash.some else None)
-      )
-      resolved <- filtered.flatten match {
-        case Nil => Sync[F].pure[List[CheckpointCache]](List.empty)
-        case nel =>
-          val peers = roundData.peers.map(p => PeerApiClient(p.peerMetadata.id, p.client))
-          nel.traverse(resolve(_, peers.find(_.id == roundData.facilitatorId.id)))
-      }
+      soes <- roundData.tipsSOE.soe.toList.pure[F]
+      peers = roundData.peers.map(p => PeerApiClient(p.peerMetadata.id, p.client))
+      existing <- soes.map(_.hash).traverse(soeService.lookup).map(_.flatten)
+      missing = soes.diff(existing)
+
+      resolved <- missing
+        .map(_.baseHash)
+        .filterA(checkpointService.contains(_).map(!_))
+        .flatTap { hashes =>
+          logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
+        }
+        .flatMap {
+          _.traverse { hash =>
+            LiftIO[F].liftIO(
+              DataResolver.resolveCheckpointDefaults(hash, peers.find(_.id == roundData.facilitatorId.id))(
+                IO.contextShift(ConstellationExecutionContext.bounded)
+              )(
+                dao = shadowDAO
+              )
+            )
+          }
+        }
       _ <- logger.debug(
-        s"[${dao.id.short}] Resolved missing parents size: ${resolved.size} for round ${roundData.roundId}"
+        s"[${dao.id.short}] Missing parents size=${missing.size}, existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
       )
+      _ <- if (missing.nonEmpty && (resolved.size != missing.size))
+        logger.error(s"Missing parents: ${missing.map(_.hash)} with base hashes: ${missing.map(_.baseHash)}")
+      else Sync[F].unit
     } yield resolved
-  }
 
   def getArbitraryMessagesWithDistance(facilitators: Set[Id]): F[Seq[(ChannelMessage, Int)]] = {
 

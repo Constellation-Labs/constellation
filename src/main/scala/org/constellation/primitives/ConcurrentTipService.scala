@@ -7,6 +7,7 @@ import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
@@ -30,7 +31,7 @@ case class TipThresholdException(cb: CheckpointBlock, limit: Int)
       s"Unable to add CB with baseHash: ${cb.baseHash} as tip. Current tips limit met: $limit"
     )
 
-class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
+class ConcurrentTipService[F[_]: Concurrent: Clock](
   sizeLimit: Int,
   maxWidth: Int,
   maxTipUsage: Int,
@@ -40,6 +41,8 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
   dao: DAO,
   facilitatorFilter: FacilitatorFilter[F]
 ) {
+
+  implicit val logger = Slf4jLogger.getLogger[F]
 
   def clearStaleTips(min: Long): F[Unit] =
     tipsRef.get.map(tips => tips.filter(_._2.height.min < min)).flatMap { toRemove =>
@@ -77,7 +80,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
         if (m.isDefined)
           remove(key)
             .flatMap(_ => conflictingTips.modify(c => (c + (key -> m.get.checkpointBlock), ())))
-            .flatTap(_ => Logger[F].warn(s"Marking tip as conflicted tipHash: $key"))
+            .flatTap(_ => logger.warn(s"Marking tip as conflicted tipHash: $key"))
         else Sync[F].unit
       },
       "concurrentTipService_markAsConflict"
@@ -116,7 +119,7 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
           min =>
             if (isGenesis || min < height.min)
               putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
-            else Logger[F].debug(s"Block height: ${height.min} below min tip: $min update skipped")
+            else logger.debug(s"Block height: ${height.min} below min tip: $min update skipped")
         )
         .recoverWith {
           case err: TipThresholdException =>
@@ -151,11 +154,11 @@ class ConcurrentTipService[F[_]: Concurrent: Logger: Clock](
   def getMinTipHeight(minActiveTipHeight: Option[Long]): F[Long] =
     logThread(
       for {
-        _ <- Logger[F].debug(s"Active tip height: $minActiveTipHeight")
+        _ <- logger.debug(s"Active tip height: $minActiveTipHeight")
         keys <- tipsRef.get.map(_.keys.toList)
         maybeData <- keys.traverse(checkpointParentService.lookupCheckpoint)
         diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
-        _ <- if (diff.nonEmpty) Logger[F].debug(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
+        _ <- if (diff.nonEmpty) logger.debug(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
         heights = maybeData.flatMap {
           _.flatMap {
             _.height.map {

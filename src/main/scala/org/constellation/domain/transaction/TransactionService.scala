@@ -26,7 +26,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
       .accept(tx, cpc)
       .flatMap(_ => transactionChainService.acceptTransaction(tx.transaction))
       .void
-      .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
       .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =

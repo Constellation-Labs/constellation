@@ -46,7 +46,6 @@ class HealthCheckerTest
       majorState
     )(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
-      Slf4jLogger.getLogger[IO],
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
 

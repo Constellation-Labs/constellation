@@ -212,7 +212,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                 val blocks = dao.recentBlockTracker.getAll.toSeq
                 //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.getSync}
                 complete(blocks.map { ccd =>
-                  val cb = ccd.checkpointBlock.get
+                  val cb = ccd.checkpointBlock
 
                   BlockUIOutput(
                     cb.soeHash,
@@ -246,8 +246,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               val blockProof = MerkleTree(blocksInSnapshot).createProof(blockHashForMessage)
 
               val block = storedSnapshot.checkpointCache.filter {
-                _.checkpointBlock.get.baseHash == blockHashForMessage
-              }.head.checkpointBlock.get
+                _.checkpointBlock.baseHash == blockHashForMessage
+              }.head.checkpointBlock
 
               val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
                 _.signedMessageData.signatures.hash

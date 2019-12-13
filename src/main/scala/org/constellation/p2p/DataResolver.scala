@@ -4,20 +4,22 @@ import java.net.SocketTimeoutException
 
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, RequestTimeoutOnResolving}
-import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdgeCache}
+import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdge}
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.Logging._
 import org.constellation.util.{Distance, PeerApiClient}
 
 import scala.concurrent.duration._
 
-class DataResolver extends StrictLogging {
+class DataResolver {
+
+  implicit val logger = Slf4jLogger.getLogger[IO]
 
   def resolveMessageDefaults(
     hash: String,
@@ -42,9 +44,8 @@ class DataResolver extends StrictLogging {
         priorityClient
       )(contextToReturn).head
         .flatTap(mcd => dao.messageService.memPool.put(mcd.channelMessage.signedMessageData.hash, mcd))
-        .flatTap(m => IO.delay(logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}"))),
-      s"dataResolver_resolveMessage [$hash]",
-      logger
+        .flatTap(m => logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}")),
+      s"dataResolver_resolveMessage [$hash]"
     )
 
   def resolveTransactionDefaults(
@@ -83,7 +84,7 @@ class DataResolver extends StrictLogging {
     roundId: Option[RoundId] = None
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
     logThread(
-      IO.delay(logger.debug(s"Start resolving transaction=${hash} for round $roundId")) >>
+      logger.debug(s"Start resolving transaction=${hash} for round $roundId") >>
         resolveDataByDistance[TransactionCacheData](
           List(hash),
           "transaction",
@@ -94,15 +95,14 @@ class DataResolver extends StrictLogging {
             case Some(tcd) =>
               dao.transactionService
                 .put(tcd, ConsensusStatus.Unknown)
-                .flatTap(_ => IO.delay(logger.debug(s"Stored resolved transaction=${tcd.hash} for roundId=${roundId}")))
+                .flatTap(_ => logger.debug(s"Stored resolved transaction=${tcd.hash} for roundId=${roundId}"))
             case _ =>
               IO.raiseError[TransactionCacheData](
                 new Throwable(s"Failed with resolving transaction=${hash} for roundId=${roundId}")
               )
           }
         },
-      s"dataResolver_resolveTransaction [${hash}]",
-      logger
+      s"dataResolver_resolveTransaction [${hash}]"
     )
 
   def resolveBatchTransactions(
@@ -113,7 +113,7 @@ class DataResolver extends StrictLogging {
   )(
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
-    IO.delay(logger.debug(s"Start resolving transactions = ${hashes} for round = $roundId")) *>
+    logger.debug(s"Start resolving transactions = ${hashes} for round = $roundId") *>
       resolveBatchData[TransactionCacheData](hashes, "transactions", pool ++ priorityClient)(contextToReturn)
         .flatMap(
           txs =>
@@ -121,7 +121,7 @@ class DataResolver extends StrictLogging {
               dao.transactionService
                 .put(tcd, ConsensusStatus.Unknown)
                 .flatTap(
-                  _ => IO.delay(logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}"))
+                  _ => logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}")
                 )
             }
         )
@@ -134,7 +134,7 @@ class DataResolver extends StrictLogging {
   )(
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Observation]] =
-    IO.delay(logger.debug(s"Start resolving observations = ${hashes} for round = $roundId")) *>
+    logger.debug(s"Start resolving observations = ${hashes} for round = $roundId") *>
       resolveBatchData[Observation](hashes, "observations", pool ++ priorityClient)(contextToReturn)
         .flatMap(
           obs =>
@@ -142,7 +142,7 @@ class DataResolver extends StrictLogging {
               dao.observationService
                 .put(o, ConsensusStatus.Unknown)
                 .flatTap(
-                  _ => IO.delay(logger.debug(s"Stored resolved observations = ${o.hash} for roundId = ${roundId}"))
+                  _ => logger.debug(s"Stored resolved observations = ${o.hash} for roundId = ${roundId}")
                 )
             }
         )
@@ -165,13 +165,11 @@ class DataResolver extends StrictLogging {
         pool,
         priorityClient
       )(contextToReturn).head
-        .flatTap(cpc => dao.checkpointAcceptanceService.accept(cpc)(contextToReturn))
-        .flatTap(
-          cb =>
-            IO.delay(logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.map(_.baseHash)}"))
-        ),
-      s"dataResolver_resolveCheckpoint [${hash}]",
-      logger
+        .flatTap(dao.checkpointAcceptanceService.accept(_)(contextToReturn).start(contextToReturn))
+        .flatTap { cb =>
+          logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}")
+        },
+      s"dataResolver_resolveCheckpoint [${hash}]"
     )
 
   def resolveSoeDefaults(
@@ -179,7 +177,7 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(
     contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdge]] =
     getPeersForResolving(dao).flatMap(resolveSoe(hashes, _, priorityClient)(contextToReturn))
 
   def resolveSoe(
@@ -188,16 +186,15 @@ class DataResolver extends StrictLogging {
     priorityClient: Option[PeerApiClient] = None
   )(
     contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdgeCache]] =
+  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdge]] =
     logThread(
-      resolveDataByDistanceFlat[SignedObservationEdgeCache](
+      resolveDataByDistanceFlat[SignedObservationEdge](
         hashes,
         "soe",
         pool,
         priorityClient
-      )(contextToReturn).flatTap(s => s.traverse(soc => dao.soeService.put(soc.signedObservationEdge.hash, soc))),
-      s"dataResolver_resolveSoe [${hashes}]",
-      logger
+      )(contextToReturn).flatTap(_.traverse(soe => dao.soeService.put(soe.hash, soe))),
+      s"dataResolver_resolveSoe [${hashes}]"
     )
 
   def resolveCheckpoints(
@@ -214,8 +211,7 @@ class DataResolver extends StrictLogging {
       )(contextToReturn).flatTap(
         cbs => cbs.traverse(cb => dao.checkpointAcceptanceService.accept(cb)(contextToReturn))
       ),
-      s"dataResolver_resolveCheckpoints [${hashes}]",
-      logger
+      s"dataResolver_resolveCheckpoints [${hashes}]"
     )
 
   def resolveObservationDefaults(
@@ -236,10 +232,9 @@ class DataResolver extends StrictLogging {
         pool,
         priorityClient
       )(contextToReturn).head
-        .flatTap(o => IO.delay(logger.debug(s"Resolving observation=${o.hash}")))
+        .flatTap(o => logger.debug(s"Resolving observation=${o.hash}"))
         .flatTap(o => dao.observationService.put(o, ConsensusStatus.Unknown)),
-      s"dataResolver_resolveObservation [${hash}]",
-      logger
+      s"dataResolver_resolveObservation [${hash}]"
     )
 
   def resolveDataByDistance[T <: AnyRef](
@@ -301,20 +296,19 @@ class DataResolver extends StrictLogging {
             case e: DataResolutionOutOfPeers => IO.raiseError[T](e)
             case e if tail.isEmpty           => IO.raiseError[T](e)
             case e: DataResolutionNoneResponse =>
-              logger.warn(e.getMessage)
-              makeAttempt(tail, allPeers, errorsSoFar + 1)
+              logger.warn(e.getMessage) >>
+                makeAttempt(tail, allPeers, errorsSoFar + 1)
             case e =>
               logger.error(
-                s"Unexpected error while resolving hash=${hash} on endpoint $endpoint with host=${head.client.hostPortForLogging}, and id ${head.client.id} trying next peer",
-                e
-              )
-              makeAttempt(tail, allPeers, errorsSoFar + 1)
+                s"Unexpected error while resolving hash=${hash} on endpoint $endpoint with host=${head.client.hostPortForLogging}, and id ${head.client.id} trying next peer | ${e.getMessage}"
+              ) >>
+                makeAttempt(tail, allPeers, errorsSoFar + 1)
           }
 
       }
 
     for {
-      _ <- IO.delay(logger.debug(s"Resolve $endpoint/$hash"))
+      _ <- logger.debug(s"Resolve $endpoint/$hash")
       t <- makeAttempt(sortedPeers, sortedPeers)
     } yield t
   }
@@ -350,13 +344,13 @@ class DataResolver extends StrictLogging {
         logger.debug(
           s"Requested : ${peer.client.hostPortForLogging} : to endpoint = $endpoint : for hashes = ${requestHashes
             .mkString(",")} : and response hashes = ${data.size}"
-        )
-        makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
+        ) >>
+          makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
       }
     }
 
     makeAttempt(sortedPeers, hashes).handleErrorWith(
-      e => IO.delay(logger.error(s"Unexpected error while resolving hashes : ${e.getMessage}")) *> IO.raiseError(e)
+      e => logger.error(s"Unexpected error while resolving hashes : ${e.getMessage}") *> IO.raiseError(e)
     )
   }
 

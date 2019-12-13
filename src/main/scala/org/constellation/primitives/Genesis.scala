@@ -74,12 +74,24 @@ object Genesis extends StrictLogging {
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true)(implicit dao: DAO): Unit = {
     // Store hashes for the edges
 
-    (go.genesis.storeSOE() >>
-      go.initialDistribution.storeSOE() >>
-      go.initialDistribution2.storeSOE() >>
-      IO(go.genesis.store(CheckpointCache(Some(go.genesis), height = Some(Height(0, 0))))) >>
-      IO(go.initialDistribution.store(CheckpointCache(Some(go.initialDistribution), height = Some(Height(1, 1))))) >>
-      IO(go.initialDistribution2.store(CheckpointCache(Some(go.initialDistribution2), height = Some(Height(1, 1))))))
+    val genesisBlock = CheckpointCache(go.genesis, height = Some(Height(0, 0)))
+    val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
+    val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
+
+    (dao.soeService.put(go.genesis.soeHash, go.genesis.soe) >>
+      dao.soeService
+        .put(go.initialDistribution.soeHash, go.initialDistribution.soe) >>
+      dao.soeService
+        .put(go.initialDistribution2.soeHash, go.initialDistribution2.soe) >>
+      dao.checkpointService.put(genesisBlock) >>
+      dao.checkpointService.put(initialBlock1) >>
+      dao.checkpointService.put(initialBlock2) >>
+      IO(dao.recentBlockTracker.put(genesisBlock)) >>
+      IO(dao.recentBlockTracker.put(initialBlock1)) >>
+      IO(
+        dao.recentBlockTracker
+          .put(initialBlock2)
+      ))
     // TODO: Get rid of unsafeRunSync
       .unsafeRunSync()
 

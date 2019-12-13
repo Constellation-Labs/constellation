@@ -6,7 +6,7 @@ import org.constellation.domain.exception.InvalidNodeState
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.storage.{SnapshotError, SnapshotIllegalState}
+import org.constellation.storage.{HeightIntervalConditionNotMet, SnapshotError, SnapshotIllegalState}
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._
 
@@ -42,11 +42,14 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
           case Left(SnapshotIllegalState) =>
             handleError(SnapshotIllegalState, stateSet)
               .flatMap(_ => contextShift.shift >> dao.snapshotBroadcastService.verifyRecentSnapshots())
+          case Left(err @ HeightIntervalConditionNotMet) =>
+            resetNodeState(stateSet) >>
+              IO(logger.warn(s"Snapshot attempt: ${err.message}")) >>
+              dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + "_heightIntervalNotMet")
           case Left(err) =>
             handleError(err, stateSet)
           case Right(created) =>
-            dao.cluster
-              .compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
+            resetNodeState(stateSet)
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
               .flatMap(
                 _ =>
@@ -57,9 +60,12 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
       IO.unit
     )
 
+  def resetNodeState(stateSet: SetStateResult): IO[SetStateResult] =
+    cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
+
   def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] =
-    cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true) >>
-      IO(logger.debug(s"Snapshot attempt error: $err"))
+    resetNodeState(stateSet) >>
+      IO(logger.warn(s"Snapshot attempt error: ${err.message}"))
         .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
 
   override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)

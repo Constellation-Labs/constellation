@@ -95,23 +95,49 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
   def unsafeCount: Int = messages.size
 
 }
+
 case class PendingDownloadException(id: Id)
     extends Exception(s"Node [${id.short}] is not ready to accept blocks from others.")
 
 // TODO: wkoszycki this one is temporary till (#412 Flatten checkpointBlock in CheckpointCache) is finished
 case object MissingCheckpointBlockException extends Exception("CheckpointBlock object is empty.")
 
-case class MissingHeightException(cb: CheckpointBlock)
-    extends Exception(s"CheckpointBlock ${cb.baseHash} height is missing for soeHash ${cb.soeHash}.")
+case class MissingHeightException(baseHash: String, soeHash: String)
+    extends Exception(s"CheckpointBlock ${baseHash} height is missing for soeHash ${soeHash}.")
 
-case class PendingAcceptance(cbBaseHash: String)
-    extends Exception(s"CheckpointBlock: $cbBaseHash is already pending acceptance phase.")
+object MissingHeightException {
+  def apply(cb: CheckpointBlock): MissingHeightException = new MissingHeightException(cb.baseHash, cb.soeHash)
+}
 
-case class CheckpointAcceptBlockAlreadyStored(cb: CheckpointBlock)
-    extends Exception(s"CheckpointBlock: ${cb.baseHash} is already stored.")
+case class PendingAcceptance(baseHash: String)
+    extends Exception(s"CheckpointBlock: $baseHash is already pending acceptance phase.")
+
+object PendingAcceptance {
+  def apply(cb: CheckpointBlock): PendingAcceptance = new PendingAcceptance(cb.baseHash)
+}
+
+case class CheckpointAcceptBlockAlreadyStored(baseHash: String)
+    extends Exception(s"CheckpointBlock: ${baseHash} is already stored.")
+
+object CheckpointAcceptBlockAlreadyStored {
+
+  def apply(cb: CheckpointBlock): CheckpointAcceptBlockAlreadyStored =
+    new CheckpointAcceptBlockAlreadyStored(cb.baseHash)
+}
 
 case class MissingTransactionReference(cb: CheckpointBlock)
     extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing transaction reference.")
+
+object MissingTransactionReference {
+  def apply(cb: CheckpointBlock): MissingTransactionReference = new MissingTransactionReference(cb)
+}
+
+case class MissingParents(cb: CheckpointBlock)
+    extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing parents.")
+
+object MissingParents {
+  def apply(cb: CheckpointBlock): MissingParents = new MissingParents(cb)
+}
 
 trait EdgeDAO {
 

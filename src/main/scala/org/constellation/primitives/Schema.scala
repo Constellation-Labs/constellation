@@ -269,7 +269,7 @@ object Schema {
     height: Option[Height] = None
   )
   case class CheckpointCache(
-    checkpointBlock: Option[CheckpointBlock] = None,
+    checkpointBlock: CheckpointBlock,
     children: Int = 0,
     height: Option[Height] = None
   ) {
@@ -284,8 +284,6 @@ object Schema {
    */
 
   }
-
-  case class SignedObservationEdgeCache(signedObservationEdge: SignedObservationEdge, resolved: Boolean = false)
 
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 

@@ -124,7 +124,7 @@ object EdgeProcessor extends StrictLogging {
 
           val cache =
             CheckpointCache(
-              Some(checkpointBlock),
+              checkpointBlock,
               height = dao.checkpointAcceptanceService.calculateHeight(checkpointBlock).unsafeRunSync()
             )
 
@@ -158,7 +158,7 @@ object EdgeProcessor extends StrictLogging {
             cb => dao.checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid
           )
           .traverse { finalCB =>
-            val cache = CheckpointCache(finalCB.some)
+            val cache = CheckpointCache(finalCB)
             dao.checkpointAcceptanceService.accept(cache).unsafeRunSync()
             processSignedBlock(
               cache,
