@@ -43,7 +43,7 @@ class TransactionChainServiceTest
   "setLastTransaction" - {
     "should return new transaction" in {
       val tx = createTransaction("unknown", "bb").unsafeRunSync
-      val createdTx = service.setLastTransaction(tx.edge, false).unsafeRunSync
+      val createdTx = service.setLastTransaction(tx.edge, isDummy = false, isTest = false).unsafeRunSync
 
       createdTx shouldBe tx
     }

@@ -14,6 +14,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint._
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
+import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
@@ -114,6 +115,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     rateLimiting = new RateLimiting[IO]
 
+    blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
     transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
@@ -226,6 +228,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
       addressService,
+      blacklistedAddresses,
       transactionService,
       observationService,
       concurrentTipService,
