@@ -19,10 +19,8 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
     checkpoint.edge.parentHashes.flatMap { key =>
-      dao.soeService.lookup(key).unsafeRunSync()
-    }.map {
-      _.signedObservationEdge.baseHash
-    }
+      dao.soeService.lookup(key).unsafeRunSync
+    }.map(_.baseHash)
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 

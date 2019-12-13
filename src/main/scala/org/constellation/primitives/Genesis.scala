@@ -78,11 +78,11 @@ object Genesis extends StrictLogging {
     val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
     val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
 
-    (dao.soeService.put(go.genesis.soeHash, SignedObservationEdgeCache(go.genesis.soe, true)) >>
+    (dao.soeService.put(go.genesis.soeHash, go.genesis.soe) >>
       dao.soeService
-        .put(go.initialDistribution.soeHash, SignedObservationEdgeCache(go.initialDistribution.soe, true)) >>
+        .put(go.initialDistribution.soeHash, go.initialDistribution.soe) >>
       dao.soeService
-        .put(go.initialDistribution2.soeHash, SignedObservationEdgeCache(go.initialDistribution2.soe, true)) >>
+        .put(go.initialDistribution2.soeHash, go.initialDistribution2.soe) >>
       dao.checkpointService.put(genesisBlock) >>
       dao.checkpointService.put(initialBlock1) >>
       dao.checkpointService.put(initialBlock2) >>

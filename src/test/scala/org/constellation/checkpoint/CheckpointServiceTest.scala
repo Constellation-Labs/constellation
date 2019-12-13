@@ -81,8 +81,8 @@ class CheckpointServiceTest
       val blocks = Seq(cb1, cb2)
 
       blocks.foreach { c =>
-        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(SignedObservationEdgeCache(c.soe)))
+        peer.getNonBlockingIO[Option[SignedObservationEdge]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
+          .pure(Some(c.soe))
 
         peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*)(*, *) shouldReturn IO
           .pure(Some(CheckpointCache(c)))
@@ -134,8 +134,8 @@ class CheckpointServiceTest
       val blocks = Seq(cb1, cb2)
 
       blocks.foreach { c =>
-        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(SignedObservationEdgeCache(c.soe)))
+        peer.getNonBlockingIO[Option[SignedObservationEdge]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
+          .pure(Some(c.soe))
 
         peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*)(*, *) shouldReturn IO
           .pure(Some(CheckpointCache(c)))

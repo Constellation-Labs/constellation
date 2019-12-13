@@ -11,7 +11,7 @@ import org.constellation.primitives.Schema.{
   CheckpointCacheMetadata,
   EdgeHashType,
   Height,
-  SignedObservationEdgeCache,
+  SignedObservationEdge,
   TypedEdgeHash
 }
 import org.constellation.storage.SOEService
@@ -65,10 +65,10 @@ class TipServiceTest
       val go = RandomData.go
 
       dao.soeService
-        .put(go.initialDistribution.soeHash, SignedObservationEdgeCache(go.initialDistribution.soe, true))
+        .put(go.initialDistribution.soeHash, go.initialDistribution.soe)
         .flatMap { _ =>
           dao.soeService
-            .put(go.initialDistribution2.soeHash, SignedObservationEdgeCache(go.initialDistribution2.soe, true))
+            .put(go.initialDistribution2.soeHash, go.initialDistribution2.soe)
         }
         .unsafeRunSync()
 
@@ -93,10 +93,10 @@ class TipServiceTest
       val go = RandomData.go()
 
       dao.soeService
-        .put(go.initialDistribution.soeHash, SignedObservationEdgeCache(go.initialDistribution.soe, true))
+        .put(go.initialDistribution.soeHash, go.initialDistribution.soe)
         .flatMap { _ =>
           dao.soeService
-            .put(go.initialDistribution2.soeHash, SignedObservationEdgeCache(go.initialDistribution2.soe, true))
+            .put(go.initialDistribution2.soeHash, go.initialDistribution2.soe)
         }
         .unsafeRunSync()
 
