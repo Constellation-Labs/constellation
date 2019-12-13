@@ -27,6 +27,52 @@ object Fixtures {
   def tx: Transaction =
     TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
+  def createAndStoreTx(amount: Long,
+                       destination: String,
+                       prevTxRef: String,
+                       ordinal: Long,
+                       storePath: String,
+                       kp: KeyPair = KeyUtils.makeKeyPair()
+                      ) = {
+    val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
+      KeyUtils.publicKeyToAddressString(kp.getPublic),
+      destination,
+      prevTxRef,
+      ordinal,
+      amount,
+      kp
+    )
+    val transaction = Transaction(transactionEdge, LastTransactionRef.empty)
+    transaction.jsonSave(storePath)
+  }
+
+  def loadKeyPairUnsafe(keystorePath: String,
+                        alias: String,
+                        keypass: Array[Char],
+                        storepass: Array[Char],
+                        keyStoreType: String = "PKCS12") = {
+    val kpFileStream = new FileInputStream(keystorePath)
+    val keyStore = KeyStore.getInstance(keyStoreType)
+    keyStore.load(kpFileStream, storepass)
+    val privateKey = keyStore.getKey(alias, keypass).asInstanceOf[PrivateKey]
+    val publicKey = keyStore.getCertificate(alias).getPublicKey
+    new KeyPair(publicKey, privateKey)
+  }
+
+  def bufferedFileReader(path: String) = new BufferedReader(new InputStreamReader(new FileInputStream(path)))
+
+  val privateKeyStr =
+    "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
+
+  val pubKeyStr =
+    "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
+
+  val keystorePath = "src/test/resources/wallet-client-test-kp.p12"
+  val alias = "alias"
+  val storepass = "storepass"
+  val keypass = "keypass"
+  val envArgs = "true"
+
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
   val tempKey2: KeyPair = KeyUtils.makeKeyPair()
