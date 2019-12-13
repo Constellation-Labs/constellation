@@ -108,12 +108,10 @@ class E2ETest extends E2E {
       _.getAPIClient()
     } //apis :+ downloadAPI
     assert(Simulation.healthy(allAPIs))
-
-    Simulation.logger.info(s"${n1.dao.selfAddressStr}")
     //n1.dao
 //    sendTo(n1, sendToAddress)sendToAddress
 
-      Thread.sleep(1000*1000)
+//      Thread.sleep(1000*1000)
 
     Simulation.disableRandomTransactions(allAPIs)
     Simulation.logger.info("Stopping transactions to run parity check")
