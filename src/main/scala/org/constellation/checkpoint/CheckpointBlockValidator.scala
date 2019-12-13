@@ -222,7 +222,6 @@ class CheckpointBlockValidator[F[_]: Sync](
   //todo move to TransactionValidator
   def singleTransactionValidation(tx: Transaction) =
     for {
-      //todo make transactions with same src and dst invalid, we have a bug that crashes consensus if a 'self' tx encountered
       transactionValidation <- validateTransaction(tx)
       balanceValidation <- validateSourceAddressBalances(Iterable(tx))
     } yield transactionValidation.product(balanceValidation).isValid //todo: use validated to get descriptive results?
