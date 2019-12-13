@@ -273,6 +273,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
               .flatMap(
                 _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, cb.transactions.map(_.hash)))
               )
+          case error @ MissingParents(cb) =>
+            logger
+              .warn(error.getMessage)
+              .flatMap(
+                _ => Sync[F].pure[(Option[CheckpointBlock], Seq[String])]((None, cb.transactions.map(_.hash)))
+              )
           case tipConflict: TipConflictException =>
             logger
               .error(tipConflict)(
@@ -295,13 +301,11 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- if (acceptedBlock._1.isEmpty)
         Sync[F].pure(List.empty[Response[Unit]])
       else
-        Sync[F].pure(List.empty[Response[Unit]])
-      // TODO: mwadon - uncomment
-//        calculationContext.blockOn(remoteCall)(
-//          broadcastSignedBlockToNonFacilitators(
-//            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
-//          )
-//        )
+        calculationContext.blockOn(remoteCall)(
+          broadcastSignedBlockToNonFacilitators(
+            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
+          )
+        )
       transactionsToReturn <- getOwnTransactionsToReturn.map(
         txs =>
           txs

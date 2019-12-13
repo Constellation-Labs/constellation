@@ -106,34 +106,37 @@ case class MissingHeightException(baseHash: String, soeHash: String)
     extends Exception(s"CheckpointBlock ${baseHash} height is missing for soeHash ${soeHash}.")
 
 object MissingHeightException {
-  def apply(cb: CheckpointBlock): MissingHeightException = MissingHeightException(cb.baseHash, cb.soeHash)
+  def apply(cb: CheckpointBlock): MissingHeightException = new MissingHeightException(cb.baseHash, cb.soeHash)
 }
 
 case class PendingAcceptance(baseHash: String)
     extends Exception(s"CheckpointBlock: $baseHash is already pending acceptance phase.")
 
 object PendingAcceptance {
-  def apply(cb: CheckpointBlock): PendingAcceptance = PendingAcceptance(cb.baseHash)
+  def apply(cb: CheckpointBlock): PendingAcceptance = new PendingAcceptance(cb.baseHash)
 }
 
 case class CheckpointAcceptBlockAlreadyStored(baseHash: String)
     extends Exception(s"CheckpointBlock: ${baseHash} is already stored.")
 
 object CheckpointAcceptBlockAlreadyStored {
-  def apply(cb: CheckpointBlock): CheckpointAcceptBlockAlreadyStored = CheckpointAcceptBlockAlreadyStored(cb.baseHash)
+
+  def apply(cb: CheckpointBlock): CheckpointAcceptBlockAlreadyStored =
+    new CheckpointAcceptBlockAlreadyStored(cb.baseHash)
 }
 
 case class MissingTransactionReference(cb: CheckpointBlock)
     extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing transaction reference.")
 
 object MissingTransactionReference {
-  def apply(cb: CheckpointBlock): MissingTransactionReference = MissingTransactionReference(cb)
+  def apply(cb: CheckpointBlock): MissingTransactionReference = new MissingTransactionReference(cb)
 }
 
-case class MissingParents(baseHash: String) extends Exception(s"CheckpointBlock hash=${baseHash} have missing parents.")
+case class MissingParents(cb: CheckpointBlock)
+    extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing parents.")
 
 object MissingParents {
-  def apply(cb: CheckpointBlock): MissingParents = MissingParents(cb.baseHash)
+  def apply(cb: CheckpointBlock): MissingParents = new MissingParents(cb)
 }
 
 trait EdgeDAO {

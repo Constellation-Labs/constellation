@@ -5,7 +5,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height}
+import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height, SignedObservationEdge}
 import org.constellation.primitives.{CheckpointBlock, Genesis}
 import org.constellation.storage.SOEService
 
@@ -41,7 +41,7 @@ class CheckpointParentService[F[_]: Sync](
                   if (parentDirect.isEmpty) dao.metrics.incrementMetricAsync("parentDirectTipReferenceMissing")
                   else Sync[F].unit
               )
-          } else Sync[F].delay(parent.map { _.signedObservationEdge.baseHash })
+          } else Sync[F].delay(parent.map(_.baseHash))
         }
       }
     }.map(_.flatten)

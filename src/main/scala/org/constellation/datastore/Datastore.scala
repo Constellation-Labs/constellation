@@ -44,17 +44,17 @@ trait Datastore {
 
   def getAddressCacheData(key: String): Option[AddressCacheData]
 
-  def putSignedObservationEdgeCache(key: String, t: SignedObservationEdgeCache): Unit
+  def putSignedObservationEdgeCache(key: String, t: SignedObservationEdge): Unit
 
   def updateSignedObservationEdgeCache(
     key: String,
-    f: SignedObservationEdgeCache => SignedObservationEdgeCache,
-    empty: SignedObservationEdgeCache
-  ): SignedObservationEdgeCache
+    f: SignedObservationEdge => SignedObservationEdge,
+    empty: SignedObservationEdge
+  ): SignedObservationEdge
 
   def getSignedObservationEdgeCache(
     key: String
-  ): Option[SignedObservationEdgeCache]
+  ): Option[SignedObservationEdge]
 
   def putTransactionEdgeData(key: String, t: TransactionEdgeData): Unit
 
