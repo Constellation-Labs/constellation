@@ -67,8 +67,10 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
-  def receiveTransaction(tx: Transaction): F[Transaction] = TransactionService.receiveTransaction(tx)(transactionChainService)
-
+  def receiveTransaction(tx: Transaction): F[TransactionCacheData] =
+    transactionChainService
+      .setLastTransaction(tx.edge, false)
+      .flatMap(tx => put(TransactionCacheData(tx)))
 }
 
 object TransactionService {
@@ -105,8 +107,4 @@ object TransactionService {
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
     createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
-
-  def receiveTransaction[F[_]: Concurrent](tx: Transaction)(transactionChainService: TransactionChainService[F]): F[Transaction] =
-    transactionChainService.setLastTransaction(tx.edge, false)
-
 }

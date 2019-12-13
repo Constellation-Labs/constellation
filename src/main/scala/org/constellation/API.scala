@@ -525,61 +525,59 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             }
         } ~
-      path("balance") {
-        entity(as[String]) { address =>
-          logger.info(s"balance lookup for address ${address}")
-          val io: IO[String] = addressService.lookup(address).map(res => res.map(_.balance.toString).getOrElse("0"))
-          //            val tryIt = checkpointBlockValidator.singleTransactionValidation(transaction)
+        path("balance") {
+          entity(as[String]) { address =>
+            logger.info(s"balance lookup for address ${address}")
+            val io = addressService
+              .lookup(address)
+              .map(
+                res =>
+                  res
+                    .map(_.balance.toString)
+                    .getOrElse("0")
+              )
 
-          APIDirective.handle(io)(complete(_))
-        }
-      } ~
+            APIDirective.handle(io)(complete(_))
+          }
+        } ~
         path("transaction") {
           entity(as[Transaction]) { transaction =>
             logger.info(s"send transaction to address ${transaction.hash}")
-            val isValid = checkpointBlockValidator.singleTransactionValidation(transaction).unsafeRunSync()
-            //todo make transactions with same src and dst invalid, we have a bug that crashes consensus if a 'self' tx encountered
-
-//            val tryIt = checkpointBlockValidator.singleTransactionValidation(transaction)
-//            logger.info(s"send transaction ${transaction} isValid ${isValid}")
-//            val check: IO[String] = dao.transactionService
-//              .receiveTransaction(transaction)
-//              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-//              .map(_.hash)
-
-            val io = if (!isValid) IO {"invalid"}
-            else dao.transactionService
-              .receiveTransaction(transaction)
-              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-              .map(_.hash)
-
-      APIDirective.handle(io)(complete(_))
-    }
-  } ~ path("send") {
-          entity(as[SendToAddress]) { sendRequest =>
-            logger.info(s"send transaction to address $sendRequest")
-
-            val io = dao.transactionService
-              .createTransaction(
-                dao.selfAddressStr,
-                sendRequest.dst,
-                sendRequest.amountActual,
-                dao.keyPair,
-                normalized = false
+            val io = checkpointBlockValidator
+              .singleTransactionValidation(transaction)
+              .ifM(
+                dao.transactionService
+                  .receiveTransaction(transaction)
+                  .map(_.hash),
+                IO { "inValid" }
               )
-              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-              .map(_.hash)
-
             APIDirective.handle(io)(complete(_))
+          }
+        } ~ path("send") {
+        entity(as[SendToAddress]) { sendRequest =>
+          logger.info(s"send transaction to address $sendRequest")
+
+          val io = dao.transactionService
+            .createTransaction(
+              dao.selfAddressStr,
+              sendRequest.dst,
+              sendRequest.amountActual,
+              dao.keyPair,
+              normalized = false
+            )
+            .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+            .map(_.hash)
+
+          APIDirective.handle(io)(complete(_))
         }
       } ~ path("restore") {
-          APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
-            case Success(value) => complete(StatusCodes.OK)
-            case Failure(error) =>
-              logger.error(s"Restored error ${error}")
-              complete(StatusCodes.InternalServerError)
-          }
-        } ~
+        APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
+          case Success(value) => complete(StatusCodes.OK)
+          case Failure(error) =>
+            logger.error(s"Restored error ${error}")
+            complete(StatusCodes.InternalServerError)
+        }
+      } ~
         path("addPeer") {
           entity(as[PeerMetadata]) { pm =>
             (IO

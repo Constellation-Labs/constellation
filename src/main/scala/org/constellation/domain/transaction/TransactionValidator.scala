@@ -43,7 +43,7 @@ object TransactionValidator {
 }
 
 class TransactionValidator[F[_]: Sync](
-  transactionService: TransactionService[F]
+  val transactionService: TransactionService[F]
 ) {
 
   import TransactionValidator._

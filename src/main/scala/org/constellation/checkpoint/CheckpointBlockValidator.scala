@@ -9,7 +9,7 @@ import org.constellation.DAO
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.Schema.CheckpointCache
-import org.constellation.primitives.{CheckpointBlock, Transaction}
+import org.constellation.primitives.{CheckpointBlock, Transaction, TransactionCacheData}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.{HashSignature, Metrics}
 
@@ -219,12 +219,13 @@ class CheckpointBlockValidator[F[_]: Sync](
     z
   }
 
-  //todo move this?
-  def singleTransactionValidation(tx: Transaction): F[Boolean] =
+  //todo move to TransactionValidator
+  def singleTransactionValidation(tx: Transaction) =
     for {
-      transactionValidation <- validateTransactions(Iterable(tx))
+      //todo make transactions with same src and dst invalid, we have a bug that crashes consensus if a 'self' tx encountered
+      transactionValidation <- validateTransaction(tx)
       balanceValidation <- validateSourceAddressBalances(Iterable(tx))
-    } yield transactionValidation.product(balanceValidation).isValid
+    } yield transactionValidation.product(balanceValidation).isValid //todo: use validated to get descriptive results?
 
   def validateCheckpointBlock(cb: CheckpointBlock): F[ValidationResult[CheckpointBlock]] = {
     val preTreeResult =
