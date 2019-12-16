@@ -19,6 +19,7 @@ import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -181,36 +182,43 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         } ~
         path("faucet") {
           entity(as[SendToAddress]) { sendRequest =>
-            // TODO: Add limiting
-            // TODO: Chain
-            if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
-                dao.addressService
-                  .lookup(dao.selfAddressStr)
-                  .unsafeRunSync()
-                  .map { _.balance }
-                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+    // TODO: Add limiting
+    // TODO: Chain
+    if (sendRequest.amountActual < (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor) &&
+        dao.addressService
+          .lookup(dao.selfAddressStr)
+          .unsafeRunSync()
+          .map { _.balance }
+          .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
 
-              val tx = dao.transactionService
-                .createTransaction(
-                  dao.selfAddressStr,
-                  sendRequest.dst,
-                  sendRequest.amountActual,
-                  dao.keyPair,
-                  normalized = false
-                )
-                .unsafeRunSync()
-              logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+      val tx = dao.transactionChainService
+        .getLastTransactionRef(dao.selfAddressStr)
+        .flatMap { ref: LastTransactionRef =>
+          dao.transactionService
+            .createTransaction(
+              dao.selfAddressStr,
+              sendRequest.dst,
+              ref.hash,
+              ref.ordinal,
+              sendRequest.amountActual,
+              dao.keyPair,
+              normalized = false
+            )
+        }
+        .flatMap { tx =>
+          logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+          dao.metrics.incrementMetric("faucetRequest")
+          dao.transactionService.put(TransactionCacheData(tx))
+        }
+        .map(_.hash)
 
-              dao.transactionService.put(TransactionCacheData(tx)).unsafeRunAsync(_ => ())
-              dao.metrics.incrementMetric("faucetRequest")
-
-              complete(Some(tx.hash))
-            } else {
-              logger.warn(s"Invalid faucet request $sendRequest")
-              dao.metrics.incrementMetric("faucetInvalidRequest")
-              complete(None)
-            }
-          }
+      APIDirective.handle(tx)(complete(_))
+    } else {
+      logger.warn(s"Invalid faucet request $sendRequest")
+      dao.metrics.incrementMetric("faucetInvalidRequest")
+      complete(None)
+    }
+  }
         } ~
         path("deregister") {
           entity(as[PeerUnregister]) { request =>

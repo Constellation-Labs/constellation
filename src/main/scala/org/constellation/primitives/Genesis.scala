@@ -6,6 +6,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.util.AccountBalance
@@ -29,7 +30,7 @@ object Genesis extends StrictLogging {
     allocAccountBalances: Seq[AccountBalance]
   )(implicit dao: DAO): F[List[Transaction]] = LiftIO[F].liftIO {
     allocAccountBalances.toList
-      .traverse(ab => dao.transactionService.createTransaction(Coinbase, ab.accountHash, ab.balance, CoinbaseKey))
+      .traverse(ab => dao.transactionService.createTransaction(Coinbase, ab.accountHash, LastTransactionRef.empty.hash, 0L, ab.balance, CoinbaseKey))
   }
 
   private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =

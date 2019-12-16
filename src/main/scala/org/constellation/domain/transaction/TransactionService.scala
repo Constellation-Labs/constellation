@@ -68,8 +68,6 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair, prevTxRef: String = "dummy", ordinal: Long = 0L): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair, prevTxRef, ordinal)(transactionChainService)
 
-  //    TransactionService.createAndSetTransaction(src, dst, prevTxRef, amount, ordinal, keyPair, normalized, dummy)(transactionChainService)
-
   def receiveTransaction(tx: Transaction): F[TransactionCacheData] =
     transactionChainService
       .setLastTransaction(tx.edge, false)
@@ -81,7 +79,32 @@ object TransactionService {
   def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO) =
     new TransactionService[F](transactionChainService, dao)
 
+  def createTransactionEdge(
+                             src: String,
+                             dst: String,
+                             prevTxRef: String,
+                             ordinal: Long,
+                             amount: Long,
+                             keyPair: KeyPair,
+                             normalized: Boolean = true,
+                             dummy: Boolean = false
+                           ): Edge[TransactionEdgeData] = {
+    val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
+    val txData = TransactionEdgeData(amount = amountToUse)
+
+    val oe = ObservationEdge(
+      Seq(
+        TypedEdgeHash(src, EdgeHashType.AddressHash),
+        TypedEdgeHash(prevTxRef+"-"+ordinal, EdgeHashType.AddressHash),//todo change to different EdgeHashType? Also must be in the middle, will break validation
+        TypedEdgeHash(dst, EdgeHashType.AddressHash)
+      ),
+      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
+    )
+
+    val soe = signedObservationEdge(oe)(keyPair)
+    Edge(oe, soe, txData)
+  }
   def createTransaction[F[_]: Concurrent](
                                              src: String,
                                              dst: String,
@@ -92,37 +115,16 @@ object TransactionService {
                                              normalized: Boolean = true,
                                              dummy: Boolean = false
                                            )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
-      val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
-
-      val txData = TransactionEdgeData(amount = amountToUse)
-
-      val oe = ObservationEdge(
-        Seq(
-          TypedEdgeHash(src, EdgeHashType.AddressHash),
-          TypedEdgeHash(prevTxRef+"-"+ordinal, EdgeHashType.AddressHash),//todo change to different EdgeHashType? Also must be in the middle, will break validation
-          TypedEdgeHash(dst, EdgeHashType.AddressHash)
-        ),
-        TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
-      )
-
-      val soe = signedObservationEdge(oe)(keyPair)
-
-      transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
+    val edge = createTransactionEdge(src: String,
+      dst: String,
+      prevTxRef: String,
+      ordinal: Long,
+      amount: Long,
+      keyPair: KeyPair,
+      normalized: Boolean,
+      dummy: Boolean)
+      transactionChainService.setLastTransaction(edge, dummy)
     }
-
-//  def createAndSetTransaction[F[_]: Concurrent](
-//    src: String,
-//    dst: String,
-//    prevTxRef: String,
-//    ordinal: Long,
-//    amount: Long,
-//    keyPair: KeyPair,
-//    normalized: Boolean = true,
-//    dummy: Boolean = false
-//  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
-//    val soe = createTransactionEdge(src, dst, prevTxRef, ordinal, amount, keyPair, normalized)
-//    transactionChainService.setLastTransaction(soe, dummy)
-//  }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair, prevTxRef: String = "dummy", ordinal: Long = 0L)(
     transactionChainService: TransactionChainService[F]

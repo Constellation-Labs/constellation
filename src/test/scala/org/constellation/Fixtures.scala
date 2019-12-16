@@ -1,7 +1,8 @@
 package org.constellation
 
+import java.io.{BufferedReader, FileInputStream, InputStreamReader}
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 import java.util.Random
 
 import cats.effect.{ContextShift, IO}
@@ -9,7 +10,7 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
 import org.constellation.schema.Id
 import org.constellation.util.{APIClient, SignHelp}
@@ -25,7 +26,7 @@ object Fixtures {
   val kp1: KeyPair = KeyUtils.makeKeyPair()
 
   def tx: Transaction =
-    TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+    TransactionService.createTransaction[IO](kp.address, kp1.address, LastTransactionRef.empty.hash, LastTransactionRef.empty.ordinal, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
   def createAndStoreTx(amount: Long,
                        destination: String,
@@ -109,19 +110,31 @@ object Fixtures {
 
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 
-  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction =
-    TransactionService
-      .createTransaction[IO](data.selfAddressStr, src.address, amt, data.keyPair)(
-        TransactionChainService[IO]
+  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction = {
+      val edge = TransactionService.createTransactionEdge(
+        data.selfAddressStr,
+        src.address,
+        LastTransactionRef.empty.hash,
+        LastTransactionRef.empty.ordinal,
+        amt,
+        data.keyPair,
+        normalized = false
       )
-      .unsafeRunSync
+    Transaction(edge, LastTransactionRef.empty)
+    }
 
-  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) =
-    TransactionService
-      .createTransaction[IO](srcAddressString, destinationAddressString, amt, keyPair)(
-        TransactionChainService[IO]
-      )
-      .unsafeRunSync
+  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
+    val edge = TransactionService.createTransactionEdge(
+      srcAddressString,
+      destinationAddressString,
+      LastTransactionRef.empty.hash,
+      LastTransactionRef.empty.ordinal,
+      amt,
+      keyPair,
+      normalized = false
+    )
+    Transaction(edge, LastTransactionRef.empty)
+  }
 
   def makeDummyTransaction(src: String, dst: String, keyPair: KeyPair) =
     TransactionService.createDummyTransaction(src, dst, keyPair)(TransactionChainService[IO]).unsafeRunSync
