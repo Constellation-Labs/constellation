@@ -5,6 +5,9 @@ import org.constellation.ConstellationExecutionContext
 import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData, SnapshotMisalignment}
 import org.constellation.schema.Id
 import org.constellation.trust.{TrustEdge, TrustManager}
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.mockito.cats.IdiomaticMockitoCats
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class EigenTrustTest
   extends FreeSpec

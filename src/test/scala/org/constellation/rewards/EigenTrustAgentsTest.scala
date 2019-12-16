@@ -1,6 +1,9 @@
 package org.constellation.rewards
 
 import org.constellation.schema.Id
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.mockito.cats.IdiomaticMockitoCats
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class EigenTrustAgentsTest
     extends FreeSpec

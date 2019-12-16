@@ -14,6 +14,7 @@ import org.constellation.trust.{DataGeneration, TrustEdge, TrustManager, TrustNo
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import cats.implicits._
+import org.constellation.rewards.EigenTrust.{opinionSampleNum, opinionSampleSD, satisfactoryThreshold, weight}
 
 import scala.util.Random
 
@@ -24,6 +25,11 @@ object EigenTrust {
   final val trustRoundingError = 0.001
   final val service = 0
   final val time = 0
+
+  final val weight = 0.5d
+  final val satisfactoryThreshold = 0.5d
+  final val opinionSampleNum = 10
+  final val opinionSampleSD = 0.1
 
 // TODO: Remove commented out code.
 
@@ -41,7 +47,12 @@ object EigenTrust {
 
   val eigenTrust = new EigenTrustJ()
   eigenTrust
-    .initialize(0.5d.asInstanceOf[Object], 0.5d.asInstanceOf[Object], 10.asInstanceOf[Object], 0.1.asInstanceOf[Object])
+    .initialize(
+      weight.asInstanceOf[Object],
+      satisfactoryThreshold.asInstanceOf[Object],
+      opinionSampleNum.asInstanceOf[Object],
+      opinionSampleSD.asInstanceOf[Object]
+    )
 
   eigenTrust.setRandomGenerator(new DefaultRandomGenerator(0))
 
@@ -63,13 +74,12 @@ class EigenTrust[F[_]: Concurrent](
   private final val eigenTrust = new EigenTrustJ()
   private final val secureRandom = SecureRandom.getInstanceStrong
 
-
   def init(): F[Unit] = Concurrent[F].delay {
     eigenTrust.initialize(
-      0.5d.asInstanceOf[Object],
-      0.5d.asInstanceOf[Object],
-      10.asInstanceOf[Object],
-      0.1.asInstanceOf[Object]
+      EigenTrust.weight.asInstanceOf[Object],
+      EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
+      EigenTrust.opinionSampleNum.asInstanceOf[Object],
+      EigenTrust.opinionSampleSD.asInstanceOf[Object],
     )
     eigenTrust.setRandomGenerator(new DefaultRandomGenerator(0))
     eigenTrust.processExperiences(List().asJava)
