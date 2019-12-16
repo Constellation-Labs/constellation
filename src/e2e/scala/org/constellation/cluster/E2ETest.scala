@@ -9,11 +9,12 @@ import cats.implicits._
 import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress, TransactionEdgeData}
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.{APIClient, Metrics, Simulation}
+import org.constellation.util.{APIClient, AccountBalance, Metrics, Simulation}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -35,10 +36,29 @@ class E2ETest extends E2E {
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
   private val storeData = false
 
+  private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
+  private def submitDoubleSpend(node1: ConstellationNode,
+                              node2: ConstellationNode,
+                              doubleSpendTx1: Transaction,
+                              doubleSpendTx2: Transaction) = {
+    val client1 = node1.getAPIClientForNode(node1)
+    val client2 = node1.getAPIClientForNode(node2)
+
+    client1.postBlocking[Transaction]("transaction", doubleSpendTx1)
+    client2.postBlocking[Transaction]("transaction", doubleSpendTx2)
+  }
+
+  def createDoubleSpendTransactions(prevTxRef: LastTransactionRef,
+                                    edge1: Edge[TransactionEdgeData],
+                                    edge2: Edge[TransactionEdgeData]): (Transaction, Transaction) = {
+    (Transaction(edge1, prevTxRef), Transaction(edge1, prevTxRef))
+  }
+
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
-
-    assert(Simulation.run(initialAPIs, addPeerRequests))
+    logger.info("API addresses: " + apis.map(_.id.address))
+    val startingAcctBalances: List[AccountBalance] = List(AccountBalance(sendToAddress, 100L))
+    assert(Simulation.run(initialAPIs, addPeerRequests, startingAcctBalances))
 
     val metadatas =
       n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
@@ -91,7 +111,7 @@ class E2ETest extends E2E {
     // messageSim.postDownload(apis.head)
 
     // TODO: Change to wait for the download node to participate in several blocks.
-//    Thread.sleep(20 * 1000)
+    Thread.sleep(20 * 1000)
 
 //    val allNodes = nodes :+ downloadNode
     val allNodes = nodes

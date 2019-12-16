@@ -23,7 +23,7 @@ object TransactionValidator {
     if (tx.dst.address.nonEmpty) tx.validNel else EmptyDestinationAddress(tx).invalidNel
 
   def validateDestinationAddress(tx: Transaction): ValidationResult[Transaction] =
-    if (tx.dst.address.length > 30 && tx.dst.address.startsWith("DAG"))
+    if (tx.dst.address.length > 30 && tx.dst.address.startsWith("DAG")&& tx.src != tx.dst)
       tx.validNel
     else
       InvalidDestinationAddress(tx).invalidNel

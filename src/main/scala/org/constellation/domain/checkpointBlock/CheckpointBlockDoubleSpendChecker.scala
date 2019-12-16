@@ -21,5 +21,5 @@ object CheckpointBlockDoubleSpendChecker {
     transactionChainService
       .getLastAcceptedTransactionRef(tx.src.address)
       .map(_.ordinal >= tx.ordinal)
-      .ifM(tx.some.pure[F], Sync[F].pure(None))
+      .ifM(Sync[F].pure(tx.some), Sync[F].pure(None))
 }

@@ -67,6 +67,10 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
+  def receiveTransaction(tx: Transaction): F[TransactionCacheData] =
+    transactionChainService
+      .setLastTransaction(tx.edge, false)
+      .flatMap(tx => put(TransactionCacheData(tx)))
 }
 
 object TransactionService {
@@ -74,14 +78,15 @@ object TransactionService {
   def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO) =
     new TransactionService[F](transactionChainService, dao)
 
-  def createTransaction[F[_]: Concurrent](
-    src: String,
-    dst: String,
-    amount: Long,
-    keyPair: KeyPair,
-    normalized: Boolean = true,
-    dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+
+  def createTransactionEdge(
+                             src: String,
+                             dst: String,
+                             amount: Long,
+                             keyPair: KeyPair,
+                             normalized: Boolean = true,
+                             dummy: Boolean = false
+                           ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amount = amountToUse)
@@ -95,8 +100,24 @@ object TransactionService {
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
+    Edge(oe, soe, txData)
+  }
 
-    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
+  def createTransaction[F[_]: Concurrent](
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true,
+    dummy: Boolean = false
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+    val edge = createTransactionEdge(src,
+      dst,
+      amount,
+      keyPair,
+      normalized = true)
+
+    transactionChainService.setLastTransaction(edge, dummy)
   }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(

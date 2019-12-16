@@ -397,7 +397,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             APIDirective.handle(
               dao.trustManager.getPredictedReputation.map(TrustData)
             )(complete(_))
+          }~
+        path("prevTxRef") {
+          entity(as[String]) { address =>
+            logger.info(s"sget prev tx ref for address $address")
+            val prevTxRef = dao.transactionChainService.getLastTransactionRef(address)
+            APIDirective.handle(prevTxRef)(complete(_))
           }
+        }
       }
     }
 
@@ -523,6 +530,20 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             }
         } ~
+        path("transaction") {
+          entity(as[Transaction]) { transaction =>
+            logger.info(s"send transaction to address ${transaction.hash}")
+            val io = checkpointBlockValidator
+              .singleTransactionValidation(transaction)
+              .ifM(
+                dao.transactionService
+                  .receiveTransaction(transaction)
+                  .map(_.hash),
+                IO { "inValid" }
+              )
+            APIDirective.handle(io)(complete(_))
+          }
+        }~
         path("send") {
           entity(as[SendToAddress]) { sendRequest =>
             logger.info(s"send transaction to address $sendRequest")

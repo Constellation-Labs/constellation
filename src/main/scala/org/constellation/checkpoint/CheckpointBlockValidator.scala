@@ -218,6 +218,12 @@ class CheckpointBlockValidator[F[_]: Sync](
     z
   }
 
+  def singleTransactionValidation(tx: Transaction) =
+    for {
+      transactionValidation <- validateTransaction(tx)
+      balanceValidation <- validateSourceAddressBalances(Iterable(tx))
+    } yield transactionValidation.product(balanceValidation).isValid //todo: use validated to get descriptive results?
+
   def validateCheckpointBlock(cb: CheckpointBlock): F[ValidationResult[CheckpointBlock]] = {
     val preTreeResult =
       for {

@@ -209,8 +209,8 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         }.flatMap(_.filterA { c =>
             AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService)(c.checkpointBlock)
           })
-          .flatMap(_.filterA { _ =>
-            Sync[F].pure(blacklistedTxs.isEmpty)
+          .map(_.filter { _ =>
+            blacklistedTxs.isEmpty
           })
 
         _ <- dao.metrics.updateMetricAsync[F]("awaitingForAcceptance", awaitingBlocks.size)
@@ -359,14 +359,14 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       .filterNot(h => txsHashToFilter.contains(h.hash))
       .map(tx => (tx, toCacheData(tx)))
       .traverse {
-        case (tx, txMetadata) => LiftIO[F].liftIO(dao.transactionService.accept(txMetadata, cpc)) >> transfer(tx)
+        case (tx, txMetadata) => transactionService.accept(txMetadata, cpc) >> transfer(tx)
       }
       .void
   }
 
   private def transfer(tx: Transaction): F[Unit] =
     shouldTransfer(tx).ifM(
-      LiftIO[F].liftIO(dao.addressService.transfer(tx).void),
+      addressService.transfer(tx).void,
       logger.info(s"Transaction with hash blocked = ${tx.hash} : is dummy = ${tx.isDummy}")
     )
 
