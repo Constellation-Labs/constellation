@@ -97,7 +97,9 @@ lazy val keyToolSharedDependencies = Seq(
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "org.bouncycastle" % "bcprov-jdk15on" % "1.63",
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
-  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc()
+  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
 )
 
 lazy val schemaSharedDependencies = Seq(
@@ -108,8 +110,6 @@ lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
   "com.roundeights" %% "hasher" % "1.2.0",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
