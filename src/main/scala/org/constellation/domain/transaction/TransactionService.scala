@@ -64,16 +64,14 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
     normalized: Boolean = true,
     dummy: Boolean = false
   ): F[Transaction] =
-    TransactionService.createTransaction(src, dst, prevTxRef, ordinal, amount, keyPair, normalized, dummy)(
+    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(
       transactionChainService
     )
 
   def createDummyTransaction(src: String,
                              dst: String,
-                             keyPair: KeyPair,
-                             prevTxRef: String = "dummy",
-                             ordinal: Long = 0L): F[Transaction] =
-    TransactionService.createDummyTransaction(src, dst, keyPair, prevTxRef, ordinal)(transactionChainService)
+                             keyPair: KeyPair): F[Transaction] =
+    TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
   def receiveTransaction(tx: Transaction): F[TransactionCacheData] =
     transactionChainService
@@ -103,7 +101,6 @@ object TransactionService {
     val oe = ObservationEdge(
       Seq(
         TypedEdgeHash(src, EdgeHashType.AddressHash),
-//        TypedEdgeHash(s"$txData", EdgeHashType.AddressHash),//todo change to different EdgeHashType? Also must be in the middle, will break validation
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
       TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
@@ -116,24 +113,17 @@ object TransactionService {
   def createTransaction[F[_]: Concurrent](
     src: String,
     dst: String,
-    prevTxRef: String,
-    ordinal: Long,
     amount: Long,
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] =
     transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
-  }
 
-  def createDummyTransaction[F[_]: Concurrent](src: String,
-                                               dst: String,
-                                               keyPair: KeyPair,
-                                               prevTxRef: String = "dummy",
-                                               ordinal: Long = 0L)(
+  def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
-    createTransaction[F](src, dst, prevTxRef, ordinal, 0L, keyPair, normalized = false, dummy = true)(
+    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(
       transactionChainService
     )
 }

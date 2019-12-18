@@ -26,7 +26,7 @@ object Fixtures {
   val kp1: KeyPair = KeyUtils.makeKeyPair()
 
   def tx: Transaction =
-    TransactionService.createTransaction[IO](kp.address, kp1.address, LastTransactionRef.empty.hash, LastTransactionRef.empty.ordinal, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+    TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
   def createAndStoreTx(amount: Long,
                        destination: String,

@@ -12,6 +12,8 @@ import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
+import cats.data.Validated
+import cats.data.Validated.{Invalid, Valid}
 import cats.effect.IO
 import cats.implicits._
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
@@ -542,19 +544,17 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("transaction") {
-          entity(as[Transaction]) { transaction =>
-            logger.info(s"send transaction to address ${transaction.hash}")
-            val io = checkpointBlockValidator
-              .singleTransactionValidation(transaction)
-              .ifM(
-                transactionChainService.setLastTransaction(transaction)
-                  .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-                  .map(_.hash),
-                IO { "inValid" }
-              )
-            APIDirective.handle(io)(complete(_))
-          }
-        } ~ path("send") {
+    entity(as[Transaction]) { transaction =>
+      logger.info(s"send transaction to address ${transaction.hash}")
+      val io = checkpointBlockValidator
+        .singleTransactionValidation(transaction).map {
+//        val isv = validationRes.isValid
+        case Invalid(e) => e.toString
+        case Valid(a) => transactionService.put(TransactionCacheData(transaction)).map(_.hash)
+      }
+      APIDirective.handle(io)(complete(_))
+    }
+  } ~ path("send") {
         entity(as[SendToAddress]) { sendRequest =>
           logger.info(s"send transaction to address $sendRequest")
           val io = transactionChainService
@@ -564,14 +564,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               sendRequest.amountActual,
               dao.keyPair,
               false
-            ).flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+            )
+            .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
             .map(_.hash)
-//          val io = dao.transactionChainService
-//            .getLastTransactionRef(dao.selfAddressStr)
-//            .flatMap { ref: LastTransactionRef =>
-//
-//            }.flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-//            .map(_.hash)
 
           APIDirective.handle(io)(complete(_))
         }

@@ -108,14 +108,14 @@ class TransactionGenerator[F[_]: Concurrent](
     if (multiAddressGenerationMode) generateMultipleAddressTransaction(peers)
     else generateSingleAddressTransaction(peers)
 
-  private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] = transactionService
-    .transactionChainService.createAndSetLastTransaction(
-    dao.selfAddressStr,
-    randomAddressFromPeers(peers),
-    randomAmount(rangeAmount),
-    dao.keyPair,
-    false
-  )
+  private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
+    transactionService.transactionChainService.createAndSetLastTransaction(
+      dao.selfAddressStr,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      dao.keyPair,
+      false
+    )
 
   private def generateMultipleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
     balancesForAddresses.flatMap(
@@ -129,31 +129,26 @@ class TransactionGenerator[F[_]: Concurrent](
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] =
     transactionService.transactionChainService.createAndSetLastTransaction(
-    dao.selfAddressStr,
-    randomAddressFromPeers(peers),
-    randomAmount(rangeAmount),
-    dao.keyPair,
+      dao.selfAddressStr,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      dao.keyPair,
       false
-  )
+    )
 
   private def generateMultipleAddressTransactionWithoutSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] = {
     val source: String = getSourceAddressForTxWithoutSufficient(addresses)
-    transactionService.transactionChainService.getLastTransactionRef(dao.selfAddressStr)
-      .flatMap { ref: LastTransactionRef =>
-        transactionService
-          .createTransaction(
-            dao.selfAddressStr,
-            randomAddressFromPeers(peers),
-            ref.hash,
-            ref.ordinal,
-            randomAmount(rangeAmount),
-            keyPairForSource(source),
-            normalized = false
-          )
-      }
+    transactionService.transactionChainService.createAndSetLastTransaction(
+      source,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      keyPairForSource(source),
+      false,
+      normalized = false
+    )
   }
 
   private def peerDataNodeTypeLight(): F[Map[Id, PeerData]] =
