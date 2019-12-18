@@ -108,21 +108,14 @@ class TransactionGenerator[F[_]: Concurrent](
     if (multiAddressGenerationMode) generateMultipleAddressTransaction(peers)
     else generateSingleAddressTransaction(peers)
 
-  private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] = {
-    transactionService.transactionChainService.getLastTransactionRef(dao.selfAddressStr)
-    .flatMap { ref: LastTransactionRef =>
-      transactionService
-        .createTransaction(
-          dao.selfAddressStr,
-          randomAddressFromPeers(peers),
-          ref.hash,
-          ref.ordinal,
-          randomAmount(rangeAmount),
-          dao.keyPair,
-          normalized = false
-        )
-    }
-  }
+  private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] = transactionService
+    .transactionChainService.createAndSetLastTransaction(
+    dao.selfAddressStr,
+    randomAddressFromPeers(peers),
+    randomAmount(rangeAmount),
+    dao.keyPair,
+    false
+  )
 
   private def generateMultipleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
     balancesForAddresses.flatMap(
@@ -135,19 +128,13 @@ class TransactionGenerator[F[_]: Concurrent](
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] =
-    transactionService.transactionChainService.getLastTransactionRef(dao.selfAddressStr)
-      .flatMap { ref: LastTransactionRef =>
-        transactionService
-          .createTransaction(
-            dao.selfAddressStr,
-            randomAddressFrom(addresses),
-            ref.hash,
-            ref.ordinal,
-            randomAmount(rangeAmount),
-            dao.keyPair,
-            normalized = false
-          )
-      }
+    transactionService.transactionChainService.createAndSetLastTransaction(
+    dao.selfAddressStr,
+    randomAddressFromPeers(peers),
+    randomAmount(rangeAmount),
+    dao.keyPair,
+      false
+  )
 
   private def generateMultipleAddressTransactionWithoutSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],

@@ -43,6 +43,7 @@ class RollbackServiceTest
   }
 
   test("should pass for data from test resources") {
+//    val test = rollbackService.rollbackLoader.loadSnapshotsFromFile()
     val result = rollbackService
       .validate()
       .value

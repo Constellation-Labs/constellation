@@ -20,6 +20,7 @@ import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
 import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -189,24 +190,18 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           .lookup(dao.selfAddressStr)
           .unsafeRunSync()
           .map { _.balance }
-          .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+          .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 10)) {
 
       val tx = dao.transactionChainService
-        .getLastTransactionRef(dao.selfAddressStr)
-        .flatMap { ref: LastTransactionRef =>
-          dao.transactionService
-            .createTransaction(
-              dao.selfAddressStr,
-              sendRequest.dst,
-              ref.hash,
-              ref.ordinal,
-              sendRequest.amountActual,
-              dao.keyPair,
-              normalized = false
-            )
-        }
-        .flatMap { tx =>
-          logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+        .createAndSetLastTransaction(
+          dao.selfAddressStr,
+          sendRequest.dst,
+          sendRequest.amountActual,
+          dao.keyPair,
+          false,
+          normalized = sendRequest.normalized
+        ).flatMap { tx =>
+          logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")//DAG69QihS1VTjo8JCaBWPZQfdAqyLPE6EfLzNwzL
           dao.metrics.incrementMetric("faucetRequest")
           dao.transactionService.put(TransactionCacheData(tx))
         }

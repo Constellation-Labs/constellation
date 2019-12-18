@@ -29,7 +29,7 @@ class GenesisObservationCreationTest extends FreeSpec with ArgumentMatchersSugar
       balances.forall { ab =>
         go.genesis.transactions.exists { tx =>
           tx.edge.observationEdge.parents match {
-            case Seq(a, _, b) => a.hash == Genesis.Coinbase && b.hash == ab.accountHash
+            case Seq(a, b) => a.hash == Genesis.Coinbase && b.hash == ab.accountHash
           }
         }
       } shouldBe true

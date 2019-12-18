@@ -193,8 +193,10 @@ object Schema {
     */
   case class TransactionEdgeData(
     amount: Long,
-    salt: Long = Random.nextLong(),
-    fee: Option[Long] = None
+    prevTxHash: String,
+    ordinal: Long,
+    fee: Option[Long] = None,
+    salt: Long = Random.nextLong()
   ) extends Signable
 
   /**

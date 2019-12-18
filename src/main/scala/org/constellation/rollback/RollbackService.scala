@@ -16,7 +16,7 @@ class RollbackService[F[_]: Concurrent](
   dao: DAO,
   rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F],
-  rollbackLoader: RollbackLoader
+  val rollbackLoader: RollbackLoader
 )(implicit C: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -83,6 +83,8 @@ class RollbackService[F[_]: Concurrent](
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {
       case 0 => Right(())
-      case _ => Left(InvalidBalances)
+      case _ =>
+        println(accountBalances.filter(_._2 < 0).toString())
+        Left(InvalidBalances)
     }
 }

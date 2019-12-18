@@ -547,8 +547,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val io = checkpointBlockValidator
               .singleTransactionValidation(transaction)
               .ifM(
-                dao.transactionService
-                  .receiveTransaction(transaction)
+                transactionChainService.setLastTransaction(transaction)
+                  .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
                   .map(_.hash),
                 IO { "inValid" }
               )
@@ -557,21 +557,21 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~ path("send") {
         entity(as[SendToAddress]) { sendRequest =>
           logger.info(s"send transaction to address $sendRequest")
-          val io = dao.transactionChainService
-            .getLastTransactionRef(dao.selfAddressStr)
-            .flatMap { ref: LastTransactionRef =>
-              dao.transactionService
-                .createTransaction(
-                  dao.selfAddressStr,
-                  sendRequest.dst,
-                  ref.hash,
-                  ref.ordinal,
-                  sendRequest.amountActual,
-                  dao.keyPair,
-                  normalized = false
-                )
-            }.flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+          val io = transactionChainService
+            .createAndSetLastTransaction(
+              dao.selfAddressStr,
+              sendRequest.dst,
+              sendRequest.amountActual,
+              dao.keyPair,
+              false
+            ).flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
             .map(_.hash)
+//          val io = dao.transactionChainService
+//            .getLastTransactionRef(dao.selfAddressStr)
+//            .flatMap { ref: LastTransactionRef =>
+//
+//            }.flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+//            .map(_.hash)
 
           APIDirective.handle(io)(complete(_))
         }

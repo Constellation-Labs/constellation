@@ -37,7 +37,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
   def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
     List
       .fill(count) {
-        val keyPair = KeyUtils.makeKeyPair()//todo note creation here is expensive, we should just use the node keypair
+        val keyPair = KeyUtils.makeKeyPair()
         TransactionService
           .createDummyTransaction(
             keyPair.getPublic.toId.address,
@@ -63,14 +63,21 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
-  ): F[Transaction] = TransactionService.createTransaction(src, dst, prevTxRef, ordinal, amount, keyPair, normalized, dummy)(transactionChainService)
+  ): F[Transaction] =
+    TransactionService.createTransaction(src, dst, prevTxRef, ordinal, amount, keyPair, normalized, dummy)(
+      transactionChainService
+    )
 
-  def createDummyTransaction(src: String, dst: String, keyPair: KeyPair, prevTxRef: String = "dummy", ordinal: Long = 0L): F[Transaction] =
+  def createDummyTransaction(src: String,
+                             dst: String,
+                             keyPair: KeyPair,
+                             prevTxRef: String = "dummy",
+                             ordinal: Long = 0L): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair, prevTxRef, ordinal)(transactionChainService)
 
   def receiveTransaction(tx: Transaction): F[TransactionCacheData] =
     transactionChainService
-      .setLastTransaction(tx.edge, false)
+      .setLastTransaction(tx)
       .flatMap(tx => put(TransactionCacheData(tx)))
 }
 
@@ -80,23 +87,23 @@ object TransactionService {
     new TransactionService[F](transactionChainService, dao)
 
   def createTransactionEdge(
-                             src: String,
-                             dst: String,
-                             prevTxRef: String,
-                             ordinal: Long,
-                             amount: Long,
-                             keyPair: KeyPair,
-                             normalized: Boolean = true,
-                             dummy: Boolean = false
-                           ): Edge[TransactionEdgeData] = {
+    src: String,
+    dst: String,
+    prevTxRef: String,
+    ordinal: Long,
+    amount: Long,
+    keyPair: KeyPair,
+    fee: Option[Long] = None,
+    normalized: Boolean = true
+  ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
-    val txData = TransactionEdgeData(amount = amountToUse)
+    val txData = TransactionEdgeData(amountToUse, prevTxRef, ordinal, fee)
 
     val oe = ObservationEdge(
       Seq(
         TypedEdgeHash(src, EdgeHashType.AddressHash),
-        TypedEdgeHash(prevTxRef+"-"+ordinal, EdgeHashType.AddressHash),//todo change to different EdgeHashType? Also must be in the middle, will break validation
+//        TypedEdgeHash(s"$txData", EdgeHashType.AddressHash),//todo change to different EdgeHashType? Also must be in the middle, will break validation
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
       TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
@@ -105,29 +112,28 @@ object TransactionService {
     val soe = signedObservationEdge(oe)(keyPair)
     Edge(oe, soe, txData)
   }
-  def createTransaction[F[_]: Concurrent](
-                                             src: String,
-                                             dst: String,
-                                             prevTxRef: String,
-                                             ordinal: Long,
-                                             amount: Long,
-                                             keyPair: KeyPair,
-                                             normalized: Boolean = true,
-                                             dummy: Boolean = false
-                                           )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
-    val edge = createTransactionEdge(src: String,
-      dst: String,
-      prevTxRef: String,
-      ordinal: Long,
-      amount: Long,
-      keyPair: KeyPair,
-      normalized: Boolean,
-      dummy: Boolean)
-      transactionChainService.setLastTransaction(edge, dummy)
-    }
 
-  def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair, prevTxRef: String = "dummy", ordinal: Long = 0L)(
+  def createTransaction[F[_]: Concurrent](
+    src: String,
+    dst: String,
+    prevTxRef: String,
+    ordinal: Long,
+    amount: Long,
+    keyPair: KeyPair,
+    normalized: Boolean = true,
+    dummy: Boolean = false
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
+    transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
+  }
+
+  def createDummyTransaction[F[_]: Concurrent](src: String,
+                                               dst: String,
+                                               keyPair: KeyPair,
+                                               prevTxRef: String = "dummy",
+                                               ordinal: Long = 0L)(
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
-    createTransaction[F](src, dst, prevTxRef, ordinal, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
+    createTransaction[F](src, dst, prevTxRef, ordinal, 0L, keyPair, normalized = false, dummy = true)(
+      transactionChainService
+    )
 }
