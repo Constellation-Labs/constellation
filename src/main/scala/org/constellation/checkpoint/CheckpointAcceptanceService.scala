@@ -128,8 +128,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           .areParentsSOEAccepted(checkpointParentService.soeService)(cb)
           .ifM(
             logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking missing parents - unit") >> Sync[F].unit,
-            logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking missing parents - error") >> awaiting
-              .modify(s => (s + checkpoint, ())) >> MissingParents(cb).raiseError[F, Unit]
+            logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking missing parents - error") >>
+              awaiting.modify(s => (s + checkpoint, ())) >>
+              MissingParents(cb).raiseError[F, Unit]
           )
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking missing references")
@@ -137,9 +138,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           .areReferencesAccepted(transactionService.transactionChainService)(cb)
           .ifM(
             logConditions(cb, true) >> Sync[F].unit,
-            logConditions(cb, false) >> awaiting.modify(
-              s => (s + checkpoint, ())
-            ) >> MissingTransactionReference(cb).raiseError[F, Unit]
+            logConditions(cb, false) >>
+              awaiting.modify(s => (s + checkpoint, ())) >>
+              MissingTransactionReference(cb).raiseError[F, Unit]
           )
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking conflicts")
