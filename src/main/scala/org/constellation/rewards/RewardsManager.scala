@@ -32,7 +32,7 @@ class RewardsManager[F[_]: Concurrent](
     * Then we are rewarding, clearing cache and caching next interval.
     */
   private val snapshotCache: Ref[F, Seq[RewardSnapshot]] = Ref.unsafe(Seq.empty)
-  private val accumulatedRewards: Ref[F, Map[Id, Long]] = Ref.unsafe(Map.empty)
+  private val accumulatedRewards: Ref[F, Map[String, Long]] = Ref.unsafe(Map.empty)
   private val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
   val logger = Slf4jLogger.getLogger[F]
@@ -78,19 +78,19 @@ class RewardsManager[F[_]: Concurrent](
         logger.debug(s"[Rewards] ${rewardSnapshot.hash} contains following observations:").flatMap { _ =>
           rewardSnapshot.observations.toList
             .map(_.signedObservationData.data)
-            .traverse(o => logger.debug(s"[Rewards] Observation for ${o.id.address}, ${o.event}")).void
+            .traverse(o => logger.debug(s"[Rewards] Observation for ${o.id}, ${o.event}")).void
         }
       )
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
-      trustMap <- eigenTrust.getTrustForIds
+      trustMap <- eigenTrust.getTrustForAddresses
 
-      weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height)
+      weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height) >>> weightByStardust
       contributions = calculateContributions(trustMap.keySet.toSeq)
       distribution = weightContributions(contributions)
       normalizedDistribution = normalize(distribution)
       _ <- logger.debug(s"[Rewards] Distribution:")
       _ <- normalizedDistribution.toList.traverse {
-        case (id, reward) => logger.debug(s"[Rewards] Address: ${id.address}, Reward: ${reward}")
+        case (address, reward) => logger.debug(s"[Rewards] Address: ${address}, Reward: ${reward}")
       }
 
       acc <- accumulatedRewards.modify(r => {
@@ -99,23 +99,26 @@ class RewardsManager[F[_]: Concurrent](
       })
 
      _ <- acc.transform {
-       case (id, reward) => logger.debug(s"[Rewards] Accumulated rewards of ${id.address}: ${reward}")
+       case (address, reward) => logger.debug(s"[Rewards] Accumulated rewards of ${address}: ${reward}")
      }.values.toList.sequence
 
       _ <- updateAddressBalances(normalizedDistribution)
     } yield ()
 
-  private def normalize(contributions: Map[Id, Double]): Map[Id, Long] =
+  private def normalize(contributions: Map[String, Double]): Map[String, Long] =
     contributions
       .mapValues(Schema.NormalizationFactor * _)
       .mapValues(_.toLong)
 
-  private def weightByEpoch(snapshotHeight: Long)(contributions: Map[Id, Double]): Map[Id, Double] =
+  def weightByStardust: Map[String, Double] => Map[String, Double] =
+    StardustCollective.weightByStardust
+
+  private def weightByEpoch(snapshotHeight: Long)(contributions: Map[String, Double]): Map[String, Double] =
     contributions.mapValues(_ * RewardsManager.rewardDuringEpoch(snapshotHeight))
 
   private def weightByTrust(
-    trustEntropyMap: Map[Id, Double]
-  )(contributions: Map[Id, Double]): Map[Id, Double] = {
+    trustEntropyMap: Map[String, Double]
+  )(contributions: Map[String, Double]): Map[String, Double] = {
     val weightedEntropy = contributions.transform {
       case (id, partitionSize) =>
         partitionSize * (1 - trustEntropyMap(id)) // Normalize wrt total partition space
@@ -130,7 +133,7 @@ class RewardsManager[F[_]: Concurrent](
     * @param ids
     * @return
     */
-  private def calculateContributions(ids: Seq[Id]): Map[Id, Double] = {
+  private def calculateContributions(ids: Seq[String]): Map[String, Double] = {
     val totalSpace = ids.size
     val contribution = 1.0 / totalSpace
     ids.map { id =>
@@ -143,7 +146,7 @@ class RewardsManager[F[_]: Concurrent](
       .traverse(checkpointService.fullData)
       .map(_.flatten.flatMap(_.checkpointBlock.observations))
 
-  private def updateAddressBalances(rewards: Map[Id, Long]): F[Unit] =
+  private def updateAddressBalances(rewards: Map[String, Long]): F[Unit] =
     addressService.addBalances(rewards).void
 }
 

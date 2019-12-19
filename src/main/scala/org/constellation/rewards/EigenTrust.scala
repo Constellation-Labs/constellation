@@ -94,17 +94,17 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
   def registerAgent(id: Id): F[Unit] =
     agents
       .modify(a => {
-        val updated = a.registerAgent(id)
+        val updated = a.registerAgent(id.address)
         (updated, updated)
       })
       .flatMap(
-        agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id)}")
+        agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id.address)}")
       )
 
   def unregisterAgent(id: Id): F[Unit] =
     agents
       .modify(a => {
-        val updated = a.unregisterAgent(id)
+        val updated = a.unregisterAgent(id.address)
         (updated, updated)
       })
       .flatMap(_ => logger.debug(s"[EigenTrust] Unregistered EigenTrust agent: ${id.address}"))
@@ -148,7 +148,7 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
       .groupBy(_.id)
       .mapValues(data => calculateExperienceOutcome(data.map(_.event)))
       .transform {
-        case (id, outcome) => new Experience(agents.getUnsafe(id), EigenTrust.service, EigenTrust.time, outcome)
+        case (id, outcome) => new Experience(agents.getUnsafe(id.address), EigenTrust.service, EigenTrust.time, outcome)
       }
       .values
       .toSeq
@@ -167,9 +167,9 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
       .toMap
       .mapValues(_.toDouble)
 
-  def getTrustForIds: F[Map[Id, Double]] = getAgents().map { agents =>
+  def getTrustForAddresses: F[Map[String, Double]] = getAgents().map { agents =>
     val trust = getTrust
-    agents.getAllAsIds().transform {
+    agents.getAllAsAddresses().transform {
       // If node has no Experiences then it's entropy should be ~0
       case (_, int) => trust.getOrElse(int, 0.0)
     }
