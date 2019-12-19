@@ -108,7 +108,7 @@ object CheckpointBlockValidator {
 }
 
 class CheckpointBlockValidator[F[_]: Sync](
-  addressService: AddressService[F],//todo this should go int TransactionValidator
+  addressService: AddressService[F],
   snapshotService: SnapshotService[F],
   checkpointParentService: CheckpointParentService[F],
   transactionValidator: TransactionValidator[F],
@@ -189,22 +189,6 @@ class CheckpointBlockValidator[F[_]: Sync](
 
   }
 
-  def validateSourceAddressBalance(
-                                     t: Transaction
-                                   ): F[ValidationResult[Transaction]] = {
-      val balance = addressService
-        .lookup(t.src.address)
-        .map(
-          _.map(_.balance)
-            .getOrElse(0L)
-        )
-      balance.map { b =>
-        val diff = b - t.amount
-        if (diff >= 0L) t.validNel else InsufficientBalance(t.src.address, t.amount, diff).invalidNel
-      }
-    }
-
-
   def isInSnapshot(c: CheckpointBlock): F[Boolean] =
     snapshotService.acceptedCBSinceSnapshot.get.map(!_.contains(c.baseHash))
 
@@ -234,10 +218,9 @@ class CheckpointBlockValidator[F[_]: Sync](
       isInSnapshot(cb).ifM(Sync[F].pure(Map.empty[String, Long].rightIor), validate)
     z
   }
-  import cats.implicits._
-  //todo move to TransactionValidator
+
   def singleTransactionValidation(tx: Transaction
-  ): F[Validated[NonEmptyList[CheckpointBlockValidation], Transaction]] =
+  ): F[ValidationResult[Transaction]] =
     for {
       transactionValidation <- validateTransactions(Iterable(tx))
       balanceValidation <- validateSourceAddressBalances(Iterable(tx))
@@ -251,7 +234,7 @@ class CheckpointBlockValidator[F[_]: Sync](
             .product(validateSignatures(cb.signatures, cb.baseHash))
         )
         transactionValidation <- validateTransactions(cb.transactions)
-        duplicatedTransactions<- Sync[F].delay(validateDuplicatedTransactions(cb.transactions))
+        duplicatedTransactions <- Sync[F].delay(validateDuplicatedTransactions(cb.transactions))
         balanceValidation <- validateSourceAddressBalances(cb.transactions)
       } yield staticValidation.product(transactionValidation).product(duplicatedTransactions).product(balanceValidation)
 

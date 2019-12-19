@@ -544,17 +544,17 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           }
         } ~
         path("transaction") {
-    entity(as[Transaction]) { transaction =>
-      logger.info(s"send transaction to address ${transaction.hash}")
-      val io = checkpointBlockValidator
-        .singleTransactionValidation(transaction).map {
-//        val isv = validationRes.isValid
-        case Invalid(e) => e.toString
-        case Valid(a) => transactionService.put(TransactionCacheData(transaction)).map(_.hash)
-      }
-      APIDirective.handle(io)(complete(_))
-    }
-  } ~ path("send") {
+          entity(as[Transaction]) { transaction =>
+            logger.info(s"send transaction to address ${transaction.hash}")
+            val io: IO[String] = checkpointBlockValidator
+              .singleTransactionValidation(transaction)
+              .flatMap {
+                case Invalid(e) => IO { e.toString() }
+                case Valid(tx)  => transactionService.put(TransactionCacheData(tx)).map(_.hash)
+              }
+            APIDirective.handle(io)(complete(_))
+          }
+        } ~ path("send") {
         entity(as[SendToAddress]) { sendRequest =>
           logger.info(s"send transaction to address $sendRequest")
           val io = transactionChainService

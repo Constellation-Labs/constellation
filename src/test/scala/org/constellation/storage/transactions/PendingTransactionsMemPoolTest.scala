@@ -1,6 +1,6 @@
 package org.constellation.storage.transactions
 
-import cats.effect.concurrent.Semaphore
+import org.constellation.keytool.KeyUtils.publicKeyToAddressString
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
@@ -9,6 +9,7 @@ import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, Trans
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.mockito.IdiomaticMockito
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import constellation._
 
 class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers with BeforeAndAfter {
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
@@ -76,7 +77,6 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
     "it should return up to max count of txs" in {
       val memPool = new PendingTransactionsMemPool[IO](txChainService)
-
       val tx1 = createTransaction("a")
       val tx2 = createTransaction("b")
       val tx3 = createTransaction("c")
@@ -156,21 +156,9 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     src: String,
     fee: Option[Long] = None
   ): TransactionCacheData = {
-    import constellation._
-
-    val txData = TransactionEdgeData(1L, "", 0L, fee)
-
-    val oe = ObservationEdge(
-      Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash("dst", EdgeHashType.AddressHash)),
-      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
-    )
-
-    val soe = signedObservationEdge(oe)(Fixtures.tempKey)
-
     txChainService
       .createAndSetLastTransaction(src, "dst", 1L, Fixtures.tempKey, false, fee)
       .map(TransactionCacheData(_))
       .unsafeRunSync
   }
-
 }
