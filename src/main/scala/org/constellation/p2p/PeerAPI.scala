@@ -201,7 +201,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           false,
           normalized = sendRequest.normalized
         ).flatMap { tx =>
-          logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")//DAG69QihS1VTjo8JCaBWPZQfdAqyLPE6EfLzNwzL
+          logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
           dao.metrics.incrementMetric("faucetRequest")
           dao.transactionService.put(TransactionCacheData(tx))
         }

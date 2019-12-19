@@ -83,8 +83,6 @@ class RollbackService[F[_]: Concurrent](
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {
       case 0 => Right(())
-      case _ =>
-        println(accountBalances.filter(_._2 < 0).toString())
-        Left(InvalidBalances)
+      case _ => Left(InvalidBalances)
     }
 }

@@ -50,8 +50,6 @@ case class Transaction(
 
   def src: Address = Address(edge.parents.head.hash)
 
-  def prevTxOrdinal: Address = Address(edge.parents.tail.head.hash)
-
   def dst: Address = Address(edge.parents.last.hash)
 
   def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures

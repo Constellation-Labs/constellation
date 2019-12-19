@@ -30,16 +30,14 @@ object Fixtures {
 
   def createAndStoreTx(amount: Long,
                        destination: String,
-                       prevTxRef: String,
-                       ordinal: Long,
+                       lastTxRef: LastTransactionRef,
                        storePath: String,
                        kp: KeyPair = KeyUtils.makeKeyPair()
                       ) = {
     val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
       KeyUtils.publicKeyToAddressString(kp.getPublic),
       destination,
-      prevTxRef,
-      ordinal,
+      lastTxRef,
       amount,
       kp
     )
@@ -114,8 +112,7 @@ object Fixtures {
       val edge = TransactionService.createTransactionEdge(
         data.selfAddressStr,
         src.address,
-        LastTransactionRef.empty.hash,
-        LastTransactionRef.empty.ordinal,
+        LastTransactionRef.empty,
         amt,
         data.keyPair,
         normalized = false
@@ -127,8 +124,7 @@ object Fixtures {
     val edge = TransactionService.createTransactionEdge(
       srcAddressString,
       destinationAddressString,
-      LastTransactionRef.empty.hash,
-      LastTransactionRef.empty.ordinal,
+      LastTransactionRef.empty,
       amt,
       keyPair,
       normalized = false

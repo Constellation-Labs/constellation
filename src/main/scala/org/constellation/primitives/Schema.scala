@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.schema.Id
 import org.constellation.util._
@@ -193,8 +194,7 @@ object Schema {
     */
   case class TransactionEdgeData(
     amount: Long,
-    prevTxHash: String,
-    ordinal: Long,
+    lastTxRef: LastTransactionRef,
     fee: Option[Long] = None,
     salt: Long = Random.nextLong()
   ) extends Signable

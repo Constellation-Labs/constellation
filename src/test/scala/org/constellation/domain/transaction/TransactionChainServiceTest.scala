@@ -55,7 +55,7 @@ class TransactionChainServiceTest
     src: String,
     dst: String
   ): IO[Transaction] = {
-    val txData = TransactionEdgeData(1L, "", 0L)
+    val txData = TransactionEdgeData(1L, LastTransactionRef("", 0L))
 
     val oe = ObservationEdge(
       Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash(dst, EdgeHashType.AddressHash)),

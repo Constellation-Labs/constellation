@@ -68,9 +68,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
       transactionChainService
     )
 
-  def createDummyTransaction(src: String,
-                             dst: String,
-                             keyPair: KeyPair): F[Transaction] =
+  def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
 }
@@ -83,8 +81,7 @@ object TransactionService {
   def createTransactionEdge(
     src: String,
     dst: String,
-    prevTxRef: String,
-    ordinal: Long,
+    lastTxRef: LastTransactionRef,
     amount: Long,
     keyPair: KeyPair,
     fee: Option[Long] = None,
@@ -92,7 +89,7 @@ object TransactionService {
   ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
-    val txData = TransactionEdgeData(amountToUse, prevTxRef, ordinal, fee)
+    val txData = TransactionEdgeData(amountToUse, lastTxRef, fee)
 
     val oe = ObservationEdge(
       Seq(
