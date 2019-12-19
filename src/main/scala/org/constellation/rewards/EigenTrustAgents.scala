@@ -20,10 +20,10 @@ object EigenTrustAgents {
 case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int] = (Map.empty[Id, Int], Map.empty[Int, Id])) {
   private val secureRandom = SecureRandom.getInstanceStrong
 
-  def registerAgent(id: Id): EigenTrustAgents = EigenTrustAgents(update(id, secureRandom.nextInt))
+  def registerAgent(id: Id): EigenTrustAgents = this.copy(update(id, secureRandom.nextInt))
 
-  def unregisterAgent(agent: Int): EigenTrustAgents = EigenTrustAgents(remove(agent))
-  def unregisterAgent(agent: Id): EigenTrustAgents = EigenTrustAgents(remove(agent))
+  def unregisterAgent(agent: Int): EigenTrustAgents = this.copy(remove(agent))
+  def unregisterAgent(agent: Id): EigenTrustAgents = this.copy(remove(agent))
 
   def get(agent: Int): Option[Id] =
     agentMappings match {
@@ -34,13 +34,19 @@ case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int]
       case (idToInd: Map[Id, Int], _) => idToInd.get(id)
     }
 
+  def getUnsafe(id: Id): Int = get(id).get
+  def getUnsafe(agent: Int): Id = get(agent).get
+
   def contains(agent: Int): Boolean = get(agent).isDefined
   def contains(id: Id): Boolean = get(id).isDefined
 
+  def clear(): EigenTrustAgents = EigenTrustAgents.empty
+
   private def update(key: Id, value: Int): BiDirectionalMap[Id, Int] = {
     agentMappings match {
-      case (idToInt: Map[Id, Int], intToId: Map[Int, Id]) =>
+      case (idToInt: Map[Id, Int], intToId: Map[Int, Id]) if !contains(key) && !contains(value) =>
         (idToInt + (key -> value), intToId + (value -> key))
+      case _ => agentMappings
     }
   }
 

@@ -1,14 +1,79 @@
 package org.constellation.rewards
 
 import cats.effect._
+import cats.effect.concurrent.Ref
 import cats.implicits._
+import org.constellation.checkpoint.CheckpointService
+import org.constellation.consensus.Snapshot
+import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerNotification
-import org.constellation.primitives.Schema.CheckpointEdge
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointEdge}
 import org.constellation.primitives.{ChannelMessage, Transaction}
-import org.constellation.storage.{RecentSnapshot, SnapshotBroadcastService}
+import org.constellation.rewards.RewardsManager.rewardDuringEpoch
+import org.constellation.storage.{AddressService, SnapshotBroadcastService}
 import org.constellation.trust.TrustEdge
 
-object Rewards {
+class RewardsManager[F[_]: Concurrent](
+  eigenTrust: EigenTrust[F],
+  checkpointService: CheckpointService[F],
+  addressService: AddressService[F],
+  snapshotBroadcastService: SnapshotBroadcastService[F],
+) {
+  final val rewards: Ref[F, Map[String, Double]] = Ref.unsafe(Map.empty)
+
+  def updateBySnapshot(snapshot: Snapshot): F[Unit] =
+    for {
+      observations <- observationsFromSnapshot(snapshot)
+      _ <- eigenTrust.retrain(observations)
+
+      snapshotNum <- getSnapshotNumber
+
+      hashesTrustMap <- eigenTrust.getTrustForAddressHashes
+
+      distribution = RewardsManager
+        .rewardDistribution(hashesTrustMap.keys.toSeq, hashesTrustMap)
+        .mapValues(_ * rewardDuringEpoch(snapshotNum))
+
+      _ <- updateRewards(distribution)
+      _ <- updateAddressBalances(distribution)
+    } yield ()
+
+  // TODO: Check if this is the correct way of checking the snapshot number
+  // Assumption that `getRecentSnapshots` returns all snapshots may be failure
+  private def getSnapshotNumber: F[Int] =
+    snapshotBroadcastService.getRecentSnapshots.map(_.size)
+
+  private def observationsFromSnapshot(snapshot: Snapshot): F[Seq[Observation]] =
+    snapshot.checkpointBlocks.toList
+      .traverse(checkpointService.fullData)
+      .map(_.flatten.flatMap(_.checkpointBlock.observations))
+
+  private def updateRewards(distribution: Map[String, Double]): F[Unit] =
+    rewards.modify(prevDistribution => (prevDistribution |+| distribution, ()))
+
+  /*
+    TODO: Not sure if it is the correct way of updating balances by rewards.
+    1. putUnsafe takes Account.hash but we pass there Id.address which could differ. Maybe we should do Address(id.address).hash.
+    2. I take the current balance and just copy the balance by adding rewards. Seems to be quite... dirty and unsafe?
+   */
+  private def updateAddressBalances(rewards: Map[String, Double]): F[Unit] =
+    rewards.transform {
+      case (address, reward) =>
+        addressService.lookup(address).flatMap { existingCacheData =>
+          val updatedAddressCacheData = existingCacheData.map(
+            cache =>
+              cache.copy(
+                balance = cache.balance + reward.toLong,
+                memPoolBalance = cache.memPoolBalance + reward.toLong
+              )
+          ).getOrElse(AddressCacheData(reward.toLong, reward.toLong))
+
+          addressService.putUnsafe(address, updatedAddressCacheData)
+        }
+    }.values.toList.sequence.void
+}
+
+object RewardsManager {
   val roundingError = 0.000000000001
 
   /*
@@ -73,9 +138,13 @@ object Rewards {
     }
   }
 
-  def weightContributions(contributions: Map[String, Double], trustEntropyMap: Map[String, Double]): Map[String, Double] = {
+  def weightContributions(
+    contributions: Map[String, Double],
+    trustEntropyMap: Map[String, Double]
+  ): Map[String, Double] = {
     val weightedEntropy = contributions.transform {
-      case (address, partitionSize) => partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
+      case (address, partitionSize) =>
+        partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
     }
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
@@ -84,11 +153,16 @@ object Rewards {
   def rewardDistribution(addresses: Seq[String], trustEntropyMap: Map[String, Double]): Map[String, Double] = {
     val totalSpace = addresses.size
     val contribution = 1.0 / totalSpace
-    val contributions = addresses.map { address => address -> contribution }.toMap
+    val contributions = addresses.map { address =>
+      address -> contribution
+    }.toMap
     weightContributions(contributions, trustEntropyMap)
   }
 
-  def rewardDistribution(partitonChart: Map[String, Set[String]], trustEntropyMap: Map[String, Double]): Map[String, Double] = {
+  def rewardDistribution(
+    partitonChart: Map[String, Set[String]],
+    trustEntropyMap: Map[String, Double]
+  ): Map[String, Double] = {
     val totalSpace = partitonChart.values.map(_.size).max
     val contributions = partitonChart.mapValues(partiton => (partiton.size / totalSpace).toDouble)
     weightContributions(contributions, trustEntropyMap)

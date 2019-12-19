@@ -1,6 +1,6 @@
 package org.constellation.util
 
-import org.constellation.rewards.Rewards.{rewardDistribution, shannonEntropy}
+import org.constellation.rewards.RewardsManager.{rewardDistribution, shannonEntropy}
 
 class RewardsBasedRateLimiter {
 

@@ -53,6 +53,7 @@ class SnapshotService[F[_]: Concurrent](
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
+  val snapshotHeightRedownloadDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
 
   val recentSnapshotInfo: Ref[F, Option[SnapshotInfoSer]] = Ref.unsafe(None)
 
