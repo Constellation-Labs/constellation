@@ -1,10 +1,12 @@
-package org.constellation.trust
+package org.constellation.rewards
 
 import cats.effect.{ContextShift, IO}
 import org.constellation.ConstellationExecutionContext
-import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationEvent, SnapshotMisalignment}
-import org.mockito.cats.IdiomaticMockitoCats
+import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData, SnapshotMisalignment}
+import org.constellation.schema.Id
+import org.constellation.trust.{TrustEdge, TrustManager}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class EigenTrustTest
@@ -49,16 +51,17 @@ class EigenTrustTest
 
   "TrustManager to EigenTrust mappings" - {
     "should convert ObservationEvent to Experience" in {
-      val observationEvents: List[ObservationEvent] = List(
-        SnapshotMisalignment(),
-        CheckpointBlockWithMissingSoe("foo")
+      val observations: List[ObservationData] = List(
+        ObservationData(Id("foo"), SnapshotMisalignment(), 321),
+        ObservationData(Id("foo"), CheckpointBlockWithMissingSoe("foo"), 123),
+        ObservationData(Id("bar"), CheckpointBlockWithMissingSoe("bar"), 123),
+        ObservationData(Id("bar"), CheckpointBlockWithMissingSoe("bar"), 123),
+        ObservationData(Id("bar"), CheckpointBlockWithMissingSoe("bar"), 123),
       )
 
-      val experience = eigenTrust.getExperience(123, observationEvents)
-      experience.agent shouldBe 123
-      experience.service shouldBe EigenTrust.service
-      experience.time shouldBe EigenTrust.time
-      experience.outcome >= 0 && experience.outcome <= 1 shouldBe true
+      val experiences = eigenTrust.convertToExperiences(observations)
+
+      experiences.size shouldBe 2
     }
 
     "should convert TrustEdges to Opinions" in {
@@ -68,7 +71,7 @@ class EigenTrustTest
         TrustEdge(3, 4, 1.0)
       )
 
-      val opinions = eigenTrust.getOpinions(trustEdges)
+      val opinions = eigenTrust.convertToOpinions(trustEdges)
 
       (opinions zip trustEdges).foreach({
         case (opinion, trustEdge) =>

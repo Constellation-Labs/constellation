@@ -9,6 +9,7 @@ import org.constellation.consensus.RandomData
 import org.constellation.trust._
 import org.scalatest.FlatSpec
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import org.constellation.rewards.EigenTrust
 import org.constellation.{DAO, TestHelpers}
 
 import scala.collection.JavaConverters._
@@ -19,7 +20,7 @@ Note: when Experience outcomes are the same, eigentrust scores stay the same.
 When Opinions stay the same, eigentrust scores change
  */
 class RewardsTest extends FlatSpec {
-  import org.constellation.util.Rewards._
+  import org.constellation.rewards.Rewards._
 
   import RandomData._
 
