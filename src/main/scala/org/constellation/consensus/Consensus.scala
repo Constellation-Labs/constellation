@@ -243,6 +243,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     for {
       maybeHeight <- checkpointAcceptanceService.calculateHeight(checkpointBlock)
       cache = CheckpointCache(checkpointBlock, height = maybeHeight)
+      _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
       _ <- dao.metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )
@@ -348,11 +349,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
     val uniques = proposals.groupBy(_._2.baseHash).size
 
-    val checkpointBlock = sameBlocks.values.foldLeft(sameBlocks.head._2)(_ + _)
+    val checkpointBlock = sameBlocks.values.reduce((a, b) => a.plusEdge(b))
     val selectedCheckpointBlock = SelectedUnionBlock(roundData.roundId, FacilitatorId(dao.id), checkpointBlock)
 
     for {
       _ <- stage.modify(_ => (ConsensusStage.WAITING_FOR_SELECTED_BLOCKS, ()))
+      _ <- logger.debug(s"Unique in resolve: ${proposals.groupBy(_._2.baseHash).keys}")
       _ <- dao.metrics.incrementMetricAsync(
         "resolveMajorityCheckpointBlockProposalCount_" + proposals.size
       )

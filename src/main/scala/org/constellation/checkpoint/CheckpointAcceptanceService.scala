@@ -246,9 +246,13 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     }.flatMap { txs =>
       if (txs.nonEmpty) {
         for {
-          t <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(txs)(contextShift))
-          _ <- logger.info(s"${Console.YELLOW}${t.map(tx => (tx.hash, tx.cbBaseHash))}${Console.RESET}")
-          cbs <- t
+//          stored <- txs.traverse(transactionService.lookup).map(_.flatten)
+//          missing = txs.diff(stored.map(_.hash))
+//          resolved <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(missing)(contextShift))
+//          allTxs = stored ++ resolved
+          allTxs <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(txs)(contextShift))
+          _ <- logger.info(s"${Console.YELLOW}${allTxs.map(tx => (tx.hash, tx.cbBaseHash))}${Console.RESET}")
+          cbs <- allTxs
             .flatMap(_.cbBaseHash)
             .distinct
             .filterA(checkpointService.contains(_).map(!_))
@@ -308,12 +312,14 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         acceptLock.release >>
           logger.debug(s"[Accept checkpoint][2-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(Timer[F].sleep(3.seconds) >> resolveMissingParents(cb)) >>
+          Concurrent[F].start(Timer[F].sleep(20.seconds) >> resolveMissingParents(cb)) >>
           error.raiseError[F, Unit]
 
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>
           logger.debug(s"[Accept checkpoint][3-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(Timer[F].sleep(3.seconds) >> resolveMissingReferences(cb)) >>
+          Concurrent[F].start(Timer[F].sleep(20.seconds) >> resolveMissingReferences(cb)) >>
           error.raiseError[F, Unit]
 
       case otherError =>

@@ -246,6 +246,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   dao.metrics.incrementMetric("peerApiRXFinishedCheckpoint")
 
                   val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+                  val bcs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
                   val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc)(cs).map { result =>
                     replyToOpt
@@ -258,25 +259,25 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       }
                   }
 
-                  APIDirective.handle(dao.snapshotService.getNextHeightInterval) { res =>
+                  val io = dao.snapshotService.getNextHeightInterval.flatMap { res =>
                     (res, fc.checkpointCacheData.height) match {
                       case (_, None) =>
-                        logger.warn(s"Missing height when accepting block $baseHash")
-                        complete(StatusCodes.BadRequest)
+                        IO { logger.warn(s"Missing height when accepting block $baseHash") } >>
+                          StatusCodes.BadRequest.pure[IO]
                       case (2, _) => // TODO: hardcoded snapshot interval
-                        callback.unsafeToFuture()
-                        complete(StatusCodes.Accepted)
+                        callback.start(bcs) >> complete(StatusCodes.Accepted).pure[IO]
                       case (nextHeight, Some(Height(min, max))) if nextHeight > min =>
-                        logger.debug(
-                          s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock.baseHash} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
-                        )
-                        complete(StatusCodes.Conflict)
+                        IO {
+                          logger.debug(
+                            s"Handle finished checkpoint for cb: ${fc.checkpointCacheData.checkpointBlock.baseHash} height condition not met next interval: ${nextHeight} received: ${fc.checkpointCacheData.height.get.min}"
+                          )
+                        } >> StatusCodes.Conflict.pure[IO]
                       case (_, _) =>
-                        callback.unsafeToFuture()
-                        complete(StatusCodes.Accepted)
+                        callback.start(bcs) >> StatusCodes.Accepted.pure[IO]
                     }
                   }
 
+                  APIDirective.handle(io)(complete(_))
                 }
               }
             }
