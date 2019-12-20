@@ -1,6 +1,6 @@
 package org.constellation.domain.p2p
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Timer}
 import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
@@ -21,6 +21,7 @@ class PeerHealthCheckTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
   var cluster: Cluster[IO] = _
