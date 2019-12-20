@@ -67,6 +67,11 @@ trait CommonEndpoints extends Json4sSupport {
           dao.snapshotBroadcastService.getRecentSnapshots
         )(complete(_))
       } ~
+      path("snapshot" / "reputation") {
+        APIDirective.handle(
+          dao.snapshotBroadcastService.getRecentSnapshots
+        )(complete(_))
+      } ~
       path("snapshot" / "nextHeight") {
         APIDirective.handle(
           dao.snapshotService.getNextHeightInterval.map((dao.id, _))
@@ -140,14 +145,25 @@ trait CommonEndpoints extends Json4sSupport {
   }
 
   val batchEndpoints: Route = post {
-    path("batch" / "transactions") {
-      entity(as[List[String]]) { ids =>
-        dao.metrics.incrementMetric(Metrics.batchTransactionEndpoint)
+    pathPrefix("batch") {
+      path("transactions") {
+        entity(as[List[String]]) { ids =>
+          dao.metrics.incrementMetric(Metrics.batchTransactionsEndpoint)
 
-        APIDirective.handle(
-          ids.traverse(id => dao.transactionService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
-        )(complete(_))
-      }
+          APIDirective.handle(
+            ids.traverse(id => dao.transactionService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
+          )(complete(_))
+        }
+      } ~
+        path("observations") {
+          entity(as[List[String]]) { ids =>
+            dao.metrics.incrementMetric(Metrics.batchObservationsEndpoint)
+
+            APIDirective.handle(
+              ids.traverse(id => dao.observationService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
+            )(complete(_))
+          }
+        }
     }
   }
 }

@@ -12,6 +12,7 @@ object ConfigUtil {
 
   val config: Config = ConfigFactory.load().resolve()
   val constellation = config.getConfig("constellation")
+  private val configAuth = config.getConfig("auth")
 
   val snapshotSizeDiskLimit: lang.Long =
     Try(config.getBytes("constellation.snapshot-size-disk-limit")).getOrElse(java.lang.Long.valueOf(1000000))
@@ -36,4 +37,13 @@ object ConfigUtil {
   def getDurationFromConfig(path: String, default: FiniteDuration, ownConfig: Config = config): FiniteDuration =
     Try(FiniteDuration(ownConfig.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS))
       .getOrElse(default)
+
+  def getAuthEnabled: Boolean =
+    configAuth.getBoolean("enabled")
+
+  def getAuthId: String =
+    configAuth.getString("id")
+
+  def getAuthPassword: String =
+    configAuth.getString("password")
 }

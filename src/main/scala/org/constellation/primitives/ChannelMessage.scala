@@ -80,7 +80,7 @@ object ChannelMessage extends StrictLogging {
         logger.info(s"Channel not in use")
 
         val genesisMessageStr = channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.CoinBaseHash, channelOpenRequest.name)(dao.keyPair)
+        val msg = create(genesisMessageStr, Genesis.Coinbase, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) = channelOpenRequest.name

@@ -1,5 +1,7 @@
 package org.constellation.domain.transaction
 
+import java.security.KeyPair
+
 import cats.effect.{Concurrent, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
@@ -7,6 +9,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.{Snapshot, SnapshotInfo}
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
+import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 
 class TransactionChainService[F[_]: Concurrent] {
 
@@ -30,15 +33,20 @@ class TransactionChainService[F[_]: Concurrent] {
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
     }
 
-  def setLastTransaction(edge: Edge[TransactionEdgeData], isDummy: Boolean): F[Transaction] = {
-    val address = edge.observationEdge.parents.head.hash
-
+  def createAndSetLastTransaction(src: String,
+                                  dst: String,
+                                  amount: Long,
+                                  keyPair: KeyPair,
+                                  isDummy: Boolean,
+                                  fee: Option[Long] = None,
+                                  normalized: Boolean = false): F[Transaction] =
     lastTransactionRef.modify { m =>
-      val ref = m.getOrElse(address, LastTransactionRef.empty)
+      val ref = m.getOrElse(src, LastTransactionRef.empty)
+      val edge: Edge[TransactionEdgeData] = createTransactionEdge(src, dst, ref, amount, keyPair, fee, normalized)
+      val address = edge.observationEdge.parents.head.hash
       val tx = Transaction(edge, ref, isDummy)
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
     }
-  }
 
   def applySnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =
     lastAcceptedTransactionRef.modify { _ =>

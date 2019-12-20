@@ -61,7 +61,7 @@ class ConsensusRoute(
 
   def createBlockBuildingRoundRoutes(): Route = extractRequestContext { ctx =>
     participateInNewRound(ctx) ~
-      addTransactionsProposal(ctx) ~
+      addConsensusDataProposal(ctx) ~
       addUnionBlock(ctx) ~
       addSelectedUnionBlock(ctx)
   }
@@ -95,11 +95,11 @@ class ConsensusRoute(
       }
     }
 
-  protected def addTransactionsProposal(ctx: RequestContext): Route =
+  protected def addConsensusDataProposal(ctx: RequestContext): Route =
     post {
       path(ConsensusRoute.proposalPath) {
         entity(as[ConsensusDataProposal]) { proposal =>
-          logger.debug(s"LightTransactionsProposal adding proposal for round ${proposal.roundId} ")
+          logger.debug(s"ConsensusDataProposal adding proposal for round ${proposal.roundId} ")
           handleProposal(proposal)
         }
       }
@@ -143,7 +143,7 @@ class ConsensusRoute(
                 )
                 .flatMap { allowed =>
                   if (allowed) {
-                    consensus.addTransactionProposal(proposal).start >> StatusCodes.Accepted.pure[IO]
+                    consensus.addConsensusDataProposal(proposal).start >> StatusCodes.Accepted.pure[IO]
                   } else {
                     StatusCodes.BadRequest.pure[IO]
                   }

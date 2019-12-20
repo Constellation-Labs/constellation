@@ -2,9 +2,6 @@ package org.constellation.consensus
 
 import java.security.KeyPair
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
-import akka.testkit.{TestKit, TestProbe}
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
@@ -12,10 +9,7 @@ import constellation._
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
-import org.constellation.util.Metrics
 import org.constellation.{DAO, Fixtures, TestHelpers}
-import org.mockito.{IdiomaticMockito, Mockito}
-import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 
 import scala.collection.concurrent.TrieMap
@@ -27,13 +21,7 @@ object RandomData {
 
   val keyPairs: Seq[KeyPair] = Seq.fill(10)(makeKeyPair())
 
-  def go()(implicit dao: DAO): GenesisObservation = Genesis.createGenesisAndInitialDistributionDirect(
-    keyPairs.head.address,
-    keyPairs.tail.map {
-      _.getPublic.toId
-    }.toSet,
-    keyPairs.head
-  )
+  def go()(implicit dao: DAO): GenesisObservation = Genesis.createGenesisObservation(Seq.empty)
 
   def startingTips(go: GenesisObservation)(implicit dao: DAO): Seq[SignedObservationEdge] =
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)

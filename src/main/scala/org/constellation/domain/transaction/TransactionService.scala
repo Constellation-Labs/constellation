@@ -3,23 +3,21 @@ package org.constellation.domain.transaction
 import java.security.KeyPair
 
 import cats.effect._
-import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
+import org.constellation.domain.consensus.ConsensusService
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 class TransactionService[F[_]: Concurrent](val transactionChainService: TransactionChainService[F], dao: DAO)
     extends ConsensusService[F, TransactionCacheData] {
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  private val pendingSemaphore = ConstellationExecutionContext.createSemaphore()
-  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService, pendingSemaphore)
+  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService)
 
   override def metricRecordPrefix: Option[String] = "Transaction".some
 
@@ -28,7 +26,7 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
       .accept(tx, cpc)
       .flatMap(_ => transactionChainService.acceptTransaction(tx.transaction))
       .void
-      .flatTap(_ => Sync[F].delay(dao.metrics.incrementMetric("transactionAccepted")))
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
       .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
   override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
@@ -59,12 +57,19 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
   def createTransaction(
     src: String,
     dst: String,
+    prevTxRef: String,
+    ordinal: Long,
     amount: Long,
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
   ): F[Transaction] =
-    TransactionService.createAndSetTransaction(src, dst, amount, keyPair, normalized, dummy)(transactionChainService)
+    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(
+      transactionChainService
+    )
+
+  def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
+    TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
 }
 
@@ -74,15 +79,17 @@ object TransactionService {
     new TransactionService[F](transactionChainService, dao)
 
   def createTransactionEdge(
-                             src: String,
-                             dst: String,
-                             amount: Long,
-                             keyPair: KeyPair,
-                             normalized: Boolean = true
-                           ): Edge[TransactionEdgeData] = {
+    src: String,
+    dst: String,
+    lastTxRef: LastTransactionRef,
+    amount: Long,
+    keyPair: KeyPair,
+    fee: Option[Long] = None,
+    normalized: Boolean = true
+  ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
-    val txData = TransactionEdgeData(amount = amountToUse)
+    val txData = TransactionEdgeData(amountToUse, lastTxRef, fee)
 
     val oe = ObservationEdge(
       Seq(
@@ -93,24 +100,23 @@ object TransactionService {
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
-
     Edge(oe, soe, txData)
   }
 
-  def createAndSetTransaction[F[_]: Concurrent](
+  def createTransaction[F[_]: Concurrent](
     src: String,
     dst: String,
     amount: Long,
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
-    val soe = createTransactionEdge(src, dst, amount, keyPair, normalized)
-    transactionChainService.setLastTransaction(soe, dummy)
-  }
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] =
+    transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
-    createAndSetTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(transactionChainService)
+    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(
+      transactionChainService
+    )
 }

@@ -8,12 +8,13 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.genesis.GenesisObservationWriterProperties
+import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.util.AccountBalance
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -36,129 +37,12 @@ class CheckpointServiceTest
   }
 
   "with real dao" - {
-
-    "should accept cb resolving parents soeHashes and cb baseHashes recursively" in {
-      kp = makeKeyPair()
-      dao = TestHelpers.prepareRealDao(readyFacilitators)
-
-      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
-      Genesis.acceptGenesis(go, setAsTips = true)
-
-      val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
-
-      val cb1 = makeBlock(
-        startingTips,
-        transactions = Seq(
-          dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
-            .unsafeRunSync
-        )
-      )
-
-      val cb2 = makeBlock(
-        startingTips,
-        transactions = Seq(
-          dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
-            .unsafeRunSync
-        )
-      )
-      val cb3 = makeBlock(
-        Seq(cb1.soe, cb2.soe),
-        transactions = Seq(
-          dao.transactionService
-            .createTransaction(dao.selfAddressStr, Fixtures.id2.address, 75L, dao.keyPair)
-            .unsafeRunSync
-        )
-      )
-
-      val peer = readyFacilitators.head._2.client
-      val blocks = Seq(cb1, cb2)
-
-      blocks.foreach { c =>
-        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(SignedObservationEdgeCache(c.soe)))
-
-        peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(CheckpointCache(Some(c))))
-
-        peer.postNonBlockingIO[List[(String, TransactionCacheData)]](eqTo(s"batch/transactions"), *, *)(*)(*, *) shouldReturn IO
-          .pure(
-            List(
-              cb1.transactions
-                .map(TransactionCacheData(_, cbBaseHash = Some(cb1.baseHash)))
-                .map(tx => (tx.hash, tx))
-                .toList ++
-                cb2.transactions
-                  .map(TransactionCacheData(_, cbBaseHash = Some(cb2.baseHash)))
-                  .map(tx => (tx.hash, tx))
-                  .toList
-            ).flatten
-          )
-      }
-
-      dao.checkpointAcceptanceService
-        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
-        .unsafeRunSync()
-      dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
-    }
-
-    "should accept cb resolving parents created with dummy transactions" in {
-      kp = makeKeyPair()
-      dao = TestHelpers.prepareRealDao(readyFacilitators)
-
-      val go = Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair)
-      Genesis.acceptGenesis(go, setAsTips = true)
-
-      val startingTips: Seq[SignedObservationEdge] = Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
-
-      val cb1 = makeBlock(
-        startingTips,
-        dao.transactionService.createDummyTransactions(1).map(_.map(_.transaction)).unsafeRunSync
-      )
-      val cb2 = makeBlock(
-        startingTips,
-        dao.transactionService.createDummyTransactions(1).map(_.map(_.transaction)).unsafeRunSync
-      )
-      val cb3 = makeBlock(
-        Seq(cb1.soe, cb2.soe),
-        dao.transactionService.createDummyTransactions(1).map(_.map(_.transaction)).unsafeRunSync
-      )
-
-      val peer = readyFacilitators.head._2.client
-      val blocks = Seq(cb1, cb2)
-
-      blocks.foreach { c =>
-        peer.getNonBlockingIO[Option[SignedObservationEdgeCache]](eqTo(s"soe/${c.soeHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(SignedObservationEdgeCache(c.soe)))
-
-        peer.getNonBlockingIO[Option[CheckpointCache]](eqTo(s"checkpoint/${c.baseHash}"), *, *)(*)(*, *) shouldReturn IO
-          .pure(Some(CheckpointCache(Some(c))))
-
-        peer.postNonBlockingIO[List[(String, TransactionCacheData)]](eqTo(s"batch/transactions"), *, *)(*)(*, *) shouldReturn IO
-          .pure(
-            List(
-              cb1.transactions
-                .map(TransactionCacheData(_, cbBaseHash = Some(cb1.baseHash)))
-                .map(tx => (tx.hash, tx))
-                .toList ++
-                cb2.transactions
-                  .map(TransactionCacheData(_, cbBaseHash = Some(cb2.baseHash)))
-                  .map(tx => (tx.hash, tx))
-                  .toList
-            ).flatten
-          )
-      }
-
-      dao.checkpointAcceptanceService
-        .acceptWithNodeCheck(FinishedCheckpoint(CheckpointCache(Some(cb3), 0, Some(Height(1, 1))), Set(dao.id)))
-        .unsafeRunSync()
-      dao.checkpointService.contains(cb3.baseHash).unsafeRunSync() shouldBe true
-    }
+    kp = makeKeyPair()
+    dao = TestHelpers.prepareRealDao(readyFacilitators)
 
     "should store genesis observation on disk during acceptance step" in {
       Genesis.acceptGenesis(
-        Genesis.createGenesisAndInitialDistributionDirect("selfAddress", Set(dao.id), dao.keyPair),
+        Genesis.createGenesisObservation(Seq.empty),
         setAsTips = true
       )
 

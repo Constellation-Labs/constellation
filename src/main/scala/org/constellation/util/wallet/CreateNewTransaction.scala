@@ -31,6 +31,7 @@ object CreateNewTransaction extends IOApp {
       transactionEdge = TransactionService.createTransactionEdge(
         KeyUtils.publicKeyToAddressString(kp.getPublic),
         cliParams.destination,
+        prevTransactionOp.map(tx => LastTransactionRef(tx.hash, tx.ordinal)).getOrElse(LastTransactionRef.empty),
         cliParams.amount.toDouble.toLong,
         kp
       )

@@ -18,6 +18,7 @@ class ConsensusScheduler(
   dao: DAO
 ) extends PeriodicIO("ConsensusScheduler") {
 
+  // TODO: Probably not used anymore
   val edgeConsensus: IO[Unit] = IO
     .fromFuture(IO {
       EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))(dao)
@@ -32,17 +33,11 @@ class ConsensusScheduler(
   val skip: IO[Unit] = IO(logger.debug("Start consensus skipped"))
 
   override def trigger(): IO[Unit] =
-    (dao.formCheckpoints, dao.nodeConfig.isGenesisNode) match {
-      case (false, _) => skip
-      case (true, true) =>
-        cluster.getNodeState
-          .map(NodeState.canStartOwnConsensus)
-          .ifM(edgeConsensus, skip)
-      case (true, false) =>
-        cluster.getNodeState
-          .map(NodeState.canStartOwnConsensus)
-          .ifM(crossTalkConsensus, skip)
-    }
+    if (dao.formCheckpoints) {
+      cluster.getNodeState
+        .map(NodeState.canStartOwnConsensus)
+        .ifM(crossTalkConsensus, skip)
+    } else skip
 
   schedule(ConfigUtil.getDurationFromConfig("constellation.consensus.start-own-interval", 10 seconds, config))
 }

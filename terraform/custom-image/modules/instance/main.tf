@@ -37,7 +37,7 @@ resource "random_id" "instance_id" {
 resource "google_compute_instance" "default" {
   count          = var.instance_count
   name           = "constellation-${var.random_id}-${random_id.instance_id.hex}-${count.index}"
-  machine_type   = "n1-highcpu-4"
+  machine_type   = "n1-standard-4"
   zone           = var.zone
   can_ip_forward = true
 
@@ -76,6 +76,18 @@ resource "google_compute_instance" "default" {
   provisioner "file" {
     source = "setup.sh"
     destination = "/tmp/setup.sh"
+
+    connection {
+      host = self.network_interface.0.access_config.0.nat_ip
+      type = "ssh"
+      user = var.ssh_user
+      timeout = "90s"
+    }
+  }
+
+  provisioner "file" {
+    source = "logback.xml"
+    destination = "/tmp/logback.xml"
 
     connection {
       host = self.network_interface.0.access_config.0.nat_ip

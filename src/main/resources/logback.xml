@@ -3,57 +3,32 @@
 
     <appender name="metrics" class="io.prometheus.client.logback.InstrumentedAppender" />
 
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] [%X{node_id}] %highlight(%-5level) %cyan(%logger{15}) - %msg %n</pattern>
+        </encoder>
+    </appender>
 
-    <property name="HOME_LOG" value="logs/app.log"/>
-    <appender name="rollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${HOME_LOG}</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/archived/app.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxFileSize>500MB</maxFileSize>
-            <totalSizeCap>20GB</totalSizeCap>
-            <maxHistory>60</maxHistory>
-        </rollingPolicy>
+    <appender name="apiConsole" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-            <pattern>%date [%thread] [%X{node_id}] %-5level %logger{25} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <appender name="json" class="ch.qos.logback.core.FileAppender">
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>DEBUG</level>
-        </filter>
-        <file>logs/json_logs/dag.log</file>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeCallerData>true</includeCallerData>
-        </encoder>
-    </appender>
-
-    <appender name="apiclient" class="ch.qos.logback.core.FileAppender">
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>DEBUG</level>
-        </filter>
-        <file>logs/json_logs/api.log</file>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeCallerData>true</includeCallerData>
-            <includeMdcKeyName>host</includeMdcKeyName>
-            <includeMdcKeyName>port</includeMdcKeyName>
+            <pattern>%date [%thread] %-5level %logger{25} host=%X{host}:%X{port} - %msg%n</pattern>
         </encoder>
     </appender>
 
 
-    <logger level="debug" name="akka.monitor.instrumentation" />
-    <logger level="debug" name="io.kontainers.micrometer" />
-
-    <logger level="debug" name="APIClient" additivity="false">
-        <appender-ref ref="apiclient"/>
+    <!-- APIClient - testing -->
+    <logger level="debug" name="org.constellation.util.APIClient" additivity="false">
+        <appender-ref ref="apiConsole"/>
     </logger>
 
-    <logger name="org.constellation" level="info">
-        <appender-ref ref="json"/>
+    <!-- APIClient - testing -->
+    <logger level="debug" name="org.constellation.util.APIClientBase" additivity="false">
+        <appender-ref ref="apiConsole"/>
     </logger>
+
 
     <logger name="org.constellation" level="debug">
-        <appender-ref ref="rollingFile"/>
+        <appender-ref ref="console"/>
     </logger>
 
     <root level="info">

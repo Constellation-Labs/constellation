@@ -7,6 +7,7 @@ import org.constellation.domain.observation.{
   CheckpointBlockInvalid,
   CheckpointBlockWithMissingParents,
   CheckpointBlockWithMissingSoe,
+  Observation,
   ObservationData,
   RequestTimeoutOnConsensus,
   RequestTimeoutOnResolving,
@@ -40,7 +41,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[TransactionCacheData])
     kryo.register(classOf[CheckpointCache])
-    kryo.register(classOf[SignedObservationEdgeCache])
     kryo.register(classOf[Transaction])
     kryo.register(classOf[TransactionGossip])
     kryo.register(classOf[Edge[TransactionEdgeData]])
@@ -65,6 +65,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[RequestTimeoutOnResolving])
     kryo.register(classOf[SnapshotMisalignment])
     kryo.register(classOf[CheckpointBlockInvalid])
+    kryo.register(classOf[Observation])
 
     kryo.register(classOf[Set[String]])
 

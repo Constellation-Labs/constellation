@@ -78,11 +78,9 @@ object Simulation {
       .exists(_.forall(gbmd => gbmd.metrics("numValidBundles").toInt >= 1))
   }
 
-  def genesis(apis: Seq[APIClient]): GenesisObservation = {
-    val ids = apis.map {
-      _.id
-    }
-    apis.head.postBlocking[GenesisObservation]("genesis/create", ids.tail.toSet)
+  def genesis(apis: Seq[APIClient], startingAcctBalances: Seq[AccountBalance] = Nil): GenesisObservation = {
+    val balances = fakeBalances(apis) ++ startingAcctBalances
+    apis.head.postBlocking[GenesisObservation]("genesis/create", balances)
   }
 
   def addPeer(
@@ -119,6 +117,10 @@ object Simulation {
   }
 
   def randomNode(apis: Seq[APIClient]) = apis(Random.nextInt(apis.length))
+
+  def fakeBalances(apis: Seq[APIClient]): Seq[AccountBalance] =
+    apis
+      .map(api => AccountBalance(api.id.address, 999))
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
     apis.filter {
@@ -378,6 +380,7 @@ object Simulation {
   def run(
     apis: Seq[APIClient],
     addPeerRequests: Seq[PeerMetadata],
+    startingBalances: Seq[AccountBalance] = Nil,
     attemptSetExternalIP: Boolean = false,
     useRegistrationFlow: Boolean = false,
     useStartFlowOnly: Boolean = false,
@@ -405,7 +408,7 @@ object Simulation {
     assert(checkPeersHealthy(apis))
     logger.info("Peer validation passed")
 
-    val goe = genesis(apis)
+    val goe = genesis(apis, startingBalances)
     apis.foreach {
       _.post("genesis/accept", goe)
     }
@@ -413,12 +416,12 @@ object Simulation {
     assert(checkGenesis(apis))
     logger.info("Genesis validation passed")
 
-    enableRandomTransactions(apis)
-    logger.info("Starting random transactions")
-
     setReady(apis)
 
     if (!useStartFlowOnly) {
+
+      enableRandomTransactions(apis)
+      logger.info("Starting random transactions")
 
       assert(awaitCheckpointsAccepted(apis, numAccepted = 3))
 

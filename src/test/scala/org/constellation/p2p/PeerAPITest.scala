@@ -71,6 +71,8 @@ class PeerAPITest
     /*
         Unfortunately ScalatestRouteTest instansiate it's own class of PeerAPI thus we can't spy on it
      */
+    // mwadon - commented out because it's not relevant anymore
+    /*
     "return accepted on finishing checkpoint and reply with callback when header is defined".ignore {
       val reply = "http://originator:9001/peer-api/finished/checkpoint/reply"
       val fakeResp = Future.successful(mock[Response[Unit]])
@@ -96,7 +98,7 @@ class PeerAPITest
       Post("/finished/checkpoint", req) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         status shouldEqual StatusCodes.Accepted
       }
-    }
+    }*/
 
     "should handle reply message" in {
       Post("/finished/reply", FinishedCheckpointResponse(true)) ~> peerAPI.postEndpoints(socketAddress) ~> check {
@@ -139,13 +141,13 @@ class PeerAPITest
     }
 
     "snapshot/verify endpoint" - {
-      val request = SnapshotCreated("snap1", 2)
+      val request = SnapshotCreated("snap1", 2, Map.empty)
       val path = "/snapshot/verify"
 
       "should return correct state" in {
         val recent = List(
-          RecentSnapshot("snap2", 4),
-          RecentSnapshot("snap1", 2)
+          RecentSnapshot("snap2", 4, Map.empty),
+          RecentSnapshot("snap1", 2, Map.empty)
         )
 
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
@@ -166,7 +168,7 @@ class PeerAPITest
       }
 
       "should return height above state when given height is above current" in {
-        val recent = List(RecentSnapshot("snap2", 1))
+        val recent = List(RecentSnapshot("snap2", 1, Map.empty))
         dao.processingConfig shouldReturn ProcessingConfig()
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF recent
 
@@ -182,12 +184,15 @@ class PeerAPITest
 
       "should return list of recent snapshots" in {
         dao.snapshotBroadcastService.getRecentSnapshots shouldReturnF List(
-          RecentSnapshot("snap2", 4),
-          RecentSnapshot("snap1", 2)
+          RecentSnapshot("snap2", 4, Map.empty),
+          RecentSnapshot("snap1", 2, Map.empty)
         )
         Get(path) ~> peerAPI.commonEndpoints ~> check {
           status shouldEqual StatusCodes.OK
-          responseAs[List[RecentSnapshot]] shouldBe List(RecentSnapshot("snap2", 4), RecentSnapshot("snap1", 2))
+          responseAs[List[RecentSnapshot]] shouldBe List(
+            RecentSnapshot("snap2", 4, Map.empty),
+            RecentSnapshot("snap1", 2, Map.empty)
+          )
         }
       }
 
@@ -283,6 +288,7 @@ class PeerAPITest
             observationCapture.hasCaptured(Observation.create(Id("foo"), SnapshotMisalignment(), 1234567)(dao.keyPair))(
               hashEquality
             )
+            true
           }
         }
       }

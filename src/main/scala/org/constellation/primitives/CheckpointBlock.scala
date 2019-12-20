@@ -19,13 +19,8 @@ abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
 
   def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
     checkpoint.edge.parentHashes.flatMap { key =>
-      dao.soeService.lookup(key).unsafeRunSync()
-    }.map {
-      _.signedObservationEdge.baseHash
-    }
-
-  def storeSOE()(implicit dao: DAO): Unit =
-    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true)).unsafeRunSync()
+      dao.soeService.lookup(key).unsafeRunSync
+    }.map(_.baseHash)
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -50,9 +45,6 @@ case class CheckpointBlock(
   notifications: Seq[PeerNotification] = Seq(),
   observations: Seq[Observation] = Seq()
 ) {
-
-  def storeSOE()(implicit dao: DAO): IO[SignedObservationEdgeCache] =
-    dao.soeService.put(soeHash, SignedObservationEdgeCache(soe, resolved = true))
 
   def uniqueSignatures: Boolean = signatures.groupBy(_.id).forall(_._2.size == 1)
 
@@ -80,18 +72,6 @@ case class CheckpointBlock(
 
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
 
-  def store(cache: CheckpointCache)(implicit dao: DAO): Unit = {
-    /*
-          transactions.foreach { rt =>
-            rt.edge.store(db, Some(TransactionCacheData(rt, inDAG = inDAG, resolved = true)))
-          }
-     */
-    // checkpoint.edge.storeCheckpointData(db, {prevCache: CheckpointCacheData => cache.plus(prevCache)}, cache, resolved)
-    (cache.checkpointBlock.get.storeSOE() >> dao.checkpointService.put(cache)).unsafeRunSync()
-    dao.recentBlockTracker.put(cache)
-
-  }
-
   def plus(keyPair: KeyPair): CheckpointBlock =
     this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignatureFrom(keyPair)))
 
@@ -118,11 +98,12 @@ object CheckpointBlock {
     transactions: Seq[Transaction],
     tips: Seq[SignedObservationEdge],
     messages: Seq[ChannelMessage] = Seq.empty,
-    peers: Seq[PeerNotification] = Seq.empty
+    peers: Seq[PeerNotification] = Seq.empty,
+    observations: Seq[Observation] = Seq.empty
   )(implicit keyPair: KeyPair): CheckpointBlock =
     createCheckpointBlock(transactions, tips.map { t =>
       TypedEdgeHash(t.hash, EdgeHashType.CheckpointHash)
-    }, messages, peers)
+    }, messages, peers, observations)
 
   def createCheckpointBlock(
     transactions: Seq[Transaction],
@@ -133,9 +114,11 @@ object CheckpointBlock {
   )(implicit keyPair: KeyPair): CheckpointBlock = {
 
     val checkpointEdgeData =
-      CheckpointEdgeData(transactions.map { _.hash }.sorted, messages.map {
-        _.signedMessageData.hash
-      })
+      CheckpointEdgeData(
+        transactions.map(_.hash).sorted,
+        messages.map(_.signedMessageData.hash).sorted,
+        observations.map(_.hash).sorted
+      )
 
     val observationEdge = ObservationEdge(
       tips.toList,

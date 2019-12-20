@@ -3,7 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Blocker, Concurrent, ContextShift, IO, Sync, Timer}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, Timer}
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
@@ -23,18 +23,19 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
+import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
-import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.primitives._
-import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
+import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.GcpStorage
+import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
 import scala.concurrent.Future
@@ -117,7 +118,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
 
-    observationService = new ObservationService[IO](this)
+    ipManager = IPManager[IO]()
+    cluster = Cluster[IO](() => metrics, ipManager, this)
+
+    trustManager = TrustManager[IO](id, cluster)
+
+    observationService = new ObservationService[IO](trustManager, this)
 
     val merkleService =
       new CheckpointMerkleService[IO](this, transactionService, messageService, notificationService, observationService)
@@ -141,9 +147,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       )
     )
     addressService = new AddressService[IO]()
-
-    ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, this)
 
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
@@ -181,7 +184,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
 
     val snapshotSelector =
-      new HeightIdBasedSnapshotSelector(
+      new HeightIdBasedSnapshotSelector[IO](
         this.id,
         ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
       )
@@ -207,6 +210,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       observationService,
       rateLimiting,
       consensusManager,
+      trustManager,
+      soeService,
       this
     )
 
@@ -250,11 +255,22 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
 
+    trustDataPollingScheduler = TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, this)
+
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
-    rollbackService = new RollbackService[IO](this, new RollbackAccountBalances, snapshotService)
+    rollbackService = new RollbackService[IO](
+      this,
+      new RollbackAccountBalances,
+      snapshotService,
+      new RollbackLoader(
+        snapshotPath.pathAsString,
+        snapshotInfoPath.pathAsString,
+        genesisObservationPath.pathAsString
+      )
+    )
 
     cloudStorage = new GcpStorage[IO]
 

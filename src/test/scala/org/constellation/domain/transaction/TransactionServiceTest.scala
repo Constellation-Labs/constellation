@@ -11,7 +11,7 @@ import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -48,7 +48,7 @@ class TransactionServiceTest
   tx.transaction.lastTxRef shouldReturn LastTransactionRef.empty
 
   before {
-    dao = mockDAO
+    dao = TestHelpers.prepareMockedDAO()
     txChain = TransactionChainService[IO]
     txService = new TransactionService[IO](txChain, dao)
   }

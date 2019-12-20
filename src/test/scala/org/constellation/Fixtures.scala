@@ -26,12 +26,18 @@ object Fixtures {
   val kp1: KeyPair = KeyUtils.makeKeyPair()
 
   def tx: Transaction =
-    TransactionService.createAndSetTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+    TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
-  def createAndStoreTx(amount: Long, destination: String, storePath: String, kp: KeyPair = KeyUtils.makeKeyPair()) ={
+  def createAndStoreTx(amount: Long,
+                       destination: String,
+                       lastTxRef: LastTransactionRef,
+                       storePath: String,
+                       kp: KeyPair = KeyUtils.makeKeyPair()
+                      ) = {
     val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
       KeyUtils.publicKeyToAddressString(kp.getPublic),
       destination,
+      lastTxRef,
       amount,
       kp
     )
@@ -102,19 +108,29 @@ object Fixtures {
 
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 
-  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction =
-    TransactionService
-      .createAndSetTransaction[IO](data.selfAddressStr, src.address, amt, data.keyPair)(
-        TransactionChainService[IO]
+  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction = {
+      val edge = TransactionService.createTransactionEdge(
+        data.selfAddressStr,
+        src.address,
+        LastTransactionRef.empty,
+        amt,
+        data.keyPair,
+        normalized = false
       )
-      .unsafeRunSync
+    Transaction(edge, LastTransactionRef.empty)
+    }
 
-  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) =
-    TransactionService
-      .createAndSetTransaction[IO](srcAddressString, destinationAddressString, amt, keyPair)(
-        TransactionChainService[IO]
-      )
-      .unsafeRunSync
+  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
+    val edge = TransactionService.createTransactionEdge(
+      srcAddressString,
+      destinationAddressString,
+      LastTransactionRef.empty,
+      amt,
+      keyPair,
+      normalized = false
+    )
+    Transaction(edge, LastTransactionRef.empty)
+  }
 
   def makeDummyTransaction(src: String, dst: String, keyPair: KeyPair) =
     TransactionService.createDummyTransaction(src, dst, keyPair)(TransactionChainService[IO]).unsafeRunSync
