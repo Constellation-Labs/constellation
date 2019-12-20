@@ -66,7 +66,6 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
 
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
-
 }
 
 object TransactionService {
@@ -80,12 +79,12 @@ object TransactionService {
     amount: Long,
     keyPair: KeyPair,
     normalized: Boolean = true,
-    dummy: Boolean = false
+    dummy: Boolean = false,
+    test: Boolean = false
   )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amount = amountToUse)
-
     val oe = ObservationEdge(
       Seq(
         TypedEdgeHash(src, EdgeHashType.AddressHash),
@@ -96,7 +95,7 @@ object TransactionService {
 
     val soe = signedObservationEdge(oe)(keyPair)
 
-    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy)
+    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy, test)
   }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(

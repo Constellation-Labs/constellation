@@ -217,7 +217,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     cb.soeHash,
                     ccd.height.get.min,
                     cb.parentSOEHashes,
-                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map { channelId =>
+                    cb.messages.map {
+                      _.signedMessageData.data.channelId
+                    }.distinct.map { channelId =>
                       ChannelValidationInfo(channelId, true)
                     }
                   )
@@ -248,7 +250,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                 _.checkpointBlock.baseHash == blockHashForMessage
               }.head.checkpointBlock
 
-              val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
+              val messageProofInput = block.transactions.map {
+                _.hash
+              } ++ block.messages.map {
                 _.signedMessageData.signatures.hash
               }
 
@@ -294,10 +298,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             APIDirective.handle(proof)(complete(_))
           } ~
           path("messages") {
-            APIDirective.handle(IO { dao.channelStorage.getLastNMessages(20) })(complete(_))
+            APIDirective.handle(IO {
+              dao.channelStorage.getLastNMessages(20)
+            })(complete(_))
           } ~
           path("messages" / Segment) { channelId =>
-            APIDirective.handle(IO { dao.channelStorage.getLastNMessages(20, Some(channelId)) })(complete(_))
+            APIDirective.handle(IO {
+              dao.channelStorage.getLastNMessages(20, Some(channelId))
+            })(complete(_))
           } ~
           path("restart") { // TODO: Revisit / fix
             System.exit(0)

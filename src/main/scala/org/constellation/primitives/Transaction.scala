@@ -45,7 +45,8 @@ object TransactionCacheData {
 case class Transaction(
   edge: Edge[TransactionEdgeData],
   lastTxRef: LastTransactionRef,
-  isDummy: Boolean = false
+  isDummy: Boolean = false,
+  isTest: Boolean = false
 ) {
 
   def src: Address = Address(edge.parents.head.hash)
@@ -89,7 +90,8 @@ case class TransactionSerialized(
   amount: Long,
   signers: Set[String],
   time: Long,
-  isDummy: Boolean
+  isDummy: Boolean,
+  isTest: Boolean
 ) {}
 
 object TransactionSerialized {
@@ -102,6 +104,7 @@ object TransactionSerialized {
       tx.amount,
       tx.signatures.map(_.address).toSet,
       Instant.now.getEpochSecond,
-      tx.isDummy
+      tx.isDummy,
+      tx.isTest
     )
 }

@@ -11,6 +11,7 @@ import org.constellation.checkpoint.{
   CheckpointService
 }
 import org.constellation.consensus._
+import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
@@ -159,6 +160,7 @@ trait EdgeDAO {
   var cluster: Cluster[IO] = _
   var trustManager: TrustManager[IO] = _
   var transactionService: TransactionService[IO] = _
+  var blacklistedAddresses: BlacklistedAddresses[IO] = _
   var transactionChainService: TransactionChainService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
   var transactionGenerator: TransactionGenerator[IO] = _
