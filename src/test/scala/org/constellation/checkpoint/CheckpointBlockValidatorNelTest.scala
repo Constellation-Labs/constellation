@@ -393,6 +393,30 @@ class ValidationSpec
       }
     }
 
+    "at least one transaction tries to reduce balance of node below stalking amount" should {
+      "not pass validation" in {
+        val nodeAddress = dao.id.address
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
+
+        val txs = Seq(
+          Fixtures.makeTransaction(nodeAddress, getAddress(b), 100L, dao.keyPair),
+          Fixtures.makeTransaction(getAddress(a), getAddress(c), 100L, a)
+        )
+
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
+
+        fill(
+          Map(
+            nodeAddress -> 100L,
+            getAddress(a) -> 200L
+          )
+        )
+
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
+      }
+    }
+
     "at least one transaction has no address cache stored" should {
       "not pass validation" in {
         val kp = keyPairs.take(4)

@@ -5,7 +5,7 @@ import cats.effect.{IO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
+import org.constellation.{ConfigUtil, DAO}
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.Schema.CheckpointCache
@@ -14,6 +14,8 @@ import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.{HashSignature, Metrics}
 
 object CheckpointBlockValidator {
+
+  private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
 
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
   type AddressBalance = Map[String, Long]
@@ -175,18 +177,20 @@ class CheckpointBlockValidator[F[_]: Sync](
         )
 
     def validateBalance(address: String, t: Iterable[Transaction]): F[ValidationResult[List[Transaction]]] =
-      lookup(address).map { a =>
-        val diff = a - t.map(_.amount).sum
+      lookup(address).map { balance =>
         val amount = t.map(_.amount).sum
+        val diff = balance - amount
 
-        if (diff >= 0L) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
+        val isNodeAddress = dao.id.address == address
+        val necessaryAmount = if (isNodeAddress) stakingAmount else 0L
+
+        if (diff >= necessaryAmount) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
       }
 
     t.groupBy(_.src.address)
       .toList
       .traverse(a => validateBalance(a._1, a._2))
       .map(_.combineAll)
-
   }
 
   def isInSnapshot(c: CheckpointBlock): F[Boolean] =
@@ -270,7 +274,7 @@ class CheckpointBlockValidator[F[_]: Sync](
                       tail ++ parents,
                       accu ++ cb.transactions.map(_.hash),
                       isIn
-                  )
+                    )
                 )
             }
 
@@ -362,6 +366,12 @@ case class InsufficientBalance(address: String, amount: Long, diff: Long) extend
 
   def errorMessage: String =
     s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
+}
+
+case class InsufficientNodeBalance(address: String, amount: Long, diff: Long) extends CheckpointBlockValidation {
+
+  override def errorMessage: String =
+    s"CheckpointBlock includes transaction from node address=$address which reduce balance below the staking amount"
 }
 
 // TODO: pass also a transaction metadata
