@@ -27,6 +27,9 @@ object ConfigUtil {
   def getOrElse(path: String, default: Int): Int =
     Try(config.getInt(path)).getOrElse(default)
 
+  def getOrElse(path: String, default: Long): Long =
+    Try(config.getLong(path)).getOrElse(default)
+
   def getOrElse(path: String, default: Boolean): Boolean =
     Try(config.getBoolean(path)).getOrElse(default)
 

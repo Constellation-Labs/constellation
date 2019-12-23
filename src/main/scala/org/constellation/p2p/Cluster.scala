@@ -22,7 +22,7 @@ import org.constellation.rollback.{
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
-import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, PeerMetadata}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -59,6 +59,8 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
+
+  private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
@@ -213,7 +215,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
     )
   }
 
-  def pendingRegistration(ip: String, request: PeerRegistrationRequest): F[Unit] =
+  def pendingRegistration(ip: String, request: PeerRegistrationRequest, isJoiningPeer: Boolean = false): F[Unit] =
     logThread(
       for {
         pr <- PendingRegistration(ip, request).pure[F]
@@ -228,8 +230,14 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
         isSelfId = dao.id == request.id
         badAttempt = isSelfId || !validExternalHost || existsNotOffline
 
+        validBalance <- if (isJoiningPeer && !badAttempt)
+          checkBalanceJoiningPeer(APIClient(request.host, request.port - 1)(dao.backend, dao))
+        else Sync[F].pure(true)
+
         _ <- if (badAttempt) {
           dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
+        } else if (!validBalance) {
+          dao.metrics.incrementMetricAsync[F]("peerWithInsufficientBalanceAdditionAttempt")
         } else {
           val client = APIClient(request.host, request.port)(dao.backend, dao)
           val authSignRequest = PeerAuthSignRequest(Random.nextLong())
@@ -278,6 +286,19 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
       } yield (),
       "cluster_pendingRegistration"
     )
+
+  def checkBalanceJoiningPeer(client: APIClient): F[Boolean] =
+    client
+      .getStringF("selfAddress")(C)
+      .flatMap(
+        address => client.getStringF(s"balance/${address.body.getOrElse("")}")(C)
+      )
+      .map(_.body.getOrElse("0L").toLong > stakingAmount)
+      .flatTap(b => logger.info(s"Checking balance for joining peers : ${client.hostName} : is valid=$b"))
+      .handleErrorWith(
+        error =>
+          logger.info(s"Cannot get balance for joining peer : ${client.hostName} : $error") >> Sync[F].pure(false)
+      )
 
   def deregister(ip: String, port: Int, id: Id): F[Unit] =
     logThread(
@@ -444,7 +465,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
       "cluster_attemptRegisterSelfWithPeer"
     )
 
-  def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
+  def attemptRegisterPeer(hp: HostPort, isJoiningPeer: Boolean = false): F[Response[Unit]] =
     logThread(
       withMetric(
         {
@@ -453,7 +474,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
           client
             .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
             .flatMap { registrationRequest =>
-              pendingRegistration(hp.host, registrationRequest) >>
+              pendingRegistration(hp.host, registrationRequest, isJoiningPeer) >>
                 client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C)
             }
             .handleErrorWith { err =>
@@ -528,7 +549,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
   def join(hp: HostPort): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
+    logThread(attemptRegisterPeer(hp, isJoiningPeer = true) >> Sync[F].delay(Download.download()), "cluster_join")
   }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =

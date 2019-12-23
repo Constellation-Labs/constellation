@@ -19,8 +19,6 @@ import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
-import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -108,7 +106,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 s"Received peer registration request $request on $ip"
               )
               logger.debug("Parsed host, sending peer manager request")
-              APIDirective.handle(dao.cluster.pendingRegistration(ip, request))(
+              APIDirective.handle(dao.cluster.pendingRegistration(ip, request, isJoiningPeer = true))(
                 _ => complete(StatusCodes.OK)
               )
             }
@@ -348,7 +346,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                     dao.observationService
                       .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
                       .void
-              )
+                )
             )
             .flatMap(
               _ =>
@@ -358,7 +356,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   }.map(
                     cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
                   )
-              }
+                }
             )
 
           APIDirective.handle(
