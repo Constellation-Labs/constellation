@@ -17,31 +17,51 @@ class RewardsManager[F[_]: Concurrent](
   eigenTrust: EigenTrust[F],
   checkpointService: CheckpointService[F],
   addressService: AddressService[F],
-  snapshotBroadcastService: SnapshotBroadcastService[F],
+  snapshotBroadcastService: SnapshotBroadcastService[F]
 ) {
   final val rewards: Ref[F, Map[String, Double]] = Ref.unsafe(Map.empty)
 
-  def updateBySnapshot(snapshot: Snapshot): F[Unit] =
+  def updateBySnapshot(snapshot: Snapshot, snapshotHeight: Int): F[Unit] =
     for {
       observations <- observationsFromSnapshot(snapshot)
       _ <- eigenTrust.retrain(observations)
+      trustMap <- eigenTrust.getTrustForAddressHashes
 
-      snapshotNum <- getSnapshotNumber
-
-      hashesTrustMap <- eigenTrust.getTrustForAddressHashes
-
-      distribution = RewardsManager
-        .rewardDistribution(hashesTrustMap.keys.toSeq, hashesTrustMap)
-        .mapValues(_ * rewardDuringEpoch(snapshotNum))
+      weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(snapshotHeight)
+      contributions = calculateContributions(trustMap.keySet.toSeq)
+      distribution = weightContributions(contributions)
 
       _ <- updateRewards(distribution)
       _ <- updateAddressBalances(distribution)
     } yield ()
 
-  // TODO: Check if this is the correct way of checking the snapshot number
-  // Assumption that `getRecentSnapshots` returns all snapshots may be failure
-  private def getSnapshotNumber: F[Int] =
-    snapshotBroadcastService.getRecentSnapshots.map(_.size)
+  def weightByEpoch(snapshotHeight: Int)(contributions: Map[String, Double]): Map[String, Double] =
+    contributions.mapValues(_ * rewardDuringEpoch(snapshotHeight))
+
+  def weightByTrust(
+    trustEntropyMap: Map[String, Double]
+  )(contributions: Map[String, Double]): Map[String, Double] = {
+    val weightedEntropy = contributions.transform {
+      case (address, partitionSize) =>
+        partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
+    }
+    val totalEntropy = weightedEntropy.values.sum
+    weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
+  }
+
+  /**
+    * Calculates non-weighted contributions so each address takes equal part which is calculated
+    * as 1/totalSpace
+    * @param addresses
+    * @return
+    */
+  def calculateContributions(addresses: Seq[String]): Map[String, Double] = {
+    val totalSpace = addresses.size
+    val contribution = 1.0 / totalSpace
+    addresses.map { address =>
+      address -> contribution
+    }.toMap
+  }
 
   private def observationsFromSnapshot(snapshot: Snapshot): F[Seq[Observation]] =
     snapshot.checkpointBlocks.toList
@@ -60,13 +80,15 @@ class RewardsManager[F[_]: Concurrent](
     rewards.transform {
       case (address, reward) =>
         addressService.lookup(address).flatMap { existingCacheData =>
-          val updatedAddressCacheData = existingCacheData.map(
-            cache =>
-              cache.copy(
-                balance = cache.balance + reward.toLong,
-                memPoolBalance = cache.memPoolBalance + reward.toLong
-              )
-          ).getOrElse(AddressCacheData(reward.toLong, reward.toLong))
+          val updatedAddressCacheData = existingCacheData
+            .map(
+              cache =>
+                cache.copy(
+                  balance = cache.balance + reward.toLong,
+                  memPoolBalance = cache.memPoolBalance + reward.toLong
+                )
+            )
+            .getOrElse(AddressCacheData(reward.toLong, reward.toLong))
 
           addressService.putUnsafe(address, updatedAddressCacheData)
         }
@@ -106,6 +128,16 @@ object RewardsManager {
   val transitiveReputationMatrix = Map[String, Map[String, Double]]()
   val neighborhoodReputationMatrix = Map[String, Double]()
 
+  // TODO: Move to RewardsManager
+  def rewardDuringEpoch(curShapshot: Int) = curShapshot match {
+    case num if num >= 0 && num < epochOne           => epochOneRewards
+    case num if num >= epochOne && num < epochTwo    => epochTwoRewards
+    case num if num >= epochTwo && num < epochThree  => epochThreeRewards
+    case num if num >= epochThree && num < epochFour => epochFourRewards
+    case _                                           => 0d
+  }
+
+  @deprecated("Old implementation for light nodes", "Since we have full-nodes only")
   def validatorRewards(
     curShapshot: Int,
     transitiveReputationMatrix: Map[String, Map[String, Double]],
@@ -117,14 +149,7 @@ object RewardsManager {
     distro.mapValues(_ * rewardDuringEpoch(curShapshot))
   }
 
-  def rewardDuringEpoch(curShapshot: Int) = curShapshot match {
-    case num if num >= 0 && num < epochOne           => epochOneRewards
-    case num if num >= epochOne && num < epochTwo    => epochTwoRewards
-    case num if num >= epochTwo && num < epochThree  => epochThreeRewards
-    case num if num >= epochThree && num < epochFour => epochFourRewards
-    case _                                           => 0d
-  }
-
+  @deprecated("Old implementation for light nodes", "Since we have full-nodes only")
   def shannonEntropy(
     transitiveReputationMatrix: Map[String, Map[String, Double]],
     neighborhoodReputationMatrix: Map[String, Double]
@@ -138,34 +163,26 @@ object RewardsManager {
     }
   }
 
-  def weightContributions(
-    contributions: Map[String, Double],
-    trustEntropyMap: Map[String, Double]
-  ): Map[String, Double] = {
-    val weightedEntropy = contributions.transform {
-      case (address, partitionSize) =>
-        partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
-    }
-    val totalEntropy = weightedEntropy.values.sum
-    weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
-  }
-
-  def rewardDistribution(addresses: Seq[String], trustEntropyMap: Map[String, Double]): Map[String, Double] = {
-    val totalSpace = addresses.size
-    val contribution = 1.0 / totalSpace
-    val contributions = addresses.map { address =>
-      address -> contribution
-    }.toMap
-    weightContributions(contributions, trustEntropyMap)
-  }
-
+  @deprecated("Old implementation for light nodes", "Since we have full-nodes only")
   def rewardDistribution(
     partitonChart: Map[String, Set[String]],
     trustEntropyMap: Map[String, Double]
   ): Map[String, Double] = {
     val totalSpace = partitonChart.values.map(_.size).max
     val contributions = partitonChart.mapValues(partiton => (partiton.size / totalSpace).toDouble)
-    weightContributions(contributions, trustEntropyMap)
+    weightContributions(contributions)(trustEntropyMap)
+  }
+
+  // TODO: Move to RewardsManager
+  def weightContributions(
+    trustEntropyMap: Map[String, Double]
+  )(contributions: Map[String, Double]): Map[String, Double] = {
+    val weightedEntropy = contributions.transform {
+      case (address, partitionSize) =>
+        partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
+    }
+    val totalEntropy = weightedEntropy.values.sum
+    weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
   }
 
   /*
