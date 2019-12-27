@@ -1,7 +1,8 @@
 package org.constellation
 
+import java.io.{BufferedReader, FileInputStream, InputStreamReader}
 import java.net.InetSocketAddress
-import java.security.{KeyPair, PublicKey}
+import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 import java.util.Random
 
 import cats.effect.{ContextShift, IO}
@@ -9,7 +10,7 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
-import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
 import org.constellation.schema.Id
 import org.constellation.util.{APIClient, SignHelp}
@@ -26,6 +27,48 @@ object Fixtures {
 
   def tx: Transaction =
     TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+
+  def createAndStoreTx(amount: Long,
+                       destination: String,
+                       lastTxRef: LastTransactionRef,
+                       storePath: String,
+                       kp: KeyPair = KeyUtils.makeKeyPair()) = {
+    val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
+                                                                   KeyUtils.publicKeyToAddressString(kp.getPublic),
+                                                                   destination,
+                                                                   lastTxRef,
+                                                                   amount,
+                                                                   kp)
+    val transaction = Transaction(transactionEdge, LastTransactionRef.empty)
+    transaction.jsonSave(storePath)
+  }
+
+  def loadKeyPairUnsafe(keystorePath: String,
+                        alias: String,
+                        keypass: Array[Char],
+                        storepass: Array[Char],
+                        keyStoreType: String = "PKCS12") = {
+    val kpFileStream = new FileInputStream(keystorePath)
+    val keyStore = KeyStore.getInstance(keyStoreType)
+    keyStore.load(kpFileStream, storepass)
+    val privateKey = keyStore.getKey(alias, keypass).asInstanceOf[PrivateKey]
+    val publicKey = keyStore.getCertificate(alias).getPublicKey
+    new KeyPair(publicKey, privateKey)
+  }
+
+  def bufferedFileReader(path: String) = new BufferedReader(new InputStreamReader(new FileInputStream(path)))
+
+  val privateKeyStr =
+    "MIGNAgEAMBAGByqGSM49AgEGBSuBBAAKBHYwdAIBAQQgnav+6JPbFl7APXykQLLaOP4OJbS0pP+D+zGKPEBatfigBwYFK4EEAAqhRANCAATAvvwlwyfMwcz5sebY2OVwXo+CFEC9lT/83Cf/o70KSHpAECl5yrfJsAVo5Y9HIAPLqUgpFG8bD5jEvvXj6U7V"
+
+  val pubKeyStr =
+    "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEwL78JcMnzMHM+bHm2NjlcF6PghRAvZU//Nwn/6O9Ckh6QBApecq3ybAFaOWPRyADy6lIKRRvGw+YxL714+lO1Q=="
+
+  val keystorePath = "src/test/resources/wallet-client-test-kp.p12"
+  val alias = "alias"
+  val storepass = "storepass"
+  val keypass = "keypass"
+  val envArgs = "true"
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()
@@ -63,19 +106,29 @@ object Fixtures {
 
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 
-  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction =
-    TransactionService
-      .createTransaction[IO](data.selfAddressStr, src.hex, amt, data.keyPair)(
-        TransactionChainService[IO]
-      )
-      .unsafeRunSync
+  def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction = {
+    val edge = TransactionService.createTransactionEdge(
+      data.selfAddressStr,
+      src.address,
+      LastTransactionRef.empty,
+      amt,
+      data.keyPair,
+      normalized = false
+    )
+    Transaction(edge, LastTransactionRef.empty)
+  }
 
-  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) =
-    TransactionService
-      .createTransaction[IO](srcAddressString, destinationAddressString, amt, keyPair)(
-        TransactionChainService[IO]
-      )
-      .unsafeRunSync
+  def makeTransaction(srcAddressString: String, destinationAddressString: String, amt: Long, keyPair: KeyPair) = {
+    val edge = TransactionService.createTransactionEdge(
+      srcAddressString,
+      destinationAddressString,
+      LastTransactionRef.empty,
+      amt,
+      keyPair,
+      normalized = false
+    )
+    Transaction(edge, LastTransactionRef.empty)
+  }
 
   def makeDummyTransaction(src: String, dst: String, keyPair: KeyPair) =
     TransactionService.createDummyTransaction(src, dst, keyPair)(TransactionChainService[IO]).unsafeRunSync

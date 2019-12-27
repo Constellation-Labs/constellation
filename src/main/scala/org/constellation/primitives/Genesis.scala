@@ -6,6 +6,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.util.AccountBalance

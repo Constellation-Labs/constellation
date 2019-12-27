@@ -64,10 +64,10 @@ class CheckpointBlockBlacklistedAddressCheckerTest extends FunSuite with BeforeA
     result.head.src.address shouldBe blacklistTx.src.address
   }
 
-  private def createTransaction(src: String): Transaction = {
+  private def createTransaction(src: String, lastHash: String = "lastHash", lastOrdinal: Long = 0L): Transaction = {
     import constellation.signedObservationEdge
-
-    val data = TransactionEdgeData(1L, fee = None)
+    val lastTxRef = LastTransactionRef(lastHash, lastOrdinal)
+    val data = TransactionEdgeData(1L, lastTxRef, fee = None)
     val oe = ObservationEdge(
       Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash("dst", EdgeHashType.AddressHash)),
       TypedEdgeHash(data.hash, EdgeHashType.TransactionDataHash)

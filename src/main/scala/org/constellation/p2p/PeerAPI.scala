@@ -19,6 +19,8 @@ import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
+import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -188,23 +190,25 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   .lookup(dao.selfAddressStr)
                   .unsafeRunSync()
                   .map { _.balance }
-                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 10)) {
 
-              val tx = dao.transactionService
-                .createTransaction(
+              val tx = dao.transactionChainService
+                .createAndSetLastTransaction(
                   dao.selfAddressStr,
                   sendRequest.dst,
                   sendRequest.amountActual,
                   dao.keyPair,
-                  normalized = false
+                  false,
+                  normalized = sendRequest.normalized
                 )
-                .unsafeRunSync()
-              logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+                .flatMap { tx =>
+                  logger.debug(s"faucet create transaction with hash: ${tx.hash} send to address $sendRequest")
+                  dao.metrics.incrementMetric("faucetRequest")
+                  dao.transactionService.put(TransactionCacheData(tx))
+                }
+                .map(_.hash)
 
-              dao.transactionService.put(TransactionCacheData(tx)).unsafeRunAsync(_ => ())
-              dao.metrics.incrementMetric("faucetRequest")
-
-              complete(Some(tx.hash))
+              APIDirective.handle(tx)(complete(_))
             } else {
               logger.warn(s"Invalid faucet request $sendRequest")
               dao.metrics.incrementMetric("faucetInvalidRequest")
@@ -344,7 +348,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                     dao.observationService
                       .put(Observation.create(pd.peerMetadata.id.hex, SnapshotMisalignment())(dao.keyPair))
                       .void
-                )
+              )
             )
             .flatMap(
               _ =>
@@ -354,7 +358,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   }.map(
                     cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
                   )
-                }
+              }
             )
 
           APIDirective.handle(

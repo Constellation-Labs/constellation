@@ -1,12 +1,10 @@
 package org.constellation.storage.transactions
 
-import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.constellation.domain.transaction.{PendingTransactionsMemPool, TransactionChainService, TransactionService}
-import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
-import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
+import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.IdiomaticMockito
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
@@ -155,22 +153,10 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
   def createTransaction(
     src: String,
     fee: Option[Long] = None
-  ): TransactionCacheData = {
-    import constellation._
-
-    val txData = TransactionEdgeData(1L, fee = fee)
-
-    val oe = ObservationEdge(
-      Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash("dst", EdgeHashType.AddressHash)),
-      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
-    )
-
-    val soe = signedObservationEdge(oe)(Fixtures.tempKey)
-
+  ): TransactionCacheData =
     txChainService
-      .setLastTransaction(Edge(oe, soe, txData), isDummy = false, isTest = false)
+      .createAndSetLastTransaction(src, "dst", 1L, Fixtures.tempKey, false, fee)
       .map(TransactionCacheData(_))
       .unsafeRunSync
-  }
 
 }

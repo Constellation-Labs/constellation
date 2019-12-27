@@ -71,7 +71,7 @@ class CheckpointBlockDoubleSpendCheckerTest extends FunSuite with BeforeAndAfter
   private def createTransaction(src: String, lastHash: String, lastOrdinal: Long): Transaction = {
     import constellation.signedObservationEdge
 
-    val data = TransactionEdgeData(1L)
+    val data = TransactionEdgeData(1L, LastTransactionRef(lastHash, lastOrdinal))
     val oe = ObservationEdge(
       Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash("dst", EdgeHashType.AddressHash)),
       TypedEdgeHash(data.hash, EdgeHashType.TransactionDataHash)

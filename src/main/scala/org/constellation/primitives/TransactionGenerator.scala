@@ -12,7 +12,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
-import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionGossiping, TransactionService}
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.schema.Id
 import org.constellation.storage.AddressService
@@ -109,12 +109,12 @@ class TransactionGenerator[F[_]: Concurrent](
     else generateSingleAddressTransaction(peers)
 
   private def generateSingleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
-    transactionService.createTransaction(
+    transactionService.transactionChainService.createAndSetLastTransaction(
       dao.selfAddressStr,
       randomAddressFromPeers(peers),
       randomAmount(rangeAmount),
       dao.keyPair,
-      normalized = false
+      false
     )
 
   private def generateMultipleAddressTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
@@ -128,19 +128,25 @@ class TransactionGenerator[F[_]: Concurrent](
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] =
-    transactionService
-      .createTransaction(dao.selfAddressStr, randomAddressFrom(addresses), randomAmount(rangeAmount), dao.keyPair)
+    transactionService.transactionChainService.createAndSetLastTransaction(
+      dao.selfAddressStr,
+      randomAddressFromPeers(peers),
+      randomAmount(rangeAmount),
+      dao.keyPair,
+      false
+    )
 
   private def generateMultipleAddressTransactionWithoutSufficent(
     addresses: Seq[(String, Option[AddressCacheData])],
     peers: Seq[(Id, PeerData)]
   ): F[Transaction] = {
-    val source = getSourceAddressForTxWithoutSufficient(addresses)
-    transactionService.createTransaction(
+    val source: String = getSourceAddressForTxWithoutSufficient(addresses)
+    transactionService.transactionChainService.createAndSetLastTransaction(
       source,
       randomAddressFromPeers(peers),
       randomAmount(rangeAmount),
       keyPairForSource(source),
+      false,
       normalized = false
     )
   }
