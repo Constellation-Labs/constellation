@@ -7,7 +7,6 @@ import constellation._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
 
 trait Signable {
 
@@ -26,12 +25,11 @@ case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 
 case class HashSignature(
   signature: String,
-  id: Id
+  pubKeyHex: String,
+  address: String
 ) extends Ordered[HashSignature] {
 
-  def publicKey: PublicKey = id.toPublicKey
-
-  def address: String = publicKey.address
+  def publicKey: PublicKey = KeyUtils.hexToPublicKey(pubKeyHex)
 
   def valid(hash: String): Boolean =
     verifySignature(hash.getBytes(), KeyUtils.hex2bytes(signature))(publicKey)
@@ -61,7 +59,7 @@ case class SignatureBatch(
   def plus(other: SignatureBatch): SignatureBatch = {
     val toAdd = other.signatures
     val newSignatures = (signatures ++ toAdd).distinct
-    val unique = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
+    val unique = newSignatures.groupBy(_.address).map { _._2.maxBy(_.signature) }.toSeq.sorted
     this.copy(
       signatures = unique
     )
@@ -70,7 +68,7 @@ case class SignatureBatch(
   def withSignature(hs: HashSignature): SignatureBatch = {
     val toAdd = Seq(hs)
     val newSignatures = (signatures ++ toAdd).distinct
-    val unique = newSignatures.groupBy(_.id).map { _._2.maxBy(_.signature) }.toSeq.sorted
+    val unique = newSignatures.groupBy(_.address).map { _._2.maxBy(_.signature) }.toSeq.sorted
     this.copy(
       signatures = unique
     )
@@ -83,7 +81,8 @@ trait SignHelpExt {
   def hashSign(hash: String, keyPair: KeyPair): HashSignature =
     HashSignature(
       signHashWithKey(hash, keyPair.getPrivate),
-      keyPair.getPublic.toId
+      KeyUtils.publicKeyToHex(keyPair.getPublic),
+      KeyUtils.publicKeyToAddressString(keyPair.getPublic)
     )
 
   def hashSignBatchZeroTyped(productHash: Signable, keyPair: KeyPair): SignatureBatch = {

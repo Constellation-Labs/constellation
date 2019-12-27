@@ -342,7 +342,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   pd =>
                     // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
                     dao.observationService
-                      .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
+                      .put(Observation.create(pd.peerMetadata.id.hex, SnapshotMisalignment())(dao.keyPair))
                       .void
                 )
             )

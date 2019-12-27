@@ -38,8 +38,8 @@ object Genesis extends StrictLogging {
   private def createEmptyBlockFromGenesis[F[_]: Concurrent](
     genesisSOE: SignedObservationEdge
   )(implicit dao: DAO): F[CheckpointBlock] = LiftIO[F].liftIO {
-    val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.address
-    val dummyTransactionDst = KeyUtils.makeKeyPair.getPublic.toId.address
+    val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.hex
+    val dummyTransactionDst = KeyUtils.makeKeyPair.getPublic.toId.hex
 
     dao.transactionService.createDummyTransaction(dummyTransactionSrc, dummyTransactionDst, CoinbaseKey).map { tx =>
       CheckpointBlock.createCheckpointBlock(

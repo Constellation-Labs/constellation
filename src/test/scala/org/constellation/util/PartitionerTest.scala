@@ -18,10 +18,10 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   val random = new java.util.Random()
 
   def getRandomTxs(factor: Int = 5): Set[Transaction] = idSet5.flatMap { id =>
-    val destinationAddresses = idSet5.map(_.address)
+    val destinationAddresses = idSet5.map(_.hex)
     val destinationAddressDups = (0 to factor).flatMap(_ => destinationAddresses)
     destinationAddressDups.map(
-      destStr => makeTransaction(id.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random))
+      destStr => makeTransaction(id.hex, destStr, random.nextLong(), getRandomElement(tempKeySet, random))
     )
   }
   val randomTxs = getRandomTxs()
@@ -36,7 +36,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "Facilitators" should "not facilitate their own transactions" in {
     val facilitator = selectTxFacilitator(ids, randomTxs.head)
-    assert(facilitator.address != randomTxs.head.src.address)
+    assert(facilitator.hex != randomTxs.head.src.address)
   }
 
   "Facilitator selection" should "be relatively balanced" in {

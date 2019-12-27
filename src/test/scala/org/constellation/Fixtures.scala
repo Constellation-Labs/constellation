@@ -65,7 +65,7 @@ object Fixtures {
 
   def dummyTx(data: DAO, amt: Long = 1L, src: Id = id): Transaction =
     TransactionService
-      .createTransaction[IO](data.selfAddressStr, src.address, amt, data.keyPair)(
+      .createTransaction[IO](data.selfAddressStr, src.hex, amt, data.keyPair)(
         TransactionChainService[IO]
       )
       .unsafeRunSync

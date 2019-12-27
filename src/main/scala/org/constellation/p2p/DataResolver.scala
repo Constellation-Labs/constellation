@@ -364,7 +364,7 @@ class DataResolver {
       .onError {
         case _: SocketTimeoutException =>
           dao.observationService
-            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(endpoint, List(hash)))(dao.keyPair))
+            .put(Observation.create(peerApiClient.id.hex, RequestTimeoutOnResolving(endpoint, List(hash)))(dao.keyPair))
             .void
       }
 
@@ -382,7 +382,7 @@ class DataResolver {
       .onError {
         case _: SocketTimeoutException =>
           dao.observationService
-            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(endpoint, hashes))(dao.keyPair))
+            .put(Observation.create(peerApiClient.id.hex, RequestTimeoutOnResolving(endpoint, hashes))(dao.keyPair))
             .void
       }
 

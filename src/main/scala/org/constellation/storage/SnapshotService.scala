@@ -108,14 +108,15 @@ class SnapshotService[F[_]: Concurrent](
         if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else {
           val path = dao.snapshotInfoPath.pathAsString
+          val infoBytes = KryoSerializer.serializeAnyRef(info)
           Resource
             .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
             .use(
               stream =>
                 Sync[F].delay {
-                  stream.write(KryoSerializer.serializeAnyRef(info))
+                  stream.write(infoBytes)
                 }.flatTap { _ =>
-                  logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
+                  logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path} with size: ${infoBytes.size}")
                 }
             )
         }
@@ -330,7 +331,7 @@ class SnapshotService[F[_]: Concurrent](
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
       for {
         _ <- writeSnapshotToDisk(currentSnapshot)
-//        _ <- writeSnapshotInfoToDisk
+        _ <- writeSnapshotInfoToDisk
         _ <- applyAfterSnapshot(currentSnapshot)
       } yield ()
 

@@ -52,11 +52,11 @@ class EigenTrustTest
   "TrustManager to EigenTrust mappings" - {
     "should convert ObservationEvent to Experience" in {
       val observations: List[ObservationData] = List(
-        ObservationData(Id("foo"), SnapshotMisalignment(), 321),
-        ObservationData(Id("foo"), CheckpointBlockWithMissingSoe("foo"), 123),
-        ObservationData(Id("bar"), CheckpointBlockWithMissingSoe("bar"), 123),
-        ObservationData(Id("bar"), CheckpointBlockWithMissingSoe("bar"), 123),
-        ObservationData(Id("bar"), CheckpointBlockWithMissingSoe("bar"), 123),
+        ObservationData("foo", SnapshotMisalignment(), 321),
+        ObservationData("foo", CheckpointBlockWithMissingSoe("foo"), 123),
+        ObservationData("bar", CheckpointBlockWithMissingSoe("bar"), 123),
+        ObservationData("bar", CheckpointBlockWithMissingSoe("bar"), 123),
+        ObservationData("bar", CheckpointBlockWithMissingSoe("bar"), 123),
       )
 
       val experiences = eigenTrust.convertToExperiences(observations)

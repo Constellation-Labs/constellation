@@ -40,8 +40,8 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
         val keyPair = KeyUtils.makeKeyPair()
         TransactionService
           .createDummyTransaction(
-            keyPair.getPublic.toId.address,
-            KeyUtils.makeKeyPair().getPublic.toId.address,
+            keyPair.getPublic.toId.hex,
+            KeyUtils.makeKeyPair().getPublic.toId.hex,
             keyPair
           )(
             transactionChainService

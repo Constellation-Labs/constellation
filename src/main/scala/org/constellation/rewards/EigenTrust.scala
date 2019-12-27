@@ -122,7 +122,7 @@ class EigenTrust[F[_]: Concurrent](
 
   def convertToExperiences(observations: Seq[ObservationData]): Seq[Experience] =
     observations
-      .groupBy(_.id)
+      .groupBy(_.pubKeyHex)
       .mapValues(data => calculateExperienceOutcome(data.map(_.event)))
       .transform { case (id, outcome) => new Experience(1, EigenTrust.service, EigenTrust.time, outcome) }
       .values

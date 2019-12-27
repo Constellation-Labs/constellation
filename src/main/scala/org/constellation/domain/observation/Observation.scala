@@ -16,10 +16,10 @@ case class Observation(
 
 object Observation {
 
-  def create(id: Id, event: ObservationEvent, time: Long = DateTimeUtils.currentTimeMillis())(
+  def create(address: String, event: ObservationEvent, time: Long = DateTimeUtils.currentTimeMillis())(
     implicit keyPair: KeyPair
   ): Observation = {
-    val data = ObservationData(id, event, time)
+    val data = ObservationData(address, event, time)
     Observation(
       SignedData(data, hashSignBatchZeroTyped(data, keyPair))
     )

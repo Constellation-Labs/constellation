@@ -131,7 +131,7 @@ class CheckpointBlockValidator[F[_]: Sync](
   def validateTransactionIntegrity(t: Transaction): F[ValidationResult[Transaction]] =
     transactionValidator
       .validateTransaction(t)
-      .map(v => if (v.isValid) t.validNel else InvalidTransaction(t).invalidNel)
+      .map{v => if (v.isValid) t.validNel else InvalidTransaction(t).invalidNel}
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): F[ValidationResult[Transaction]] =
     addressService
@@ -139,6 +139,8 @@ class CheckpointBlockValidator[F[_]: Sync](
       .map(_.fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel))
 
   def validateTransaction(t: Transaction): F[ValidationResult[Transaction]] = validateTransactionIntegrity(t)
+
+
 
   def validateTransactions(
     t: Iterable[Transaction]
@@ -210,7 +212,7 @@ class CheckpointBlockValidator[F[_]: Sync](
           (result, d) => result.combine(d)
         )
         .map(getSummaryBalance(cb) |+| _)
-      result = folded.flatMap(diffs => diffs.rightIor) // TODO: wkoszycki   how to make diffs.forallM(validateDiff)
+      result = folded.flatMap(diffs => diffs.rightIor) // TODO: wkoszycki how to make diffs.forallM(validateDiff)
     } yield result
 
     val z: F[Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]] =

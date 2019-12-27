@@ -299,7 +299,7 @@ class TransactionServiceTest
       val cs = IO.contextShift(ec)
 
       val puts = (1 to totalExpected).toList
-        .map(_ => Fixtures.makeTransaction(Fixtures.id1.address, Fixtures.id2.address, 1L, Fixtures.tempKey))
+        .map(_ => Fixtures.makeTransaction(Fixtures.id1.hex, Fixtures.id2.hex, 1L, Fixtures.tempKey))
         .map(TransactionCacheData(_))
         .traverse(tx => cs.shift >> txService.put(tx))
 

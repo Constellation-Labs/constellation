@@ -69,12 +69,12 @@ class CheckpointBlockValidatorNelTest
     rightParent.baseHash shouldReturn "rightParent"
 
     rightBlock.signatures shouldReturn Seq(
-      HashSignature.apply("sig1", Id("id1")),
-      HashSignature.apply("sig2", Id("id2"))
+      HashSignature.apply("sig1", "id1", "id1"),
+      HashSignature.apply("sig2", "id2", "id2")
     )
     leftBlock.signatures shouldReturn Seq(
-      HashSignature.apply("sig1", Id("id1")),
-      HashSignature.apply("sig2", Id("id2"))
+      HashSignature.apply("sig1", "id1", "id1"),
+      HashSignature.apply("sig2", "id2", "id2")
     )
 
     checkpointParentService.parentSOEBaseHashes(rightBlock) shouldReturnF List("rightParent")
@@ -164,7 +164,7 @@ class CheckpointBlockValidatorNelTest
   }
 
   test("it should return correct block to preserve with greater number of signatures") {
-    val signatures = rightBlock.signatures ++ Seq(HashSignature.apply("extraSig", Id("extra_id1")))
+    val signatures = rightBlock.signatures ++ Seq(HashSignature.apply("extraSig", "extra_id1", "extra_id1"))
 
     leftBlock.signatures shouldReturn signatures
 

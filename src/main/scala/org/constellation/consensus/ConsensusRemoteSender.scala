@@ -86,7 +86,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
           .onError {
             case _: SocketTimeoutException =>
               observationService
-                .put(Observation.create(pd.peerMetadata.id, RequestTimeoutOnConsensus(roundId))(keyPair))
+                .put(Observation.create(pd.peerMetadata.id.hex, RequestTimeoutOnConsensus(roundId))(keyPair))
                 .void
           }
           .flatTap(

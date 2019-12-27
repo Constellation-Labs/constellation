@@ -168,9 +168,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
             .traverse(
               id =>
                 observationService
-                  .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair))
+                  .put(Observation.create(id.hex, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair))
             )
-            .flatMap(_ => Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation")))
+            .flatMap(_ => Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: ${validation}")))
         else Sync[F].unit
         _ <- checkpointParentService.soeService
           .put(cb.soeHash, cb.soe) // TODO: consider moving down

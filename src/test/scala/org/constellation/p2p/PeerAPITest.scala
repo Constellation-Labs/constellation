@@ -285,7 +285,7 @@ class PeerAPITest
               def areEqual(a: Observation, b: Any): Boolean =
                 b.isInstanceOf[Observation] && a.hash == b.asInstanceOf[Observation].hash
             }
-            observationCapture.hasCaptured(Observation.create(Id("foo"), SnapshotMisalignment(), 1234567)(dao.keyPair))(
+            observationCapture.hasCaptured(Observation.create("foo", SnapshotMisalignment(), 1234567)(dao.keyPair))(
               hashEquality
             )
             true

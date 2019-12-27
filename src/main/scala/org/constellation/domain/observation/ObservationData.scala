@@ -4,7 +4,7 @@ import org.constellation.schema.Id
 import org.constellation.util.Signable
 
 case class ObservationData(
-  id: Id,
+  pubKeyHex: String,
   event: ObservationEvent,
   time: Long
 ) extends Signable

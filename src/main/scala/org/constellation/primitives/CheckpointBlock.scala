@@ -46,20 +46,20 @@ case class CheckpointBlock(
   observations: Seq[Observation] = Seq()
 ) {
 
-  def uniqueSignatures: Boolean = signatures.groupBy(_.id).forall(_._2.size == 1)
+  def uniqueSignatures: Boolean = signatures.groupBy(_.address).forall(_._2.size == 1)
 
-  def signedBy(id: Id): Boolean = witnessIds.contains(id)
+//  def signedBy(id: Id): Boolean = witnessIds.contains(id)
 
-  def hashSignaturesOf(id: Id): Seq[HashSignature] = signatures.filter(_.id == id)
+  def hashSignaturesOf(id: Id): Seq[HashSignature] = signatures.filter(_.address == id.hex)
 
   def signatureConflict(other: CheckpointBlock): Boolean =
     signatures.exists { s =>
       other.signatures.exists { s2 =>
-        s.signature != s2.signature && s.id == s2.id
+        s.signature != s2.signature && s.address == s2.address
       }
     }
 
-  def witnessIds: Seq[Id] = signatures.map { _.id }
+//  def witnessIds: Seq[Id] = signatures.map { _.id }
 
   def signatures: Seq[HashSignature] =
     checkpoint.edge.signedObservationEdge.signatureBatch.signatures

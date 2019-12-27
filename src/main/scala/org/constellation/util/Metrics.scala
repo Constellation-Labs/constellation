@@ -200,7 +200,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
   def updateBalanceMetrics(): IO[Unit] =
     for {
       peers <- dao.peerInfo
-      allAddresses = peers.map(_._1.address).toSeq :+ dao.selfAddressStr
+      allAddresses = peers.map(_._1.hex).toSeq :+ dao.selfAddressStr
 
       balancesBySnapshot <- balancesBySnapshotMetrics(allAddresses)
       balances <- balancesMetrics(allAddresses)

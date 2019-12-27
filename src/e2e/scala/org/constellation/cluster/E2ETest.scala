@@ -39,7 +39,7 @@ class E2ETest extends E2E {
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
-    logger.info("API Addresses: " + apis.map(_.id.address))
+    logger.info("API Addresses: " + apis.map(_.id.hex))
 
     val startingAccountBalances: List[AccountBalance] = List(
       AccountBalance(sendToAddress, 10L),
