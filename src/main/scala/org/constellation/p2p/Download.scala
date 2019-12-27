@@ -235,7 +235,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       case Success(value) => value
       case Failure(exception) =>
         throw new Exception(
-          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage}",
+          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
           exception
         )
     }

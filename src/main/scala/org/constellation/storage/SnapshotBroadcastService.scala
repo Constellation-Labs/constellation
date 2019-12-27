@@ -47,19 +47,19 @@ class SnapshotBroadcastService[F[_]: Concurrent](
             .handleErrorWith(
               t =>
                 Sync[F]
-                  .delay(logger.warn(s"error while verifying snapshot $hash msg: ${t.getMessage}"))
+                  .delay(logger.error(s"error while verifying snapshot $hash msg: ${t.getMessage}"))
                   .flatMap(_ => Sync[F].pure[Option[SnapshotVerification]](None))
             )
         )
       maybeDownload = snapshotSelector.selectSnapshotFromBroadcastResponses(responses, ownRecent)
-//      _ <- maybeDownload.fold(Sync[F].unit)(
-//        d =>
-//          healthChecker
-//            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
-//            .flatMap(
-//              _ => recentSnapshots.modify(_ => (d._2, ()))
-//            )
-//      )
+      _ <- maybeDownload.fold(Sync[F].unit)(
+        d =>
+          healthChecker
+            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
+            .flatMap(
+              _ => recentSnapshots.modify(_ => (d._2, ()))
+            )
+      )
     } yield ()
 
   def verifyRecentSnapshots(): F[Unit] = {
@@ -67,15 +67,15 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       ownRecent <- getRecentSnapshots
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
-//      maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
-//      _ <- maybeDownload.fold(Sync[F].unit)(
-//        d =>
-//          healthChecker
-//            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
-//            .flatMap(
-//              _ => recentSnapshots.modify(_ => (d._2, ()))
-//            )
-//      )
+      maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
+      _ <- maybeDownload.fold(Sync[F].unit)(
+        d =>
+          healthChecker
+            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
+            .flatMap(
+              _ => recentSnapshots.modify(_ => (d._2, ()))
+            )
+      )
     } yield ()
 
     if (clusterCheckPending.compareAndSet(false, true)) {
