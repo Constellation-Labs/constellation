@@ -6,9 +6,9 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.consensus.SnapshotInfo
+import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
-import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 
 class TransactionChainService[F[_]: Concurrent] {
 
