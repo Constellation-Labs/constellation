@@ -11,7 +11,7 @@ object TransactionValidator {
 
   def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] = {
     val isValid = tx.signatures.exists { hs ⇒
-      hs.publicKey.address == tx.src.address && hs.valid(
+      hs.address == tx.src.address && hs.valid(
         tx.signaturesHash
       )
     }

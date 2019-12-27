@@ -50,7 +50,7 @@ case class CheckpointBlock(
 
 //  def signedBy(id: Id): Boolean = witnessIds.contains(id)
 
-  def hashSignaturesOf(id: Id): Seq[HashSignature] = signatures.filter(_.address == id.hex)
+  def hashSignaturesOf(id: Id): Seq[HashSignature] = signatures.filter(_.address == id.address)
 
   def signatureConflict(other: CheckpointBlock): Boolean =
     signatures.exists { s =>

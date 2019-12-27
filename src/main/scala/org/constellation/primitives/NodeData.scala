@@ -42,9 +42,9 @@ trait NodeData {
 
   def id: Id = keyPair.getPublic.toId
 
-  def selfAddressStr: String = id.hex
+  def selfAddressStr: String = id.address
 
-  val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.hex
+  val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
 
   def externalHostString: String = nodeConfig.hostName
   def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort

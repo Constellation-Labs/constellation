@@ -130,9 +130,19 @@ class CheckpointBlockValidator[F[_]: Sync](
     } yield validation
 
   def validateTransactionIntegrity(t: Transaction): F[ValidationResult[Transaction]] =
-    transactionValidator
-      .validateTransaction(t)
-      .map{v => if (v.isValid) t.validNel else InvalidTransaction(t).invalidNel}
+    {logger.warn(s"validateTransactionIntegrity")
+      transactionValidator
+        .validateTransaction(t)
+        .map{v => if (v.isValid) {
+          logger.warn(s"validateTransactionIntegrity: isValid")
+          t.validNel
+        }
+        else {
+          logger.warn(s"validateTransactionIntegrity: ${v.toString}")
+          InvalidTransaction(t, v.toString).invalidNel
+        }
+        }
+    }
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): F[ValidationResult[Transaction]] =
     addressService
@@ -329,14 +339,14 @@ object InvalidSignature {
   def apply(s: HashSignature) = new InvalidSignature(s.signature)
 }
 
-case class InvalidTransaction(txHash: String) extends CheckpointBlockValidation {
+case class InvalidTransaction(txHash: String, error: String) extends CheckpointBlockValidation {
 
-  def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid"
+  def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid with error message: $error"
 }
 
 object InvalidTransaction {
 
-  def apply(t: Transaction) = new InvalidTransaction(t.hash)
+  def apply(t: Transaction, error: String) = new InvalidTransaction(t.hash, error)
 }
 
 case class DuplicatedTransaction(txHash: String) extends CheckpointBlockValidation {

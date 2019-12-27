@@ -15,10 +15,9 @@ case class Id(hex: String) {
   val medium: String = hex.toString.slice(0, 10)
 
   @transient
-  def address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
+  lazy val address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
 
-  @transient
-  lazy val toPublicKey: PublicKey = hexToPublicKey(hex)
+  def toPublicKey: PublicKey = hexToPublicKey(hex)
 
   @transient
   lazy val bytes: Array[Byte] = KeyUtils.hex2bytes(hex)

@@ -31,8 +31,14 @@ case class HashSignature(
 
   def publicKey: PublicKey = KeyUtils.hexToPublicKey(pubKeyHex)
 
-  def valid(hash: String): Boolean =
-    verifySignature(hash.getBytes(), KeyUtils.hex2bytes(signature))(publicKey)
+  def valid(hash: String): Boolean = verifySignature(hash.getBytes(), KeyUtils.hex2bytes(signature))(publicKey)
+
+//  {
+//    val valid = verifySignature(hash.getBytes(), KeyUtils.hex2bytes(signature))(publicKey)
+//    println("HashSignature valid: " + valid)
+//    valid
+//  }
+
 
   override def compare(that: HashSignature): Int =
     signature.compare(that.signature)

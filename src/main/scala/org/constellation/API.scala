@@ -358,7 +358,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(wallet)
           } ~
           path("selfAddress") {
-            complete(id.hex)
+            complete(id.address)
           } ~
           path("nodeKeyPair") {
             complete(keyPair)
@@ -380,7 +380,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
 
             val peerMap = dao.peerInfo.map {
               _.toSeq.map {
-                case (id, pd) => Node(id.hex, pd.peerMetadata.host, pd.peerMetadata.httpPort)
+                case (id, pd) => Node(id.address, pd.peerMetadata.host, pd.peerMetadata.httpPort)
               } :+ self
             }
 

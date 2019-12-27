@@ -236,8 +236,8 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
           val req = client.postNonBlockingF[F, SingleHashSignature]("sign", authSignRequest)(C)
 
           req.flatTap { sig =>
-            if (sig.hashSignature.address != request.id.hex) {
-              logger.warn(s"Keys should be the same: ${sig.hashSignature.address} != ${request.id.hex}" ) >>
+            if (sig.hashSignature.pubKeyHex != request.id.hex) {
+              logger.warn(s"Keys should be the same: ${sig.hashSignature.pubKeyHex} != ${request.id.hex}" ) >>
                 dao.metrics.incrementMetricAsync[F]("peerKeyMismatch")
             } else Sync[F].unit
           }.flatTap { sig =>

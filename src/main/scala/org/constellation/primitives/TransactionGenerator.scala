@@ -200,7 +200,7 @@ class TransactionGenerator[F[_]: Concurrent](
 
   private def randomAddressFromPeers(peers: Seq[(Id, PeerData)]): String =
     if (peers.isEmpty && dao.nodeConfig.isGenesisNode) dao.dummyAddress
-    else peers(Random.nextInt(peers.size))._1.hex
+    else peers(Random.nextInt(peers.size))._1.address
 
   private def randomAddressFrom(addresses: Seq[(String, Option[AddressCacheData])]): String =
     if (addresses.isEmpty) dao.dummyAddress

@@ -131,7 +131,7 @@ object Simulation {
 
   def fakeBalances(apis: Seq[APIClient]): Seq[AccountBalance] =
     apis
-      .map(api => AccountBalance(api.id.hex, 999))
+      .map(api => AccountBalance(api.id.address, 999))
 
   def randomOtherNode(not: APIClient, apis: Seq[APIClient]): APIClient =
     apis.filter {
@@ -316,7 +316,7 @@ object Simulation {
 
   def sendRandomTransaction(apis: Seq[APIClient]): Future[Response[String]] = {
     val src = randomNode(apis)
-    val dst = randomOtherNode(src, apis).id.hex
+    val dst = randomOtherNode(src, apis).id.address
 
     val s = SendToAddress(dst, Random.nextInt(1000).toLong)
     src.post("send", s)
@@ -353,7 +353,7 @@ object Simulation {
   }
 
   def getPublicAddressFromKeyPair(keyPair: KeyPair): String =
-    keyPair.getPublic.toId.hex
+    keyPair.getPublic.toId.address
 
   def createDoubleSpendTxs(
     node1: ConstellationNode,
