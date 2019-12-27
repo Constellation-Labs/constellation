@@ -2,6 +2,7 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.schema.Id
 import org.constellation.util._
@@ -29,7 +30,7 @@ object Schema {
     type NodeState = Value
 
     val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, SnapshotCreation, Ready, Leaving,
-      Offline =
+    Offline =
       Value
 
     val all: Set[NodeState.Value] = values.toSet
@@ -138,7 +139,7 @@ object Schema {
     type EdgeHashType = Value
 
     val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash, ValidationHash,
-      BundleDataHash, ChannelMessageDataHash = Value
+    BundleDataHash, ChannelMessageDataHash = Value
   }
 
   case class BundleEdgeData(rank: Double, hashes: Seq[String])
@@ -159,9 +160,9 @@ object Schema {
     * @param data : Optional hash reference to attached information
     */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
-    parents: Seq[TypedEdgeHash],
-    data: TypedEdgeHash
-  ) extends Signable
+                             parents: Seq[TypedEdgeHash],
+                             data: TypedEdgeHash)
+      extends Signable
 
   /**
     * Encapsulation for all witness information about a given observation edge.
@@ -193,8 +194,9 @@ object Schema {
     */
   case class TransactionEdgeData(
     amount: Long,
-    salt: Long = Random.nextLong(),
-    fee: Option[Long] = None
+    lastTxRef: LastTransactionRef,
+    fee: Option[Long] = None,
+    salt: Long = Random.nextLong()
   ) extends Signable
 
   /**

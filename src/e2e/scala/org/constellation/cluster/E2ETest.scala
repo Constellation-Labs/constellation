@@ -7,6 +7,7 @@ import better.files.File
 import cats.effect.{ContextShift, IO}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.primitives._
@@ -33,23 +34,33 @@ class E2ETest extends E2E {
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
   private val storeData = false
 
+  private def sendTo(node: ConstellationNode, dst: String, amount: Long = 100L) = {
+    val client = node.getAPIClientForNode(node)
+    client.postBlocking[SendToAddress]("send", SendToAddress(dst, amount))
+  }
+
   private val blacklistedKeyPair = KeyUtils.makeKeyPair()
   private val blacklistedAddress = Simulation.getPublicAddressFromKeyPair(blacklistedKeyPair)
   private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
-    logger.info("API Addresses: " + apis.map(_.id.address))
-
+    logger.info("API addresses: " + apis.map(_.id.address))
     val startingAccountBalances: List[AccountBalance] = List(
       AccountBalance(sendToAddress, 10L),
       AccountBalance(blacklistedAddress, 10L)
     )
     assert(Simulation.run(initialAPIs, addPeerRequests, startingAccountBalances))
 
-    val metadatas = n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
+    val metadatas =
+      n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
+
     logger.info(s"Metadata: $metadatas")
-    assert(metadatas.nonEmpty, "channel neighborhood empty")
+
+    assert(
+      metadatas.nonEmpty,
+      "channel neighborhood empty"
+    )
 
 //    val lightNode = createNode(
 //      seedHosts = Seq(HostPort("localhost", 9001)),
@@ -92,7 +103,7 @@ class E2ETest extends E2E {
     // messageSim.postDownload(apis.head)
 
     // TODO: Change to wait for the download node to participate in several blocks.
-    Thread.sleep(20 * 1000)
+//    Thread.sleep(20 * 1000)
 
 //    val allNodes = nodes :+ downloadNode
     val allNodes = nodes
@@ -103,34 +114,12 @@ class E2ETest extends E2E {
     assert(Simulation.healthy(allAPIs))
     //  Thread.sleep(1000*1000)
 
-    Simulation
-      .balanceForAddress(allAPIs, blacklistedAddress)
-      .foreach(b => assert(b == "1000000000"))
-
-    val doubleSpendTxs = Simulation
-      .createDoubleSpendTxs(nodes.head, nodes(1), blacklistedAddress, sendToAddress, blacklistedKeyPair)
-      .unsafeRunSync()
-    Simulation.logger.info(
-      s"Double spend transaction submitted : ${doubleSpendTxs.map(t => t.hash)} : ${doubleSpendTxs.map(t => t.lastTxRef)} "
-    )
-
-    Simulation.awaitConditionMet(
-      "BlacklistedAddress is diffrent accross a cluster",
-      allAPIs.map { p =>
-        val n = Await.result(p.metricsAsync, 5 seconds)(Metrics.blacklistedAddressesSize)
-        Simulation.logger.info(s"peer ${p.id} has $n blacklisted addresses")
-        n.toInt >= 1
-      }.forall(_ == true),
-      maxRetries = 10,
-      delay = 10000
-    )
-
     Simulation.disableRandomTransactions(allAPIs)
     Simulation.logger.info("Stopping transactions to run parity check")
     Simulation.disableCheckpointFormation(allAPIs)
     Simulation.logger.info("Stopping checkpoint formation to run parity check")
 
-    //    TODO: It can fail when redownload occurs fix when  issue #527 is finished
+//    TODO: It can fail when redownload occurs fix when  issue #527 is finished
     Simulation.awaitConditionMet(
       "Accepted checkpoint blocks number differs across the nodes",
       allAPIs.map { p =>

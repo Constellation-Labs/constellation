@@ -12,6 +12,8 @@ import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
+import cats.data.Validated
+import cats.data.Validated.{Invalid, Valid}
 import cats.effect.IO
 import cats.implicits._
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
@@ -22,7 +24,9 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.api.TokenAuthenticator
+import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{ChangePeerState, Download, SetStateResult}
@@ -519,6 +523,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("genesis") {
           path("create") {
             entity(as[Seq[AccountBalance]]) { balances =>
+              logger.info(s"genesis created with balances ${balances}")
               val go = Genesis.createGenesisObservation(balances)
               complete(go)
             }
@@ -531,32 +536,56 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             }
         } ~
-        path("send") {
-          entity(as[SendToAddress]) { sendRequest =>
-            logger.info(s"send transaction to address $sendRequest")
-
-            val io = dao.transactionService
-              .createTransaction(
-                dao.selfAddressStr,
-                sendRequest.dst,
-                sendRequest.amountActual,
-                dao.keyPair,
-                normalized = false
+        path("balance") {
+          entity(as[String]) { address =>
+            logger.info(s"balance lookup for address ${address}")
+            val io = addressService
+              .lookup(address)
+              .map(
+                res =>
+                  res
+                    .map(_.balance.toString)
+                    .getOrElse("0")
               )
-              .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
-              .map(_.hash)
 
             APIDirective.handle(io)(complete(_))
           }
         } ~
-        path("restore") {
-          APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
-            case Success(value) => complete(StatusCodes.OK)
-            case Failure(error) =>
-              logger.error(s"Restored error ${error}")
-              complete(StatusCodes.InternalServerError)
+        path("transaction") {
+          entity(as[Transaction]) { transaction =>
+            logger.info(s"send transaction to address ${transaction.hash}")
+            val io = checkpointBlockValidator
+              .singleTransactionValidation(transaction)
+              .flatMap {
+                case Invalid(e) => IO { e.toString() }
+                case Valid(tx)  => transactionService.put(TransactionCacheData(tx)).map(_.hash)
+              }
+            APIDirective.handle(io)(complete(_))
           }
-        } ~
+        } ~ path("send") {
+        entity(as[SendToAddress]) { sendRequest =>
+          logger.info(s"send transaction to address $sendRequest")
+          val io = transactionChainService
+            .createAndSetLastTransaction(
+              dao.selfAddressStr,
+              sendRequest.dst,
+              sendRequest.amountActual,
+              dao.keyPair,
+              false
+            )
+            .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx)))
+            .map(_.hash)
+
+          APIDirective.handle(io)(complete(_))
+        }
+      } ~ path("restore") {
+        APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
+          case Success(value) => complete(StatusCodes.OK)
+          case Failure(error) =>
+            logger.error(s"Restored error ${error}")
+            complete(StatusCodes.InternalServerError)
+        }
+      } ~
         path("addPeer") {
           entity(as[PeerMetadata]) { pm =>
             (IO
