@@ -35,7 +35,7 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, Roll
 import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
-import org.constellation.storage.external.GcpStorage
+import org.constellation.storage.external.{AwsStorage, GcpStorage}
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
@@ -275,7 +275,11 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       )
     )
 
-    cloudStorage = new GcpStorage[IO]
+    if (ConfigUtil.isEnabledAwsStorage) {
+      cloudStorage = new AwsStorage[IO]
+    } else if (ConfigUtil.isEnabledGcpStorage) {
+      cloudStorage = new GcpStorage[IO]
+    }
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
       cloudStorage,

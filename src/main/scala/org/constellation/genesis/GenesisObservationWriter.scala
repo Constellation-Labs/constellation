@@ -26,10 +26,13 @@ class GenesisObservationWriter[F[_]: Concurrent](
   def write(genesisObservation: GenesisObservation): EitherT[F, GenesisObservationWriterException, Unit] =
     for {
       _ <- EitherT(writeToDisk(genesisObservation))
-      _ <- EitherT.liftF(logger.debug("Genesis observation saved on disk"))
+      _ <- EitherT.liftF(logger.info("Genesis observation saved on disk"))
+
+      isEnabledCloudStorage = ConfigUtil.isEnabledCloudStorage
+      _ <- EitherT.liftF(logger.info(s"Cloud storage is enabled : $isEnabledCloudStorage"))
 
       result <- sendToCloudIfRequired(genesisObservation)
-      _ <- EitherT.liftF(logger.debug(s"Genesis observation files saved on cloud : ${result.size}"))
+      _ <- EitherT.liftF(logger.info(s"Genesis observation files saved on cloud : ${result.size} : ${result}"))
     } yield ()
 
   private def writeToDisk(genesis: GenesisObservation): F[Either[GenesisObservationWriterException, File]] =
@@ -43,10 +46,7 @@ class GenesisObservationWriter[F[_]: Concurrent](
   private def sendToCloudIfRequired(
     genesis: GenesisObservation
   ): EitherT[F, GenesisObservationWriterException, List[String]] =
-    if (shouldSendToCloud) EitherT(sendToCloud(genesis)) else EitherT.rightT(List.empty)
-
-  private def shouldSendToCloud: Boolean =
-    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
+    if (ConfigUtil.isEnabledCloudStorage) EitherT(sendToCloud(genesis)) else EitherT.rightT(List.empty)
 
   private def sendToCloud(genesis: GenesisObservation): F[Either[GenesisObservationWriterException, List[String]]] =
     executionContext.evalOn(fileOperationContext) {
