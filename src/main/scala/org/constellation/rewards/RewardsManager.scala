@@ -19,7 +19,7 @@ class RewardsManager[F[_]: Concurrent](
   addressService: AddressService[F],
   snapshotBroadcastService: SnapshotBroadcastService[F]
 ) {
-  final val rewards: Ref[F, Map[String, Double]] = Ref.unsafe(Map.empty)
+  final val rewards: Ref[F, Map[String, Long]] = Ref.unsafe(Map.empty)
 
   def updateBySnapshot(snapshot: Snapshot, snapshotHeight: Int): F[Unit] =
     for {
@@ -29,7 +29,7 @@ class RewardsManager[F[_]: Concurrent](
 
       weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(snapshotHeight)
       contributions = calculateContributions(trustMap.keySet.toSeq)
-      distribution = weightContributions(contributions)
+      distribution = weightContributions(contributions).mapValues(_.toLong)
 
       _ <- updateRewards(distribution)
       _ <- updateAddressBalances(distribution)
@@ -68,31 +68,11 @@ class RewardsManager[F[_]: Concurrent](
       .traverse(checkpointService.fullData)
       .map(_.flatten.flatMap(_.checkpointBlock.observations))
 
-  private def updateRewards(distribution: Map[String, Double]): F[Unit] =
+  private def updateRewards(distribution: Map[String, Long]): F[Unit] =
     rewards.modify(prevDistribution => (prevDistribution |+| distribution, ()))
 
-  /*
-    TODO: Not sure if it is the correct way of updating balances by rewards.
-    1. putUnsafe takes Account.hash but we pass there Id.address which could differ. Maybe we should do Address(id.address).hash.
-    2. I take the current balance and just copy the balance by adding rewards. Seems to be quite... dirty and unsafe?
-   */
-  private def updateAddressBalances(rewards: Map[String, Double]): F[Unit] =
-    rewards.transform {
-      case (address, reward) =>
-        addressService.lookup(address).flatMap { existingCacheData =>
-          val updatedAddressCacheData = existingCacheData
-            .map(
-              cache =>
-                cache.copy(
-                  balance = cache.balance + reward.toLong,
-                  memPoolBalance = cache.memPoolBalance + reward.toLong
-                )
-            )
-            .getOrElse(AddressCacheData(reward.toLong, reward.toLong))
-
-          addressService.putUnsafe(address, updatedAddressCacheData)
-        }
-    }.values.toList.sequence.void
+  private def updateAddressBalances(rewards: Map[String, Long]): F[Unit] =
+    addressService.addBalances(rewards).void
 }
 
 object RewardsManager {
@@ -143,7 +123,7 @@ object RewardsManager {
     transitiveReputationMatrix: Map[String, Map[String, Double]],
     neighborhoodReputationMatrix: Map[String, Double],
     partitonChart: Map[String, Set[String]]
-  ) = {
+  ): Map[String, Double] = {
     val trustEntropyMap = shannonEntropy(transitiveReputationMatrix, neighborhoodReputationMatrix)
     val distro = rewardDistribution(partitonChart, trustEntropyMap)
     distro.mapValues(_ * rewardDuringEpoch(curShapshot))
@@ -153,7 +133,7 @@ object RewardsManager {
   def shannonEntropy(
     transitiveReputationMatrix: Map[String, Map[String, Double]],
     neighborhoodReputationMatrix: Map[String, Double]
-  ) = {
+  ): Map[String, Double] = {
     val weightedTransitiveReputation = transitiveReputationMatrix.transform {
       case (key, view) => view.map { case (neighbor, score) => neighborhoodReputationMatrix(key) * score }.sum
     }

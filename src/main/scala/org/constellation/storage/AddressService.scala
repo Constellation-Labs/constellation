@@ -38,6 +38,15 @@ class AddressService[F[_]: Concurrent]() {
         )
     }
 
+
+  def addBalances(addition: Map[String, Long]): F[List[AddressCacheData]] = {
+    locks.acquire(addition.keys.toList) {
+      addition.toList.traverse {
+        case (address, balance) => memPool.update(address, a => a.copy(balance = a.balance + balance), AddressCacheData(balance, balance))
+      }
+    }
+  }
+
   def transferSnapshot(tx: Transaction): F[AddressCacheData] =
     memPool.update(tx.src.hash, { a =>
       a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount)
