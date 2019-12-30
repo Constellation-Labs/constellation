@@ -188,7 +188,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   .lookup(dao.selfAddressStr)
                   .unsafeRunSync()
                   .map { _.balance }
-                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 5)) {
+                  .getOrElse(0L) > (dao.processingConfig.maxFaucetSize * Schema.NormalizationFactor * 10)) {
 
               val tx = dao.transactionService
                 .createTransaction(
@@ -351,9 +351,13 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 dao.snapshotService.getSnapshotInfo.flatMap { info =>
                   info.acceptedCBSinceSnapshot.toList.traverse {
                     dao.checkpointService.fullData(_)
-                  }.map(
-                    cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
-                  )
+                  }.map{
+                    cbs =>
+                    val snapshotInfo = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)
+                    val serialziedSnapshot = KryoSerializer.serializeAnyRef(snapshotInfo).some
+                      logger.warn(s"KryoSerializer.serializeAnyRef for snapshotInfo: ${snapshotInfo} with size ${serialziedSnapshot.size}")
+                      serialziedSnapshot
+                  }
                 }
             )
 

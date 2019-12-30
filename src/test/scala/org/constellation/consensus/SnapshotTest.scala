@@ -11,6 +11,7 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.util.Metrics
+import Fixtures.randomSnapshotHash
 import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
 class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
@@ -23,7 +24,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
 
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =
-      StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash)), Seq.fill(50)(CheckpointCache(randomCB)))
+      StoredSnapshot(Snapshot(randomSnapshotHash, Seq.fill(50)(randomSnapshotHash)), Seq.fill(50)(CheckpointCache(randomCB)))
     Snapshot.writeSnapshot[IO](ss).value.unsafeRunSync()
     Snapshot
       .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash), dao.snapshotPath.pathAsString)
@@ -32,7 +33,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
 
   test("should remove old snapshots but not recent when needed") {
     val snaps = List.fill(3)(
-      StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash)), Seq.fill(50)(CheckpointCache(randomCB)))
+      StoredSnapshot(Snapshot(randomSnapshotHash, Seq.fill(50)(randomSnapshotHash)), Seq.fill(50)(CheckpointCache(randomCB)))
     )
 
     dao.snapshotBroadcastService
@@ -57,9 +58,9 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
     dao.snapshotPath.delete()
   }
 
-  private def randomHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
-  private val genesis = RandomData.go()
-  private def randomCB =
+
+  val genesis = RandomData.go()
+  def randomCB =
     CheckpointBlock
       .createCheckpointBlockSOE(Seq.fill(10)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
         Fixtures.tempKey1

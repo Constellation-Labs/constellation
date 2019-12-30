@@ -2,9 +2,10 @@ package org.constellation
 
 import java.net.InetSocketAddress
 import java.security.{KeyPair, PublicKey}
-import java.util.Random
+import java.util.{Random, UUID}
 
 import cats.effect.{ContextShift, IO}
+import com.google.common.hash.Hashing
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
@@ -26,6 +27,8 @@ object Fixtures {
 
   def tx: Transaction =
     TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+
+  def randomSnapshotHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()

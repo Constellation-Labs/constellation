@@ -73,8 +73,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     f
   }
 
-  def snapshotHashes: Seq[String] =
-    snapshotPath.list.toSeq.map { _.name }
+  def snapshotHashes: Seq[String] = snapshotPath.list.toSeq.sortBy { _.lastModifiedTime }.map { _.name }
+//    snapshotPath.list.toSeq.map { _.name }
+  // todo, we need to limit the size here. need modification to split in fixed size directories in writeSnapshotToDisk
 
   def peersInfoPath: File = {
     val f = File(s"tmp/${id.medium}/peers")

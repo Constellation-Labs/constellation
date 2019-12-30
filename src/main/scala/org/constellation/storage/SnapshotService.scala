@@ -108,14 +108,15 @@ class SnapshotService[F[_]: Concurrent](
         if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else {
           val path = dao.snapshotInfoPath.pathAsString
+          val infoBytes = KryoSerializer.serializeAnyRef(info)
           Resource
             .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
             .use(
               stream =>
                 Sync[F].delay {
-                  stream.write(KryoSerializer.serializeAnyRef(info))
+                  stream.write(infoBytes)
                 }.flatTap { _ =>
-                  logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
+                  logger.warn(s"Writing SnapshotInfo: ${info} in path: ${path} with size: ${infoBytes.size}")
                 }
             )
         }
@@ -127,7 +128,7 @@ class SnapshotService[F[_]: Concurrent](
       s <- snapshot.get
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
-      hashes = dao.snapshotHashes
+      hashes = dao.snapshotHashes.drop(2*ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"))//todo, drop or take? We don't want whole list just up to delay interval
       addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
       snapshotCache <- s.checkpointBlocks.toList
