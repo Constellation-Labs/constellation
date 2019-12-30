@@ -27,13 +27,21 @@ class TransactionChainService[F[_]: Concurrent] {
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
     }
 
-  def setLastTransaction(edge: Edge[TransactionEdgeData], isDummy: Boolean, isTest: Boolean): F[Transaction] = {
-    val address = edge.observationEdge.parents.head.hash
-
+  def setLastTransaction(edge: Edge[TransactionEdgeData], isTest: Boolean): F[Transaction] = {
+    val address = edge.parents.head.hash
     lastTransactionRef.modify { m =>
       val ref = m.getOrElse(address, LastTransactionRef.empty)
-      val tx = Transaction(edge, ref, isDummy, isTest)
+      val tx = Transaction(edge, ref, false, isTest)
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
+    }
+  }
+
+  def checkDummyTransaction(edge: Edge[TransactionEdgeData], isTest: Boolean): F[Transaction] = {
+    val address = edge.parents.head.hash
+    lastTransactionRef.get.map { m =>
+      val ref = m.get(address)
+      assert(ref.isEmpty)
+      Transaction(edge, LastTransactionRef.empty, true, isTest)
     }
   }
 

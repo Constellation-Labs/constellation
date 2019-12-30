@@ -331,7 +331,7 @@ class SnapshotService[F[_]: Concurrent](
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
       for {
         _ <- writeSnapshotToDisk(currentSnapshot)
-//        _ <- writeSnapshotInfoToDisk
+        _ <- writeSnapshotInfoToDisk
         _ <- applyAfterSnapshot(currentSnapshot)
       } yield ()
 

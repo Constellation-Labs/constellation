@@ -94,8 +94,9 @@ object TransactionService {
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
-
-    transactionChainService.setLastTransaction(Edge(oe, soe, txData), dummy, test)
+    val edge = Edge(oe, soe, txData)
+    if (dummy) transactionChainService.checkDummyTransaction(edge, test)
+    else transactionChainService.setLastTransaction(edge, test)
   }
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(

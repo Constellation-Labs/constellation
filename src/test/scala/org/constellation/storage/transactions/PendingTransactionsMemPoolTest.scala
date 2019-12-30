@@ -168,7 +168,7 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
     val soe = signedObservationEdge(oe)(Fixtures.tempKey)
 
     txChainService
-      .setLastTransaction(Edge(oe, soe, txData), isDummy = false, isTest = false)
+      .setLastTransaction(Edge(oe, soe, txData), isTest = false)
       .map(TransactionCacheData(_))
       .unsafeRunSync
   }

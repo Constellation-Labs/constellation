@@ -5,7 +5,7 @@ import org.constellation._
 import org.constellation.consensus._
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, CheckpointEdge}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, CheckpointEdge, Height}
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, Transaction}
@@ -13,27 +13,36 @@ import org.scalatest.FlatSpec
 
 class KryoSerializerTest extends FlatSpec {
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao(
-    nodeConfig =
-      NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
-  )
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+//  implicit val dao: DAO = TestHelpers.prepareRealDao(
+//    nodeConfig =
+//      NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
+//  )
+//  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+//
+//  val genesis = RandomData.go()
+//  def randomCB =
+//    CheckpointBlock
+//      .createCheckpointBlockSOE(Seq.fill(1000)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
+//        Fixtures.tempKey1
+//      )
 
-  val genesis = RandomData.go()
-  def randomCB =
-    CheckpointBlock
-      .createCheckpointBlockSOE(Seq.fill(1000)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
-        Fixtures.tempKey1
-      )
-
-  def transactions100 = Seq.fill[Transaction](100)(Fixtures.tx)
-  val checkpointBlocks = Seq.fill[CheckpointBlock](1000)(randomCB)
-  val snapshot = Snapshot(Fixtures.randomSnapshotHash, checkpointBlocks.map(_.baseHash))
-
-  val snaps = List.fill(3)(
-    StoredSnapshot(Snapshot(Fixtures.randomSnapshotHash, Seq.fill(100)(Fixtures.randomSnapshotHash)), Seq.fill(100)(CheckpointCache(randomCB)))
-  )
-
+//  def transactions100 = Seq.fill[Transaction](100)(Fixtures.tx)
+//  val checkpointBlocks = Seq.fill[CheckpointBlock](1000)(randomCB)
+//  val snapshot = Snapshot(Fixtures.randomSnapshotHash, checkpointBlocks.map(_.baseHash))
+//  val snapshotHashes = Seq.fill[String](10000)(Fixtures.randomSnapshotHash)
+//  val acceptedCBSinceSnapshotCache = Seq.fill(1000)(CheckpointCache(randomCB))
+//` val lastSnapshotHeight = Int.MaxValue
+//  val addressCacheData
+//  val tips = Seq.fill[CheckpointBlock](50)(randomCB).map( cb => (cb.baseHash, TipData(cb, 2, Height(0L, 100000L))))
+//  val lastAcceptedTransactionRef = Seq.fill[String](10000)(Fixtures.tx.hash).map(hash => (hash, LastTransactionRef.empty)).toMap
+//  val loadedSnapshotInfo = SnapshotInfo(
+//    snapshot,
+//    checkpointBlocks.map(_.baseHash),
+//    acceptedCBSinceSnapshotCache,
+//    lastSnapshotHeight,
+//    snapshotHashes,
+//    addressCacheData,
+//  )
 //  case class SnapshotInfo(
 //                           snapshot: Snapshot,
 //                           acceptedCBSinceSnapshot: Seq[String] = Seq(),
