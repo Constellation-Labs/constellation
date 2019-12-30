@@ -24,7 +24,8 @@ class TransactionChainService[F[_]: Concurrent] {
   def acceptTransaction(tx: Transaction): F[Unit] =
     lastAcceptedTransactionRef.modify { m =>
       val address = tx.src.address
-      (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
+      if (tx.isDummy) (m, ())
+      else (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
     }
 
   def setLastTransaction(edge: Edge[TransactionEdgeData], isTest: Boolean): F[Transaction] = {

@@ -374,7 +374,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     )
 
     cb.transactions.toList
-      .filterNot(h => txsHashToFilter.contains(h.hash) || h.isDummy)
+      .filterNot(h => txsHashToFilter.contains(h.hash))
       .map(tx => (tx, toCacheData(tx)))
       .traverse {
         case (tx, txMetadata) => transactionService.accept(txMetadata, cpc) >> transfer(tx)
