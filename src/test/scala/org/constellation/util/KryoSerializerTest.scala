@@ -170,16 +170,20 @@ class KryoSerializerTest extends FlatSpec {
 
 
 
-//  "KryoSerializer" should "serializing within buffer size" in {
-//      val snap = generateSnapshotInfo()
-////      storeSnapshotInfo(snap, InfoPartsDeflateSerializer)
-////    val loadedSnapshotInfo = loadSnapshotInfo(smallInfoParts)
-//    val deSer = Try {KryoSerializer.serializeAnyRef(snap)}
+  "KryoSerializer" should "serializing within buffer size" in {
+      val snap = generateSnapshotInfo()
+//      storeSnapshotInfo(snap, InfoPartsDeflateSerializer)
+//    val loadedSnapshotInfo = loadSnapshotInfo(smallInfoParts)
+    val serializedSnapInfo = Try {KryoSerializer.serializeAnyRef(snap)}
+    val serializedSnapInfoSer = Try {KryoSerializer.serializeAnyRef(EdgeProcessor.toSnapshotInfoSer(snap))}
+    println(s"${serializedSnapInfo.get.size} - serializedSnapInfo.size")
+    println(s"${serializedSnapInfoSer.get.size} - serializedSnapInfoSer.size")
+assert(true)
 //    deSer.map { b =>
 //      SerExt(b).jsonSave(InfoPartsDeflateSerializer + "/snapshot")
 //    }
 //    assert(deSer.isSuccess)
-//  }
+  }
 //
 //  "KryoSerializer" should "fail when serializing beyond buffer size" in {
 ////    val loadedSnapshotInfo = loadSnapshotInfo(lrgInfoParts)

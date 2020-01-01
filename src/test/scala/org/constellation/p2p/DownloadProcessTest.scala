@@ -31,7 +31,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   test("should get majority snapshot when most of the cluster part is responsive") {
     peers.slice(0, 2).map(_._2.client).foreach { c =>
-      c.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn IO.pure(KryoSerializer.serializeAnyRef(EdgeProcessor.toSnapshotInfoSer(snapInfo)))
+      c.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn IO.pure(KryoSerializer.serializeAnyRef(snapInfo))
     }
     peers.last._2.client.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn
       IO.raiseError[Array[Byte]](new Exception("ups"))

@@ -46,7 +46,6 @@ object Fixtures {
         Seq.fill(2)(getRandomTip))(
         Fixtures.tempKey1
       )
-    println(cb)
     cb
   }
 
