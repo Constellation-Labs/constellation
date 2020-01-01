@@ -217,13 +217,41 @@ object EdgeProcessor extends StrictLogging {
       "handleSignatureRequest"
     )(ConstellationExecutionContext.bounded, dao)
 
+
+  def toSnapshotInfoSer(info: SnapshotInfo) = {
+    SnapshotInfoSer(
+      KryoSerializer.serializeAnyRef(info.snapshot),
+      KryoSerializer.serializeAnyRef(info.acceptedCBSinceSnapshot),
+      KryoSerializer.serializeAnyRef(info.acceptedCBSinceSnapshotCache),
+      info.lastSnapshotHeight,
+      KryoSerializer.serializeAnyRef(info.snapshotHashes),
+      KryoSerializer.serializeAnyRef(info.addressCacheData),
+      KryoSerializer.serializeAnyRef(info.tips),
+      KryoSerializer.serializeAnyRef(info.snapshotCache),
+      KryoSerializer.serializeAnyRef(info.lastAcceptedTransactionRef)
+    )
+  }
+
+  def toSnapshotInfo(info: SnapshotInfoSer) = {
+    SnapshotInfo(
+      KryoSerializer.deserializeCast[Snapshot](info.snapshot),
+      KryoSerializer.deserializeCast[Seq[String]](info.acceptedCBSinceSnapshot),
+      KryoSerializer.deserializeCast[Seq[CheckpointCache]](info.acceptedCBSinceSnapshotCache),
+      info.lastSnapshotHeight,
+      KryoSerializer.deserializeCast[Seq[String]](info.snapshotHashes),
+      KryoSerializer.deserializeCast[Map[String, AddressCacheData] ](info.addressCacheData),
+      KryoSerializer.deserializeCast[Map[String, TipData]](info.tips),
+      KryoSerializer.deserializeCast[Seq[CheckpointCache]](info.snapshotCache),
+      KryoSerializer.deserializeCast[Map[String, LastTransactionRef]](info.lastAcceptedTransactionRef)
+    )
+  }
 }
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
 
 case class SnapshotInfo(
   snapshot: Snapshot,
-  acceptedCBSinceSnapshot: Seq[String] = Seq(),
+  acceptedCBSinceSnapshot: Seq[String] = Seq(),//todo remove
   acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
   lastSnapshotHeight: Int = 0,
   snapshotHashes: Seq[String] = Seq(),
@@ -232,6 +260,16 @@ case class SnapshotInfo(
   snapshotCache: Seq[CheckpointCache] = Seq(),
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
 )
+
+case class SnapshotInfoSer(  snapshot: Array[Byte],
+                             acceptedCBSinceSnapshot: Array[Byte],
+                             acceptedCBSinceSnapshotCache: Array[Byte],
+                             lastSnapshotHeight: Int,
+                             snapshotHashes: Array[Byte],
+                             addressCacheData: Array[Byte],
+                             tips: Array[Byte],
+                             snapshotCache: Array[Byte],
+                             lastAcceptedTransactionRef: Array[Byte])
 
 case object GetMemPool
 
@@ -245,19 +283,39 @@ import java.nio.file.{Files, Paths}
 
 object Snapshot extends StrictLogging {
 
+  val maxSnapshotInDir = ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+  var snapshotDir: Long = 0//todo ref?
+  var curSnapshotsInDir = 0//todo ref?
+
+  def getDirFromSnapshotCounter = {
+    println("curSnapshotsInDir"+ curSnapshotsInDir )
+    println("snapshotDirs"+ snapshotDir )
+    if (curSnapshotsInDir >= maxSnapshotInDir) {
+      snapshotDir += 1
+
+      snapshotDir
+    }
+    else {
+      curSnapshotsInDir += 1
+      snapshotDir
+    }
+  }
+
   def writeSnapshot[F[_]: Concurrent](
     storedSnapshot: StoredSnapshot
   )(implicit dao: DAO, C: ContextShift[F]): EitherT[F, Throwable, Path] =
     for {
       serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(storedSnapshot)).attempt)
       write <- EitherT(
-        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized).value)
+        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized//, directory = getDirFromSnapshotCounter
+        ).value)
       )
     } yield write
 
   private def writeSnapshot[F[_]: Concurrent](
     storedSnapshot: StoredSnapshot,
     serialized: Array[Byte],
+//    directory: Long = 0L,
     trialNumber: Int = 0
   )(
     implicit dao: DAO,
@@ -266,12 +324,15 @@ object Snapshot extends StrictLogging {
     trialNumber match {
       case x if x >= 3 => EitherT.leftT[F, Path](new IOException(s"Unable to write snapshot"))
       case _ if isOverDiskCapacity(serialized.length) =>
-        EitherT(removeOldSnapshots().attempt) >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
+        EitherT(removeOldSnapshots().attempt) >> writeSnapshot(storedSnapshot, serialized,
+//          directory,
+          trialNumber + 1)
       case _ =>
         EitherT(
           withMetric(
             Sync[F].delay(
-              Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
+              Files.write(Paths.get(dao.snapshotPath.pathAsString,// + s"/${directory}",
+                storedSnapshot.snapshot.hash), serialized)
             ),
             "writeSnapshot"
           ).attempt
@@ -368,7 +429,7 @@ object Snapshot extends StrictLogging {
     )
 
   def snapshotHashes()(implicit dao: DAO): List[String] =
-    dao.snapshotPath.list.map { _.name }.toList
+    dao.snapshotPath.list.map { _.name }.toList//todo this is duplicated
 
   def findLatestMessageWithSnapshotHash(
     depth: Int,

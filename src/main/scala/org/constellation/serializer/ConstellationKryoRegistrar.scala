@@ -1,24 +1,17 @@
 package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.serializers.{DeflateSerializer, FieldSerializer}
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
-import org.constellation.domain.observation.{
-  CheckpointBlockInvalid,
-  CheckpointBlockWithMissingParents,
-  CheckpointBlockWithMissingSoe,
-  Observation,
-  ObservationData,
-  RequestTimeoutOnConsensus,
-  RequestTimeoutOnResolving,
-  SnapshotMisalignment
-}
+import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationData, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}
 import org.constellation.p2p.SerializedUDPMessage
 import org.constellation.primitives._
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.schema.Id
 import org.constellation.util.{HashSignature, SignatureBatch}
+import com.esotericsoftware.minlog.Log
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
 
@@ -26,16 +19,20 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     this.registerClasses(kryo)
 
   def registerClasses(kryo: Kryo): Unit = {
-
+//    Log.TRACE()
     kryo.register(classOf[ChannelMessageData])
     kryo.register(classOf[SignedData[ChannelMessageData]])
     kryo.register(classOf[ChannelMessage])
     kryo.register(classOf[StoredSnapshot])
-    kryo.register(classOf[SnapshotInfo])
+    kryo.register(classOf[SnapshotInfo], new DeflateSerializer(new FieldSerializer(kryo, classOf[SnapshotInfo])))
+    kryo.register(classOf[SnapshotInfoSer])
     kryo.register(classOf[TipData])
     kryo.register(classOf[Height])
     kryo.register(classOf[CommonMetadata])
-    kryo.register(classOf[Seq[CheckpointBlock]])
+    kryo.register(classOf[Seq[CheckpointBlock]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Seq[CheckpointBlock]])))
+    kryo.register(classOf[Seq[CheckpointCache]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Seq[CheckpointCache]])))
+    kryo.register(classOf[Map[String, LastTransactionRef]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Map[String, LastTransactionRef]])))
+    kryo.register(classOf[Map[String, AddressCacheData]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Map[String, AddressCacheData]])))
     kryo.register(classOf[Address])
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])
@@ -52,7 +49,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointBlock])
     kryo.register(classOf[TypedEdgeHash])
     //  kryo.register(classOf[EdgeHashType])
-    kryo.register(classOf[Enumeration#Value])
+    kryo.register(classOf[Enumeration#Value])//todo: EnumNameSerializer?
     kryo.register(classOf[TransactionEdgeData])
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])

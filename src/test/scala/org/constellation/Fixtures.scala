@@ -8,10 +8,11 @@ import cats.effect.{ContextShift, IO}
 import com.google.common.hash.Hashing
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.consensus.RandomData
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema.SendToAddress
+import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
-import org.constellation.primitives.Transaction
+import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.schema.Id
 import org.constellation.util.{APIClient, SignHelp}
 
@@ -29,6 +30,25 @@ object Fixtures {
     TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
   def randomSnapshotHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
+
+  def transactions100 = Seq.fill[Transaction](1000)(Fixtures.tx)
+
+  def getRandomTip: SignedObservationEdge = {
+    val oe = ObservationEdge(Seq.fill[TypedEdgeHash](2)
+      (TypedEdgeHash(Fixtures.randomSnapshotHash, EdgeHashType.CheckpointHash)),
+      TypedEdgeHash(Fixtures.randomSnapshotHash, EdgeHashType.CheckpointHash))
+    signedObservationEdge(oe)(Fixtures.kp)
+  }
+
+  def randomCB(numTx: Int = 100) = {
+    val cb = CheckpointBlock
+      .createCheckpointBlockSOE(Seq.fill(numTx)(RandomData.randomTransaction),
+        Seq.fill(2)(getRandomTip))(
+        Fixtures.tempKey1
+      )
+    println(cb)
+    cb
+  }
 
   val tempKey: KeyPair = KeyUtils.makeKeyPair()
   val tempKey1: KeyPair = KeyUtils.makeKeyPair()

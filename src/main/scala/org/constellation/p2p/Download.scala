@@ -230,9 +230,28 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     makeAttempt(peers.values.toList).map(deserializeSnapshotInfo)
   }
 
+//  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
+//    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
+//      case Success(value) => value
+//      case Failure(exception) =>
+//        throw new Exception(
+//          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
+//          exception
+//        )
+//    }
+
+
   private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
-      case Success(value) => value
+    Try{
+      val snapInfoSer = KryoSerializer.deserializeCast[SnapshotInfoSer](byteArray)
+      Sync[F].delay(logger.warn(s"deserializeSnapshotInfoRef Success for snapshot height: ${snapInfoSer.lastSnapshotHeight}"))
+      val snapInfo = EdgeProcessor.toSnapshotInfo(snapInfoSer)
+      Sync[F].delay(logger.warn(s"deserializeSnapshotInfo Success for snapshot hash: ${snapInfo.snapshot.hash}"))
+      snapInfo
+    } match {
+      case Success(value: SnapshotInfo) =>
+        Sync[F].delay(logger.warn(s"deserializeSnapshotInfo Success for snapshot height: ${value.snapshot.hash}"))
+        value
       case Failure(exception) =>
         throw new Exception(
           s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
