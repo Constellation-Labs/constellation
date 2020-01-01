@@ -357,13 +357,13 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 //                      val snapshotInfoSer = EdgeProcessor.toSnapshotInfoSer(snapshotInfo)
                       val serialziedSnapshot = KryoSerializer.serializeAnyRef(snapshotInfo).some
 
-                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef for snapshotInfo contains: " +
+                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef snapshotInfo of hash ${info.snapshot.hash} contains: " +
                         s"acceptedCBSinceSnapshot ifo - ${snapshotInfo.acceptedCBSinceSnapshot.length} " +
 //                        s"acceptedCBSinceSnapshot SER - ${snapshotInfoSer.acceptedCBSinceSnapshot.length} " +
                       s"snapshotHashes ifo - ${snapshotInfo.snapshotHashes.length}" +
                         s"snapshotCache ifo - ${snapshotInfo.snapshotCache.length}" +
 //                        s"snapshotCache SER - ${snapshotInfoSer.snapshotCache.length}" +
-                        s"with size ${serialziedSnapshot.size}")
+                        s"with size ${serialziedSnapshot.get.size}")
 //                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef for snapshotInfo: ${snapshotInfo} with size ${serialziedSnapshot.size}")
                       serialziedSnapshot
                   }
