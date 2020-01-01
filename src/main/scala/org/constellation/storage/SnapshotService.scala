@@ -104,7 +104,7 @@ class SnapshotService[F[_]: Concurrent](
 
   def writeSnapshotInfoToDisk: EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
-      getSnapshotInfoWithFullData.flatMap { info =>
+      getSnapshotInfoWithFullData.flatMap { info => //todo, remove accepted cp hashes since this snapshot
         if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else {
           val path = dao.snapshotInfoPath.pathAsString
@@ -116,7 +116,7 @@ class SnapshotService[F[_]: Concurrent](
                 Sync[F].delay {
                   stream.write(infoBytes)
                 }.flatTap { _ =>
-                  logger.warn(s"Writing SnapshotInfo: ${info} in path: ${path} with size: ${infoBytes.size}")
+                  logger.warn(s"Writing SnapshotInfo in path: ${path} with size: ${infoBytes.size}")
                 }
             )
         }
