@@ -6,6 +6,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.primitives.Schema.{Address, AddressCacheData}
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
+import org.constellation.schema.Id
 
 class AddressService[F[_]: Concurrent]() {
 
@@ -39,10 +40,10 @@ class AddressService[F[_]: Concurrent]() {
     }
 
 
-  def addBalances(addition: Map[String, Long]): F[List[AddressCacheData]] = {
-    locks.acquire(addition.keys.toList) {
+  def addBalances(addition: Map[Id, Long]): F[List[AddressCacheData]] = {
+    locks.acquire(addition.keys.toList.map(_.address)) {
       addition.toList.traverse {
-        case (address, balance) => memPool.update(address, a => a.copy(balance = a.balance + balance), AddressCacheData(balance, balance))
+        case (id, balance) => memPool.update(id.address, a => a.copy(balance = a.balance + balance), AddressCacheData(balance, balance))
       }
     }
   }

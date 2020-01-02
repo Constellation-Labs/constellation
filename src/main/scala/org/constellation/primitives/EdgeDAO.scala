@@ -190,7 +190,7 @@ trait EdgeDAO {
   var consensusScheduler: ConsensusScheduler = _
   var trustDataPollingScheduler: TrustDataPollingScheduler = _
   var eigenTrust: EigenTrust[IO] = _
-  var rewards: RewardsManager[IO] = _
+  var rewardsManager: RewardsManager[IO] = _
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
 
   val notificationService = new NotificationService[IO]()

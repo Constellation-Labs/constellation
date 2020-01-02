@@ -19,6 +19,7 @@ import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
+import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
@@ -37,6 +38,7 @@ class SnapshotService[F[_]: Concurrent](
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
   soeService: SOEService[F],
+  rewardsManager: RewardsManager[F],
   snapshotStorage: SnapshotStorage[F],
   dao: DAO
 )(implicit C: ContextShift[F], P: Parallel[F]) {
@@ -53,7 +55,6 @@ class SnapshotService[F[_]: Concurrent](
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
-  val snapshotHeightRedownloadDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
 
   val recentSnapshotInfo: Ref[F, Option[SnapshotInfoSer]] = Ref.unsafe(None)
 
@@ -101,6 +102,8 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(snapshot.set(nextSnapshot))
 
       _ <- EitherT.liftF(removeLeavingPeers())
+
+      _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
 
       created <- EitherT.liftF(
         trustManager.getPredictedReputation.map(
@@ -543,6 +546,7 @@ object SnapshotService {
     trustManager: TrustManager[F],
     soeService: SOEService[F],
     snapshotStorage: SnapshotStorage[F],
+    rewardsManager: RewardsManager[F],
     dao: DAO
   )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
@@ -558,6 +562,7 @@ object SnapshotService {
       trustManager,
       soeService,
       snapshotStorage,
+      rewardsManager,
       dao
     )
 }

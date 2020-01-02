@@ -175,6 +175,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
 
+    eigenTrust = new EigenTrust[IO](trustManager)
+    rewardsManager = new RewardsManager[IO](
+      eigenTrust = eigenTrust,
+      checkpointService = checkpointService,
+      addressService = addressService,
+    )
+
     snapshotService = SnapshotService[IO](
       concurrentTipService,
       cloudStorage,
@@ -188,6 +195,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       trustManager,
       soeService,
       snapshotStorage,
+      rewardsManager,
       this
     )
 
@@ -293,9 +301,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       IO.contextShift(ConstellationExecutionContext.bounded),
       ConstellationExecutionContext.unbounded
     )
-
-    eigenTrust = new EigenTrust[IO](trustManager)
-    rewards = new RewardsManager[IO](eigenTrust, checkpointService, addressService, snapshotBroadcastService)
   }
 
   def unsafeShutdown(): Unit = {

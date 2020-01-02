@@ -93,13 +93,13 @@ class EigenTrust[F[_]: Concurrent](
   def registerAgent(id: Id): F[Unit] =
     agents
       .modify(a => (a.registerAgent(id), a))
-      .flatTap(agents => logger.debug(s"Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id)}"))
+      .flatTap(agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id)}"))
       .void
 
   def unregisterAgent(id: Id): F[Unit] =
     agents
       .modify(a => (a.unregisterAgent(id), a))
-      .flatTap(_ => logger.debug(s"Unregistered EigenTrust agent: ${id.address}"))
+      .flatTap(_ => logger.debug(s"[EigenTrust] Unregistered EigenTrust agent: ${id.address}"))
       .void
 
   def seed(trustEdges: Seq[TrustEdge]): F[Unit] = Concurrent[F].delay {
@@ -159,9 +159,9 @@ class EigenTrust[F[_]: Concurrent](
       .toMap
       .mapValues(_.toDouble)
 
-  def getTrustForAddressHashes: F[Map[String, Double]] =
+  def getTrustForIds: F[Map[Id, Double]] =
     getAgents().map { a =>
-      getTrust.map { case (int, trust) => (a.getUnsafe(int).address, trust) }
+      getTrust.map { case (int, trust) => (a.getUnsafe(int), trust) }
     }
 
   /**
