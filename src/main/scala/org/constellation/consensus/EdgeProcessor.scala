@@ -324,7 +324,7 @@ object Snapshot extends StrictLogging {
     snapshotsHash.traverse(hash => Sync[F].delay(File(snapshotPath, hash)))
 
   private def shouldSendSnapshotsToCloud(snapshotsPath: String): Boolean =
-    ConfigUtil.getOrElse("constellation.storage.enabled", default = false)
+    ConfigUtil.isEnabledCloudStorage
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
     val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
