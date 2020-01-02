@@ -155,6 +155,15 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       "download_reDownload"
     )
 
+  def testSnapInfoSer(): F[SnapshotInfo] =
+    logThread(
+      for {
+        peers <- getReadyPeers()
+        majoritySnapshot <- getMajoritySnapshot(peers)
+      } yield majoritySnapshot,
+      "testSnapInfoSer"
+    )
+
   def download(): F[Unit] =
     logThread(
       for {
@@ -207,19 +216,20 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
-  private[p2p] def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] = {
+//  private[p2p]
+  def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] = {
 
-    def makeAttempt(clients: List[PeerData]): F[Array[Byte]] =
+    def makeAttempt(clients: List[PeerData]): F[SnapshotInfoSer] =
       clients match {
         case Nil =>
-          Sync[F].raiseError[Array[Byte]](
+          Sync[F].raiseError[SnapshotInfoSer](
             new Exception(
               s"[${dao.id.short}] Unable to get majority snapshot run out of peers, peers size ${peers.size}"
             )
           )
         case head :: tail =>
           head.client
-            .getNonBlockingArrayByteF("snapshot/info", timeout = 8.seconds)(C)
+            .getNonBlockingF[F, SnapshotInfoSer]("snapshot/info", timeout = 8.seconds)(C)
             .handleErrorWith(e => {
               Sync[F]
                 .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
@@ -230,15 +240,26 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     makeAttempt(peers.values.toList).map(deserializeSnapshotInfo)
   }
 
-  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
+  private def deserializeSnapshotInfo(snapshotInfoSer: SnapshotInfoSer) =
+    Try(EdgeProcessor.toSnapshotInfo(snapshotInfoSer)) match {
       case Success(value) => value
       case Failure(exception) =>
         throw new Exception(
-          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
+          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with acceptedCBSinceSnapshot.size=${snapshotInfoSer.lastSnapshotHeight}",
           exception
         )
     }
+
+
+//  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
+//    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
+//      case Success(value) => value
+//      case Failure(exception) =>
+//        throw new Exception(
+//          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
+//          exception
+//        )
+//    }
 
 
 //  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
@@ -354,6 +375,20 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
 object Download extends StrictLogging {
 
+  def  getMajoritySnapshotTest()(implicit dao: DAO, ec: ExecutionContext) = {
+    tryWithMetric(
+      {
+        implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
+        implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+        val snapshotsProcessor =
+          new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
+        val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster, dao.checkpointAcceptanceService)
+        process.testSnapInfoSer()
+      },
+      "getMajoritySnapshotTest"
+    )
+  }
+
   // TODO: Remove Try/Future and make it properly chainable
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
     if (dao.nodeType == NodeType.Full) {
@@ -381,7 +416,7 @@ object Download extends StrictLogging {
                           logger.warn(
                             s"Download process error. Trying to set state back to ${oldState}. Result: ${recoverState}"
                           )
-                        )
+                      )
                     )
                 }
                 download.flatMap(
@@ -394,8 +429,8 @@ object Download extends StrictLogging {
                             logger.warn(
                               s"Download process finished. Trying to set state to ${NodeState.Ready}. Result: ${recoverState}"
                             )
-                          )
-                      )
+                        )
+                    )
                 )
               case SetStateResult(oldState, _) =>
                 IO.delay(

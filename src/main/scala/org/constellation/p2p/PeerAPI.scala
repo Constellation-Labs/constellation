@@ -354,18 +354,18 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   }.map{
                     cbs =>
                     val snapshotInfo = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)
-//                      val snapshotInfoSer = EdgeProcessor.toSnapshotInfoSer(snapshotInfo)
-                      val serialziedSnapshot = KryoSerializer.serializeAnyRef(snapshotInfo).some
+                      val snapshotInfoSer = EdgeProcessor.toSnapshotInfoSer(snapshotInfo)
+//                      val serialziedSnapshot = KryoSerializer.serializeAnyRef(snapshotInfo).some
 
                       logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef snapshotInfo of hash ${info.snapshot.hash} contains: " +
                         s"acceptedCBSinceSnapshot ifo - ${snapshotInfo.acceptedCBSinceSnapshot.length} " +
-//                        s"acceptedCBSinceSnapshot SER - ${snapshotInfoSer.acceptedCBSinceSnapshot.length} " +
+                        s"acceptedCBSinceSnapshot SER - ${snapshotInfoSer.acceptedCBSinceSnapshot.length} " +
                       s"snapshotHashes ifo - ${snapshotInfo.snapshotHashes.length}" +
                         s"snapshotCache ifo - ${snapshotInfo.snapshotCache.length}" +
-//                        s"snapshotCache SER - ${snapshotInfoSer.snapshotCache.length}" +
-                        s"with size ${serialziedSnapshot.get.size}")
+                        s"snapshotCache SER - ${snapshotInfoSer.snapshotCache.length}")
+//                        s"with size ${serialziedSnapshot.get.size}")
 //                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef for snapshotInfo: ${snapshotInfo} with size ${serialziedSnapshot.size}")
-                      serialziedSnapshot
+                        snapshotInfoSer
                   }
                 }
             )

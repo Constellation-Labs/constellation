@@ -23,6 +23,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import constellation._
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
@@ -108,13 +109,13 @@ class SnapshotService[F[_]: Concurrent](
         if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else {
           val path = dao.snapshotInfoPath.pathAsString
-          val infoBytes = KryoSerializer.serializeAnyRef(info)
+          val infoBytes = EdgeProcessor.toSnapshotInfoSer(info).toString.getBytes
           Resource
             .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
             .use(
               stream =>
                 Sync[F].delay {
-                  stream.write(infoBytes)
+//                  stream.write(infoBytes)
                 }.flatTap { _ =>
                   logger.warn(s"Writing SnapshotInfo in path: ${path} with size: ${infoBytes.size}")
                 }
@@ -128,7 +129,7 @@ class SnapshotService[F[_]: Concurrent](
       s <- snapshot.get
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
-      hashes = dao.snapshotHashes.drop(2*ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"))//todo, drop or take? We don't want whole list just up to delay interval
+      hashes = dao.snapshotHashes//.drop(2*ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"))//todo, drop or take? We don't want whole list just up to delay interval
       addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
       snapshotCache <- s.checkpointBlocks.toList

@@ -1,6 +1,6 @@
 package org.constellation.p2p
 import cats.effect.IO
-import org.constellation.consensus.{EdgeProcessor, Snapshot, SnapshotInfo}
+import org.constellation.consensus.{EdgeProcessor, Snapshot, SnapshotInfo, SnapshotInfoSer}
 import org.constellation.primitives.Schema
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
@@ -31,7 +31,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   test("should get majority snapshot when most of the cluster part is responsive") {
     peers.slice(0, 2).map(_._2.client).foreach { c =>
-      c.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn IO.pure(KryoSerializer.serializeAnyRef(snapInfo))
+      c.getNonBlockingF[IO, SnapshotInfoSer](*, *, *)(*)(*, *, *) shouldReturn IO.pure(EdgeProcessor.toSnapshotInfoSer(snapInfo))
     }
     peers.last._2.client.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn
       IO.raiseError[Array[Byte]](new Exception("ups"))
@@ -41,7 +41,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   test("should fail to get majority snapshot when all of the cluster members is unresponsive") {
     peers.slice(0, 2).map(_._2.client).foreach { c =>
-      c.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn IO.raiseError[Array[Byte]](new Exception("ups"))
+      c.getNonBlockingF[IO, SnapshotInfoSer](*, *, *)(*)(*, *, *) shouldReturn IO.raiseError[SnapshotInfoSer](new Exception("ups"))
     }
 
     assertThrows[Exception] {

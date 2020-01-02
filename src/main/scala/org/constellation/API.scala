@@ -146,6 +146,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
           } ~
+          path("snapshotInfo") {
+            val downloadedMajority = Download.getMajoritySnapshotTest()(dao, ConstellationExecutionContext.bounded)
+            val io = downloadedMajority.get
+
+            APIDirective.handle(io)(complete(_))
+          }~
           pathPrefix("data") {
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
