@@ -217,7 +217,7 @@ object Simulation {
             s =>
               s.forall { res =>
                 res.forall(_._2) && res.size == apis.size - 1
-            }
+              }
           )
       },
       maxRetries,
