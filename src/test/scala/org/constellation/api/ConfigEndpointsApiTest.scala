@@ -12,7 +12,7 @@ import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
 import org.constellation.util.Metrics
-import org.constellation.{API, DAO}
+import org.constellation.{API, BuildInfo, DAO}
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -78,6 +78,21 @@ class ConfigEndpointsApiTest
       Delete("/checkpointFormation") ~> api.configEndpoints ~> check {
         status.isSuccess() shouldEqual true
         dao.disableCheckpointFormation().wasCalled(once)
+      }
+    }
+  }
+
+  "BuildInfo Endpoints" - {
+    "should return full build info" in {
+      Get("/buildInfo") ~> api.getEndpoints ~> check {
+        status.isSuccess() shouldEqual true
+      }
+    }
+
+    "should return only git commit hash" in {
+      Get("/buildInfo/gitCommit") ~> api.getEndpoints ~> check {
+        status.isSuccess() shouldEqual true
+        responseAs[String] shouldEqual BuildInfo.gitCommit
       }
     }
   }

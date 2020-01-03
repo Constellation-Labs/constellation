@@ -328,8 +328,15 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(res)
             }
           } ~
-          path("buildInfo") {
-            complete(BuildInfo.toMap)
+          pathPrefix("buildInfo") {
+            concat(
+              pathEnd {
+                complete(BuildInfo.toMap)
+              },
+              path("gitCommit") {
+                complete(BuildInfo.gitCommit)
+              }
+            )
           } ~
           path("metrics") {
             val response = MetricsResult(

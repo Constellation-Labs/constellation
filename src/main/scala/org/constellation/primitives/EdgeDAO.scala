@@ -15,7 +15,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.p2p.Cluster
+import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.{
   TransactionChainService,
@@ -187,6 +187,7 @@ trait EdgeDAO {
   var consensusWatcher: ConsensusWatcher = _
   var consensusScheduler: ConsensusScheduler = _
   var trustDataPollingScheduler: TrustDataPollingScheduler = _
+  var joiningPeerValidator: JoiningPeerValidator[IO] = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()

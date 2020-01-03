@@ -9,6 +9,7 @@ import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation._
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
@@ -22,7 +23,6 @@ import org.constellation.rollback.{
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, PeerMetadata}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -52,7 +52,11 @@ object PeerState extends Enumeration {
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
-class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], dao: DAO)(
+class Cluster[F[_]: Concurrent: Timer: ContextShift](
+  ipManager: IPManager[F],
+  joiningPeerValidator: JoiningPeerValidator[F],
+  dao: DAO
+)(
   implicit C: ContextShift[F]
 ) {
   private val initialState: NodeState =
@@ -230,14 +234,14 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
         isSelfId = dao.id == request.id
         badAttempt = isSelfId || !validExternalHost || existsNotOffline
 
-        validBalance <- if (isJoiningPeer && !badAttempt)
-          checkBalanceJoiningPeer(APIClient(request.host, request.port - 1)(dao.backend, dao))
+        isValid <- if (isJoiningPeer)
+          joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
         else Sync[F].pure(true)
 
         _ <- if (badAttempt) {
           dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
-        } else if (!validBalance) {
-          dao.metrics.incrementMetricAsync[F]("peerWithInsufficientBalanceAdditionAttempt")
+        } else if (!isValid) {
+          dao.metrics.incrementMetricAsync[F]("invalidPeerAdditionAttempt")
         } else {
           val client = APIClient(request.host, request.port)(dao.backend, dao)
           val authSignRequest = PeerAuthSignRequest(Random.nextLong())
@@ -286,19 +290,6 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
       } yield (),
       "cluster_pendingRegistration"
     )
-
-  def checkBalanceJoiningPeer(client: APIClient): F[Boolean] =
-    client
-      .getStringF("selfAddress")(C)
-      .flatMap(
-        address => client.getStringF(s"balance/${address.body.getOrElse("")}")(C)
-      )
-      .map(_.body.getOrElse("0L").toLong > stakingAmount)
-      .flatTap(b => logger.info(s"Checking balance for joining peers : ${client.hostName} : is valid=$b"))
-      .handleErrorWith(
-        error =>
-          logger.info(s"Cannot get balance for joining peer : ${client.hostName} : $error") >> Sync[F].pure(false)
-      )
 
   def deregister(ip: String, port: Int, id: Id): F[Unit] =
     logThread(
@@ -651,8 +642,13 @@ object Cluster {
 
   type Peers = Map[Id, PeerData]
 
-  def apply[F[_]: Concurrent: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
-    new Cluster(ipManager, dao)
+  def apply[F[_]: Concurrent: Timer: ContextShift](
+    metrics: () => Metrics,
+    ipManager: IPManager[F],
+    joiningPeerValidator: JoiningPeerValidator[F],
+    dao: DAO
+  ) =
+    new Cluster(ipManager, joiningPeerValidator, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
 
