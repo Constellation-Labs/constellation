@@ -104,8 +104,8 @@ class SnapshotServiceTest
       val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
       val cbs = Seq(CheckpointCache(cb1, 0, None), CheckpointCache(cb2, 0, None))
 
-      val snapshot = Snapshot("lastSnapHash", cbs.map(_.checkpointBlock.baseHash))
-      val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
+      val snapshot = Snapshot("lastSnapHash", cbs.map(_.checkpointBlock.baseHash).toArray)
+      val info: SnapshotInfo = SnapshotInfo(snapshot.lastSnapshot, snapshot.checkpointBlocks, snapshotCache = cbs)
       snapshotService.setSnapshot(info).unsafeRunSync()
       snapshotService.applySnapshot().value.unsafeRunSync()
 

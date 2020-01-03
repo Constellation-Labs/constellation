@@ -229,7 +229,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           )
         case head :: tail =>
           head.client
-            .getNonBlockingF[F, SnapshotInfoSer]("snapshot/info", timeout = 8.seconds)(C)
+            .getNonBlockingF[F, SnapshotInfoSer]("snapshot/info", timeout = 12.seconds)(C)
             .handleErrorWith(e => {
               Sync[F]
                 .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
@@ -383,7 +383,7 @@ object Download extends StrictLogging {
         val snapshotsProcessor =
           new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
         val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster, dao.checkpointAcceptanceService)
-        process.testSnapInfoSer()
+        process.testSnapInfoSer().map(t => "getMajoritySnapshotTest")//.map(EdgeProcessor.toSnapshotInfoSer(_))
       },
       "getMajoritySnapshotTest"
     )

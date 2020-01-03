@@ -72,6 +72,7 @@ object RandomData {
           SnapshotInfo(
             snapshot,
             cb.map(_.baseHash),
+            cb.map(_.baseHash),
             Seq(),
             1,
             Seq(),

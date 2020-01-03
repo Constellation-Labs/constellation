@@ -19,7 +19,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     this.registerClasses(kryo)
 
   def registerClasses(kryo: Kryo): Unit = {
-//    Log.TRACE()
+    Log.ERROR
     kryo.register(classOf[ChannelMessageData])
     kryo.register(classOf[SignedData[ChannelMessageData]])
     kryo.register(classOf[ChannelMessage])
@@ -29,16 +29,18 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[TipData])
     kryo.register(classOf[Height])
     kryo.register(classOf[CommonMetadata])
-//    kryo.register(classOf[scala.collection.mutable.ArrayBuffer])
-    kryo.register(classOf[Seq[CheckpointBlock]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Seq[CheckpointBlock]])))
-    kryo.register(classOf[Seq[CheckpointCache]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Seq[CheckpointCache]])))
-    kryo.register(classOf[Seq[(String, LastTransactionRef)]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Seq[(String, LastTransactionRef)]])))
-    kryo.register(classOf[Seq[(String, AddressCacheData)]], new DeflateSerializer(new FieldSerializer(kryo, classOf[Seq[(String, AddressCacheData)]])))
-    kryo.register(classOf[Address])
+//    kryo.register(classOf[Seq.GenericCanBuildFrom[_]])
+    kryo.register(classOf[Array[CheckpointBlock]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[CheckpointBlock]])))
+    kryo.register(classOf[Array[CheckpointCache]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[CheckpointCache]])))
+    kryo.register(classOf[Array[(String, LastTransactionRef)]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[(String, LastTransactionRef)]])))
+    kryo.register(classOf[Array[(String, AddressCacheData)]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[(String, AddressCacheData)]])))
+    kryo.register(classOf[Array[String]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[String]])))
+    kryo.register(classOf[Address])//
+    kryo.register(classOf[Int])//
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[TransactionCacheData])
-    kryo.register(classOf[CheckpointCache])
+    kryo.register(classOf[CheckpointCache], new DeflateSerializer(new FieldSerializer(kryo, classOf[CheckpointCache])))
     kryo.register(classOf[Transaction])
     kryo.register(classOf[TransactionGossip])
     kryo.register(classOf[Edge[TransactionEdgeData]])
@@ -53,7 +55,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Enumeration#Value])//todo: EnumNameSerializer?
     kryo.register(classOf[TransactionEdgeData])
     kryo.register(classOf[CheckpointEdgeData])
-    kryo.register(classOf[Snapshot], new DeflateSerializer(new FieldSerializer(kryo, classOf[Snapshot])))
+    kryo.register(classOf[Snapshot])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Snapshot])))
+//    kryo.register(classOf[Array[Snapshot]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[Snapshot]])))
     kryo.register(classOf[GenesisObservation])
     kryo.register(classOf[LastTransactionRef])
     kryo.register(classOf[ObservationData])
@@ -71,6 +74,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Id])
 
     kryo.register(classOf[Array[Byte]])
+    kryo.register(classOf[String])
 
     kryo.register(classOf[AddressMetaData])
 

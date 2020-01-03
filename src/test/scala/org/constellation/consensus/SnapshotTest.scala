@@ -24,7 +24,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
 
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =
-      StoredSnapshot(Snapshot(randomSnapshotHash, Seq.fill(50)(randomSnapshotHash)), Seq.fill(50)(CheckpointCache(randomCB)))
+      StoredSnapshot(Snapshot(randomSnapshotHash, Array.fill(50)(randomSnapshotHash)), Seq.fill(50)(CheckpointCache(randomCB)))
     Snapshot.writeSnapshot[IO](ss).value.unsafeRunSync()
     Snapshot
       .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash), dao.snapshotPath.pathAsString)
@@ -33,7 +33,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
 
   test("should remove old snapshots but not recent when needed") {
     val snaps = List.fill(3)(
-      StoredSnapshot(Snapshot(randomSnapshotHash, Seq.fill(50)(randomSnapshotHash)), Seq.fill(50)(CheckpointCache(randomCB)))
+      StoredSnapshot(Snapshot(randomSnapshotHash, Array.fill(50)(randomSnapshotHash)), Seq.fill(50)(CheckpointCache(randomCB)))
     )
 
     dao.snapshotBroadcastService

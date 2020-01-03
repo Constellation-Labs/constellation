@@ -40,7 +40,7 @@ class KryoSerializerTest extends FlatSpec {
                            delayinterval: Int = 30) = {
     val checkpointBlocks = Seq.fill[CheckpointBlock](numCheckpointBlocks)(randomCB())
     println("checkpointBlocks")
-    val snapshot = Snapshot(Fixtures.randomSnapshotHash, checkpointBlocks.map(_.baseHash))
+    val snapshot = Snapshot(Fixtures.randomSnapshotHash, checkpointBlocks.map(_.baseHash).toArray)
     println("snapshot")
     val snapshotHashes = Seq.fill[String](2*delayinterval)(Fixtures.randomSnapshotHash)
     val acceptedCBSinceSnapshotCache = Seq.fill(numAcceptedCBSinceSnapshotCache)(CheckpointCache(randomCB()))//todo, remove CheckpointCache, size diff huge 95095683 vs 67001 with acceptedCBSinceSnapshot
@@ -53,7 +53,8 @@ class KryoSerializerTest extends FlatSpec {
     val snapshotCache = acceptedCBSinceSnapshotCache ++ acceptedCBSinceSnapshotCache//todo same here with snapshotCache as above
     println("snapshotCache")
     val loadedSnapshotInfo = SnapshotInfo(
-      snapshot,
+      snapshot.lastSnapshot,
+      snapshot.checkpointBlocks,
       checkpointBlocks.map(_.baseHash),//todo 5156 matches before crash
       acceptedCBSinceSnapshotCache,
       lastSnapshotHeight,
@@ -154,7 +155,8 @@ class KryoSerializerTest extends FlatSpec {
     println("lastAcceptedTransactionRef")
 
     SnapshotInfo(
-      snapshot,
+      snapshot.lastSnapshot,
+      snapshot.checkpointBlocks,
       acceptedCBSinceSnapshot,
       acceptedCBSinceSnapshotCache,
       lastSnapshotHeight,
@@ -171,12 +173,16 @@ class KryoSerializerTest extends FlatSpec {
 
 
   "KryoSerializer" should "serializing within buffer size" in {
-      val snap = generateSnapshotInfo(100, 100)
+      val snap = generateSnapshotInfo(1000, 1000)
 //      storeSnapshotInfo(snap, InfoPartsDeflateSerializer)
 //    val loadedSnapshotInfo = loadSnapshotInfo(smallInfoParts)
 //    val serializedSnapInfo = Try {KryoSerializer.serializeAnyRef(snap)}
-    val serializedSnapInfoSer100 = Try {EdgeProcessor.toSnapshotInfoSer(snap, 100)}.get
-    val serializedSnapInfoSer500 = Try {EdgeProcessor.toSnapshotInfoSer(snap, 500)}
+    val serializedSnapInfoSer100 = Try {EdgeProcessor.toSnapshotInfoSer(snap)}.get
+    val serializedSnapInfoSer100Ser = KryoSerializer.serializeAnyRef(serializedSnapInfoSer100)
+    println(s"serializedSnapInfoSer100Ser: ${serializedSnapInfoSer100Ser.size}")
+    println(s"serializedSnapInfoSer100: ${serializedSnapInfoSer100.json.getBytes.size}")
+
+    //    val serializedSnapInfoSer500 = Try {EdgeProcessor.toSnapshotInfoSer(snap, 500)}
 
     println(s"serializedSnapInfoSer100 - ${serializedSnapInfoSer100.snapshot.size} - snapshot.size")
     println(s"serializedSnapInfoSer100 - ${serializedSnapInfoSer100.acceptedCBSinceSnapshot.map(_.size).toList} - acceptedCBSinceSnapshot.size")
@@ -187,19 +193,21 @@ class KryoSerializerTest extends FlatSpec {
     println(s"serializedSnapInfoSer100 - ${serializedSnapInfoSer100.lastAcceptedTransactionRef.map(_.size).toList} - lastAcceptedTransactionRef.size")
 
 
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.snapshot.size} - snapshot.size")
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.acceptedCBSinceSnapshot.map(_.size).toList} - acceptedCBSinceSnapshot.size")
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.acceptedCBSinceSnapshotCache.map(_.size).toList} - acceptedCBSinceSnapshotCache.size")
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.snapshotHashes.map(_.size).toList} - snapshotHashes.size")
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.addressCacheData.map(_.size).toList} - addressCacheData.size")
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.snapshotCache.map(_.size).toList} - snapshotCache.size")
-    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.lastAcceptedTransactionRef.map(_.size).toList} - lastAcceptedTransactionRef.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.snapshot.size} - snapshot.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.acceptedCBSinceSnapshot.map(_.size).toList} - acceptedCBSinceSnapshot.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.acceptedCBSinceSnapshotCache.map(_.size).toList} - acceptedCBSinceSnapshotCache.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.snapshotHashes.map(_.size).toList} - snapshotHashes.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.addressCacheData.map(_.size).toList} - addressCacheData.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.snapshotCache.map(_.size).toList} - snapshotCache.size")
+//    println(s"serializedSnapInfoSer500 - ${serializedSnapInfoSer500.get.lastAcceptedTransactionRef.map(_.size).toList} - lastAcceptedTransactionRef.size")
 
-    val deSerializedSnapInfoSer100 = EdgeProcessor.toSnapshotInfo(serializedSnapInfoSer100)
-    val deSerializedSnapInfoSer500 = EdgeProcessor.toSnapshotInfo(serializedSnapInfoSer500.get)
+    val deSerializedSnapInfoSer100 = Try {KryoSerializer.deserializeCast[SnapshotInfoSer](serializedSnapInfoSer100Ser)}
+    val snI = EdgeProcessor.toSnapshotInfo(deSerializedSnapInfoSer100.get)
+
+//    val deSerializedSnapInfoSer500 = EdgeProcessor.toSnapshotInfo(serializedSnapInfoSer500.get)
 
     //toSnapshotInfoSer
-    assert(deSerializedSnapInfoSer100.snapshot.hash == snap.snapshot.hash)// == deSerializedSnapInfoSer500)
+    assert(snI.snapshot == snap.snapshot)// == deSerializedSnapInfoSer500)
 
     //    deSer.map { b =>
 //      SerExt(b).jsonSave(InfoPartsDeflateSerializer + "/snapshot")

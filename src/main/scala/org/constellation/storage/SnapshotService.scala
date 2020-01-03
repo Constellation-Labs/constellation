@@ -109,7 +109,7 @@ class SnapshotService[F[_]: Concurrent](
         if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else {
           val path = dao.snapshotInfoPath.pathAsString
-          val infoBytes = EdgeProcessor.toSnapshotInfoSer(info).toString.getBytes
+//          val infoBytes = EdgeProcessor.toSnapshotInfoSer(info).toString.getBytes
           Resource
             .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
             .use(
@@ -117,7 +117,7 @@ class SnapshotService[F[_]: Concurrent](
                 Sync[F].delay {
 //                  stream.write(infoBytes)
                 }.flatTap { _ =>
-                  logger.warn(s"Writing SnapshotInfo in path: ${path} with size: ${infoBytes.size}")
+                  logger.warn(s"Writing SnapshotInfo in path: ${path} with size:")
                 }
             )
         }
@@ -139,7 +139,8 @@ class SnapshotService[F[_]: Concurrent](
       lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
     } yield
       SnapshotInfo(
-        s,
+        s.lastSnapshot,
+        s.checkpointBlocks,
         accepted,
         lastSnapshotHeight = lastHeight,
         snapshotHashes = hashes,
@@ -163,7 +164,7 @@ class SnapshotService[F[_]: Concurrent](
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- retainOldData()
-      _ <- snapshot.modify(_ => (snapshotInfo.snapshot, ()))
+      _ <- snapshot.modify(_ => (Snapshot(snapshotInfo.snapshot, snapshotInfo.checkpointBlocks.toArray), ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
@@ -326,7 +327,7 @@ class SnapshotService[F[_]: Concurrent](
   private def getNextSnapshot(hashesForNextSnapshot: Seq[String]): F[Snapshot] =
     snapshot.get
       .map(_.hash)
-      .map(hash => Snapshot(hash, hashesForNextSnapshot))
+      .map(hash => Snapshot(hash, hashesForNextSnapshot.toArray))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>

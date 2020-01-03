@@ -222,7 +222,8 @@ class ValidationSpec
   dao.snapshotService
     .setSnapshot(
       SnapshotInfo(
-        Snapshot.snapshotZero,
+        Snapshot.snapshotZero.lastSnapshot,
+        Snapshot.snapshotZero.checkpointBlocks,
         Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
         Seq(),
         0,

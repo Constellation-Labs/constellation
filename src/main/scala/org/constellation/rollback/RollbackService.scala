@@ -48,7 +48,7 @@ class RollbackService[F[_]: Concurrent](
       genesisObservation <- EitherT.fromEither[F](rollbackLoader.loadGenesisObservation())
       _ <- EitherT.liftF(logger.info("GenesisObservation file loaded"))
 
-      balances <- EitherT.fromEither[F](rollbackBalances.calculate(snapshotInfo.snapshot.lastSnapshot, snapshots))
+      balances <- EitherT.fromEither[F](rollbackBalances.calculate(snapshotInfo.snapshot, snapshots))
       genesisBalances <- EitherT.fromEither[F](rollbackBalances.calculate(genesisObservation))
       _ <- EitherT.fromEither[F](validateAccountBalance(balances |+| genesisBalances))
       _ <- EitherT.liftF(logger.info("Account balances validated"))
