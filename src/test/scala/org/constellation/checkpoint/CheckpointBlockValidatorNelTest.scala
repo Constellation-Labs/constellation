@@ -13,7 +13,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.domain.configuration.NodeConfig
-import org.constellation.p2p.Cluster
+import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
@@ -212,7 +212,7 @@ class ValidationSpec
     )
 
   val ipManager = IPManager[IO]()
-  val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
+  val cluster = Cluster[IO](() => dao.metrics, ipManager, new JoiningPeerValidator[IO](), dao)
   dao.cluster = cluster
 
   dao.checkpointService.put(CheckpointCache(go.genesis)).unsafeRunSync

@@ -368,12 +368,6 @@ case class InsufficientBalance(address: String, amount: Long, diff: Long) extend
     s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
 }
 
-case class InsufficientNodeBalance(address: String, amount: Long, diff: Long) extends CheckpointBlockValidation {
-
-  override def errorMessage: String =
-    s"CheckpointBlock includes transaction from node address=$address which reduce balance below the staking amount"
-}
-
 // TODO: pass also a transaction metadata
 
 case class InternalInconsistency(cbHash: String) extends CheckpointBlockValidation {

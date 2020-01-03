@@ -119,9 +119,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionChainService = TransactionChainService[IO]
     transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+    joiningPeerValidator = JoiningPeerValidator[IO]
 
     ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, this)
+    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, this)
 
     trustManager = TrustManager[IO](id, cluster)
 
