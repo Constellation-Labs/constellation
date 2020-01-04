@@ -124,6 +124,8 @@ class SnapshotService[F[_]: Concurrent](
       }
     }.leftMap(SnapshotInfoIOError)
 
+  val recentSnapshotInfo: Ref[F, Option[SnapshotInfo]] = Ref.unsafe(None)
+
   def getSnapshotInfo: F[SnapshotInfo] =
     for {
       s <- snapshot.get

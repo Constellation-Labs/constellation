@@ -9,7 +9,9 @@ import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
-import org.constellation.consensus._
+import org.constellation.consensus.EdgeProcessor.chunkDeSerialize
+import org.constellation.consensus.{SnapshotInfo, _}
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -219,36 +221,108 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 //  private[p2p]
   def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] = {
 
-    def makeAttempt(clients: List[PeerData]): F[SnapshotInfoSer] =
+    def makeAttempt(clients: List[PeerData]): F[SnapshotInfo] =
       clients match {
         case Nil =>
-          Sync[F].raiseError[SnapshotInfoSer](
+          Sync[F].raiseError[SnapshotInfo](
             new Exception(
               s"[${dao.id.short}] Unable to get majority snapshot run out of peers, peers size ${peers.size}"
             )
           )
         case head :: tail =>
-          head.client
-            .getNonBlockingF[F, SnapshotInfoSer]("snapshot/info", timeout = 12.seconds)(C)
-            .handleErrorWith(e => {
-              Sync[F]
-                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
-                makeAttempt(tail)
-            })
+          val t = head.client.getNonBlockingArrayByteF[F]("snapshot/info", timeout = 12.seconds)(C).flatMap{ res =>
+                        chainSnapshotInfo(head, res)
+                      }.handleErrorWith(e => {
+                                  Sync[F]
+                                    .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+                                    makeAttempt(tail)
+                                })
+
+//            .flatMap{ _ =>
+//            chainSnapshotInfo(head)
+//          }.handleErrorWith(e => {
+//                      Sync[F]
+//                        .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+//                        makeAttempt(tail)
+//                    })
+//          head.client
+//            .getNonBlockingF[F, SnapshotInfoSer]("snapshot/info", timeout = 12.seconds)(C)
+//            .handleErrorWith(e => {
+//              Sync[F]
+//                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+//                makeAttempt(tail)
+//            })
+          t
       }
 
-    makeAttempt(peers.values.toList).map(deserializeSnapshotInfo)
+    makeAttempt(peers.values.toList)//.map(deserializeSnapshotInfo)
   }
 
-  private def deserializeSnapshotInfo(snapshotInfoSer: SnapshotInfoSer) =
-    Try(EdgeProcessor.toSnapshotInfo(snapshotInfoSer)) match {
-      case Success(value) => value
-      case Failure(exception) =>
-        throw new Exception(
-          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with acceptedCBSinceSnapshot.size=${snapshotInfoSer.lastSnapshotHeight}",
-          exception
-        )
+  def chainSnapshotInfo(peer: PeerData, res: Array[Byte]) = {
+    logger.error(s"[${dao.id.short}] [Re-Download] chainSnapshotInfo")
+    val test = peer.client.getNonBlockingArrayByteF[F]("snapshot/obj/snapshot", timeout = 12.seconds)(C)
+    .map{ t: Array[Byte] =>
+      logger.error(s"[${dao.id.short}] [Re-Download] chainSnapshotInfo success: ${t}")
+      t
     }
+    for {
+    snh <- test//peer.client.getNonBlockingF[F, Array[Byte]]("snapshot/obj/snapshot", timeout = 12.seconds)(C)
+    snapcbs <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/snapshotCBS", timeout = 12.seconds)(C)
+    sncbs <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/acceptedCBSinceSnapshot", timeout = 12.seconds)(C)
+    sncbsc <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/acceptedCBSinceSnapshotCache", timeout = 12.seconds)(C)
+    lastSnapshotHeight <- peer.client.getNonBlockingArrayByteF[F]("snapshot/obj/lastSnapshotHeight", timeout = 12.seconds)(C)
+    snapshotHashes <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/snapshotHashes", timeout = 12.seconds)(C)
+    addressCacheData <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/addressCacheData", timeout = 12.seconds)(C)
+    tips <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 12.seconds)(C)
+    snapshotCache <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/snapshotCache", timeout = 12.seconds)(C)
+    lastAcceptedTransactionRef <- peer.client.getNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/lastAcceptedTransactionRef", timeout = 12.seconds)(C)
+    } yield (SnapshotInfo(
+      KryoSerializer.deserializeCast[String](snh),
+      snapcbs.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "snapshotCBS")),
+      sncbs.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "checkpointBlocks")),
+      sncbsc.toSeq.flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "acceptedCBSinceSnapshotCache")),
+      KryoSerializer.deserializeCast[Int](lastSnapshotHeight),
+      snapshotHashes.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "snapshotHashes")),
+      addressCacheData.toSeq.flatMap(chunkDeSerialize[Array[(String, AddressCacheData)]](_, "addressCacheData")).toMap,
+      tips.toSeq.flatMap(chunkDeSerialize[Array[(String, TipData)]](_, "tips")).toMap,
+      snapshotCache.toSeq.flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "snapshotCache")),
+      lastAcceptedTransactionRef.toSeq.flatMap(chunkDeSerialize[Array[(String, LastTransactionRef)]](_, "lastAcceptedTransactionRef")).toMap
+    ))
+
+  }
+
+  case class SnapshotInfoSer(  snapshot: Array[Byte],
+                               checkpointBlocks: Array[Array[Byte]],
+                               acceptedCBSinceSnapshot: Array[Array[Byte]],
+                               acceptedCBSinceSnapshotCache: Array[Array[Byte]],
+                               lastSnapshotHeight: Array[Byte],
+                               snapshotHashes: Array[Array[Byte]],
+                               addressCacheData: Array[Array[Byte]],
+                               tips: Array[Array[Byte]],
+                               snapshotCache: Array[Array[Byte]],
+                               lastAcceptedTransactionRef: Array[Array[Byte]])
+//  case class SnapshotInfo(
+//                           snapshot: String,
+//                           checkpointBlocks: Seq[String] = Seq(),
+//                           acceptedCBSinceSnapshot: Seq[String] = Seq(),//todo remove
+//                           acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
+//                           lastSnapshotHeight: Int = 0,
+//                           snapshotHashes: Seq[String] = Seq(),
+//                           addressCacheData: Map[String, AddressCacheData] = Map(),
+//                           tips: Map[String, TipData] = Map(),
+//                           snapshotCache: Seq[CheckpointCache] = Seq(),
+//                           lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
+//                         )
+
+//  private def deserializeSnapshotInfo(snapshotInfoSer: SnapshotInfoSer) =
+//    Try(EdgeProcessor.toSnapshotInfo(snapshotInfoSer)) match {
+//      case Success(value) => value
+//      case Failure(exception) =>
+//        throw new Exception(
+//          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with acceptedCBSinceSnapshot.size=${snapshotInfoSer.lastSnapshotHeight}",
+//          exception
+//        )
+//    }
 
 
 //  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =

@@ -29,6 +29,10 @@ import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
+import cats.effect.Concurrent
+import cats.effect.concurrent.Ref
+import cats.implicits._
+import org.constellation.consensus.EdgeProcessor.chunkSerialize
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -302,6 +306,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           .createBlockBuildingRoundRoutes()
     )
 
+  val chunkSize = 100
+
   private[p2p] def mixedEndpoints(socketAddress: InetSocketAddress) =
     path("transaction") {
       put {
@@ -332,61 +338,184 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           complete(StatusCodes.OK)
         }
       }
-    } ~ get {
-      path("snapshot" / "info") {
-        APIDirective.extractIP(socketAddress) { ip =>
-          val getInfo = idLookup(ip)
-            .flatMap(
-              maybePeer =>
-                maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
-                  pd =>
-                    // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
-                    dao.observationService
-                      .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
-                      .void
-                )
-            )
-            .flatMap(
-              _ =>
-                dao.snapshotService.getSnapshotInfo.flatMap { info =>
-                  info.acceptedCBSinceSnapshot.toList.traverse {
-                    dao.checkpointService.fullData(_)
-                  }.map{
-                    cbs =>
-                    val snapshotInfo = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)
-                      val snapshotInfoSer = EdgeProcessor.toSnapshotInfoSer(snapshotInfo)
+    } ~
+      get {
+        path("snapshot" / "obj" / "snapshot") {
+          APIDirective.extractIP(socketAddress) { ip =>
+            val snapshotHash: IO[Array[Byte]] =
+              dao.snapshotService.recentSnapshotInfo.get.map{
+                sni =>
+                  val ser = KryoSerializer.serialize[String](sni.get.snapshot)
+                  logger.warn(s"snapshot/obj/snapshot ${ser}")
+                ser
+              }
+            APIDirective.handle[Array[Byte]](snapshotHash)(complete(_))
+          }
+        } ~ path("snapshot" / "obj" / "snapshotCBS") {
+          APIDirective.extractIP(socketAddress) { ip =>
+            val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+              logger.warn(s"snapshot/obj/snapshotCBS prev")
+              val test: Array[Array[Byte]] = sni.get.checkpointBlocks
+                .grouped(chunkSize)
+                .map(t => chunkSerialize[String](t.toArray, "snapshotCBS"))
+                .toArray
+              logger.warn(s"snapshot/obj/snapshotCBS num snapshotCBS: ${sni.get.checkpointBlocks.length}")
+              test
+            }
+            APIDirective.handle(snapshotHash)(complete(_))
+          }
+        } ~
+          path("snapshot" / "obj" / "acceptedCBSinceSnapshot") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] = sni.get.acceptedCBSinceSnapshot
+                  .grouped(chunkSize)
+                  .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshot"))
+                  .toArray
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "obj" / "acceptedCBSinceSnapshotCache") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] = sni.get.acceptedCBSinceSnapshotCache
+                  .grouped(chunkSize)
+                  .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshotCache"))
+                  .toArray
+                logger.warn(s"snapshot/obj/snapshotCBS ${sni.get.acceptedCBSinceSnapshotCache.length}")
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "obj" / "lastSnapshotHeight") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get
+                .map(sni => KryoSerializer.serialize[Int](sni.get.lastSnapshotHeight))
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "obj" / "snapshotHashes") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] =
+                  sni.get.snapshotHashes
+                    .grouped(chunkSize)
+                    .map(t => chunkSerialize(t.toArray, "snapshotHashes"))
+                    .toArray
+                logger.warn(s"snapshot/obj/snapshotHashes ${sni.get.snapshotHashes.length}")
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "obj" / "addressCacheData") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] =
+                  sni.get.addressCacheData.toSeq.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "tips")).toArray
+                logger.warn(s"snapshot/obj/addressCacheData ${test.length}")
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          }~
+          path("snapshot" / "obj" / "tips") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] =
+                  sni.get.tips.toSeq.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "tips")).toArray
+                logger.warn(s"snapshot/obj/tips ${sni.get.tips.toSeq.length}")
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "obj" / "snapshotCache") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] =
+                  sni.get.snapshotCache.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "snapshotCache")).toArray
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "obj" / "lastAcceptedTransactionRef") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                val test: Array[Array[Byte]] = sni.get.lastAcceptedTransactionRef
+                  .grouped(chunkSize)
+                  .map(t => chunkSerialize(t.toArray, "lastAcceptedTransactionRef"))
+                  .toArray
+                test
+              }
+              APIDirective.handle(snapshotHash)(complete(_))
+            }
+          } ~
+          path("snapshot" / "info") {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val getInfo =
+                idLookup(ip)
+                  .flatMap(
+                    maybePeer =>
+                      maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
+                        pd =>
+                          // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
+                          dao.observationService
+                            .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
+                            .void
+                    )
+                  )
+                  .flatMap(
+                    _ =>
+                      dao.snapshotService.getSnapshotInfo.flatMap { info =>
+                        info.acceptedCBSinceSnapshot.toList.traverse {
+                          dao.checkpointService.fullData(_)
+                        }.flatMap {
+                          cbs =>
+                            val snapshotInfo = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)
+                            val io = dao.snapshotService.recentSnapshotInfo.modify{
+                              _ =>
+                                logger.warn(s"snapshot/info recentSnapshotInfo updating")
+                                (Some(snapshotInfo), Array.empty[Byte])
+                            }
+//                            logger.warn(s"snapshot/obj/snapshot is empty: ${dao.snapshotService.recentSnapshotInfo.get}")
+                            //                      val snapshotInfoSer = EdgeProcessor.toSnapshotInfoSer(snapshotInfo)
 //                      val serialziedSnapshot = KryoSerializer.serializeAnyRef(snapshotInfo).some
 
-                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef snapshotInfo of hash ${info.snapshot.hash} contains: " +
-                        s"acceptedCBSinceSnapshot ifo - ${snapshotInfo.acceptedCBSinceSnapshot.length} " +
-                        s"acceptedCBSinceSnapshot SER - ${snapshotInfoSer.acceptedCBSinceSnapshot.length} " +
-                      s"snapshotHashes ifo - ${snapshotInfo.snapshotHashes.length}" +
-                        s"snapshotCache ifo - ${snapshotInfo.snapshotCache.length}" +
-                        s"snapshotCache SER - ${snapshotInfoSer.snapshotCache.length}")
+//                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef snapshotInfo of hash ${info.snapshot.hash} contains: " +
+//                        s"acceptedCBSinceSnapshot ifo - ${snapshotInfo.acceptedCBSinceSnapshot.length} " +
+//                        s"acceptedCBSinceSnapshot SER - ${snapshotInfoSer.acceptedCBSinceSnapshot.length} " +
+//                      s"snapshotHashes ifo - ${snapshotInfo.snapshotHashes.length}" +
+//                        s"snapshotCache ifo - ${snapshotInfo.snapshotCache.length}" )
+//                        s"snapshotCache SER - ${snapshotInfoSer.snapshotCache.length}")
 //                        s"with size ${serialziedSnapshot.get.size}")
 //                      logger.warn(s"snapshot/info KryoSerializer.serializeAnyRef for snapshotInfo: ${snapshotInfo} with size ${serialziedSnapshot.size}")
-                        snapshotInfoSer
-                  }
-                }
-            )
+                            io
+                        }
+                    }
+                  )
 
-          APIDirective.handle(
-            dao.cluster.getNodeState
-              .map(NodeState.canActAsDownloadSource)
-              .ifM(getInfo, IO.pure(none[Array[Byte]]))
-          )(complete(_))
-        }
-      } ~
-        path("trust") {
-          APIDirective.handle(
-            dao.trustManager.getPredictedReputation.flatMap { predicted =>
-              if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
-              else TrustData(predicted).pure[IO]
+              APIDirective.handle(
+                dao.cluster.getNodeState
+                  .map(NodeState.canActAsDownloadSource)
+                  .ifM(getInfo, IO.pure(none[Array[Byte]]))
+              )(complete(_))
             }
-          )(complete(_))
-        }
+          } ~
+          path("trust") {
+            APIDirective.handle(
+              dao.trustManager.getPredictedReputation.flatMap { predicted =>
+                if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
+                else TrustData(predicted).pure[IO]
+              }
+            )(complete(_))
+          }
+      }
 
-    }
 
   def routes(socketAddress: InetSocketAddress): Route =
     APIDirective.extractIP(socketAddress) { ip =>

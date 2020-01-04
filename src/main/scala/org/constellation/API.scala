@@ -22,6 +22,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.api.TokenAuthenticator
+import org.constellation.BuildInfo
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils

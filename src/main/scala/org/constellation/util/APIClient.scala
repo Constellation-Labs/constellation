@@ -99,7 +99,9 @@ class APIClient private (
         .onComplete {
           case Success(value: Response[Array[Byte]]) =>
             value.body.fold(err => cb(Left(new Exception(err))), body => cb(Right(body)))
-          case Failure(error: Throwable) => cb(Left(error))
+          case Failure(error: Throwable) =>
+            println(s"getNonBlockingF - ${suffix} - ${error}")
+            cb(Left(error))
         }(ConstellationExecutionContext.unbounded)
     })
 
