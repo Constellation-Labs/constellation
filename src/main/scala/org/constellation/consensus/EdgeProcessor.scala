@@ -217,39 +217,36 @@ object EdgeProcessor extends StrictLogging {
       "handleSignatureRequest"
     )(ConstellationExecutionContext.bounded, dao)
 
-
-//  def toSnapshotInfoSer(info: SnapshotInfo) = {
-//    SnapshotInfoSer(
-//      KryoSerializer.serializeAnyRef(info.snapshot),
-//      KryoSerializer.serializeAnyRef(info.acceptedCBSinceSnapshot),
-//      KryoSerializer.serializeAnyRef(info.acceptedCBSinceSnapshotCache),
-//      info.lastSnapshotHeight,
-//      KryoSerializer.serializeAnyRef(info.snapshotHashes),
-//      KryoSerializer.serializeAnyRef(info.addressCacheData),
-//      KryoSerializer.serializeAnyRef(info.tips),
-//      KryoSerializer.serializeAnyRef(info.snapshotCache),
-//      KryoSerializer.serializeAnyRef(info.lastAcceptedTransactionRef)
-//    )
-//  }
-
   val chunkSize = 2048
 
-  def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = chunkSize) = {//todo make chunk size config
-//    val test: Iterator[Map[String, AddressCacheData]] = info.addressCacheData.grouped(100)
-
+  def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = chunkSize) = //todo make chunk size config
     SnapshotInfoSer(
       KryoSerializer.serialize[String](info.snapshot),
       info.checkpointBlocks.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshot")).toArray,
-      info.acceptedCBSinceSnapshot.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshot")).toArray,
-      info.acceptedCBSinceSnapshotCache.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshotCache")).toArray,
+      info.acceptedCBSinceSnapshot
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshot"))
+        .toArray,
+      info.acceptedCBSinceSnapshotCache
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshotCache"))
+        .toArray,
       KryoSerializer.serialize[Int](info.lastSnapshotHeight),
       info.snapshotHashes.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "snapshotHashes")).toArray,
-      info.addressCacheData.toSeq.grouped(chunkSize).map(partitionMap => chunkSerialize(partitionMap.toArray, "addressCacheData")).toArray,
-      info.tips.grouped(chunkSize).map(partitionMap => chunkSerialize(partitionMap.toArray, "acceptedCBSinceSnapshot")).toArray,
+      info.addressCacheData.toSeq
+        .grouped(chunkSize)
+        .map(partitionMap => chunkSerialize(partitionMap.toArray, "addressCacheData"))
+        .toArray,
+      info.tips
+        .grouped(chunkSize)
+        .map(partitionMap => chunkSerialize(partitionMap.toArray, "acceptedCBSinceSnapshot"))
+        .toArray,
       info.snapshotCache.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "snapshotCache")).toArray,
-      info.lastAcceptedTransactionRef.grouped(chunkSize).map(partitionMap => chunkSerialize(partitionMap.toArray, "lastAcceptedTransactionRef")).toArray
+      info.lastAcceptedTransactionRef
+        .grouped(chunkSize)
+        .map(partitionMap => chunkSerialize(partitionMap.toArray, "lastAcceptedTransactionRef"))
+        .toArray
     )
-  }
 
   def chunkSerialize[T](chunk: Array[T], tag: String) = {
     logger.warn(s"chunkSerialize ${tag}")
@@ -261,20 +258,24 @@ object EdgeProcessor extends StrictLogging {
     KryoSerializer.deserializeCast[T](chunk)
   }
 
-  def toSnapshotInfo(info: SnapshotInfoSer) = {
+  def toSnapshotInfo(info: SnapshotInfoSer) =
     SnapshotInfo(
       KryoSerializer.deserializeCast[String](info.snapshot),
       info.checkpointBlocks.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "checkpointBlocks")),
       info.acceptedCBSinceSnapshot.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "acceptedCBSinceSnapshot")),
-      info.acceptedCBSinceSnapshotCache.toSeq.flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "acceptedCBSinceSnapshot")),
+      info.acceptedCBSinceSnapshotCache.toSeq
+        .flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "acceptedCBSinceSnapshot")),
       KryoSerializer.deserializeCast[Int](info.lastSnapshotHeight),
       info.snapshotHashes.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "snapshotHashes")),
-      info.addressCacheData.toSeq.flatMap(chunkDeSerialize[Array[(String, AddressCacheData)]](_, "addressCacheData")).toMap,
+      info.addressCacheData.toSeq
+        .flatMap(chunkDeSerialize[Array[(String, AddressCacheData)]](_, "addressCacheData"))
+        .toMap,
       info.tips.toSeq.flatMap(chunkDeSerialize[Array[(String, TipData)]](_, "tips")).toMap,
       info.snapshotCache.toSeq.flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "snapshotCache")),
-      info.lastAcceptedTransactionRef.toSeq.flatMap(chunkDeSerialize[Array[(String, LastTransactionRef)]](_, "lastAcceptedTransactionRef")).toMap
+      info.lastAcceptedTransactionRef.toSeq
+        .flatMap(chunkDeSerialize[Array[(String, LastTransactionRef)]](_, "lastAcceptedTransactionRef"))
+        .toMap
     )
-  }
 }
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
@@ -282,7 +283,7 @@ case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Heigh
 case class SnapshotInfo(
   snapshot: String,
   checkpointBlocks: Seq[String] = Seq(),
-  acceptedCBSinceSnapshot: Seq[String] = Seq(),//todo remove
+  acceptedCBSinceSnapshot: Seq[String] = Seq(), //todo remove
   acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
   lastSnapshotHeight: Int = 0,
   snapshotHashes: Seq[String] = Seq(),
@@ -292,16 +293,16 @@ case class SnapshotInfo(
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
 )
 
-case class SnapshotInfoSer(  snapshot: Array[Byte],
-                             checkpointBlocks: Array[Array[Byte]],
-                             acceptedCBSinceSnapshot: Array[Array[Byte]],
-                             acceptedCBSinceSnapshotCache: Array[Array[Byte]],
-                             lastSnapshotHeight: Array[Byte],
-                             snapshotHashes: Array[Array[Byte]],
-                             addressCacheData: Array[Array[Byte]],
-                             tips: Array[Array[Byte]],
-                             snapshotCache: Array[Array[Byte]],
-                             lastAcceptedTransactionRef: Array[Array[Byte]])
+case class SnapshotInfoSer(snapshot: Array[Byte],
+                           checkpointBlocks: Array[Array[Byte]],
+                           acceptedCBSinceSnapshot: Array[Array[Byte]],
+                           acceptedCBSinceSnapshotCache: Array[Array[Byte]],
+                           lastSnapshotHeight: Array[Byte],
+                           snapshotHashes: Array[Array[Byte]],
+                           addressCacheData: Array[Array[Byte]],
+                           tips: Array[Array[Byte]],
+                           snapshotCache: Array[Array[Byte]],
+                           lastAcceptedTransactionRef: Array[Array[Byte]])
 
 case object GetMemPool
 
@@ -316,18 +317,17 @@ import java.nio.file.{Files, Paths}
 object Snapshot extends StrictLogging {
 
   val maxSnapshotInDir = ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-  var snapshotDir: Long = 0//todo ref?
-  var curSnapshotsInDir = 0//todo ref?
+  var snapshotDir: Long = 0 //todo ref?
+  var curSnapshotsInDir = 0 //todo ref?
 
   def getDirFromSnapshotCounter = {
-    println("curSnapshotsInDir"+ curSnapshotsInDir )
-    println("snapshotDirs"+ snapshotDir )
+    println("curSnapshotsInDir" + curSnapshotsInDir)
+    println("snapshotDirs" + snapshotDir)
     if (curSnapshotsInDir >= maxSnapshotInDir) {
       snapshotDir += 1
 
       snapshotDir
-    }
-    else {
+    } else {
       curSnapshotsInDir += 1
       snapshotDir
     }
@@ -339,15 +339,13 @@ object Snapshot extends StrictLogging {
     for {
       serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(storedSnapshot)).attempt)
       write <- EitherT(
-        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized//, directory = getDirFromSnapshotCounter
-        ).value)
+        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(storedSnapshot, serialized).value)
       )
     } yield write
 
   private def writeSnapshot[F[_]: Concurrent](
     storedSnapshot: StoredSnapshot,
     serialized: Array[Byte],
-//    directory: Long = 0L,
     trialNumber: Int = 0
   )(
     implicit dao: DAO,
@@ -356,15 +354,14 @@ object Snapshot extends StrictLogging {
     trialNumber match {
       case x if x >= 3 => EitherT.leftT[F, Path](new IOException(s"Unable to write snapshot"))
       case _ if isOverDiskCapacity(serialized.length) =>
-        EitherT(removeOldSnapshots().attempt) >> writeSnapshot(storedSnapshot, serialized,
-//          directory,
-          trialNumber + 1)
+        EitherT(removeOldSnapshots().attempt) >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
       case _ =>
         EitherT(
           withMetric(
             Sync[F].delay(
-              Files.write(Paths.get(dao.snapshotPath.pathAsString,// + s"/${directory}",
-                storedSnapshot.snapshot.hash), serialized)
+              Files.write(Paths.get(dao.snapshotPath.pathAsString, // + s"/${directory}",
+                                    storedSnapshot.snapshot.hash),
+                          serialized)
             ),
             "writeSnapshot"
           ).attempt
@@ -461,7 +458,7 @@ object Snapshot extends StrictLogging {
     )
 
   def snapshotHashes()(implicit dao: DAO): List[String] =
-    dao.snapshotPath.list.map { _.name }.toList//todo this is duplicated
+    dao.snapshotPath.list.map { _.name }.toList //todo this is duplicated
 
   def findLatestMessageWithSnapshotHash(
     depth: Int,

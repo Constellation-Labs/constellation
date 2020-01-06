@@ -134,20 +134,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     logThread(
       for {
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
-
-//          s.checkpointBlocks.toList
-//          .map(checkpointService.fullData)
-//          .sequence
-//          .map(_.flatten)
         majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)
-//        _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) Sync[F].unit
-//        else
-//          Sync[F].raiseError[Unit](
-//            new RuntimeException(
-//              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${snapshotHashes
-//                .filterNot(majoritySnapshot.snapshotHashes.contains)}"
-//            )
-//          )
         snapshotClient <- getSnapshotClient(peers)
         alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
           snapshotClient,
@@ -238,7 +225,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
             )
           )
         case head :: tail =>
-          val t = head.client.postNonBlockingF[F, Array[Byte]]("snapshot/info",
+          head.client.postNonBlockingF[F, Array[Byte]]("snapshot/info",
             serializedHashes,
             45.seconds
           )(C).flatMap{ res =>
@@ -248,33 +235,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
                                     .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
                                     makeAttempt(tail)
                                 })
-
-//            .flatMap{ _ =>
-//            chainSnapshotInfo(head)
-//          }.handleErrorWith(e => {
-//                      Sync[F]
-//                        .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
-//                        makeAttempt(tail)
-//                    })
-//          head.client
-//            .getNonBlockingF[F, SnapshotInfoSer]("snapshot/info", timeout = 12.seconds)(C)
-//            .handleErrorWith(e => {
-//              Sync[F]
-//                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
-//                makeAttempt(tail)
-//            })
-          t
       }
 
     makeAttempt(peers.values.toList)//.map(deserializeSnapshotInfo)
   }
-
-//  def timeCall[F[_], T](res: _ => T) = for {
-//    startTime <- F(System.currentTimeMillis())
-//    snapshotResult <- dao.snapshotService.attemptSnapshot().value
-//    elapsed <- IO(System.currentTimeMillis() - startTime)
-//    _ = logger.debug(s"Attempt snapshot took: $elapsed millis")
-//  }
 
   def chainSnapshotInfo(peer: PeerData, res: Array[Byte]) = {
     logger.error(s"[${dao.id.short}] [Re-Download] chainSnapshotInfo")
@@ -319,58 +283,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
                                tips: Array[Array[Byte]],
                                snapshotCache: Array[Array[Byte]],
                                lastAcceptedTransactionRef: Array[Array[Byte]])
-//  case class SnapshotInfo(
-//                           snapshot: String,
-//                           checkpointBlocks: Seq[String] = Seq(),
-//                           acceptedCBSinceSnapshot: Seq[String] = Seq(),//todo remove
-//                           acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
-//                           lastSnapshotHeight: Int = 0,
-//                           snapshotHashes: Seq[String] = Seq(),
-//                           addressCacheData: Map[String, AddressCacheData] = Map(),
-//                           tips: Map[String, TipData] = Map(),
-//                           snapshotCache: Seq[CheckpointCache] = Seq(),
-//                           lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
-//                         )
-
-//  private def deserializeSnapshotInfo(snapshotInfoSer: SnapshotInfoSer) =
-//    Try(EdgeProcessor.toSnapshotInfo(snapshotInfoSer)) match {
-//      case Success(value) => value
-//      case Failure(exception) =>
-//        throw new Exception(
-//          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with acceptedCBSinceSnapshot.size=${snapshotInfoSer.lastSnapshotHeight}",
-//          exception
-//        )
-//    }
-
-
-//  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-//    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
-//      case Success(value) => value
-//      case Failure(exception) =>
-//        throw new Exception(
-//          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
-//          exception
-//        )
-//    }
-
-
-//  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-//    Try{
-//      val snapInfoSer = KryoSerializer.deserializeCast[SnapshotInfoSer](byteArray)
-//      Sync[F].delay(logger.warn(s"deserializeSnapshotInfoRef Success for snapshot height: ${snapInfoSer.lastSnapshotHeight}"))
-//      val snapInfo = EdgeProcessor.toSnapshotInfo(snapInfoSer)
-//      Sync[F].delay(logger.warn(s"deserializeSnapshotInfo Success for snapshot hash: ${snapInfo.snapshot.hash}"))
-//      snapInfo
-//    } match {
-//      case Success(value: SnapshotInfo) =>
-//        Sync[F].delay(logger.warn(s"deserializeSnapshotInfo Success for snapshot height: ${value.snapshot.hash}"))
-//        value
-//      case Failure(exception) =>
-//        throw new Exception(
-//          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage} with byteArray.size=${byteArray.size}",
-//          exception
-//        )
-//    }
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(
     implicit snapshotClient: APIClient,

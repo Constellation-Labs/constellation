@@ -110,7 +110,7 @@ class SnapshotService[F[_]: Concurrent](
   def writeSnapshotInfoToDisk: EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
       getSnapshotInfoWithFullData.flatMap { info => //todo, remove accepted cp hashes since this snapshot
-        if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
+        if (info.snapshot == Snapshot.snapshotZero.lastSnapshot) Sync[F].unit
         else {
           val path = dao.snapshotInfoPath.pathAsString
 //          val infoBytes = EdgeProcessor.toSnapshotInfoSer(info).toString.getBytes
@@ -137,7 +137,7 @@ class SnapshotService[F[_]: Concurrent](
       s <- snapshot.get
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
-      hashes = dao.snapshotHashes//.drop(2*ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"))//todo, drop or take? We don't want whole list just up to delay interval
+      hashes = dao.snapshotHashes
       addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
       snapshotCache <- s.checkpointBlocks.toList
