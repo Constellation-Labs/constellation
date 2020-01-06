@@ -53,6 +53,7 @@ resource "google_compute_instance" "default" {
   }
 
   metadata_startup_script = <<SCRIPT
+    sleep 30
     sudo apt update
     sleep 30
     sudo apt -yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confnew install filebeat

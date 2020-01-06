@@ -89,7 +89,7 @@ class HealthChecker[F[_]: Concurrent](
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
-      _ <- logger.debug(s"[${dao.id.short}] Re-download checking cluster consistency")
+      _ <- logger.warn(s"[${dao.id.short}] Re-download checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
@@ -101,6 +101,8 @@ class HealthChecker[F[_]: Concurrent](
       diff <- compareSnapshotState(major, ownSnapshots)
 
 //      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
+      _ <- logger.info(s"Re-download checking cluster consistency diff ${diff.toString}")
+
       result <- if (shouldReDownload(ownSnapshots, diff)) {
         logger.info(
           s"[${dao.id.short}] Re-download process with : " +
@@ -140,10 +142,12 @@ class HealthChecker[F[_]: Concurrent](
         .groupBy(x => x)
         .filter(t => t._2.size >= dao.processingConfig.numFacilitatorPeers)
 
-      if (maxHeightsOfMinimumFacilitators.nonEmpty)
+      if (maxHeightsOfMinimumFacilitators.nonEmpty){
+        logger.warn("[Clear staletips] clearning staletips")
         concurrentTipService.clearStaleTips(
           maxHeightsOfMinimumFacilitators.keySet.min + snapshotHeightInterval
         )
+      }
       else logger.debug("[Clear staletips] staletips Not enough data to determine height")
     } else
       logger.debug(
@@ -151,16 +155,23 @@ class HealthChecker[F[_]: Concurrent](
       )
   }
 
-  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
-    diff match {
+  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean = {
+    logger.warn(s"[${dao.id.short}] shouldReDownload diff ${diff.toString.toList}")
+    val shouldReDownload = diff match {
       case SnapshotDiff(_, _, Nil) => false
       case SnapshotDiff(_, Nil, _) => false
       case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
         val below = isBelowInterval(ownSnapshots, snapshotsToDownload)
+        logger.warn(s"[${dao.id.short}] shouldReDownload - below - ${below}")
         val misaligned =
           isMisaligned(ownSnapshots, (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap)
+        logger.warn(s"[${dao.id.short}] shouldReDownload - misaligned - ${misaligned}")
+
         below || misaligned
     }
+    logger.warn(s"[${dao.id.short}] shouldReDownload - ${shouldReDownload} - diff ${diff.toString.toList}")
+    shouldReDownload
+  }
 
   private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
     ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))

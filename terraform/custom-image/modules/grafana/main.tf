@@ -36,8 +36,9 @@ resource "google_compute_instance" "grafana" {
   }
 
   metadata_startup_script = <<SCRIPT
+  sleep 90
     sudo apt update
-    sleep 30
+    sleep 90
     sudo sysctl -w vm.max_map_count=262144
   SCRIPT
 

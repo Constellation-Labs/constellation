@@ -232,7 +232,9 @@ object EdgeProcessor extends StrictLogging {
 //    )
 //  }
 
-  def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = 100) = {//todo make chunk size config
+  val chunkSize = 2048
+
+  def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = chunkSize) = {//todo make chunk size config
 //    val test: Iterator[Map[String, AddressCacheData]] = info.addressCacheData.grouped(100)
 
     SnapshotInfoSer(

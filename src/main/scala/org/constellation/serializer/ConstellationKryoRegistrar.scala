@@ -1,7 +1,7 @@
 package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.serializers.{DeflateSerializer, FieldSerializer}
+import com.esotericsoftware.kryo.serializers.{DeflateSerializer, EnumNameSerializer, FieldSerializer}
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
 import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationData, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}

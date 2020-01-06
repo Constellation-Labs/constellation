@@ -39,7 +39,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
             .postNonBlockingF[F, SnapshotVerification](
               "snapshot/verify",
               SnapshotCreated(hash, height, publicReputation),
-              5 second
+              30 second
             )(
               contextShift
             )
@@ -95,7 +95,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
 
   def runClusterCheck: F[Unit] =
     cluster.getNodeState
-      .map(NodeState.canRunClusterCheck)
+      .map{s =>
+        val can = NodeState.canRunClusterCheck(s)
+        logger.warn(s"can - ${can}")
+        can
+      }
       .ifM(
         getRecentSnapshots
           .flatMap(healthChecker.checkClusterConsistency)

@@ -141,35 +141,59 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
       pathPrefix("snapshot") {
-        path("verify") {
-          entity(as[SnapshotCreated]) { s =>
-            APIDirective.handle(
-              dao.snapshotBroadcastService.getRecentSnapshots
-            ) { result =>
-              logger.debug(s"snapshot received ${s}")
-              // TODO: wkoszycki maybe move it SnapshotBroadcastService ?
-              val response = result match {
-                case Nil => SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
-                case lastSnap :: _ if lastSnap.height < s.height =>
-                  if (lastSnap.height + snapshotHeightRedownloadDelayInterval < s.height) {
+        path("info") {
+          entity(as[Array[Array[Byte]]]) { curCheckpointHashes =>
+          val curCheckpoints = curCheckpointHashes.flatMap(EdgeProcessor.chunkDeSerialize[Array[String]](_, "curCheckpointHashes"))
+    val res = dao.snapshotService.getSnapshotInfo.flatMap { info =>
+      logger.warn(s"snapshot/info nfo.acceptedCBSinceSnapshot - ${info.acceptedCBSinceSnapshot.toList}")
+      logger.warn(s"snapshot/info curCheckpointHashes - ${curCheckpointHashes.toList}")
+      val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(curCheckpoints.toList)
+      logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet.toList}")
+      logger.warn(s"snapshot/info checkpointsToGet.length - ${checkpointsToGet.length}")
+      checkpointsToGet.toList.traverse { //todo .diff on info.acceptedCBSinceSnapshotCache with acceptedCBSinceSnapshotCache from querying peer
+        dao.checkpointService.fullData(_)
+      }.flatMap { cbs =>
+        val snapshotInfo = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)
+        val io = dao.snapshotService.recentSnapshotInfo.modify { _ =>
+          logger.warn(s"snapshot/info recentSnapshotInfo updating")
+          (Some(snapshotInfo), Array.empty[Byte])
+        }
+        io
+      }
+    }
+
+    APIDirective.handle(res)(complete(_))
+  }
+        }~
+          path("verify") {
+            entity(as[SnapshotCreated]) { s =>
+              APIDirective.handle(
+                dao.snapshotBroadcastService.getRecentSnapshots
+              ) { result =>
+                logger.warn(s"snapshot received ${s}")
+                // TODO: wkoszycki maybe move it SnapshotBroadcastService ?
+                val response = result match {
+                  case Nil => SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
+                  case lastSnap :: _ if lastSnap.height < s.height =>
+                    if (lastSnap.height + snapshotHeightRedownloadDelayInterval < s.height) {
+                      (IO
+                        .contextShift(ConstellationExecutionContext.bounded)
+                        .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
+                    }
+                    SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
+                  case list if list.contains(RecentSnapshot(s.hash, s.height, s.publicReputation)) =>
+                    SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
+                  case _ =>
                     (IO
                       .contextShift(ConstellationExecutionContext.bounded)
                       .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
-                  }
-                  SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
-                case list if list.contains(RecentSnapshot(s.hash, s.height, s.publicReputation)) =>
-                  SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
-                case _ =>
-                  (IO
-                    .contextShift(ConstellationExecutionContext.bounded)
-                    .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
-                  SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result)
+                    SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result)
+                }
+                complete(response)
               }
-              complete(response)
             }
           }
-        }
-      } ~
+        }} ~
         pathPrefix("channel") {
           path("neighborhood") {
             entity(as[Id]) { peerId =>
@@ -298,7 +322,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               }
             }
         }
-    }
+
   private val blockBuildingRoundRoute =
     createRoute(ConsensusRoute.pathPrefix)(
       () =>
@@ -472,7 +496,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   .flatMap(
                     _ =>
                       dao.snapshotService.getSnapshotInfo.flatMap { info =>
-                        info.acceptedCBSinceSnapshot.toList.traverse {
+                        info.acceptedCBSinceSnapshot.toList.traverse {//todo .diff on info.acceptedCBSinceSnapshotCache with acceptedCBSinceSnapshotCache from querying peer
                           dao.checkpointService.fullData(_)
                         }.flatMap {
                           cbs =>

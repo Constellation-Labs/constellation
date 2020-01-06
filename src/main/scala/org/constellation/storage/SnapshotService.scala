@@ -60,6 +60,10 @@ class SnapshotService[F[_]: Concurrent](
 
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
 
+  def getAcceptedCBSinceSnapshot: F[Seq[String]] = for {
+  hashes <- acceptedCBSinceSnapshot.get
+  } yield hashes
+
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- validateMaxAcceptedCBHashesInMemory()
@@ -125,6 +129,8 @@ class SnapshotService[F[_]: Concurrent](
     }.leftMap(SnapshotInfoIOError)
 
   val recentSnapshotInfo: Ref[F, Option[SnapshotInfo]] = Ref.unsafe(None)
+
+  def getSnapshot: F[Snapshot] = snapshot.get
 
   def getSnapshotInfo: F[SnapshotInfo] =
     for {

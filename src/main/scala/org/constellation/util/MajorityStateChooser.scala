@@ -31,7 +31,7 @@ class MajorityStateChooser[F[_]: Concurrent] {
       )
       nodeId <- OptionT.fromOption[F](chooseNodeId(majorState))
       node: (Id, Seq[RecentSnapshot]) <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
-      _ <- OptionT.liftF(logger.debug(s"Re-download from node : ${node}"))
+      _ <- OptionT.liftF(logger.warn(s"Re-download from node : ${node}"))
     } yield dropToCurrentState(node, majorState)
 
   private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], ownHeight: Long) =
