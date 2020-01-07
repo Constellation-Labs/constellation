@@ -85,6 +85,71 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       case _ => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
     }
 
+  def acceptSyncPending(cb: CheckpointBlock)(implicit cs: ContextShift[F]) = {
+    val acceptance = for {
+      _ <- logger.info(s"[${dao.id.short}] begin pendingAcceptanceFromOthers for accept block: ${cb.baseHash}")
+      _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
+      _ <- logger.info(s"[${dao.id.short}] end pendingAcceptanceFromOthers for accept block: ${cb.baseHash}")
+    } yield ()
+    acceptance.recoverWith {
+      case ex: PendingAcceptance =>
+        logger.info(s"[${dao.id.short}] acceptSyncPending.recoverWith ex: PendingAcceptance: ${cb.baseHash}")
+        acceptErrorHandler(ex)
+      case error =>
+        logger.info(s"[${dao.id.short}] acceptSyncPending.recoverWith error: ${cb.baseHash}")
+        pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ())) >> acceptErrorHandler(error)
+    }
+  }
+
+  def acceptCheckPending(cb: CheckpointBlock)(implicit cs: ContextShift[F]) = {
+    val acceptance = for {
+      _ <- logger.info(s"[${dao.id.short}] begin checkPending for accept block: ${cb.baseHash}")
+      _ <- checkPending(cb.baseHash)
+      _ <- logger.info(s"[${dao.id.short}] end checkPending for accept block: ${cb.baseHash}")
+    } yield ()
+    acceptance.recoverWith {
+      case ex: PendingAcceptance =>
+        logger.info(s"[${dao.id.short}] acceptCheckPending.recoverWith ex: PendingAcceptance: ${cb.baseHash}")
+        acceptErrorHandler(ex)
+      case error =>
+        logger.info(s"[${dao.id.short}] acceptCheckPending.recoverWith error: ${cb.baseHash}")
+        pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ())) >> acceptErrorHandler(error)
+    }
+  }
+
+  def acceptCheckpointCacheData(cb: FinishedCheckpoint)(implicit cs: ContextShift[F]) = {
+    val acceptance = for {
+      _ <- logger.info(s"[${dao.id.short}] starting accept block for accept block: ${cb.checkpointCacheData.checkpointBlock.baseHash}")
+      _ <- accept(cb.checkpointCacheData, cb.facilitators)
+      _ <- logger.info(s"[${dao.id.short}] ending accept block for accept block: ${cb.checkpointCacheData.checkpointBlock.baseHash} from others")
+    } yield ()
+    acceptance.recoverWith {
+      case ex: PendingAcceptance =>
+        logger.info(s"[${dao.id.short}] acceptCheckpointCacheData.recoverWith ex: PendingAcceptance: ${cb.checkpointCacheData.checkpointBlock.baseHash}")
+        acceptErrorHandler(ex)
+      case error =>
+        logger.info(s"[${dao.id.short}] acceptCheckpointCacheData.recoverWith error: ${cb.checkpointCacheData.checkpointBlock.baseHash}")
+        pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.checkpointCacheData.checkpointBlock.baseHash), ())) >> acceptErrorHandler(error)
+    }
+  }
+
+  def acceptPendingAcceptanceFromOther(cb: CheckpointBlock)(implicit cs: ContextShift[F]) = {
+    val acceptance = for {
+      _ <- logger.info(s"[${dao.id.short}] begin pendingAcceptanceFromOthers.modify: ${cb.baseHash}")
+      _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
+      _ <- logger.info(s"[${dao.id.short}] end pendingAcceptanceFromOthers.modify: ${cb.baseHash}")
+    } yield ()
+    acceptance.recoverWith {
+      case ex: PendingAcceptance =>
+        logger.info(s"[${dao.id.short}] acceptPendingAcceptanceFromOther.recoverWith ex: PendingAcceptance: ${cb.baseHash}")
+        acceptErrorHandler(ex)
+      case error =>
+        logger.info(s"[${dao.id.short}] acceptPendingAcceptanceFromOther.recoverWith error: ${cb.baseHash}")
+        pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ())) >> acceptErrorHandler(error)
+    }
+  }
+
+
   def accept(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] = {
 //    val obtainPeers = cluster.getPeerInfo.map { allPeers =>
 //      val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))

@@ -217,7 +217,7 @@ object EdgeProcessor extends StrictLogging {
       "handleSignatureRequest"
     )(ConstellationExecutionContext.bounded, dao)
 
-  val chunkSize = 5000
+  val chunkSize = 1000
 
   def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = chunkSize) = //todo make chunk size config
     SnapshotInfoSer(

@@ -41,7 +41,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[TransactionCacheData])
-    kryo.register(classOf[CheckpointCache], new JavaSerializer())//, new DeflateSerializer(new FieldSerializer(kryo, classOf[CheckpointCache])))
+    kryo.register(classOf[CheckpointCache], new DeflateSerializer(new FieldSerializer(kryo, classOf[CheckpointCache])))//, new JavaSerializer())//todo try java ser if issue with class registration
     kryo.register(classOf[Transaction])
     kryo.register(classOf[TransactionGossip])
     kryo.register(classOf[Edge[TransactionEdgeData]])

@@ -387,15 +387,16 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       )
       .flatMap(
         f =>
-          f.traverse { h: FinishedCheckpoint =>
+          f.traverse { h =>
             Sync[F].delay(
               logger.debug(
                 s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.baseHash}"
               )
             ) >>
-              checkpointAcceptanceService
-                .accept(h)
-                .recoverWith {
+              checkpointAcceptanceService.acceptSyncPending(h.checkpointCacheData.checkpointBlock) >>
+              checkpointAcceptanceService.acceptCheckPending(h.checkpointCacheData.checkpointBlock) >>
+              checkpointAcceptanceService.acceptCheckpointCacheData(h) >>
+              checkpointAcceptanceService.acceptPendingAcceptanceFromOther(h.checkpointCacheData.checkpointBlock).recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
                 Sync[F].pure(None)
               case unknownError =>
@@ -410,8 +411,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def filter(buffer: List[FinishedCheckpoint], info: SnapshotInfo) = {
     val alreadyAccepted =
       (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.baseHash)).distinct
-    buffer.filterNot(//todo will need to change logic when snapshotCache is filtered
-      //todo it's this filter?
+    buffer.filterNot(
       f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.baseHash)
     )
   }
@@ -447,7 +447,7 @@ object Download extends StrictLogging {
           val snapshotsProcessor =
             new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
           val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster, dao.checkpointAcceptanceService)
-          val download = process.download()
+          val download = process.download()//dao.snapshotBroadcastService.verifyRecentSnapshots()
           val wrappedDownload =
             dao.cluster.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress).flatMap {
               case SetStateResult(oldState, true) =>
