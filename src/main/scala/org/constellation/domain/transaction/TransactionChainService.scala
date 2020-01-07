@@ -41,7 +41,6 @@ class TransactionChainService[F[_]: Concurrent] {
     val address = edge.parents.head.hash
     lastTransactionRef.get.map { m =>
       val ref = m.get(address)
-      assert(ref.isEmpty)
       Transaction(edge, LastTransactionRef.empty, true, isTest)
     }
   }

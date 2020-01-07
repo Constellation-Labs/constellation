@@ -171,12 +171,6 @@ class SnapshotService[F[_]: Concurrent](
 
   def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Array[String]): F[List[CheckpointCache]] =
     snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
-//    getAcceptedCBSinceSnapshot.flatMap{
-//    snapHashes =>
-//      val res =
-//snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
-////    res
-//  }
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
@@ -204,7 +198,7 @@ class SnapshotService[F[_]: Concurrent](
       }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
-        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString//todo change here
+        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
       )
       _ <- updateMetricsAfterSnapshot()
     } yield ()

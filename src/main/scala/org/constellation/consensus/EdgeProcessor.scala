@@ -316,23 +316,6 @@ import java.nio.file.{Files, Paths}
 
 object Snapshot extends StrictLogging {
 
-  val maxSnapshotInDir = ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-  var snapshotDir: Long = 0 //todo ref?
-  var curSnapshotsInDir = 0 //todo ref?
-
-  def getDirFromSnapshotCounter = {
-    println("curSnapshotsInDir" + curSnapshotsInDir)
-    println("snapshotDirs" + snapshotDir)
-    if (curSnapshotsInDir >= maxSnapshotInDir) {
-      snapshotDir += 1
-
-      snapshotDir
-    } else {
-      curSnapshotsInDir += 1
-      snapshotDir
-    }
-  }
-
   def writeSnapshot[F[_]: Concurrent](
     storedSnapshot: StoredSnapshot
   )(implicit dao: DAO, C: ContextShift[F]): EitherT[F, Throwable, Path] =
@@ -359,9 +342,7 @@ object Snapshot extends StrictLogging {
         EitherT(
           withMetric(
             Sync[F].delay(
-              Files.write(Paths.get(dao.snapshotPath.pathAsString, // + s"/${directory}",
-                                    storedSnapshot.snapshot.hash),
-                          serialized)
+              Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
             ),
             "writeSnapshot"
           ).attempt

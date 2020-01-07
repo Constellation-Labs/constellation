@@ -222,24 +222,24 @@ object Schema {
     balance: Long,
     memPoolBalance: Long,
     reputation: Option[Double] = None,
-//    ancestorBalances: Map[String, Long] = Map(),
-//    ancestorReputations: Map[String, Long] = Map(),
-    //    recentTransactions: Seq[String] = Seq(),
+    ancestorBalances: Map[String, Long] = Map(),
+    ancestorReputations: Map[String, Long] = Map(),
+        recentTransactions: Seq[String] = Seq(),
     balanceByLatestSnapshot: Long = 0L
   ) {
 
-//    def plus(previous: AddressCacheData): AddressCacheData =
-//      this.copy(
-//        ancestorBalances =
-//          ancestorBalances ++ previous.ancestorBalances
-//            .filterKeys(k => !ancestorBalances.contains(k)),
-//        ancestorReputations =
-//          ancestorReputations ++ previous.ancestorReputations.filterKeys(
-//            k => !ancestorReputations.contains(k)
-//          )
-//        //recentTransactions =
-//        //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
-//      )
+    def plus(previous: AddressCacheData): AddressCacheData =
+      this.copy(
+        ancestorBalances =
+          ancestorBalances ++ previous.ancestorBalances
+            .filterKeys(k => !ancestorBalances.contains(k)),
+        ancestorReputations =
+          ancestorReputations ++ previous.ancestorReputations.filterKeys(
+            k => !ancestorReputations.contains(k)
+          )
+        //recentTransactions =
+        //  recentTransactions ++ previous.recentTransactions.filter(k => !recentTransactions.contains(k))
+      )
 
   }
 
