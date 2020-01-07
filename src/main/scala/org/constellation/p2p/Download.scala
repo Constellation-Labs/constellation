@@ -130,11 +130,31 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   val config: Config = ConfigFactory.load()
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
+  def updateSnapInfo(majoritySnapshot: SnapshotInfo, snapshotCache: Seq[String]) = {
+    val localCps = snapshotCache.toSet
+    val acceptedCBSinceSnapshotCacheInfo = majoritySnapshot.acceptedCBSinceSnapshotCache
+    val updatedMajority = for {
+      localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(majoritySnapshot.acceptedCBSinceSnapshot.filter(localCps.contains).toArray))
+    } yield majoritySnapshot.copy(acceptedCBSinceSnapshotCache = (acceptedCBSinceSnapshotCacheInfo ++ localSnapshotCacheData))
+    updatedMajority
+  }
+
+
   def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): F[Unit] =
     logThread(
       for {
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
-        majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)
+//        snapshotCacheData: Seq[CheckpointCache] <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache.toArray))
+        majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)//todo need to get acceptedCbsFromSnapshot from snapinfo
+        updatedMajoritySnapshot <- updateSnapInfo(majoritySnapshot, snapshotCache)
+        _ <- if (snapshotHashes.forall(updatedMajoritySnapshot.snapshotHashes.contains)) Sync[F].unit
+        else
+          Sync[F].raiseError[Unit](
+            new RuntimeException(
+              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${snapshotHashes
+                .filterNot(updatedMajoritySnapshot.snapshotHashes.contains)}"
+            )
+          )
         snapshotClient <- getSnapshotClient(peers)
         alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
           snapshotClient,
@@ -144,7 +164,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           snapshotClient,
           peers
         )
-        _ <- finishDownload(majoritySnapshot)
+        _ <- finishDownload(updatedMajoritySnapshot)
         _ <- setAcceptedTransactionsAfterDownload()
       } yield (),
       "download_reDownload"
@@ -156,7 +176,8 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
         peers <- getReadyPeers()
         majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)
-      } yield majoritySnapshot,
+        updatedMajoritySnapshot <- updateSnapInfo(majoritySnapshot, snapshotCache)
+      } yield updatedMajoritySnapshot,
       "testSnapInfoSer"
     )
 
@@ -170,17 +191,18 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         snapshotClient <- getSnapshotClient(peers)
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
         majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)
-        hashes <- getSnapshotHashes(majoritySnapshot)
+        updatedMajoritySnapshot <- updateSnapInfo(majoritySnapshot, snapshotCache)
+        hashes <- getSnapshotHashes(updatedMajoritySnapshot)
         snapshotHashes <- downloadAndProcessSnapshotsFirstPass(hashes)(
           snapshotClient,
           peers
         )
-        missingHashes <- getSnapshotHashes(majoritySnapshot)
+        missingHashes <- getSnapshotHashes(updatedMajoritySnapshot)
         _ <- downloadAndProcessSnapshotsSecondPass(missingHashes.filterNot(snapshotHashes.contains))(
           snapshotClient,
           peers
         )
-        _ <- finishDownload(majoritySnapshot)
+        _ <- finishDownload(updatedMajoritySnapshot)
         _ <- setAcceptedTransactionsAfterDownload()
       } yield (),
       "download_download"
@@ -258,6 +280,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     tips <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag="tips")(C)
     snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCache", timeout = 45.seconds, tag="snapshotCache")(C)
     lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/lastAcceptedTransactionRef", timeout = 45.seconds, tag="lastAcceptedTransactionRef")(C)
+//    localAcceptedCBSinceSnapshotCache <- snapshotService
     } yield (SnapshotInfo(
       KryoSerializer.deserializeCast[String](snh),
       snapcbs.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "snapshotCBS")),
@@ -357,7 +380,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
                 Sync[F].pure(None)
               case unknownError =>
                 Sync[F].delay {
-                  logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
+                  logger.error(s"[${dao.id.short}] Failed to accept checkpoint block acceptSnapshotCacheData", unknownError)
                 } >> Sync[F].pure(None)
             }
           }
@@ -367,7 +390,8 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def filter(buffer: List[FinishedCheckpoint], info: SnapshotInfo) = {
     val alreadyAccepted =
       (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.baseHash)).distinct
-    buffer.filterNot(
+    buffer.filterNot(//todo will need to change logic when snapshotCache is filtered
+      //todo it's this filter?
       f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.baseHash)
     )
   }

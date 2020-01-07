@@ -169,6 +169,15 @@ class SnapshotService[F[_]: Concurrent](
       _ <- checkpointService.applySnapshot(cbs)
     } yield ()
 
+  def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Array[String]): F[List[CheckpointCache]] =
+    snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
+//    getAcceptedCBSinceSnapshot.flatMap{
+//    snapHashes =>
+//      val res =
+//snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
+////    res
+//  }
+
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- retainOldData()
@@ -179,6 +188,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
+        //todo its here ^ need to add this.acceptedCBSinceSnapshot to line above, since filtered from snapshotInfo.acceptedCBSinceSnapshotCache
         soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
@@ -195,7 +205,7 @@ class SnapshotService[F[_]: Concurrent](
       }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
-        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString//todo change here
       )
       _ <- updateMetricsAfterSnapshot()
     } yield ()

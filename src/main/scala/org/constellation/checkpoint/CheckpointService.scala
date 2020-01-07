@@ -53,6 +53,11 @@ class CheckpointService[F[_]: Concurrent](
   def fullData(key: String): F[Option[CheckpointCache]] =
     lookup(key).flatMap(_.map(merkleService.convert).sequence)
 
+//  def batchFullData(keys: Seq[String]): F[Option[CheckpointCache]] = {
+//    val test = keys.map{ key => lookup(key) }
+//    lookup(key).flatMap(_.map(merkleService.convert).sequence)
+//  }
+
   def lookup(key: String): F[Option[CheckpointCacheMetadata]] =
     Lookup.extendedLookup[F, String, CheckpointCacheMetadata](List(memPool))(key)
 

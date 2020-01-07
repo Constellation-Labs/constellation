@@ -145,7 +145,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           entity(as[Array[Array[Byte]]]) { curCheckpointHashes =>
           val curCheckpoints = curCheckpointHashes.flatMap(EdgeProcessor.chunkDeSerialize[Array[String]](_, "curCheckpointHashes"))
     val res = dao.snapshotService.getSnapshotInfo.flatMap { info =>
-      logger.warn(s"snapshot/info nfo.acceptedCBSinceSnapshot - ${info.acceptedCBSinceSnapshot.toList}")
+      logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot - ${info.acceptedCBSinceSnapshot.toList}")
       logger.warn(s"snapshot/info curCheckpointHashes - ${curCheckpointHashes.toList}")
       val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(curCheckpoints.toList)
       logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet.toList}")
@@ -457,7 +457,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               APIDirective.handle(snapshotHash)(complete(_))
             }
           } ~
-          path("snapshot" / "obj" / "snapshotCache") {
+          path("snapshot" / "obj" / "snapshotCache") {//todo filter here too
             APIDirective.extractIP(socketAddress) { ip =>
               val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
                 val test: Array[Array[Byte]] =

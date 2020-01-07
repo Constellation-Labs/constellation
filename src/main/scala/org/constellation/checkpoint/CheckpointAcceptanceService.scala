@@ -86,26 +86,35 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     }
 
   def accept(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] = {
-    val obtainPeers = cluster.getPeerInfo.map { allPeers =>
-      val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))
-      (if (filtered.isEmpty) allPeers else filtered)
-        .map(p => PeerApiClient(p._1, p._2.client))
-        .toList
-    }
+//    val obtainPeers = cluster.getPeerInfo.map { allPeers =>
+//      val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))
+//      (if (filtered.isEmpty) allPeers else filtered)
+//        .map(p => PeerApiClient(p._1, p._2.client))
+//        .toList
+//    }
 
     val cb = checkpoint.checkpointCacheData.checkpointBlock
     val acceptance = for {
+      _ <- logger.debug(s"[${dao.id.short}] begin pendingAcceptanceFromOthers for accept block: ${cb.baseHash}")
       _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
+      _ <- logger.debug(s"[${dao.id.short}] end pendingAcceptanceFromOthers for accept block: ${cb.baseHash}")
+      _ <- logger.debug(s"[${dao.id.short}] begin checkPending for accept block: ${cb.baseHash}")
       _ <- checkPending(cb.baseHash)
-      _ <- logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others")
+      _ <- logger.debug(s"[${dao.id.short}] end checkPending for accept block: ${cb.baseHash}")
+      _ <- logger.debug(s"[${dao.id.short}] starting accept block for accept block: ${cb.baseHash}")
       _ <- accept(checkpoint.checkpointCacheData, checkpoint.facilitators)
+      _ <- logger.debug(s"[${dao.id.short}] ending accept block for accept block: ${cb.baseHash} from others")
+      _ <- logger.debug(s"[${dao.id.short}] begin pendingAcceptanceFromOthers.modify: ${cb.baseHash}")
       _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
+      _ <- logger.debug(s"[${dao.id.short}] end pendingAcceptanceFromOthers.modify: ${cb.baseHash}")
     } yield ()
 
     acceptance.recoverWith {
       case ex: PendingAcceptance =>
+        logger.debug(s"[${dao.id.short}] acceptance.recoverWith ex: PendingAcceptance: ${cb.baseHash}")
         acceptErrorHandler(ex)
       case error =>
+        logger.debug(s"[${dao.id.short}] acceptance.recoverWith error: ${cb.baseHash}")
         pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ())) >> acceptErrorHandler(error)
     }
   }
