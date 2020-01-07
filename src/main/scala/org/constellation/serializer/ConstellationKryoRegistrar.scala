@@ -1,11 +1,11 @@
 package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.serializers.{DeflateSerializer, EnumNameSerializer, FieldSerializer}
+import com.esotericsoftware.kryo.serializers.{DeflateSerializer, EnumNameSerializer, FieldSerializer, JavaSerializer}
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
 import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationData, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}
-import org.constellation.p2p.SerializedUDPMessage
+import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
 import org.constellation.primitives._
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.LastTransactionRef
@@ -24,14 +24,15 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[SignedData[ChannelMessageData]])
     kryo.register(classOf[ChannelMessage])
     kryo.register(classOf[StoredSnapshot])
-    kryo.register(classOf[SnapshotInfo], new DeflateSerializer(new FieldSerializer(kryo, classOf[SnapshotInfo])))
+    kryo.register(classOf[SnapshotInfo])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[SnapshotInfo])))
     kryo.register(classOf[SnapshotInfoSer])
     kryo.register(classOf[TipData])
     kryo.register(classOf[Height])
     kryo.register(classOf[CommonMetadata])
+    kryo.register(classOf[PeerNotification])
 //    kryo.register(classOf[Seq.GenericCanBuildFrom[_]])
     kryo.register(classOf[Array[CheckpointBlock]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[CheckpointBlock]])))
-    kryo.register(classOf[Array[CheckpointCache]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[CheckpointCache]])))
+    kryo.register(classOf[Array[CheckpointCache]], new JavaSerializer())//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[CheckpointCache]])))
     kryo.register(classOf[Array[(String, LastTransactionRef)]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[(String, LastTransactionRef)]])))
     kryo.register(classOf[Array[(String, AddressCacheData)]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[(String, AddressCacheData)]])))
     kryo.register(classOf[Array[String]])//, new DeflateSerializer(new FieldSerializer(kryo, classOf[Array[String]])))
@@ -40,7 +41,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[TransactionCacheData])
-    kryo.register(classOf[CheckpointCache], new DeflateSerializer(new FieldSerializer(kryo, classOf[CheckpointCache])))
+    kryo.register(classOf[CheckpointCache], new JavaSerializer())//, new DeflateSerializer(new FieldSerializer(kryo, classOf[CheckpointCache])))
     kryo.register(classOf[Transaction])
     kryo.register(classOf[TransactionGossip])
     kryo.register(classOf[Edge[TransactionEdgeData]])

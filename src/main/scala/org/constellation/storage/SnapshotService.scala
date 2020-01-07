@@ -188,7 +188,6 @@ class SnapshotService[F[_]: Concurrent](
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        //todo its here ^ need to add this.acceptedCBSinceSnapshot to line above, since filtered from snapshotInfo.acceptedCBSinceSnapshotCache
         soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>

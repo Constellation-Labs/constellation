@@ -92,8 +92,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 //        .map(p => PeerApiClient(p._1, p._2.client))
 //        .toList
 //    }
-
     val cb = checkpoint.checkpointCacheData.checkpointBlock
+    logger.debug(s"[${dao.id.short}] begin checkpointAcceptanceService.accept for accept block: ${cb.baseHash}")
+
     val acceptance = for {
       _ <- logger.debug(s"[${dao.id.short}] begin pendingAcceptanceFromOthers for accept block: ${cb.baseHash}")
       _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
@@ -108,7 +109,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
       _ <- logger.debug(s"[${dao.id.short}] end pendingAcceptanceFromOthers.modify: ${cb.baseHash}")
     } yield ()
-
+    logger.debug(s"[${dao.id.short}] end of checkpointAcceptanceService.accept for accept block: ${cb.baseHash}")
     acceptance.recoverWith {
       case ex: PendingAcceptance =>
         logger.debug(s"[${dao.id.short}] acceptance.recoverWith ex: PendingAcceptance: ${cb.baseHash}")

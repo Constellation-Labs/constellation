@@ -130,13 +130,26 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   val config: Config = ConfigFactory.load()
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
-  def updateSnapInfo(majoritySnapshot: SnapshotInfo, snapshotCache: Seq[String]) = {
-    val localCps = snapshotCache.toSet
+  def updateSnapInfo(majoritySnapshot: SnapshotInfo, localSnapshotCacheData: List[CheckpointCache]) = {
+    val majoritySnapCpHashesToGet = majoritySnapshot.acceptedCBSinceSnapshot.diff(majoritySnapshot.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash)).toSet
+    val localCps = localSnapshotCacheData.filter(cpc => majoritySnapCpHashesToGet.contains(cpc.checkpointBlock.baseHash)).distinct
     val acceptedCBSinceSnapshotCacheInfo = majoritySnapshot.acceptedCBSinceSnapshotCache
-    val updatedMajority = for {
-      localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(majoritySnapshot.acceptedCBSinceSnapshot.filter(localCps.contains).toArray))
-    } yield majoritySnapshot.copy(acceptedCBSinceSnapshotCache = (acceptedCBSinceSnapshotCacheInfo ++ localSnapshotCacheData))
-    updatedMajority
+//    val updatedMajority = for {
+//      localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(majoritySnapshot.acceptedCBSinceSnapshot.filter(localCps.contains).toArray))
+//    } yield
+      val res = majoritySnapshot.copy(acceptedCBSinceSnapshotCache = acceptedCBSinceSnapshotCacheInfo ++ localCps)
+//    updatedMajority
+//    assert(majoritySnapshot.acceptedCBSinceSnapshot.size == majoritySnapshot.acceptedCBSinceSnapshotCache.size)
+//    println(s"acceptedCBSinceSnapshotCache: ${res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash)}")
+//    println(s"acceptedCBSinceSnapshot: ${res.acceptedCBSinceSnapshot}")
+      logger.debug(s"acceptedCBSinceSnapshotCache.size: ${res.acceptedCBSinceSnapshotCache.size}")
+      logger.debug(s"acceptedCBSinceSnapshot.size: ${res.acceptedCBSinceSnapshot.size}")
+      logger.info(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache.size}")
+      logger.info(s"updateSnapInfo hashes == ? ${res.acceptedCBSinceSnapshot.toSet == res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash).toSet}")
+//    println(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache}")
+      logger.debug(s"updateSnapInfo diff: ${res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))}")
+
+    res
   }
 
 
@@ -144,9 +157,11 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     logThread(
       for {
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
-//        snapshotCacheData: Seq[CheckpointCache] <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache.toArray))
-        majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)//todo need to get acceptedCbsFromSnapshot from snapinfo
-        updatedMajoritySnapshot <- updateSnapInfo(majoritySnapshot, snapshotCache)
+        localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache.toArray))
+
+        //        snapshotCacheData: Seq[CheckpointCache] <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache.toArray))
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash).toArray)//todo need to get acceptedCbsFromSnapshot from snapinfo
+        updatedMajoritySnapshot = updateSnapInfo(majoritySnapshot, localSnapshotCacheData)
         _ <- if (snapshotHashes.forall(updatedMajoritySnapshot.snapshotHashes.contains)) Sync[F].unit
         else
           Sync[F].raiseError[Unit](
@@ -174,9 +189,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     logThread(
       for {
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
+        localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache.toArray))
         peers <- getReadyPeers()
-        majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)
-        updatedMajoritySnapshot <- updateSnapInfo(majoritySnapshot, snapshotCache)
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash).toArray)
+        updatedMajoritySnapshot = updateSnapInfo(majoritySnapshot, localSnapshotCacheData)
       } yield updatedMajoritySnapshot,
       "testSnapInfoSer"
     )
@@ -190,8 +206,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         peers <- getReadyPeers()
         snapshotClient <- getSnapshotClient(peers)
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
-        majoritySnapshot <- getMajoritySnapshot(peers, snapshotCache.toArray)
-        updatedMajoritySnapshot <- updateSnapInfo(majoritySnapshot, snapshotCache)
+        localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache.toArray))
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash).toArray)
+        updatedMajoritySnapshot = updateSnapInfo(majoritySnapshot, localSnapshotCacheData)
         hashes <- getSnapshotHashes(updatedMajoritySnapshot)
         snapshotHashes <- downloadAndProcessSnapshotsFirstPass(hashes)(
           snapshotClient,
@@ -375,7 +392,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
               logger.debug(
                 s"[${dao.id.short}] Sync buffer accept checkpoint block ${h.checkpointCacheData.checkpointBlock.baseHash}"
               )
-            ) >> checkpointAcceptanceService.accept(h).recoverWith {
+            ) >>
+              checkpointAcceptanceService
+                .accept(h)
+                .recoverWith {
               case _ @(CheckpointAcceptBlockAlreadyStored(_) | TipConflictException(_, _)) =>
                 Sync[F].pure(None)
               case unknownError =>
