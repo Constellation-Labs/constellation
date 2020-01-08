@@ -5,10 +5,8 @@ import java.nio.file.Path
 
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
 import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
@@ -16,7 +14,7 @@ import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
@@ -155,7 +153,10 @@ class SnapshotService[F[_]: Concurrent](
       fetched <- getCheckpointBlocksFromSnapshot(cbs)
       _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
       _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.applySnapshot))
+      soeHashes <- getSOEHashesFrom(cbs)
       _ <- checkpointService.applySnapshot(cbs)
+      _ <- soeService.applySnapshot(soeHashes)
+      _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
@@ -391,7 +392,10 @@ class SnapshotService[F[_]: Concurrent](
         dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString)
       }
 
+      soeHashes <- getSOEHashesFrom(currentSnapshot.checkpointBlocks.toList)
       _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
+      _ <- soeService.applySnapshot(soeHashes)
+      _ <- logger.info(s"Removed soeHashes : $soeHashes")
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
       _ <- dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
     } yield ()
@@ -399,6 +403,11 @@ class SnapshotService[F[_]: Concurrent](
     applyAfter.attemptT
       .leftMap(SnapshotUnexpectedError)
   }
+
+  private def getSOEHashesFrom(cbs: List[String]): F[List[String]] =
+    cbs
+      .traverse(checkpointService.lookup)
+      .map(_.flatMap(_.map(_.checkpointBlock.soeHash)))
 
   private def updateMetricsAfterSnapshot(): F[Unit] =
     for {
