@@ -16,7 +16,7 @@ class RollbackService[F[_]: Concurrent](
   dao: DAO,
   rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F],
-  val rollbackLoader: RollbackLoader
+  rollbackLoader: RollbackLoader
 )(implicit C: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]

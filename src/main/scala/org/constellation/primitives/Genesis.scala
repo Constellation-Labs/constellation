@@ -30,7 +30,7 @@ object Genesis extends StrictLogging {
     allocAccountBalances: Seq[AccountBalance]
   )(implicit dao: DAO): F[List[Transaction]] = LiftIO[F].liftIO {
     allocAccountBalances.toList
-      .traverse(ab => dao.transactionService.createTransaction(Coinbase, ab.accountHash, LastTransactionRef.empty, ab.balance, CoinbaseKey))
+      .traverse(ab => dao.transactionService.createTransaction(Coinbase, ab.accountHash, ab.balance, CoinbaseKey))
   }
 
   private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =

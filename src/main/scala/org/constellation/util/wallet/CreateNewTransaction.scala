@@ -31,10 +31,10 @@ object CreateNewTransaction extends IOApp {
       transactionEdge = TransactionService.createTransactionEdge(
         KeyUtils.publicKeyToAddressString(kp.getPublic),
         cliParams.destination,
-        prevTransactionOp.get.edge.data.lastTxRef,
+        prevTransactionOp.map(_.edge.data.lastTxRef).getOrElse(LastTransactionRef.empty),
         cliParams.amount.toDouble.toLong,
         kp,
-        prevTransactionOp.get.edge.data.fee
+        prevTransactionOp.flatMap(_.edge.data.fee)
       )
       transaction = Transaction(transactionEdge, prevTransactionOp.map(_.lastTxRef).getOrElse(LastTransactionRef.empty))
       transactionWriteBuffer = transactionWriter(transaction)

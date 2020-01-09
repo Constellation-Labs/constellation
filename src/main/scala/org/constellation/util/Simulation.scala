@@ -352,6 +352,26 @@ object Simulation {
     Future.sequence(responses).get()
   }
 
+  def getPublicAddressFromKeyPair(keyPair: KeyPair): String =
+    keyPair.getPublic.toId.address
+
+  def createDoubleSpendTxs(
+    node1: ConstellationNode,
+    node2: ConstellationNode,
+    src: String,
+    dst: String,
+    keyPair: KeyPair
+  ): IO[Seq[Transaction]] =
+    for {
+      firstTx <- node1.dao.transactionService.createTransaction(src, dst, 1L, keyPair)
+      firstDoubleSpendTx <- Sync[IO].pure(Transaction(firstTx.edge, LastTransactionRef.empty, isTest = true))
+      secondTx <- node2.dao.transactionService.createTransaction(src, dst, 1L, keyPair)
+      secondDoubleSpendTx <- Sync[IO].pure(Transaction(secondTx.edge, LastTransactionRef.empty, isTest = true))
+
+      _ <- node1.dao.transactionService.put(TransactionCacheData(firstDoubleSpendTx))
+      _ <- node1.dao.transactionService.put(TransactionCacheData(secondDoubleSpendTx))
+    } yield Seq(firstDoubleSpendTx, secondDoubleSpendTx)
+
   def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
     val addPeers = apis.flatMap { a =>
       addPeerRequests.zip(apis).filter(_._2 != a).map {

@@ -39,13 +39,18 @@ class E2ETest extends E2E {
     client.postBlocking[SendToAddress]("send", SendToAddress(dst, amount))
   }
 
+  private val blacklistedKeyPair = KeyUtils.makeKeyPair()
+  private val blacklistedAddress = Simulation.getPublicAddressFromKeyPair(blacklistedKeyPair)
   private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
 
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
     logger.info("API addresses: " + apis.map(_.id.address))
-    val startingAcctBalances: List[AccountBalance] = List(AccountBalance(sendToAddress, 100L))
-    assert(Simulation.run(initialAPIs, addPeerRequests, startingAcctBalances))
+    val startingAccountBalances: List[AccountBalance] = List(
+      AccountBalance(sendToAddress, 10L),
+      AccountBalance(blacklistedAddress, 10L)
+    )
+    assert(Simulation.run(initialAPIs, addPeerRequests, startingAccountBalances))
 
     val metadatas =
       n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)

@@ -57,21 +57,18 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
   def createTransaction(
     src: String,
     dst: String,
-    lastTxRef: LastTransactionRef,
     amount: Long,
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
   ): F[Transaction] =
-    TransactionService.createAndSetTransaction(src, dst, lastTxRef, amount, keyPair, normalized, dummy)(transactionChainService)
+    TransactionService.createTransaction(src, dst, amount, keyPair, normalized, dummy)(
+      transactionChainService
+    )
 
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
-  def receiveTransaction(tx: Transaction): F[TransactionCacheData] =
-    transactionChainService
-      .setLastTransaction(tx.edge, false)
-      .flatMap(tx => put(TransactionCacheData(tx)))
 }
 
 object TransactionService {
@@ -101,29 +98,23 @@ object TransactionService {
     )
 
     val soe = signedObservationEdge(oe)(keyPair)
-
     Edge(oe, soe, txData)
   }
 
-  def createAndSetTransaction[F[_]: Concurrent](
+  def createTransaction[F[_]: Concurrent](
     src: String,
     dst: String,
-    lastTxRef: LastTransactionRef,
     amount: Long,
     keyPair: KeyPair,
     normalized: Boolean = true,
     dummy: Boolean = false
-  )(transactionChainService: TransactionChainService[F]): F[Transaction] = {
-    val soe = createTransactionEdge(src, dst, lastTxRef, amount, keyPair)
-    transactionChainService.setLastTransaction(soe, dummy)
-  }
+  )(transactionChainService: TransactionChainService[F]): F[Transaction] =
+    transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
 
-
-  def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair, prevTxRef: String = "dummy", ordinal: Long = 0L)(
+  def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
   ): F[Transaction] =
-    createAndSetTransaction[F](src, dst, LastTransactionRef.empty,0L, keyPair, true)(transactionChainService)
-
-  def receiveTransaction[F[_]: Concurrent](tx: Transaction)(transactionChainService: TransactionChainService[F]): F[Transaction] =
-    transactionChainService.setLastTransaction(tx.edge, false)
+    createTransaction[F](src, dst, 0L, keyPair, normalized = false, dummy = true)(
+      transactionChainService
+    )
 }
