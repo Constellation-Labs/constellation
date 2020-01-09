@@ -58,6 +58,24 @@ class TransactionChainService[F[_]: Concurrent] {
       (snapshotInfo.lastAcceptedTransactionRef, ())
     }
 
+  def checkDummyTransaction(
+    src: String,
+    dst: String,
+    amount: Long,
+    keyPair: KeyPair,
+    isDummy: Boolean,
+    fee: Option[Long] = None,
+    normalized: Boolean = false,
+    isTest: Boolean = false
+  ): F[Transaction] = {
+    val ref = LastTransactionRef.empty
+    val edge: Edge[TransactionEdgeData] = createTransactionEdge(src, dst, ref, amount, keyPair, fee, normalized)
+    val address = edge.observationEdge.parents.head.hash
+    lastTransactionRef.get.map { m =>
+      Transaction(edge, LastTransactionRef.empty, true, isTest)
+    }
+  }
+
   def clear: F[Unit] =
     lastAcceptedTransactionRef
       .modify(_ => (Map.empty, ()))
