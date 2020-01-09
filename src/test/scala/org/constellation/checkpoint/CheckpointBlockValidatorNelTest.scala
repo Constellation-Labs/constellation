@@ -13,7 +13,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.domain.configuration.NodeConfig
-import org.constellation.p2p.Cluster
+import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
@@ -212,7 +212,7 @@ class ValidationSpec
     )
 
   val ipManager = IPManager[IO]()
-  val cluster = Cluster[IO](() => dao.metrics, ipManager, dao)
+  val cluster = Cluster[IO](() => dao.metrics, ipManager, new JoiningPeerValidator[IO](), dao)
   dao.cluster = cluster
 
   dao.checkpointService.put(CheckpointCache(go.genesis)).unsafeRunSync
@@ -386,6 +386,30 @@ class ValidationSpec
           Map(
             getAddress(a) -> 75L,
             getAddress(b) -> 75L
+          )
+        )
+
+        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
+      }
+    }
+
+    "at least one transaction tries to reduce balance of node below stalking amount" should {
+      "not pass validation" in {
+        val nodeAddress = dao.id.address
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
+
+        val txs = Seq(
+          Fixtures.makeTransaction(nodeAddress, getAddress(b), 100L, dao.keyPair),
+          Fixtures.makeTransaction(getAddress(a), getAddress(c), 100L, a)
+        )
+
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
+
+        fill(
+          Map(
+            nodeAddress -> 100L,
+            getAddress(a) -> 200L
           )
         )
 

@@ -5,14 +5,13 @@ import java.util.concurrent.TimeUnit
 import akka.util.Timeout
 import better.files.File
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
-import com.softwaremill.sttp.{Response, StatusCodes}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
+import org.constellation.keytool.KeyUtils
+import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage.RecentSnapshot
 import org.constellation.util.{APIClient, AccountBalance, Metrics, Simulation}
 
 import scala.concurrent.Await
@@ -35,17 +34,23 @@ class E2ETest extends E2E {
   private val addPeerRequests = nodes.map(_.getAddPeerRequest)
   private val storeData = true
 
-  private val sendToAddress = "DAG2fwc7VsMiVLBBVvADsg9AVLF9yzqE4QSjsKgR"
   private def sendTo(node: ConstellationNode, dst: String, amount: Long = 100L) = {
     val client = node.getAPIClientForNode(node)
     client.postBlocking[SendToAddress]("send", SendToAddress(dst, amount))
   }
 
+  private val blacklistedKeyPair = KeyUtils.makeKeyPair()
+  private val blacklistedAddress = Simulation.getPublicAddressFromKeyPair(blacklistedKeyPair)
+  private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
+
   "E2E Run" should "demonstrate full flow" in {
     logger.info("API Ports: " + apis.map(_.apiPort))
     logger.info("API addresses: " + apis.map(_.id.address))
-    val startingAcctBalances: List[AccountBalance] = List(AccountBalance(sendToAddress, 100L))
-    assert(Simulation.run(initialAPIs, addPeerRequests, startingAcctBalances))
+    val startingAccountBalances: List[AccountBalance] = List(
+      AccountBalance(sendToAddress, 10L),
+      AccountBalance(blacklistedAddress, 10L)
+    )
+    assert(Simulation.run(initialAPIs, addPeerRequests, startingAccountBalances))
 
     val metadatas =
       n1.getPeerAPIClient.postBlocking[Seq[ChannelMetadata]]("channel/neighborhood", n1.dao.id)
@@ -101,14 +106,13 @@ class E2ETest extends E2E {
 //    Thread.sleep(20 * 1000)
 
 //    val allNodes = nodes :+ downloadNode
-
     val allNodes = nodes
 
     val allAPIs: Seq[APIClient] = allNodes.map {
       _.getAPIClient()
     } //apis :+ downloadAPI
     assert(Simulation.healthy(allAPIs))
-//      Thread.sleep(1000*1000)
+    //  Thread.sleep(1000*1000)
 
     Simulation.disableRandomTransactions(allAPIs)
     Simulation.logger.info("Stopping transactions to run parity check")

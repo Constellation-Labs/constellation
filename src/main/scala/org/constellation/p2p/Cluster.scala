@@ -9,6 +9,7 @@ import com.softwaremill.sttp.Response
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation._
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
@@ -22,7 +23,6 @@ import org.constellation.rollback.{
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._
-import org.constellation.{ConstellationExecutionContext, DAO, PeerMetadata}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -52,13 +52,19 @@ object PeerState extends Enumeration {
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
-class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], dao: DAO)(
+class Cluster[F[_]: Concurrent: Timer: ContextShift](
+  ipManager: IPManager[F],
+  joiningPeerValidator: JoiningPeerValidator[F],
+  dao: DAO
+)(
   implicit C: ContextShift[F]
 ) {
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
+
+  private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
@@ -213,7 +219,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
     )
   }
 
-  def pendingRegistration(ip: String, request: PeerRegistrationRequest): F[Unit] =
+  def pendingRegistration(ip: String, request: PeerRegistrationRequest, isJoiningPeer: Boolean = false): F[Unit] =
     logThread(
       for {
         pr <- PendingRegistration(ip, request).pure[F]
@@ -228,8 +234,14 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
         isSelfId = dao.id == request.id
         badAttempt = isSelfId || !validExternalHost || existsNotOffline
 
+        isValid <- if (isJoiningPeer)
+          joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
+        else Sync[F].pure(true)
+
         _ <- if (badAttempt) {
           dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
+        } else if (!isValid) {
+          dao.metrics.incrementMetricAsync[F]("invalidPeerAdditionAttempt")
         } else {
           val client = APIClient(request.host, request.port)(dao.backend, dao)
           val authSignRequest = PeerAuthSignRequest(Random.nextLong())
@@ -444,7 +456,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
       "cluster_attemptRegisterSelfWithPeer"
     )
 
-  def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
+  def attemptRegisterPeer(hp: HostPort, isJoiningPeer: Boolean = false): F[Response[Unit]] =
     logThread(
       withMetric(
         {
@@ -453,7 +465,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
           client
             .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
             .flatMap { registrationRequest =>
-              pendingRegistration(hp.host, registrationRequest) >>
+              pendingRegistration(hp.host, registrationRequest, isJoiningPeer) >>
                 client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C)
             }
             .handleErrorWith { err =>
@@ -528,7 +540,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](ipManager: IPManager[F], da
   def join(hp: HostPort): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
+    logThread(attemptRegisterPeer(hp, isJoiningPeer = true) >> Sync[F].delay(Download.download()), "cluster_join")
   }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
@@ -630,8 +642,13 @@ object Cluster {
 
   type Peers = Map[Id, PeerData]
 
-  def apply[F[_]: Concurrent: Timer: ContextShift](metrics: () => Metrics, ipManager: IPManager[F], dao: DAO) =
-    new Cluster(ipManager, dao)
+  def apply[F[_]: Concurrent: Timer: ContextShift](
+    metrics: () => Metrics,
+    ipManager: IPManager[F],
+    joiningPeerValidator: JoiningPeerValidator[F],
+    dao: DAO
+  ) =
+    new Cluster(ipManager, joiningPeerValidator, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
 

@@ -14,6 +14,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint._
 import org.constellation.consensus.{ConsensusManager, ConsensusRemoteSender, ConsensusScheduler, ConsensusWatcher}
 import org.constellation.crypto.SimpleWalletLike
+import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
@@ -34,7 +35,7 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, Roll
 import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
-import org.constellation.storage.external.GcpStorage
+import org.constellation.storage.external.{AwsStorage, GcpStorage}
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
@@ -114,12 +115,14 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     rateLimiting = new RateLimiting[IO]
 
+    blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
     transactionService = new TransactionService[IO](transactionChainService, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+    joiningPeerValidator = JoiningPeerValidator[IO]
 
     ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, this)
+    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, this)
 
     trustManager = TrustManager[IO](id, cluster)
 
@@ -226,6 +229,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
       addressService,
+      blacklistedAddresses,
       transactionService,
       observationService,
       concurrentTipService,
@@ -272,7 +276,11 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       )
     )
 
-    cloudStorage = new GcpStorage[IO]
+    if (ConfigUtil.isEnabledAwsStorage) {
+      cloudStorage = new AwsStorage[IO]
+    } else if (ConfigUtil.isEnabledGcpStorage) {
+      cloudStorage = new GcpStorage[IO]
+    }
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
       cloudStorage,

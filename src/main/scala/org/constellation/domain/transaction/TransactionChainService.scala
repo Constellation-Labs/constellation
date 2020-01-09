@@ -2,18 +2,15 @@ package org.constellation.domain.transaction
 
 import java.security.KeyPair
 
-import cats.effect.{Concurrent, Sync}
+import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.consensus.{Snapshot, SnapshotInfo}
+import org.constellation.consensus.SnapshotInfo
+import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
-import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 
 class TransactionChainService[F[_]: Concurrent] {
-
-  val logger = Slf4jLogger.getLogger[F]
 
   // TODO: Make sure to clean-up those properly
   private[domain] val lastTransactionRef: Ref[F, Map[String, LastTransactionRef]] = Ref.unsafe(Map.empty)
@@ -47,6 +44,7 @@ class TransactionChainService[F[_]: Concurrent] {
       val tx = Transaction(edge, ref, isDummy)
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
     }
+
 
   def applySnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =
     lastAcceptedTransactionRef.modify { _ =>

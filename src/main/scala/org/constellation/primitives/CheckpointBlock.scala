@@ -79,10 +79,20 @@ case class CheckpointBlock(
     this.copy(checkpoint = checkpoint.copy(edge = checkpoint.edge.withSignature(hs)))
 
   def plus(other: CheckpointBlock): CheckpointBlock =
-    this.copy(checkpoint = checkpoint.plus(other.checkpoint))
+    this.copy(
+      checkpoint = checkpoint.plus(other.checkpoint),
+      transactions = transactions ++ other.transactions,
+      messages = messages ++ other.messages,
+      notifications = notifications ++ other.notifications,
+      observations = observations ++ other.observations
+    )
 
-  def +(other: CheckpointBlock): CheckpointBlock =
-    this.copy(checkpoint = checkpoint.plus(other.checkpoint))
+  def +(other: CheckpointBlock): CheckpointBlock = plus(other)
+
+  def plusEdge(other: CheckpointBlock): CheckpointBlock =
+    this.copy(
+      checkpoint = checkpoint.plus(other.checkpoint)
+    )
 
   def parentSOE: Seq[TypedEdgeHash] = checkpoint.edge.parents
 

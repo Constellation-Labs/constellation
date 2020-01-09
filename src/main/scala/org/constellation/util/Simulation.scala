@@ -1,14 +1,17 @@
 package org.constellation.util
 
+import java.security.KeyPair
 import java.util.concurrent.ForkJoinPool
 
+import cats.effect.{IO, Sync}
 import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.PeerMetadata
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.{ConstellationNode, PeerMetadata}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
@@ -82,6 +85,14 @@ object Simulation {
     val balances = fakeBalances(apis) ++ startingAcctBalances
     apis.head.postBlocking[GenesisObservation]("genesis/create", balances)
   }
+
+  def balanceForAddress(apis: Seq[APIClient], address: String): Seq[String] = {
+    val responses = apis.map(a => a.getString(s"balance/$address", timeout = 5.seconds))
+    Future.sequence(responses).get().map(_.body.getOrElse(""))
+  }
+
+  def getLastTxRefForAddress(api: APIClient, address: String): LastTransactionRef =
+    api.getBlocking[LastTransactionRef]("prevTxRef", timeout = 5.seconds)
 
   def addPeer(
     api: APIClient,
@@ -340,6 +351,26 @@ object Simulation {
     val responses = apis.map(_.postNonBlockingEmptyString("ready"))
     Future.sequence(responses).get()
   }
+
+  def getPublicAddressFromKeyPair(keyPair: KeyPair): String =
+    keyPair.getPublic.toId.address
+
+  def createDoubleSpendTxs(
+    node1: ConstellationNode,
+    node2: ConstellationNode,
+    src: String,
+    dst: String,
+    keyPair: KeyPair
+  ): IO[Seq[Transaction]] =
+    for {
+      firstTx <- node1.dao.transactionService.createTransaction(src, dst, 1L, keyPair)
+      firstDoubleSpendTx <- Sync[IO].pure(Transaction(firstTx.edge, LastTransactionRef.empty, isTest = true))
+      secondTx <- node2.dao.transactionService.createTransaction(src, dst, 1L, keyPair)
+      secondDoubleSpendTx <- Sync[IO].pure(Transaction(secondTx.edge, LastTransactionRef.empty, isTest = true))
+
+      _ <- node1.dao.transactionService.put(TransactionCacheData(firstDoubleSpendTx))
+      _ <- node1.dao.transactionService.put(TransactionCacheData(secondDoubleSpendTx))
+    } yield Seq(firstDoubleSpendTx, secondDoubleSpendTx)
 
   def addPeersFromRequest(apis: Seq[APIClient], addPeerRequests: Seq[PeerMetadata]): Unit = {
     val addPeers = apis.flatMap { a =>

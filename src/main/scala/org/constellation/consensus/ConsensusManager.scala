@@ -53,13 +53,15 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   val timeout: Long =
     ConfigUtil.getDurationFromConfig("constellation.consensus.form-checkpoint-blocks-timeout").toMillis
 
+  private val proposalsExpireTimeCache = ConfigUtil.getOrElse("constellation.cache.expire-after-min.cache", 10)
+
   private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
   private[consensus] val consensuses: Ref[F, Map[RoundId, ConsensusInfo[F]]] = Ref.unsafe(
     Map.empty[RoundId, ConsensusInfo[F]]
   )
   private[consensus] val ownConsensus: Ref[F, Option[OwnConsensus[F]]] = Ref.unsafe(None)
   private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] =
-    new StorageService("ConsensusProposal".some, 2.some)
+    new StorageService("ConsensusProposal".some, proposalsExpireTimeCache.some)
 
   private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
 
@@ -238,6 +240,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
       _ <- proposals.put(roundId.toString, missed :+ roundCommand)
+      _ <- logger.debug(s"[${dao.id.short}] Put to proposals : ${roundId.toString}")
     } yield ()
 
   def passMissed(roundId: RoundId, consensus: Consensus[F]): F[Unit] =
@@ -285,11 +288,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         curr => if (curr.isDefined && curr.get.roundId == cmd.roundId) (None, ()) else (curr, ())
       )
       _ <- transactionService.returnToPending(cmd.transactionsToReturn.map(_.hash))
-      _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
       _ <- transactionService.clearInConsensus(cmd.transactionsToReturn.map(_.hash))
+      _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
       _ <- observationService.clearInConsensus(cmd.observationsToReturn.map(_.hash))
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
       _ = releaseMessages(cmd.maybeCB)
+      _ <- proposals.remove(cmd.roundId.toString)
+      _ <- logger.debug(s"[${dao.id.short}] Removed from proposals : ${cmd.roundId.toString}")
       _ <- logger.debug(
         s"[${dao.id.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.baseHash).getOrElse("empty")}"
       )

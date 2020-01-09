@@ -221,7 +221,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     cb.soeHash,
                     ccd.height.get.min,
                     cb.parentSOEHashes,
-                    cb.messages.map { _.signedMessageData.data.channelId }.distinct.map { channelId =>
+                    cb.messages.map {
+                      _.signedMessageData.data.channelId
+                    }.distinct.map { channelId =>
                       ChannelValidationInfo(channelId, true)
                     }
                   )
@@ -252,7 +254,9 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                 _.checkpointBlock.baseHash == blockHashForMessage
               }.head.checkpointBlock
 
-              val messageProofInput = block.transactions.map { _.hash } ++ block.messages.map {
+              val messageProofInput = block.transactions.map {
+                _.hash
+              } ++ block.messages.map {
                 _.signedMessageData.signatures.hash
               }
 
@@ -298,10 +302,14 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             APIDirective.handle(proof)(complete(_))
           } ~
           path("messages") {
-            APIDirective.handle(IO { dao.channelStorage.getLastNMessages(20) })(complete(_))
+            APIDirective.handle(IO {
+              dao.channelStorage.getLastNMessages(20)
+            })(complete(_))
           } ~
           path("messages" / Segment) { channelId =>
-            APIDirective.handle(IO { dao.channelStorage.getLastNMessages(20, Some(channelId)) })(complete(_))
+            APIDirective.handle(IO {
+              dao.channelStorage.getLastNMessages(20, Some(channelId))
+            })(complete(_))
           } ~
           path("restart") { // TODO: Revisit / fix
             System.exit(0)
@@ -320,8 +328,15 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               complete(res)
             }
           } ~
-          path("buildInfo") {
-            complete(BuildInfo.toMap)
+          pathPrefix("buildInfo") {
+            concat(
+              pathEnd {
+                complete(BuildInfo.toMap)
+              },
+              path("gitCommit") {
+                complete(BuildInfo.gitCommit)
+              }
+            )
           } ~
           path("metrics") {
             val response = MetricsResult(
@@ -515,7 +530,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("genesis") {
           path("create") {
             entity(as[Seq[AccountBalance]]) { balances =>
-              logger.info(s"genesis created with balances ${balances}")
               val go = Genesis.createGenesisObservation(balances)
               complete(go)
             }
@@ -546,7 +560,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         path("transaction") {
           entity(as[Transaction]) { transaction =>
             logger.info(s"send transaction to address ${transaction.hash}")
-            val io: IO[String] = checkpointBlockValidator
+            val io = checkpointBlockValidator
               .singleTransactionValidation(transaction)
               .flatMap {
                 case Invalid(e) => IO { e.toString() }

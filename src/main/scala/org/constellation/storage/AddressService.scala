@@ -1,6 +1,6 @@
 package org.constellation.storage
 
-import cats.effect.{Concurrent, Sync}
+import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.primitives.Schema.{Address, AddressCacheData}
 import org.constellation.primitives.Transaction
