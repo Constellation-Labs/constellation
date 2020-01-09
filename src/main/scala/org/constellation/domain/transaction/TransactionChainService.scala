@@ -45,6 +45,7 @@ class TransactionChainService[F[_]: Concurrent] {
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
     }
 
+
   def applySnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =
     lastAcceptedTransactionRef.modify { _ =>
       (snapshotInfo.lastAcceptedTransactionRef, ())

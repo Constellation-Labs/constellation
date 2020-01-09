@@ -530,7 +530,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         pathPrefix("genesis") {
           path("create") {
             entity(as[Seq[AccountBalance]]) { balances =>
-              logger.info(s"genesis created with balances ${balances}")
               val go = Genesis.createGenesisObservation(balances)
               complete(go)
             }
