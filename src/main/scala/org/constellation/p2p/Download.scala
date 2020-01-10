@@ -128,10 +128,27 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   val config: Config = ConfigFactory.load()
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
+  def updateSnapInfo(majoritySnapshot: SnapshotInfo, localSnapshotCacheData: List[CheckpointCache]) = {
+    val majoritySnapCpHashesToGet = majoritySnapshot.acceptedCBSinceSnapshot.diff(majoritySnapshot.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash)).toSet
+    val localCps = localSnapshotCacheData.filter(cpc => majoritySnapCpHashesToGet.contains(cpc.checkpointBlock.baseHash)).distinct
+    val acceptedCBSinceSnapshotCacheInfo = majoritySnapshot.acceptedCBSinceSnapshotCache
+    val res = majoritySnapshot.copy(acceptedCBSinceSnapshotCache = acceptedCBSinceSnapshotCacheInfo ++ localCps)
+    logger.debug(s"majoritySnapshot acceptedCBSinceSnapshotCache.size: ${majoritySnapshot.acceptedCBSinceSnapshotCache.size}")
+    logger.debug(s"res acceptedCBSinceSnapshotCache.size: ${res.acceptedCBSinceSnapshotCache.size}")
+    logger.debug(s"res acceptedCBSinceSnapshot.size: ${res.acceptedCBSinceSnapshot.size}")
+    logger.info(s"res updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache.size}")
+    logger.info(s"res updateSnapInfo hashes == ? ${res.acceptedCBSinceSnapshot.toSet == res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash).toSet}")
+    logger.debug(s"res updateSnapInfo diff: ${res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))}")
+    res
+  }
+
+
   def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): F[Unit] =
     logThread(
       for {
-        majoritySnapshot <- getMajoritySnapshot(peers)
+        snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
+        localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache))
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash))
         _ <- if (snapshotHashes.forall(majoritySnapshot.snapshotHashes.contains)) Sync[F].unit
         else
           Sync[F].raiseError[Unit](
@@ -155,6 +172,18 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       "download_reDownload"
     )
 
+  def testSnapInfoSer(): F[SnapshotInfo] =
+    logThread(
+      for {
+        snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
+        localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache))
+        peers <- getReadyPeers()
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash))
+        updatedMajoritySnapshot = updateSnapInfo(majoritySnapshot, localSnapshotCacheData)
+      } yield updatedMajoritySnapshot,
+      "testSnapInfoSer"
+    )
+
   def download(): F[Unit] =
     logThread(
       for {
@@ -164,7 +193,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         _ <- waitForPeers()
         peers <- getReadyPeers()
         snapshotClient <- getSnapshotClient(peers)
-        majoritySnapshot <- getMajoritySnapshot(peers)
+        snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
+        localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache))
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash))
         hashes <- getSnapshotHashes(majoritySnapshot)
         snapshotHashes <- downloadAndProcessSnapshotsFirstPass(hashes)(
           snapshotClient,
@@ -216,8 +247,8 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
-  private[p2p] def getMajoritySnapshot(peers: Peers): F[SnapshotInfo] = {
-
+  private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String]): F[SnapshotInfo] = {
+    val serializedHashes = KryoSerializer.serializeAnyRef(hashes)
     def makeAttempt(clients: List[PeerData]): F[Array[Byte]] =
       clients match {
         case Nil =>
@@ -227,9 +258,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
             )
           )
         case head :: tail =>
-          head.client
-            .getNonBlockingArrayByteF("snapshot/info", timeout = 8.seconds)(C)
-            .handleErrorWith(e => {
+          head.client.postNonBlockingF[F, Array[Byte]]("snapshot/info",
+            serializedHashes,
+            45.seconds
+          )(C).handleErrorWith(e => {
               Sync[F]
                 .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
                 makeAttempt(tail)
@@ -343,6 +375,20 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 }
 
 object Download extends StrictLogging {
+
+  def  getMajoritySnapshotTest()(implicit dao: DAO, ec: ExecutionContext) = {
+    tryWithMetric(
+      {
+        implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
+        implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+        val snapshotsProcessor =
+          new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotRandomly[IO])
+        val process = new DownloadProcess[IO](snapshotsProcessor, dao.cluster, dao.checkpointAcceptanceService)
+        process.testSnapInfoSer().map(t => "getMajoritySnapshotTest")//.map(EdgeProcessor.toSnapshotInfoSer(_))
+      },
+      "getMajoritySnapshotTest"
+    )
+  }
 
   // TODO: Remove Try/Future and make it properly chainable
   def download()(implicit dao: DAO, ec: ExecutionContext): Unit =
