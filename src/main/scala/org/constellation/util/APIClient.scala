@@ -2,13 +2,14 @@ package org.constellation.util
 
 import cats.effect.{Async, ContextShift, Effect, IO}
 import com.softwaremill.sttp._
-import com.typesafe.config.ConfigFactory
+import akka.util.ByteString
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Schema.MetricsResult
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.json4s.Formats
+import org.json4s.native.Serialization
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -101,6 +102,20 @@ class APIClient private (
             value.body.fold(err => cb(Left(new Exception(err))), body => cb(Right(body)))
           case Failure(error: Throwable) => cb(Left(error))
         }(ConstellationExecutionContext.unbounded)
+    })
+
+  def postNonBlockingArrayByteF[F[_]: Async](
+    suffix: String,
+    b: AnyRef,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds
+  )(contextToReturn: ContextShift[F])(implicit m: Manifest[Array[Byte]],
+                                      f: Formats = constellation.constellationFormats): F[Array[Byte]] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
+      postNonBlockingArrayByte(suffix, b, timeout, queryParams).onComplete {
+        case Success(value) => cb(Right(value))
+        case Failure(error) => cb(Left(error))
+      }(ConstellationExecutionContext.unbounded)
     })
 
   def getNonBlockingIO[T <: AnyRef](
