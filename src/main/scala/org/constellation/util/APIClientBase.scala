@@ -161,6 +161,27 @@ class APIClientBase(
       .map(_.unsafeBody)(ConstellationExecutionContext.unbounded)
   }
 
+  def postNonBlockingArrayByte(
+    suffix: String,
+    b: AnyRef,
+    timeout: Duration = 15.seconds,
+    headers: Map[String, String] = Map.empty
+  )(
+    implicit m: Manifest[Array[Byte]],
+    f: Formats = constellation.constellationFormats
+  ): Future[Array[Byte]] = {
+    val ser = Serialization.write(b)
+    val gzipped = Gzip.encode(ByteString.fromString(ser)).toArray
+    httpWithAuth(suffix, timeout = timeout)(Method.POST)
+      .body(gzipped)
+      .contentType("application/json")
+      .header("Content-Encoding", "gzip")
+      .headers(headers)
+      .response(asByteArray)
+      .send()
+      .map(_.unsafeBody)(ConstellationExecutionContext.unbounded)
+  }
+
   def postNonBlockingUnit(
     suffix: String,
     b: AnyRef,

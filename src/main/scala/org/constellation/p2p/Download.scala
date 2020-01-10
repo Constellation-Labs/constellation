@@ -239,7 +239,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
   private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String]): F[SnapshotInfo] = {
-    val serializedHashes = KryoSerializer.serializeAnyRef(hashes)
     def makeAttempt(clients: List[PeerData]): F[Array[Byte]] =
       clients match {
         case Nil =>
@@ -249,9 +248,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
             )
           )
         case head :: tail =>
-          head.client.postNonBlockingF[F, Array[Byte]]("snapshot/info",
-            serializedHashes,
-            45.seconds
+          head.client.postNonBlockingArrayByteF[F]("snapshot/info",
+            hashes,
+            Map(),
+            timeout = 45.seconds
           )(C).handleErrorWith(e => {
               Sync[F]
                 .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
@@ -263,7 +263,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   }
 
   private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-    Try(KryoSerializer.deserializeCast[SnapshotInfo](byteArray)) match {
+    Try{
+      logger.error(s"[${dao.id.short}] [Re-Download] deserializeSnapshotInfo begin deserializeCast[SnapshotInfo]")
+      KryoSerializer.deserializeCast[SnapshotInfo](byteArray)
+    } match {
       case Success(value) => value
       case Failure(exception) =>
         throw new Exception(
