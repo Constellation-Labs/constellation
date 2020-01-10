@@ -137,6 +137,25 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
       pathPrefix("snapshot") {
+        path("info") {
+          entity(as[Array[Byte]]) { curCheckpointHashes =>
+            val sendersAcceptedCbs = KryoSerializer.deserializeCast[Seq[String]](curCheckpointHashes)
+            val res = dao.snapshotService.getSnapshotInfo.flatMap { info =>
+              logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
+              logger.warn(s"snapshot/info curCheckpointHashes.size - ${curCheckpointHashes}")
+              val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(sendersAcceptedCbs.toList)
+              logger.warn(s"snapshot/info checkpointsToGet.size - ${checkpointsToGet.size}")
+              logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet.toList}")
+              checkpointsToGet.toList.traverse {
+                dao.checkpointService.fullData(_)
+              }.map { cbs =>
+                KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
+              }
+            }
+
+            APIDirective.handle(res)(complete(_))
+          }
+        }~
         path("verify") {
           entity(as[SnapshotCreated]) { s =>
             APIDirective.handle(

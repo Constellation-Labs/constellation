@@ -36,7 +36,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
     peers.last._2.client.getNonBlockingArrayByteF[IO](*, *, *)(*)(*) shouldReturn
       IO.raiseError[Array[Byte]](new Exception("ups"))
 
-    downloader.getMajoritySnapshot(peers).unsafeRunSync() shouldBe snapInfo
+    downloader.getMajoritySnapshot(peers, Seq()).unsafeRunSync() shouldBe snapInfo
   }
 
   test("should fail to get majority snapshot when all of the cluster members is unresponsive") {
@@ -45,7 +45,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
     }
 
     assertThrows[Exception] {
-      downloader.getMajoritySnapshot(peers).unsafeRunSync()
+      downloader.getMajoritySnapshot(peers, Seq()).unsafeRunSync()
     }
   }
 }

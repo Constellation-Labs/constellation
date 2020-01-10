@@ -57,6 +57,10 @@ class SnapshotService[F[_]: Concurrent](
 
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
 
+  def getAcceptedCBSinceSnapshot: F[Seq[String]] = for {
+    hashes <- acceptedCBSinceSnapshot.get
+  } yield hashes
+
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- validateMaxAcceptedCBHashesInMemory()
@@ -158,6 +162,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- soeService.applySnapshot(soeHashes)
       _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
+
+  def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Seq[String]): F[List[CheckpointCache]] =
+    snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
