@@ -168,29 +168,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
 
-    snapshotService = SnapshotService[IO](
-      concurrentTipService,
-      addressService,
-      checkpointService,
-      messageService,
-      transactionService,
-      observationService,
-      rateLimiting,
-      consensusManager,
-      trustManager,
-      soeService,
-      this
-    )
-
-    transactionValidator = new TransactionValidator[IO](transactionService)
-    checkpointBlockValidator = new CheckpointBlockValidator[IO](
-      addressService,
-      snapshotService,
-      checkpointParentService,
-      transactionValidator,
-      this
-    )
-
     checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
       addressService,
       blacklistedAddresses,
@@ -240,6 +217,31 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         this
       )
     }
+
+    snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
+
+    snapshotService = SnapshotService[IO](
+      concurrentTipService,
+      addressService,
+      checkpointService,
+      messageService,
+      transactionService,
+      observationService,
+      rateLimiting,
+      consensusManager,
+      trustManager,
+      soeService,
+      this
+    )
+
+    transactionValidator = new TransactionValidator[IO](transactionService)
+    checkpointBlockValidator = new CheckpointBlockValidator[IO](
+      addressService,
+      snapshotService,
+      checkpointParentService,
+      transactionValidator,
+      this
+    )
 
     snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
