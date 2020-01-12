@@ -167,6 +167,22 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         ConstellationExecutionContext.bounded,
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
+
+    checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
+      addressService,
+      blacklistedAddresses,
+      transactionService,
+      observationService,
+      concurrentTipService,
+      snapshotService,
+      checkpointService,
+      checkpointParentService,
+      checkpointBlockValidator,
+      cluster,
+      rateLimiting,
+      this
+    )
+    
     val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService)(
       Concurrent(IO.ioConcurrentEffect),
       ioTimer,
@@ -224,21 +240,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotService,
       checkpointParentService,
       transactionValidator,
-      this
-    )
-
-    checkpointAcceptanceService = new CheckpointAcceptanceService[IO](
-      addressService,
-      blacklistedAddresses,
-      transactionService,
-      observationService,
-      concurrentTipService,
-      snapshotService,
-      checkpointService,
-      checkpointParentService,
-      checkpointBlockValidator,
-      cluster,
-      rateLimiting,
       this
     )
 
