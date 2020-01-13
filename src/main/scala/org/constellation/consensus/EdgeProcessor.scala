@@ -217,6 +217,16 @@ object EdgeProcessor extends StrictLogging {
       "handleSignatureRequest"
     )(ConstellationExecutionContext.bounded, dao)
 
+  def chunkSerialize[T](chunk: Array[T], tag: String) = {
+    logger.warn(s"chunkSerialize ${tag}")
+    KryoSerializer.serializeAnyRef(chunk)
+  }
+
+  def chunkDeSerialize[T](chunk: Array[Byte], tag: String) = {
+    logger.warn(s"chunkDeSerialize ${tag}")
+    KryoSerializer.deserializeCast[T](chunk)
+  }
+
 }
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
@@ -232,7 +242,85 @@ case class SnapshotInfo(
   tips: Map[String, TipData] = Map(),
   snapshotCache: Seq[CheckpointCache] = Seq(),
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
-)
+) {
+  import EdgeProcessor.chunkSerialize
+
+  def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = 100) = //todo make chunk size config
+    SnapshotInfoSer(
+      KryoSerializer.serialize[String](info.snapshot.lastSnapshot),
+      info.snapshot.checkpointBlocks
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshot"))
+        .toArray,
+      info.acceptedCBSinceSnapshot
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshot"))
+        .toArray,
+      info.awaitingCbs
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toArray, "awaitingCbs"))
+        .toArray,
+      info.acceptedCBSinceSnapshotCache
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toArray, "acceptedCBSinceSnapshotCache"))
+        .toArray,
+      KryoSerializer.serialize[Int](info.lastSnapshotHeight),
+      info.snapshotHashes.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "snapshotHashes")).toArray,
+      info.addressCacheData.toSeq
+        .grouped(chunkSize)
+        .map(partitionMap => chunkSerialize(partitionMap.toArray, "addressCacheData"))
+        .toArray,
+      info.tips
+        .grouped(chunkSize)
+        .map(partitionMap => chunkSerialize(partitionMap.toArray, "acceptedCBSinceSnapshot"))
+        .toArray,
+      info.snapshotCache.grouped(chunkSize).map(t => chunkSerialize(t.toArray, "snapshotCache")).toArray,
+      info.lastAcceptedTransactionRef
+        .grouped(chunkSize)
+        .map(partitionMap => chunkSerialize(partitionMap.toArray, "lastAcceptedTransactionRef"))
+        .toArray
+    )
+}
+
+case class SnapshotInfoSer(
+  snapshot: Array[Byte],
+  snapshotCheckpointBlocks: Array[Array[Byte]],
+  acceptedCBSinceSnapshot: Array[Array[Byte]],
+  acceptedCBSinceSnapshotCache: Array[Array[Byte]],
+  awaitingCbs: Array[Array[Byte]],
+  lastSnapshotHeight: Array[Byte],
+  snapshotHashes: Array[Array[Byte]],
+  addressCacheData: Array[Array[Byte]],
+  tips: Array[Array[Byte]],
+  snapshotCache: Array[Array[Byte]],
+  lastAcceptedTransactionRef: Array[Array[Byte]]
+) {
+  import EdgeProcessor.chunkDeSerialize
+
+  def toSnapshotInfo(info: SnapshotInfoSer) = {
+    val lastSnapshot = KryoSerializer.deserializeCast[String](info.snapshot)
+    val snapshotCheckpointBlocks =
+      info.snapshotCheckpointBlocks.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "checkpointBlocks"))
+    SnapshotInfo(
+      Snapshot(lastSnapshot, snapshotCheckpointBlocks),
+      info.acceptedCBSinceSnapshot.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "acceptedCBSinceSnapshot")),
+      info.acceptedCBSinceSnapshotCache.toSeq
+        .flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "acceptedCBSinceSnapshot")),
+      info.awaitingCbs.toSeq
+        .flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "awaitingCbs")),
+      KryoSerializer.deserializeCast[Int](info.lastSnapshotHeight),
+      info.snapshotHashes.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "snapshotHashes")),
+      info.addressCacheData.toSeq
+        .flatMap(chunkDeSerialize[Array[(String, AddressCacheData)]](_, "addressCacheData"))
+        .toMap,
+      info.tips.toSeq.flatMap(chunkDeSerialize[Array[(String, TipData)]](_, "tips")).toMap,
+      info.snapshotCache.toSeq.flatMap(chunkDeSerialize[Array[CheckpointCache]](_, "snapshotCache")),
+      info.lastAcceptedTransactionRef.toSeq
+        .flatMap(chunkDeSerialize[Array[(String, LastTransactionRef)]](_, "lastAcceptedTransactionRef"))
+        .toMap
+    )
+  }
+}
 
 case object GetMemPool
 
@@ -323,7 +411,7 @@ object Snapshot extends StrictLogging {
     } yield ()
 
   private def getFiles[F[_]: Concurrent](snapshotsHash: List[String], snapshotPath: String): F[List[File]] =
-    snapshotsHash.traverse(hash => Sync[F].delay(File(snapshotPath, hash)))
+    snapshotsHash.traverse(hash => Sync[F].delay(File(snapshotPath, hash))) //todo need to grab all part files
 
   private def shouldSendSnapshotsToCloud: Boolean =
     ConfigUtil.isEnabledCloudStorage
