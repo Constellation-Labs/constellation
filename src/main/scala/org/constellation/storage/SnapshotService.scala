@@ -115,7 +115,7 @@ class SnapshotService[F[_]: Concurrent](
             .use(
               stream =>
                 Sync[F].delay {
-                  stream.write(KryoSerializer.serializeAnyRef(info))
+//                  stream.write(KryoSerializer.serializeAnyRef(info))todo save in part files using chunked serialization
                 }.flatTap { _ =>
                   logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
                 }
