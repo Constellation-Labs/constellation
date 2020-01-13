@@ -2,11 +2,14 @@ package org.constellation.storage
 
 import cats.effect.Concurrent
 import cats.implicits._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.primitives.Schema.{Address, AddressCacheData}
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
 
 class AddressService[F[_]: Concurrent]() {
+
+  private val logger = Slf4jLogger.getLogger[F]
 
   private val locks = new MultiLock[F, String]()
 
@@ -47,4 +50,8 @@ class AddressService[F[_]: Concurrent]() {
     locks.acquire(addresses.map(_.hash).toList) {
       fn
     }
+
+  def clear: F[Unit] =
+    memPool.clear
+      .flatTap(_ => logger.info("Address MemPool has been cleared"))
 }
