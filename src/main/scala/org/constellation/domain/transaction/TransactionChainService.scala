@@ -10,6 +10,7 @@ import org.constellation.consensus.SnapshotInfo
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
+import cats.effect.Sync
 
 class TransactionChainService[F[_]: Concurrent] {
 
@@ -28,10 +29,12 @@ class TransactionChainService[F[_]: Concurrent] {
   def getLastAcceptedTransactionMap(): F[Map[String, LastTransactionRef]] = lastAcceptedTransactionRef.get
 
   def acceptTransaction(tx: Transaction): F[Unit] =
-    lastAcceptedTransactionRef.modify { m =>
-      val address = tx.src.address
-      (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
-    }
+    if (tx.isDummy) Sync[F].unit
+    else
+      lastAcceptedTransactionRef.modify { m =>
+        val address = tx.src.address
+        (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), ())
+      }
 
   def createAndSetLastTransaction(
     src: String,
@@ -44,7 +47,7 @@ class TransactionChainService[F[_]: Concurrent] {
   ): F[Transaction] =
     lastTransactionRef.modify { m =>
       val ref = m.getOrElse(src, LastTransactionRef.empty)
-      val edge: Edge[TransactionEdgeData] = createTransactionEdge(src, dst, ref, amount, keyPair, fee, normalized)
+      val edge = createTransactionEdge(src, dst, ref, amount, keyPair, fee, normalized)
       val address = edge.observationEdge.parents.head.hash
       val tx = Transaction(edge, ref, isDummy)
       (m + (address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
