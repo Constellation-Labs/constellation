@@ -378,9 +378,9 @@ object Simulation {
         case (add, a2) =>
           val addAdjusted =
             if (a.internalPeerHost.nonEmpty && a2.internalPeerHost.nonEmpty)
-              add
+              add.copy(isSimulation = true)
             else
-              add.copy(auxHost = "")
+              add.copy(auxHost = "", isSimulation = true)
           addPeer(a, addAdjusted)
       }
     }
@@ -399,7 +399,7 @@ object Simulation {
               add
             else
               add.copy(auxHost = "")
-          addPeerWithRegistrationFlow(a, HostPort(addAdjusted.host, addAdjusted.httpPort))
+          addPeerWithRegistrationFlow(a, HostPort(addAdjusted.host, addAdjusted.httpPort, isSimulation = true))
       }
     }
 
