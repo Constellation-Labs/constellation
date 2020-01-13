@@ -53,7 +53,8 @@ case class PeerMetadata(
   auxHost: String = "",
   auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
   nodeType: NodeType = NodeType.Full,
-  resourceInfo: ResourceInfo
+  resourceInfo: ResourceInfo,
+  isSimulation: Boolean = false
 )
 
 case class ResourceInfo(

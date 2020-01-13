@@ -116,7 +116,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
     def filter(p: Map[Id, PeerData]) = p.filter {
       case (pid, d) =>
         val badHost = hp.exists {
-          case HostPort(host, port) =>
+          case HostPort(host, port, isSimulation) =>
             d.client.hostName == host && d.client.apiPort == port
         }
         val badId = id.contains(pid)
@@ -178,7 +178,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
       "cluster_setNodeStatus"
     )
 
-  def peerDiscovery(client: APIClient): F[Unit] =
+  def peerDiscovery(client: APIClient, isSimulation: Boolean = false): F[Unit] =
     for {
       peersMetadata <- client.getNonBlockingF[F, Seq[PeerMetadata]]("peers")(C).handleErrorWith { err =>
         dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") >> err.raiseError[F, Seq[PeerMetadata]]
@@ -192,10 +192,10 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
           .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
           .map((md, _))
       }
-      _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
+      _ <- register.traverse(r => pendingRegistration(r._1.host, r._2, isSimulation))
       registerResponse <- register.traverse { md =>
         APIClient(md._1.host, md._1.httpPort)(dao.backend, dao)
-          .postNonBlockingUnitF[F]("register", dao.peerRegistrationRequest)(C)
+          .postNonBlockingUnitF[F]("register", dao.peerRegistrationRequest(isSimulation))(C)
       }.void
     } yield registerResponse
 
@@ -209,7 +209,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         adjustedHost <- (if (pm.auxHost.nonEmpty) pm.auxHost else pm.host).pure[F]
         client = APIClient(adjustedHost, pm.httpPort)(dao.backend, dao)
 
-        _ <- peerDiscovery(client)
+        _ <- peerDiscovery(client, pm.isSimulation)
 
         _ <- Sync[F].delay(client.id = pm.id)
 
@@ -219,7 +219,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
     )
   }
 
-  def pendingRegistration(ip: String, request: PeerRegistrationRequest, isJoiningPeer: Boolean = false): F[Unit] =
+  def pendingRegistration(ip: String, request: PeerRegistrationRequest, isSimulation: Boolean = false): F[Unit] =
     logThread(
       for {
         pr <- PendingRegistration(ip, request).pure[F]
@@ -234,7 +234,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         isSelfId = dao.id == request.id
         badAttempt = isSelfId || !validExternalHost || existsNotOffline
 
-        isValid <- if (isJoiningPeer)
+        isValid <- if (!isSimulation)
           joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
         else Sync[F].pure(true)
 
@@ -449,14 +449,14 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         _ <- logger.info(s"Attempting to register with $hp")
         _ <- withMetric(
           APIClient(hp.host, hp.port)(dao.backend, dao)
-            .postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C),
+            .postNonBlockingUnitF("register", dao.peerRegistrationRequest(hp.isSimulation))(C),
           "addPeerWithRegistration"
         )
       } yield (),
       "cluster_attemptRegisterSelfWithPeer"
     )
 
-  def attemptRegisterPeer(hp: HostPort, isJoiningPeer: Boolean = false): F[Response[Unit]] =
+  def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
     logThread(
       withMetric(
         {
@@ -465,8 +465,8 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
           client
             .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
             .flatMap { registrationRequest =>
-              pendingRegistration(hp.host, registrationRequest, isJoiningPeer) >>
-                client.postNonBlockingUnitF("register", dao.peerRegistrationRequest)(C)
+              pendingRegistration(hp.host, registrationRequest, hp.isSimulation) >>
+                client.postNonBlockingUnitF("register", dao.peerRegistrationRequest(hp.isSimulation))(C)
             }
             .handleErrorWith { err =>
               logger.error(s"registration request failed: $err") >>
@@ -540,7 +540,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
   def join(hp: HostPort): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    logThread(attemptRegisterPeer(hp, isJoiningPeer = true) >> Sync[F].delay(Download.download()), "cluster_join")
+    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
   }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
