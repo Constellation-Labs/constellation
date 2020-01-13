@@ -24,6 +24,11 @@ class BlacklistedAddresses[F[_]: Concurrent] {
 
   def contains(address: String): F[Boolean] =
     blacklistedAddresses.modify(b => (b, b.contains(address)))
+
+  def clear: F[Unit] =
+    blacklistedAddresses
+      .modify(_ => (Set.empty[String], ()))
+      .flatTap(_ => logger.info("BlacklistedAddresses collection has been cleared"))
 }
 
 object BlacklistedAddresses {

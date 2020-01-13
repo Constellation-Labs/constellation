@@ -71,4 +71,9 @@ class StorageService[F[_]: Concurrent, V](
 
   def getLast20(): F[List[V]] =
     queueRef.get.map(_.reverse.toList)
+
+  def clear: F[Unit] =
+    queueRef
+      .modify(_ => (Queue[V](), ()))
+      .flatTap(_ => Sync[F].delay(lruCache.invalidateAll()))
 }
