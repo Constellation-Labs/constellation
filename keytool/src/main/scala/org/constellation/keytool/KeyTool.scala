@@ -1,7 +1,10 @@
 package org.constellation.keytool
 
+import java.security.{KeyPair, KeyStore}
+
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
+import org.constellation.keytool.KeyStoreUtils.loadEnvPasswords
 import scopt.OParser
 
 object KeyTool extends IOApp {
@@ -9,14 +12,23 @@ object KeyTool extends IOApp {
   def run(args: List[String]): IO[ExitCode] = {
     for {
       cliParams <- loadCliParams[IO](args)
-      keyStore <- KeyStoreUtils.keyPairToStorePath[IO](
+      keyStore <- makeKeyPairWith[IO](cliParams)
+    } yield keyStore
+  }.fold[ExitCode](throw _, _ => ExitCode.Success)
+
+  def makeKeyPairWith[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
+    if (Option(cliParams.loadFromEnvArgs).nonEmpty) {
+      KeyStoreUtils.keyPairToStorePath[F](
+        path = cliParams.keystore,
+        alias = cliParams.alias
+      )
+    } else
+      KeyStoreUtils.keyPairToStorePath[F](
         path = cliParams.keystore,
         alias = cliParams.alias,
         storePassword = cliParams.storepass,
         keyPassword = cliParams.keypass
       )
-    } yield keyStore
-  }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
   def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
     val builder = OParser.builder[CliConfig]
@@ -34,10 +46,12 @@ object KeyTool extends IOApp {
           .action((x, c) => c.copy(keystore = x)),
         opt[String]("alias").required
           .action((x, c) => c.copy(alias = x)),
-        opt[String]("storepass").required
+        opt[String]("storepass").optional
           .action((x, c) => c.copy(storepass = x.toCharArray)),
-        opt[String]("keypass").required
-          .action((x, c) => c.copy(keypass = x.toCharArray))
+        opt[String]("keypass").optional
+          .action((x, c) => c.copy(keypass = x.toCharArray)),
+        opt[String]("env_args").optional
+          .action((x, c) => c.copy(loadFromEnvArgs = x))
       )
     }
     EitherT.fromEither[F] {
