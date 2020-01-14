@@ -159,6 +159,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     logThread(
       for {
         _ <- initDownloadingProcess
+        _ <- clearDataBeforeDownload
         _ <- downloadAndAcceptGenesis
         _ <- waitForPeers()
         peers <- getReadyPeers()
@@ -196,6 +197,14 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       .map(_.find(_.nonEmpty).flatten.get)
       .flatTap(_ => dao.metrics.updateMetricAsync("downloadedGenesis", "true"))
       .flatTap(genesis => Sync[F].delay(Genesis.acceptGenesis(genesis)))
+
+  private def clearDataBeforeDownload: F[Unit] =
+    for {
+      _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
+      _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
+      _ <- LiftIO[F].liftIO(dao.addressService.clear)
+      _ <- LiftIO[F].liftIO(dao.soeService.clear)
+    } yield ()
 
   private def waitForPeers(): F[Unit] =
     Sync[F]

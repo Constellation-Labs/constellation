@@ -6,7 +6,7 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 
 class GenerateAddressTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val generateAddress = GenerateAddress
-  val addressStringStorePath = "src/test/resources/address.txt"
+  val addressStringStorePath = getClass.getResource("/address.txt").getPath
 
   "Generate Address" should "load CLI params successfully" in {
     val testArgs = List(

@@ -11,7 +11,7 @@ import org.scalatest._
 
 class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val keyTool = KeyTool
-  val savedKeystorePath = "src/test/resources/wallet-client-test-save-kp.p12"
+  val savedKeystorePath = getClass.getResource("/wallet-client-test-save-kp.p12").getPath
   val keyToolArgs = List(
     s"--keystore=${savedKeystorePath}",
     s"--alias=${Fixtures.alias}",

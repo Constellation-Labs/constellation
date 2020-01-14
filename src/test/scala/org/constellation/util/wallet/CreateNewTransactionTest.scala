@@ -9,12 +9,12 @@ import constellation._
 
 class CreateNewTransactionTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val walletClient = CreateNewTransaction
-  val accountPath = "src/test/resources/valid-tx.txt"
-  val emptyAccountPath = "src/test/resources/empty-tx-file.txt"
+  val accountPath = getClass.getResource("/valid-tx.txt").getPath
+  val emptyAccountPath = getClass.getResource("/empty-tx-file.txt").getPath
   val amount = "137.035999084"
   val fee = "0.007297"
   val destination = "receiverAddress"
-  val storePath = "src/test/resources/new-tx.txt"
+  val storePath = getClass.getResource("/new-tx.txt").getPath
   val args = List(
     s"--keystore=${Fixtures.keystorePath}",
     s"--alias=${Fixtures.alias}",

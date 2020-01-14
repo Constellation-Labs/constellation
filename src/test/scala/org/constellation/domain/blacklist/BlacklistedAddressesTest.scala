@@ -51,4 +51,15 @@ class BlacklistedAddressesTest extends FreeSpec with BeforeAndAfter with Matcher
       blacklistAddresses.get.unsafeRunSync().size shouldBe 2
     }
   }
+
+  "clear" - {
+    "should remove all addresses from blacklist" in {
+      val addresses = List("abcd1234", "efgh5678")
+      blacklistAddresses.addAll(addresses).unsafeRunSync()
+
+      blacklistAddresses.clear.unsafeRunSync()
+
+      blacklistAddresses.get.unsafeRunSync().size shouldBe 0
+    }
+  }
 }

@@ -20,7 +20,7 @@ object KryoSerializer {
       .setRegistrationRequired(true)
       .withRegistrar(new ConstellationKryoRegistrar()),
     32,
-    1024 * 1024 * 100
+    -1
   )
 
   def serializeGrouped[T](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {

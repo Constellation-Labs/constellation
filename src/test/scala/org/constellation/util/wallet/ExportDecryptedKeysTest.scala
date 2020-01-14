@@ -6,8 +6,8 @@ import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, 
 
 class ExportDecryptedKeysTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val exportKeysDecrypted = ExportDecryptedKeys
-  val decryptedPrivKeyStorePath = "src/test/resources/decrypted_keystore"
-  val decryptedPubKeyStorePath = "src/test/resources/decrypted_keystore.pub"
+  val decryptedPrivKeyStorePath = getClass.getResource("/decrypted_keystore").getPath
+  val decryptedPubKeyStorePath = getClass.getResource("/decrypted_keystore.pub").getPath
 
   val testArgs = List(
     s"--keystore=${Fixtures.keystorePath}",

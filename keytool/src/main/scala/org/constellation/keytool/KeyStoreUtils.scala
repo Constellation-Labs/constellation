@@ -48,14 +48,14 @@ object KeyStoreUtils {
       .fromAutoCloseable(Sync[F].delay {
         new BufferedWriter(new OutputStreamWriter(stream))
       })
-      .use(outStream => outStream.write(serializer(obj)).pure[F])
+      .use(outStream => Sync[F].delay { outStream.write(serializer(obj)) })
 
   def storeKeyPemDecrypted[F[_]: Sync](key: Key)(stream: FileOutputStream): F[Unit] =
     Resource
       .fromAutoCloseable(Sync[F].delay { new PemWriter(new OutputStreamWriter(stream)) })
       .use { pemWriter =>
         val pemObj = new PemObject("EC KEY", key.getEncoded)
-        pemWriter.writeObject(pemObj).pure[F]
+        Sync[F].delay { pemWriter.writeObject(pemObj) }
       }
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =

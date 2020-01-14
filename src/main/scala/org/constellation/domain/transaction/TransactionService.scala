@@ -109,7 +109,11 @@ object TransactionService {
     normalized: Boolean = true,
     dummy: Boolean = false
   )(transactionChainService: TransactionChainService[F]): F[Transaction] =
-    transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
+    if (dummy)
+      Transaction(createTransactionEdge(src, dst, LastTransactionRef.empty, amount, keyPair, None, normalized),
+                  LastTransactionRef.empty,
+                  dummy).pure[F]
+    else transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
