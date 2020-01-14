@@ -1,12 +1,13 @@
 package org.constellation.keytool
 
-import java.io.{File, FileInputStream, FileOutputStream}
+import java.io._
 import java.security.cert.Certificate
-import java.security.{KeyPair, KeyStore, PrivateKey}
+import java.security.{Key, KeyPair, KeyStore, PrivateKey}
 
 import cats.data.EitherT
 import cats.effect._
 import cats.implicits._
+import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
@@ -24,6 +25,38 @@ object KeyStoreUtils {
       // TODO: Check if file exists
       new FileOutputStream(file)
     })
+
+  def readFromFileStream[F[_]: Sync, T](dataPath: String, streamParser: FileInputStream => F[T]) =
+    reader(dataPath)
+      .use(streamParser)
+      .attemptT
+
+  def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: FileOutputStream => F[Unit]) =
+    writer(path)
+      .use(bufferedWriter)
+      .attemptT
+
+  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) =
+    Resource
+      .fromAutoCloseable(Sync[F].delay {
+        new BufferedReader(new InputStreamReader(stream))
+      })
+      .use(inStream => Option(inStream.readLine()).map(parser).pure[F])
+
+  def writeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) =
+    Resource
+      .fromAutoCloseable(Sync[F].delay {
+        new BufferedWriter(new OutputStreamWriter(stream))
+      })
+      .use(outStream => Sync[F].delay { outStream.write(serializer(obj)) })
+
+  def storeKeyPemDecrypted[F[_]: Sync](key: Key)(stream: FileOutputStream): F[Unit] =
+    Resource
+      .fromAutoCloseable(Sync[F].delay { new PemWriter(new OutputStreamWriter(stream)) })
+      .use { pemWriter =>
+        val pemObj = new PemObject("EC KEY", key.getEncoded)
+        Sync[F].delay { pemWriter.writeObject(pemObj) }
+      }
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {
@@ -110,6 +143,15 @@ object KeyStoreUtils {
       )
       .attemptT
 
+  def keyPairToStorePath[F[_]: Sync](
+    path: String,
+    alias: String
+  ): EitherT[F, Throwable, KeyStore] =
+    for {
+      env <- loadEnvPasswords
+      keyStore <- keyPairToStorePath(path, alias, env.storepass, env.keypass)
+    } yield keyStore
+
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
     alias: String
@@ -122,4 +164,16 @@ object KeyStoreUtils {
         .use(_.pure[F])
         .attemptT
     } yield keyPair
+
+  def keyPairFromStorePath[F[_]: Sync](
+    path: String,
+    alias: String,
+    storepass: Array[Char],
+    keypass: Array[Char]
+  ): EitherT[F, Throwable, KeyPair] =
+    reader(path)
+      .evalMap(unlockKeyStore[F](storepass))
+      .evalMap(unlockKeyPair[F](alias, keypass))
+      .use(_.pure[F])
+      .attemptT
 }

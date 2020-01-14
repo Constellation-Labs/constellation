@@ -9,6 +9,7 @@ import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService}
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -46,7 +47,8 @@ class TransactionGossipingTest
   test("it should update the transaction path if it's the first time the tx is being observed") {
     val dao = mockDAO
     val txChain = TransactionChainService[IO]
-    val txService = spy(new TransactionService[IO](txChain, dao))
+    val rl = RateLimiting[IO]()
+    val txService = spy(new TransactionService[IO](txChain, rl, dao))
     val gossiping = new TransactionGossiping[IO](txService, 2, dao)
 
     val t = Fixtures.makeTransaction("a", "b", 1L, Fixtures.tempKey)

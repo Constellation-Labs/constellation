@@ -1,19 +1,11 @@
 package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.minlog.Log
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
-import org.constellation.domain.observation.{
-  CheckpointBlockInvalid,
-  CheckpointBlockWithMissingParents,
-  CheckpointBlockWithMissingSoe,
-  Observation,
-  ObservationData,
-  RequestTimeoutOnConsensus,
-  RequestTimeoutOnResolving,
-  SnapshotMisalignment
-}
-import org.constellation.p2p.SerializedUDPMessage
+import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationData, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}
+import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
 import org.constellation.primitives._
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.LastTransactionRef
@@ -29,13 +21,23 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
     kryo.register(classOf[ChannelMessageData])
     kryo.register(classOf[SignedData[ChannelMessageData]])
+    kryo.register(classOf[SignedData[ObservationData]])
+    kryo.register(classOf[SignedData[ObservationData]])
     kryo.register(classOf[ChannelMessage])
+    kryo.register(classOf[Seq[ChannelMessage]])
     kryo.register(classOf[StoredSnapshot])
     kryo.register(classOf[SnapshotInfo])
     kryo.register(classOf[TipData])
     kryo.register(classOf[Height])
+    kryo.register(classOf[Option[Height]])
     kryo.register(classOf[CommonMetadata])
     kryo.register(classOf[Seq[CheckpointBlock]])
+    kryo.register(classOf[Seq[Transaction]])
+    kryo.register(classOf[SignedData[ObservationData]])
+    kryo.register(classOf[Seq[CheckpointCache]])
+    kryo.register(classOf[Map[String, AddressCacheData]])
+    kryo.register(classOf[Map[String, TipData]])
+    kryo.register(classOf[Map[String, LastTransactionRef]])
     kryo.register(classOf[Address])
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])
@@ -50,6 +52,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[SignedObservationEdge])
     kryo.register(classOf[ObservationEdge])
     kryo.register(classOf[CheckpointBlock])
+    kryo.register(classOf[PeerNotification])
+    kryo.register(classOf[Seq[PeerNotification]])
     kryo.register(classOf[TypedEdgeHash])
     //  kryo.register(classOf[EdgeHashType])
     kryo.register(classOf[Enumeration#Value])
@@ -66,6 +70,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[SnapshotMisalignment])
     kryo.register(classOf[CheckpointBlockInvalid])
     kryo.register(classOf[Observation])
+    kryo.register(classOf[Seq[Observation]])
 
     kryo.register(classOf[Set[String]])
 
@@ -73,6 +78,9 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Id])
 
     kryo.register(classOf[Array[Byte]])
+    kryo.register(classOf[Option[Long]])
+    kryo.register(classOf[String])
+    kryo.register(classOf[Boolean])
 
     kryo.register(classOf[AddressMetaData])
 

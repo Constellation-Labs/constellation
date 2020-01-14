@@ -117,7 +117,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
-    transactionService = new TransactionService[IO](transactionChainService, this)
+    transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     joiningPeerValidator = JoiningPeerValidator[IO]
 
@@ -167,42 +167,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         ConstellationExecutionContext.bounded,
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
-    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService)(
-      Concurrent(IO.ioConcurrentEffect),
-      ioTimer,
-      ioTimer.clock,
-      this,
-      ConstellationExecutionContext.bounded,
-      IO.contextShift(ConstellationExecutionContext.bounded)
-    )
-
-    val healthChecker = new HealthChecker[IO](
-      this,
-      concurrentTipService,
-      consensusManager,
-      IO.contextShift(ConstellationExecutionContext.bounded),
-      downloadProcess,
-      cluster,
-      majorityStateChooser
-    )
-
-    val snapshotSelector =
-      new HeightIdBasedSnapshotSelector[IO](
-        this.id,
-        ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-      )
-    snapshotBroadcastService = {
-
-      new SnapshotBroadcastService[IO](
-        healthChecker,
-        cluster,
-        snapshotSelector,
-        IO.contextShift(ConstellationExecutionContext.bounded),
-        this
-      )
-    }
-
-    snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
     snapshotService = SnapshotService[IO](
       concurrentTipService,
@@ -241,6 +205,43 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       rateLimiting,
       this
     )
+
+    val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService)(
+      Concurrent(IO.ioConcurrentEffect),
+      ioTimer,
+      ioTimer.clock,
+      this,
+      ConstellationExecutionContext.bounded,
+      IO.contextShift(ConstellationExecutionContext.bounded)
+    )
+
+    val healthChecker = new HealthChecker[IO](
+      this,
+      concurrentTipService,
+      consensusManager,
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      downloadProcess,
+      cluster,
+      majorityStateChooser
+    )
+
+    val snapshotSelector =
+      new HeightIdBasedSnapshotSelector[IO](
+        this.id,
+        ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+      )
+    snapshotBroadcastService = {
+
+      new SnapshotBroadcastService[IO](
+        healthChecker,
+        cluster,
+        snapshotSelector,
+        IO.contextShift(ConstellationExecutionContext.bounded),
+        this
+      )
+    }
+
+    snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
     consensusManager = new ConsensusManager[IO](
       transactionService,

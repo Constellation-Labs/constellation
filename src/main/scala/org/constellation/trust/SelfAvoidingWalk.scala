@@ -99,7 +99,7 @@ object SelfAvoidingWalk {
 
     for (_ <- 0 to numIterations) {
       val (id, trust) = walkFromOrigin()
-      //  println(s"Returning $id with trust $trust")
+//        println(s"Returning $id with trust $trust")
       if (id != n1.id) {
         walkScores(id) += trust
       }
@@ -110,7 +110,8 @@ object SelfAvoidingWalk {
   // Handle edge case where sum is 0
   def normalizeScores(scores: Array[Double]): Array[Double] = {
     val sumScore = scores.sum
-    scores.map { _ / sumScore }
+    if (sumScore == 0d) scores
+    else scores.map { _ / sumScore }
   }
 
   def normalizeScoresWithIndex(scores: Array[(Double, Int)]): Array[(Double, Int)] = {
@@ -148,7 +149,6 @@ object SelfAvoidingWalk {
     var iterationNum = 0
 
     while (delta > epsilon && iterationNum < maxIterations) {
-
       val batchScores = runWalkRaw(selfId, nodes, batchIterationSize)
       val merged = walkScores.zip(batchScores).map { case (s1, s2) => s1 + s2 }
       val renormalized = normalizeScores(merged)
@@ -156,7 +156,7 @@ object SelfAvoidingWalk {
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      println(s"Batch number $iterationNum with delta $delta")
+      println(s"runWalkBatches - Batch number $iterationNum with delta $delta")
     }
 
     reweightEdges(walkProbability, nodes.map { n =>
@@ -189,7 +189,7 @@ object SelfAvoidingWalk {
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      println(s"Batch number $iterationNum with delta $delta")
+      println(s"runWalkBatchesFeedback - Batch number $iterationNum with delta $delta")
     }
 
     val selfNode = nodes.filter { _.id == selfId }.head
@@ -312,12 +312,14 @@ object SelfAvoidingWalk {
   ): TrustNode = {
 
     var nodesCycle = nodes
-
+    println(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
     (0 until feedbackCycles).foreach { cycle =>
       println(s"feedback cycle $cycle for node $selfId")
       nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
     }
     val res: TrustNode = nodesCycle.filter(_.id == selfId).head
+    println(s"runWalkFeedbackUpdateSingleNode res: TrustNode ${res} for node $selfId")
+
     res
   }
 

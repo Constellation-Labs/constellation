@@ -11,13 +11,17 @@ import org.constellation.domain.consensus.ConsensusService
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
+import org.constellation.storage.RateLimiting
 
-class TransactionService[F[_]: Concurrent](val transactionChainService: TransactionChainService[F], dao: DAO)
-    extends ConsensusService[F, TransactionCacheData] {
+class TransactionService[F[_]: Concurrent](
+  val transactionChainService: TransactionChainService[F],
+  rateLimiting: RateLimiting[F],
+  dao: DAO
+) extends ConsensusService[F, TransactionCacheData] {
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService)
+  protected[domain] val pending = PendingTransactionsMemPool[F](transactionChainService, rateLimiting)
 
   override def metricRecordPrefix: Option[String] = "Transaction".some
 
@@ -73,8 +77,12 @@ class TransactionService[F[_]: Concurrent](val transactionChainService: Transact
 
 object TransactionService {
 
-  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], dao: DAO) =
-    new TransactionService[F](transactionChainService, dao)
+  def apply[F[_]: Concurrent](
+    transactionChainService: TransactionChainService[F],
+    rateLimiting: RateLimiting[F],
+    dao: DAO
+  ) =
+    new TransactionService[F](transactionChainService, rateLimiting, dao)
 
   def createTransactionEdge(
     src: String,
@@ -109,7 +117,13 @@ object TransactionService {
     normalized: Boolean = true,
     dummy: Boolean = false
   )(transactionChainService: TransactionChainService[F]): F[Transaction] =
-    transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
+    if (dummy)
+      Transaction(
+        createTransactionEdge(src, dst, LastTransactionRef.empty, amount, keyPair, None, normalized),
+        LastTransactionRef.empty,
+        dummy
+      ).pure[F]
+    else transactionChainService.createAndSetLastTransaction(src, dst, amount, keyPair, dummy, normalized = normalized)
 
   def createDummyTransaction[F[_]: Concurrent](src: String, dst: String, keyPair: KeyPair)(
     transactionChainService: TransactionChainService[F]
