@@ -2,6 +2,7 @@ import E2E._
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
+envVars in Test := Map("CL_STOREPASS" -> "storepass", "CL_KEYPASS" -> "keypass")
 enablePlugins(JavaAgent, JavaAppPackaging)
 //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
