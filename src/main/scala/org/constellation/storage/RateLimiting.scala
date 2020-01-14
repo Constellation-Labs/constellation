@@ -44,24 +44,22 @@ class RateLimiting[F[_]: Concurrent]() {
   def available(address: Schema.Address): F[Int] =
     for {
       c <- counter.get
-      accounts = c.size
-      address <- counter.get.map(_.getOrElse(address, 0))
-      available = (if (accounts > 0) limits.available / accounts else limits.available) - address
+      addressTxs <- counter.get.map(_.getOrElse(address, 0))
+      available = limits.txsPerAddressPerSnapshot - addressTxs
     } yield available
 
   private def blacklist(): F[Unit] =
     for {
       c <- counter.get
       left <- c.keys.toList.traverse(a => available(a).map(a -> _))
-      _ <- left.filter(_._2 <= 0).traverse(p => blacklisted.update(p._1.address, _ => p._2, p._2))
+      _ <- left.filter(_._2 < 0).traverse(p => blacklisted.update(p._1.address, _ => p._2, p._2))
     } yield ()
 
   object limits {
-    val total = 50
-    val offlineTxs = 0.01
+    val totalTxsInCB = 50
+    val txsPerAddressPerSnapshot = 1
 
-    val offline: Int = ceil(total * offlineTxs).toInt
-    val available: Int = total - offline
+    val available: Int = totalTxsInCB
   }
 }
 

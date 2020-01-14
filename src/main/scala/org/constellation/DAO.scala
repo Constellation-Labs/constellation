@@ -117,7 +117,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
-    transactionService = new TransactionService[IO](transactionChainService, this)
+    transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     joiningPeerValidator = JoiningPeerValidator[IO]
 
@@ -205,7 +205,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       rateLimiting,
       this
     )
-    
+
     val downloadProcess = new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService)(
       Concurrent(IO.ioConcurrentEffect),
       ioTimer,

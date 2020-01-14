@@ -172,8 +172,10 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     }
     dao.messageService shouldReturn ms
 
+    val rl = RateLimiting[IO]()
+
     val txChain = TransactionChainService[IO]
-    val ts = new TransactionService[IO](txChain, dao)
+    val ts = new TransactionService[IO](txChain, rl, dao)
     dao.transactionService shouldReturn ts
 
     val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO]()
@@ -187,7 +189,6 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     val os = new ObservationService[IO](tm, dao)
     dao.observationService shouldReturn os
 
-    val rl = mock[RateLimiting[IO]]
     dao.checkpointService shouldReturn mock[CheckpointService[IO]]
 
     val keyPair = KeyUtils.makeKeyPair()
