@@ -73,6 +73,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Seq[Observation]])
 
     kryo.register(classOf[Set[String]])
+    kryo.register(classOf[Seq[String]])
 
     kryo.register(classOf[SerializedUDPMessage])
     kryo.register(classOf[Id])

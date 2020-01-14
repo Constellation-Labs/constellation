@@ -7,9 +7,8 @@ import better.files.File
 import cats.effect.{ContextShift, IO}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.{APIClient, AccountBalance, Metrics, Simulation}
@@ -187,6 +186,7 @@ class E2ETest extends E2E {
 
   private def saveState(allAPIs: Seq[APIClient]): Unit = {
     File("rollback_data/snapshots").createDirectoryIfNotExists().clear()
+    File("rollback_data/snapshot_info").createDirectoryIfNotExists().clear()
     storeSnapshotInfo(allAPIs)
     storeSnapshots(allAPIs)
     storeGenesis(allAPIs)
@@ -204,12 +204,9 @@ class E2ETest extends E2E {
 
   private def storeSnapshotInfo(allAPIs: Seq[APIClient]): Unit = {
     val snapshotInfo = allAPIs.map(_.snapshotsInfoDownload())
-
-    snapshotInfo.foreach(s => {
-      better.files
-        .File("rollback_data", "rollback_info")
-        .writeByteArray(KryoSerializer.serializeAnyRef(s))
-    })
+    snapshotInfo.foreach(
+      _.toSnapshotInfoSer().writeLocal()
+    )
   }
 
   private def storeGenesis(allAPIs: Seq[APIClient]): Unit = {

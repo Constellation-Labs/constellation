@@ -1,4 +1,5 @@
 package org.constellation.util
+
 import java.{lang, util}
 
 import atb.common.DefaultRandomGenerator
@@ -7,8 +8,9 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures.{id1, id2, id3}
 import org.constellation.consensus.RandomData
 import org.constellation.trust._
-import org.scalatest.FlatSpec
+import org.scalatest.{BeforeAndAfter, FlatSpec}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.rewards.EigenTrust
 import org.constellation.{DAO, TestHelpers}
 
@@ -19,28 +21,39 @@ import scala.util.Random
 Note: when Experience outcomes are the same, eigentrust scores stay the same.
 When Opinions stay the same, eigentrust scores change
  */
-class RewardsTest extends FlatSpec {
+class RewardsTest extends FlatSpec with BeforeAndAfter {
   import org.constellation.rewards.Rewards._
 
   import RandomData._
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit var dao: DAO = _
 
-  val dummyCb = randomBlock(startingTips(go()), keyPairs.head)
-  val acceptedCbRound1 = Seq(randomTransaction, randomTransaction)
-  val acceptedCbRound2 = Seq(randomTransaction, randomTransaction)
+  var dummyCb: CheckpointBlock = _
+  var acceptedCbRound1: Seq[Transaction] = _
+  var acceptedCbRound2: Seq[Transaction] = _
+  var consensusRound1: Map[Int, Set[String]] = _
+  var consensusRound2: Map[Int, Set[String]] = _
 
-  val consensusRound1 = Map(
-    1 -> Set(acceptedCbRound1.head.hash, acceptedCbRound1.tail.head.hash), //todo use id1
-    2 -> Set(acceptedCbRound1.head.hash, acceptedCbRound1.tail.head.hash),
-    3 -> Set(acceptedCbRound1.head.hash)
-  )
+  before {
+    dao = TestHelpers.prepareRealDao()
+    dummyCb = randomBlock(startingTips(go()), keyPairs.head)
+    acceptedCbRound1 = Seq(randomTransaction, randomTransaction)
+    acceptedCbRound2 = Seq(randomTransaction, randomTransaction)
+    consensusRound1 = Map(
+      1 -> Set(acceptedCbRound1.head.hash, acceptedCbRound1.tail.head.hash), //todo use id1
+      2 -> Set(acceptedCbRound1.head.hash, acceptedCbRound1.tail.head.hash),
+      3 -> Set(acceptedCbRound1.head.hash)
+    )
+    consensusRound2 = Map(
+      1 -> Set(acceptedCbRound2.head.hash, acceptedCbRound2.tail.head.hash),
+      2 -> Set(acceptedCbRound2.head.hash, acceptedCbRound2.tail.head.hash),
+      3 -> Set(acceptedCbRound2.head.hash)
+    )
+  }
 
-  val consensusRound2 = Map(
-    1 -> Set(acceptedCbRound2.head.hash, acceptedCbRound2.tail.head.hash),
-    2 -> Set(acceptedCbRound2.head.hash, acceptedCbRound2.tail.head.hash),
-    3 -> Set(acceptedCbRound2.head.hash)
-  )
+  after {
+    dao.unsafeShutdown()
+  }
 
   val eigenTrustRes = EigenTrust
   val totalNeighbors = eigenTrustRes.trustMap.size

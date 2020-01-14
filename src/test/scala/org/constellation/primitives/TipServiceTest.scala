@@ -19,24 +19,33 @@ import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{FunSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers}
 
 class TipServiceTest
     extends FunSpecLike
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with ArgumentMatchersSugar
-    with Matchers {
+    with Matchers
+    with BeforeAndAfter {
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao(
-    nodeConfig =
-      NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
-  )
+  implicit var dao: DAO = _
   implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger = Slf4jLogger.getLogger[IO]
 
   val facilitatorFilter: FacilitatorFilter[IO] = mock[FacilitatorFilter[IO]]
+
+  before {
+    dao = TestHelpers.prepareRealDao(
+      nodeConfig =
+        NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
+    )
+  }
+
+  after {
+    dao.unsafeShutdown()
+  }
 
   describe("TrieBasedTipService") {
 

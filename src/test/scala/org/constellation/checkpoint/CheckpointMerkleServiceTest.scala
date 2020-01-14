@@ -8,32 +8,39 @@ import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObser
 import org.constellation.primitives._
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FreeSpec, Matchers}
 
 class CheckpointMerkleServiceTest
     extends FreeSpec
     with IdiomaticMockito
     with ArgumentMatchersSugar
     with Matchers
-    with BeforeAndAfter {
+    with BeforeAndAfter
+    with BeforeAndAfterAll {
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit var dao: DAO = _
   val soe: SignedObservationEdge = mock[SignedObservationEdge]
+
+  var merkleService: CheckpointMerkleService[IO] = _
 
   before {
     soe.baseHash shouldReturn "abc"
-  }
-
-  "with mocked dao" - {
-    implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-
-    val merkleService = new CheckpointMerkleService[IO](
+    dao = TestHelpers.prepareRealDao()
+    merkleService = new CheckpointMerkleService[IO](
       dao,
       dao.transactionService,
       dao.messageService,
       dao.notificationService,
       dao.observationService
     )
+  }
+
+  after {
+    dao.unsafeShutdown()
+  }
+
+  "with mocked dao" - {
     "should convert CB to merkle roots when all data is filled" in {
 
       val cbProposal = CheckpointBlock

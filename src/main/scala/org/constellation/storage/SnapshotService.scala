@@ -3,9 +3,11 @@ package org.constellation.storage
 import java.io.FileOutputStream
 import java.nio.file.Path
 
+import better.files.File
+import cats.Parallel
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Resource, Sync, _}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -14,10 +16,9 @@ import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
+import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -34,7 +35,7 @@ class SnapshotService[F[_]: Concurrent](
   trustManager: TrustManager[F],
   soeService: SOEService[F],
   dao: DAO
-)(implicit C: ContextShift[F]) {
+)(implicit C: ContextShift[F], P: Parallel[F]) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
@@ -95,27 +96,38 @@ class SnapshotService[F[_]: Concurrent](
               nextSnapshot.lastSnapshot,
               nextHeightInterval - snapshotHeightInterval,
               predictedReputation
-            )
+          )
         )
       )
     } yield created
 
-  def writeSnapshotInfoToDisk: EitherT[F, SnapshotInfoIOError, Unit] =
+  def writeSnapshotPart(path: String, part: Array[Byte]): F[Unit] =
+    Resource
+      .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
+      .use(
+        stream =>
+          Sync[F].delay {
+            stream.write(part)
+          }.flatTap { _ =>
+            logger.debug(s"SnapshotInfo part written for path: $path")
+        }
+      )
+
+  def snapshotInfoWriterProc(plan: Seq[(String, Array[Byte])], basePath: String) = plan.toList.parTraverse {
+    case (path, part) => writeSnapshotPart(File(basePath, path).pathAsString, part)
+  }
+
+  def writeSnapshotInfoParts(info: SnapshotInfo, basePath: String = dao.snapshotInfoPath.pathAsString) =
+    info.toSnapshotInfoSer().write[F[List[Unit]]](snapshotInfoWriterProc)(basePath = basePath)
+
+  def writeSnapshotInfoToDisk(overWritePath: String = ""): EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
       getSnapshotInfoWithFullData.flatMap { info =>
         if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else {
-          val path = dao.snapshotInfoPath.pathAsString
-          Resource
-            .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
-            .use(
-              stream =>
-                Sync[F].delay {
-                  stream.write(KryoSerializer.serializeAnyRef(info))//todo break up info.toSnapshotInfoSer and save in part-files
-                }.flatTap { _ =>
-                  logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
-                }
-            )
+          for {
+            _ <- writeSnapshotInfoParts(info, overWritePath)
+          } yield ()
         }
       }
     }.leftMap(SnapshotInfoIOError)
@@ -331,7 +343,7 @@ class SnapshotService[F[_]: Concurrent](
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
       for {
         _ <- writeSnapshotToDisk(currentSnapshot)
-        _ <- writeSnapshotInfoToDisk
+        _ <- writeSnapshotInfoToDisk()
         _ <- applyAfterSnapshot(currentSnapshot)
       } yield ()
 
@@ -506,7 +518,7 @@ object SnapshotService {
     trustManager: TrustManager[F],
     soeService: SOEService[F],
     dao: DAO
-  )(implicit C: ContextShift[F]) =
+  )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
       concurrentTipService,
       addressService,

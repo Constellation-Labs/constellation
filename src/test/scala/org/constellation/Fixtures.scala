@@ -28,26 +28,31 @@ object Fixtures {
   def tx: Transaction =
     TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
 
-  def createAndStoreTx(amount: Long,
-                       destination: String,
-                       lastTxRef: LastTransactionRef,
-                       storePath: String,
-                       kp: KeyPair = KeyUtils.makeKeyPair()) = {
+  def createAndStoreTx(
+    amount: Long,
+    destination: String,
+    lastTxRef: LastTransactionRef,
+    storePath: String,
+    kp: KeyPair = KeyUtils.makeKeyPair()
+  ) = {
     val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
-                                                                   KeyUtils.publicKeyToAddressString(kp.getPublic),
-                                                                   destination,
-                                                                   lastTxRef,
-                                                                   amount,
-                                                                   kp)
+      KeyUtils.publicKeyToAddressString(kp.getPublic),
+      destination,
+      lastTxRef,
+      amount,
+      kp
+    )
     val transaction = Transaction(transactionEdge, LastTransactionRef.empty)
     transaction.jsonSave(storePath)
   }
 
-  def loadKeyPairUnsafe(keystorePath: String,
-                        alias: String,
-                        keypass: Array[Char],
-                        storepass: Array[Char],
-                        keyStoreType: String = "PKCS12") = {
+  def loadKeyPairUnsafe(
+    keystorePath: String,
+    alias: String,
+    keypass: Array[Char],
+    storepass: Array[Char],
+    keyStoreType: String = "PKCS12"
+  ) = {
     val kpFileStream = new FileInputStream(keystorePath)
     val keyStore = KeyStore.getInstance(keyStoreType)
     keyStore.load(kpFileStream, storepass)

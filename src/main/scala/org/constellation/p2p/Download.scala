@@ -301,7 +301,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     LiftIO[F].liftIO(dao.snapshotService.setSnapshot(snapshotInfo))
 
   private def storeSnapshotInfo: F[Unit] =
-    LiftIO[F].liftIO(dao.snapshotService.writeSnapshotInfoToDisk.value.void)
+    LiftIO[F].liftIO(dao.snapshotService.writeSnapshotInfoToDisk().value.void)
 
   private def acceptSnapshotCacheData(snapshotInfo: SnapshotInfo): F[Unit] =
     LiftIO[F]

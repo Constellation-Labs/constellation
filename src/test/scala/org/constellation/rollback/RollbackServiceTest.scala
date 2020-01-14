@@ -36,7 +36,7 @@ class RollbackServiceTest
       snapshotService,
       new RollbackLoader(
         existingFolder + "snapshots",
-        existingFolder + "rollback_info",
+        existingFolder + "snapshot_info",
         existingFolder + "rollback_genesis"
       )
     )
@@ -47,7 +47,6 @@ class RollbackServiceTest
       .validate()
       .value
       .unsafeRunSync()
-
     result.isRight shouldBe true
   }
 

@@ -14,7 +14,7 @@ import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, GenesisObservation}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.schema.Id
@@ -184,14 +184,13 @@ class ValidationSpec
     extends TestKit(ActorSystem("Validation"))
     with WordSpecLike
     with Matchers
-    with BeforeAndAfterEach
-    with BeforeAndAfterAll
+    with BeforeAndAfter
     with MockFactory
     with OneInstancePerTest {
 
   import RandomData._
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit var dao: DAO = _
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val keyPair: KeyPair = keyPairs.head
@@ -200,42 +199,49 @@ class ValidationSpec
   implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
   implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
 
-  val genesis = go()
+  var genesis: GenesisObservation = _
 
-  val checkpointBlockValidator: CheckpointBlockValidator[IO] =
-    new CheckpointBlockValidator[IO](
+  var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
+
+  val ipManager = IPManager[IO]()
+  var cluster: Cluster[IO] = _
+
+  before {
+    dao = TestHelpers.prepareRealDao()
+    checkpointBlockValidator = new CheckpointBlockValidator[IO](
       dao.addressService,
       dao.snapshotService,
       dao.checkpointParentService,
       dao.transactionValidator,
       dao
     )
-
-  val ipManager = IPManager[IO]()
-  val cluster = Cluster[IO](() => dao.metrics, ipManager, new JoiningPeerValidator[IO](), dao)
-  dao.cluster = cluster
-
-  dao.checkpointService.put(CheckpointCache(go.genesis)).unsafeRunSync
-  dao.checkpointService.put(CheckpointCache(go.initialDistribution)).unsafeRunSync
-  dao.checkpointService.put(CheckpointCache(go.initialDistribution2)).unsafeRunSync
-  dao.metrics = new Metrics()
-  dao.snapshotService
-    .setSnapshot(
-      SnapshotInfo(
-        Snapshot.snapshotZero,
-        Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
-        Seq(),
-        0,
-        Seq(),
-        Map.empty,
-        Map.empty,
-        Seq()
+    genesis = go()
+    cluster = Cluster[IO](() => dao.metrics, ipManager, new JoiningPeerValidator[IO](), dao)
+    dao.cluster = cluster
+    dao.checkpointService.put(CheckpointCache(go.genesis)).unsafeRunSync
+    dao.checkpointService.put(CheckpointCache(go.initialDistribution)).unsafeRunSync
+    dao.checkpointService.put(CheckpointCache(go.initialDistribution2)).unsafeRunSync
+    dao.metrics = new Metrics()
+    dao.snapshotService
+      .setSnapshot(
+        SnapshotInfo(
+          Snapshot.snapshotZero,
+          Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
+          Seq(),
+          0,
+          Seq(),
+          Map.empty,
+          Map.empty,
+          Seq()
+        )
       )
-    )
-    .unsafeRunSync()
+      .unsafeRunSync()
+  }
 
-  override def afterAll(): Unit =
+  after {
+    dao.unsafeShutdown()
     TestKit.shutdownActorSystem(system)
+  }
 
   "Checkpoint block validation" when {
     "all transactions are valid" should {

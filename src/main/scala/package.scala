@@ -12,14 +12,7 @@ import cats.effect.Sync
 import cats.implicits._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
-import org.constellation.domain.observation.{
-  CheckpointBlockInvalid,
-  CheckpointBlockWithMissingParents,
-  CheckpointBlockWithMissingSoe,
-  RequestTimeoutOnConsensus,
-  RequestTimeoutOnResolving,
-  SnapshotMisalignment
-}
+import org.constellation.domain.observation._
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.schema.Id
@@ -157,6 +150,11 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   implicit class HTTPHelp(httpResponse: HttpResponse)(implicit val materialize: ActorMaterializer) {
 
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
+  }
+
+  def getCCParams(cc: Product) = {
+    val values = cc.productIterator
+    cc.getClass.getDeclaredFields.map(_.getName -> values.next).toList
   }
 
   def pprintInet(inetSocketAddress: InetSocketAddress): String =

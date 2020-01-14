@@ -355,6 +355,7 @@ class TransactionServiceTest
 
         tcd.transaction shouldReturn mock[Transaction]
         tcd.transaction.hash shouldReturn n.toString
+        tcd.hash shouldReturn n.toString
 
         tcd
       }

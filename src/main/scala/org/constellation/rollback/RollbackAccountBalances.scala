@@ -27,6 +27,7 @@ class RollbackAccountBalances {
     if (snapshotHash == zeroSnapshotHash) {
       balances
     } else {
+      println(snapshotHash)
       val snapshot = findSnapshot(snapshotHash, snapshots)
       calculateSnapshotsBalances(
         snapshot.snapshot.lastSnapshot,
