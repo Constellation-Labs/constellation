@@ -18,7 +18,7 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
   implicit val logger = Slf4jLogger.getLogger[IO]
 
   "update" - {
-    "it should increment counter for all source addresses in provided txs" in {
+    "it should increment counter for all (not dummy) source addresses in provided txs" in {
       val rl = RateLimiting[IO]()
 
       val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
@@ -38,6 +38,18 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
 
       rl.counter.get.unsafeRunSync shouldBe Map(Address("a") -> 50)
       rl.blacklisted.lookup("a").unsafeRunSync shouldBe -1.some
+    }
+
+    "it should ignore dummy transactions" in {
+      val rl = RateLimiting[IO]()
+
+      val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx2 = Fixtures.makeDummyTransaction("a", "z", Fixtures.tempKey)
+      val tx3 = Fixtures.makeDummyTransaction("b", "z", Fixtures.tempKey)
+
+      rl.update(List(tx1, tx2, tx3)).unsafeRunSync
+
+      rl.counter.get.unsafeRunSync shouldBe Map(Address("a") -> 1)
     }
   }
 
@@ -87,6 +99,32 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
 
       rl.counter.get.unsafeRunSync shouldBe Map(Address("a") -> 55)
       rl.blacklisted.lookup("a").unsafeRunSync shouldBe -6.some
+    }
+
+    "it should ignore dummy transactions" in {
+      val rl = RateLimiting[IO]()
+      val cs = mock[CheckpointService[IO]]
+
+      val tx1 = Fixtures.makeTransaction("a", "z", 5L, Fixtures.tempKey)
+      val tx2 = Fixtures.makeDummyTransaction("a", "z", Fixtures.tempKey)
+      val tx3 = Fixtures.makeDummyTransaction("b", "z", Fixtures.tempKey)
+
+      rl.update(List(tx1, tx2, tx3)).unsafeRunSync
+
+      val tx4 = Fixtures.makeDummyTransaction("a", "z", Fixtures.tempKey)
+      val tx5 = Fixtures.makeDummyTransaction("b", "z", Fixtures.tempKey)
+      val tx6 = Fixtures.makeDummyTransaction("c", "z", Fixtures.tempKey)
+
+      val cb1 = mock[CheckpointCache]
+      cb1.checkpointBlock shouldReturn mock[CheckpointBlock]
+      cb1.checkpointBlock.baseHash shouldReturn "cb1"
+      cb1.checkpointBlock.transactions shouldReturn List(tx4, tx5, tx6)
+
+      cs.fullData("cb1") shouldReturnF cb1.some
+
+      rl.reset(List("cb1"))(cs).unsafeRunSync
+
+      rl.counter.get.unsafeRunSync shouldBe Map()
     }
   }
 

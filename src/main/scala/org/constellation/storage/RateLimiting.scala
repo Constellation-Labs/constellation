@@ -17,7 +17,8 @@ class RateLimiting[F[_]: Concurrent]() {
 
   def update(txs: List[Transaction]): F[Unit] =
     for {
-      grouped <- txs.groupBy(_.src).mapValues(_.size).pure[F]
+      filtered <- txs.filterNot(_.isDummy).pure[F]
+      grouped = filtered.groupBy(_.src).mapValues(_.size)
       _ <- counter.modify(c => (c |+| grouped, ()))
 
       _ <- counter.get.flatTap(c => logger.debug(s"Update [rate-limiting]: $c"))
@@ -28,7 +29,8 @@ class RateLimiting[F[_]: Concurrent]() {
     for {
       cbs <- cbHashes.map(checkpointService.fullData).sequence[F, Option[Schema.CheckpointCache]].map(_.flatten)
       txs = cbs.flatMap(_.checkpointBlock.transactions.toList)
-      grouped = txs.groupBy(_.src).mapValues(_.size)
+      filtered = txs.filterNot(_.isDummy)
+      grouped = filtered.groupBy(_.src).mapValues(_.size)
 
       _ <- counter.modify(_ => (grouped, ()))
 
