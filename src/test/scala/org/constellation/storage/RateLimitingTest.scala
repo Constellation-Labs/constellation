@@ -17,9 +17,6 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
-  // TODO: Uncomment with re-enabling RateLimiting
-  /*
-
   "update" - {
     "it should increment counter for all source addresses in provided txs" in {
       val rl = RateLimiting[IO]()
@@ -130,6 +127,4 @@ class RateLimitingTest extends FreeSpec with IdiomaticMockito with IdiomaticMock
       rl.available(Address("unknown")).unsafeRunSync shouldBe left
     }
   }
-
- */
 }
