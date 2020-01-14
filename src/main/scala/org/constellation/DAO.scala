@@ -243,29 +243,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
 
-    snapshotService = SnapshotService[IO](
-      concurrentTipService,
-      addressService,
-      checkpointService,
-      messageService,
-      transactionService,
-      observationService,
-      rateLimiting,
-      consensusManager,
-      trustManager,
-      soeService,
-      this
-    )
-
-    transactionValidator = new TransactionValidator[IO](transactionService)
-    checkpointBlockValidator = new CheckpointBlockValidator[IO](
-      addressService,
-      snapshotService,
-      checkpointParentService,
-      transactionValidator,
-      this
-    )
-
     consensusManager = new ConsensusManager[IO](
       transactionService,
       concurrentTipService,
