@@ -18,7 +18,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     this.registerClasses(kryo)
 
   def registerClasses(kryo: Kryo): Unit = {
-    Log.DEBUG()
+
     kryo.register(classOf[ChannelMessageData])
     kryo.register(classOf[SignedData[ChannelMessageData]])
     kryo.register(classOf[SignedData[ObservationData]])
