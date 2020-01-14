@@ -43,7 +43,7 @@ jobs:
         
       # run tests!
       - run: cat /dev/null | sbt -no-colors test:test
-      - run: cat /dev/null | sbt -no-colors e2e:test
+      # - run: cat /dev/null | sbt -no-colors e2e:test
 
       - store_test_results:
           path: target/test-results
