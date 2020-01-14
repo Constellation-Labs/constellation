@@ -5,12 +5,20 @@ import java.util.Collections
 import io.prometheus.client.CollectorRegistry
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.{DAO, TestHelpers}
-import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfter, FlatSpecLike, Matchers}
 
-class MetricsManagerTest() extends Matchers with FlatSpecLike with BeforeAndAfterAll {
+class MetricsManagerTest() extends Matchers with FlatSpecLike with BeforeAndAfter {
 
-  implicit val dao: DAO =
-    TestHelpers.prepareRealDao(nodeConfig = NodeConfig(allowLocalhostPeers = true, hostName = "", peerHttpPort = 0))
+  implicit var dao: DAO = _
+
+  before {
+    dao =
+      TestHelpers.prepareRealDao(nodeConfig = NodeConfig(allowLocalhostPeers = true, hostName = "", peerHttpPort = 0))
+  }
+
+  after {
+    dao.unsafeShutdown()
+  }
 
   "MetricsManager" should "report micrometer metrics" in {
     val familySamples = Collections.list(CollectorRegistry.defaultRegistry.metricFamilySamples())

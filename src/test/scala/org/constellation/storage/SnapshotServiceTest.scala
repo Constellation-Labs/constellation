@@ -111,6 +111,8 @@ class SnapshotServiceTest
 
       dao.metrics.getCountMetric(Metrics.snapshotCount) shouldBe 1.some
       dao.metrics.getCountMetric(Metrics.snapshotWriteToDisk + Metrics.success) shouldBe 1.some
+
+      dao.unsafeShutdown()
     }
   }
 
