@@ -1,6 +1,6 @@
 package org.constellation.util
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import cats.effect.IO
 import com.typesafe.scalalogging.StrictLogging
@@ -14,6 +14,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
   val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
   val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.bounded
   val executionNumber: AtomicLong = new AtomicLong(0)
+  val cancellationToken: AtomicBoolean = new AtomicBoolean(false)
 
   def trigger(): IO[Unit]
 
@@ -42,8 +43,9 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
       .onComplete { res =>
         val currNumber = executionNumber.incrementAndGet()
         logger.debug(s"Periodic task: $taskName has finished $res execution number: $currNumber")
-        schedule(duration)
+        if (!cancellationToken.get()) schedule(duration)
       }(timerPool)
   }
 
+  def cancel(): IO[Unit] = IO { cancellationToken.set(true) }
 }

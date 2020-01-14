@@ -48,6 +48,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
     (dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready) >>
       facilitators.toList.traverse(p => dao.cluster.updatePeerInfo(p._2))).unsafeRunSync
+
     dao
   }
 

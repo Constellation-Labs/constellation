@@ -1,20 +1,22 @@
 package org.constellation.rollback
 
 import org.constellation.primitives.Genesis
+import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.util.AccountBalance
 import org.constellation.{DAO, TestHelpers}
 import org.mockito.ArgumentMatchersSugar
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FreeSpec, Matchers}
 
 class RollbackCalculateBalancesGenesisTest
     extends FreeSpec
     with ArgumentMatchersSugar
     with BeforeAndAfter
+    with BeforeAndAfterAll
     with Matchers {
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit var dao: DAO = _
 
-  private val rollbackAccountBalances: RollbackAccountBalances = new RollbackAccountBalances
+  private var rollbackAccountBalances: RollbackAccountBalances = _
   private val initialBalances = Seq(
     AccountBalance("a", 10),
     AccountBalance("b", 20),
@@ -22,8 +24,19 @@ class RollbackCalculateBalancesGenesisTest
     AccountBalance("d", 50)
   )
 
-  private val genesisObservationWithInitialBalances = Genesis.createGenesisObservation(initialBalances)
-  private val emptyGenesisObservation = Genesis.createGenesisObservation(Seq.empty)
+  private var genesisObservationWithInitialBalances: GenesisObservation = _
+  private var emptyGenesisObservation: GenesisObservation = _
+
+  before {
+    dao = TestHelpers.prepareRealDao()
+    rollbackAccountBalances = new RollbackAccountBalances
+    genesisObservationWithInitialBalances = Genesis.createGenesisObservation(initialBalances)
+    emptyGenesisObservation = Genesis.createGenesisObservation(Seq.empty)
+  }
+
+  after {
+    dao.unsafeShutdown()
+  }
 
   "Genesis Observation" - {
     "should proceed calculations" in {

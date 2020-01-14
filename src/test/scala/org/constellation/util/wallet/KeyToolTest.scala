@@ -12,6 +12,7 @@ import org.scalatest._
 class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val keyTool = KeyTool
   val savedKeystorePath = getClass.getResource("/wallet-client-test-save-kp.p12").getPath
+
   val keyToolArgs = List(
     s"--keystore=${savedKeystorePath}",
     s"--alias=${Fixtures.alias}",
@@ -23,9 +24,16 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
     val loadKp =
       for {
         lkp <- KeyStoreUtils
-          .keyPairFromStorePath[IO](savedKeystorePath, Fixtures.alias, Fixtures.storepass.toCharArray, Fixtures.keypass.toCharArray)
+          .keyPairFromStorePath[IO](
+            savedKeystorePath,
+            Fixtures.alias,
+            Fixtures.storepass.toCharArray,
+            Fixtures.keypass.toCharArray
+          )
       } yield lkp
-    val kp = loadKp.value.unsafeRunSync().right.get
+    val kpEither = loadKp.value.unsafeRunSync()
+    assert(kpEither.isRight)
+    val kp = kpEither.right.get
     assert(kp.getPublic.isInstanceOf[PublicKey] && kp.getPrivate.isInstanceOf[PrivateKey])
   }
 

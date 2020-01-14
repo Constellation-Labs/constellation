@@ -16,14 +16,15 @@ import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.util.AccountBalance
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FreeSpec, Matchers}
 
 class CheckpointServiceTest
     extends FreeSpec
     with IdiomaticMockito
     with ArgumentMatchersSugar
     with Matchers
-    with BeforeAndAfter {
+    with BeforeAndAfter
+    with BeforeAndAfterAll {
 
   val readyFacilitators: Map[Id, PeerData] = TestHelpers.prepareFacilitators(1)
 
@@ -32,14 +33,17 @@ class CheckpointServiceTest
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
+  before {
+    kp = makeKeyPair()
+    dao = TestHelpers.prepareRealDao(readyFacilitators)
+  }
+
   after {
     File(GenesisObservationWriterProperties.path(dao.id), GenesisObservationWriterProperties.FILE_NAME).delete()
+    dao.unsafeShutdown()
   }
 
   "with real dao" - {
-    kp = makeKeyPair()
-    dao = TestHelpers.prepareRealDao(readyFacilitators)
-
     "should store genesis observation on disk during acceptance step" in {
       Genesis.acceptGenesis(
         Genesis.createGenesisObservation(Seq.empty),
