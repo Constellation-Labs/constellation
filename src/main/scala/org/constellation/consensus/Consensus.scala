@@ -271,6 +271,10 @@ class Consensus[F[_]: Concurrent: ContextShift](
             logger.error(tipConflict)(
               s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${tipConflict.getMessage}"
             ) >> ConsensusFinalResult(None, true, tipConflict.conflictingTxs).pure[F]
+          case containsInvalidTransactions: ContainsInvalidTransactionsException =>
+            logger.error(containsInvalidTransactions)(
+              s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${containsInvalidTransactions.getMessage}"
+            ) >> ConsensusFinalResult(None, shouldReturnData = true, containsInvalidTransactions.txsToExclude).pure[F]
           case unknownError =>
             logger.error(unknownError)(
               s"[${dao.id.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
@@ -287,12 +291,13 @@ class Consensus[F[_]: Concurrent: ContextShift](
         )
       }
 
+      _ <- logger.debug(s"[Accept checkpoint] Txs hashes to exclude : ${finalResult.txsToExclude}")
       transactionsToReturn <- if (finalResult.shouldReturnData) {
         getOwnTransactionsToReturn.map(
           txs =>
             txs
               .diff(finalResult.cb.map(_.transactions).getOrElse(Seq.empty))
-              .filterNot(finalResult.txsToExclude.contains)
+              .filterNot(tx => finalResult.txsToExclude.contains(tx.hash))
         )
       } else Seq.empty[Transaction].pure[F]
 
