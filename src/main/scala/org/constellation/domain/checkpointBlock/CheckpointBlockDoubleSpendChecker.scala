@@ -21,12 +21,13 @@ object CheckpointBlockDoubleSpendChecker {
       .groupBy(_.src.address)
       .toList
       .flatMap {
-        case (_, txs: Seq[Transaction]) =>
+        case (_: String, txs: List[Transaction]) =>
           txs.groupBy(_.ordinal).toList.flatMap {
             case (_, txs: List[Transaction]) =>
               if (txs.size > 1) txs
               else List.empty
           }
+        case (_, _) => List.empty
       }
 
   private def checkOrdinal[F[_]: Concurrent](tx: Transaction)(
