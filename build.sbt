@@ -86,21 +86,26 @@ lazy val coreSettings = Seq(
   resolvers += "jitpack".at("https://jitpack.io")
 )
 
-lazy val keyToolSharedDependencies = Seq(
+lazy val sharedDependencies = Seq(
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
+  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
+)
+
+lazy val keyToolSharedDependencies = Seq(
   "com.google.cloud" % "google-cloud-storage" % "1.91.0",
   "com.madgag.spongycastle" % "core" % versions.spongyCastle,
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.63",
-  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
-  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
-)
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.63"
+) ++ sharedDependencies
+
+lazy val walletSharedDependencies = sharedDependencies
 
 lazy val schemaSharedDependencies = Seq(
   "com.twitter" %% "chill" % versions.twitterChill
@@ -217,8 +222,22 @@ lazy val keytool = (project in file("keytool"))
     libraryDependencies ++= keyToolSharedDependencies
   )
 
+lazy val wallet = (project in file("wallet"))
+  .enablePlugins(BuildInfoPlugin)
+  .dependsOn(keytool)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation.wallet",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    mainClass := Some("org.constellation.wallet.Wallet"),
+    libraryDependencies ++= walletSharedDependencies
+  )
+
 lazy val schema = (project in file("schema"))
   .dependsOn(keytool)
+  .dependsOn(wallet)
   .enablePlugins(BuildInfoPlugin)
   .settings(
     buildInfoKeys := Seq[BuildInfoKey](

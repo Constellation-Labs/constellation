@@ -6,13 +6,10 @@ import cats.implicits._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.checkpointBlock.{
-  AwaitingCheckpointBlock,
-  CheckpointBlockBlacklistedAddressChecker,
-  CheckpointBlockDoubleSpendChecker
-}
+import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
 import org.constellation.domain.observation.{CheckpointBlockInvalid, Observation, ObservationService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, DataResolver}
@@ -161,17 +158,31 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
               .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
         }
 
-        _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking validation")
         validation <- checkpointBlockValidator.simpleValidation(cb)
-        _ <- if (!validation.isValid)
+        addressesWithInsufficientBalances = if (validation.isInvalid) getAddressesWithInsufficientBalances(validation)
+        else List.empty
+
+        _ <- if (validation.isInvalid)
           facilitators.toList
             .traverse(
               id =>
                 observationService
                   .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair))
             )
-            .flatMap(_ => Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation")))
+            .flatMap(
+              _ =>
+                if (addressesWithInsufficientBalances.nonEmpty)
+                  ContainsInvalidTransactionsException(
+                    cb,
+                    cb.transactions
+                      .filter(t => addressesWithInsufficientBalances.contains(t.src.address))
+                      .map(_.hash)
+                      .toList
+                  ).raiseError[F, Unit]
+                else Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation"))
+            )
         else Sync[F].unit
+
         _ <- checkpointParentService.soeService
           .put(cb.soeHash, cb.soe) // TODO: consider moving down
         maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
@@ -231,6 +242,16 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         } >> acceptErrorHandler(ex)
     }
   }
+
+  private def getAddressesWithInsufficientBalances(validation: ValidationResult[CheckpointBlock]): List[String] =
+    validation
+      .fold(
+        _.toList.flatMap {
+          case InsufficientBalance(address, _, _) => List(address)
+          case _                                  => List.empty
+        },
+        _ => List.empty
+      )
 
   private def checkDoubleSpendTransaction(cb: CheckpointBlock): F[List[Transaction]] =
     for {
