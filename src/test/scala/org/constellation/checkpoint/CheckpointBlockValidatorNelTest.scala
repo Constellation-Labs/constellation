@@ -227,6 +227,7 @@ class ValidationSpec
           Snapshot.snapshotZero,
           Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
           Seq(),
+          Set(),
           0,
           Seq(),
           Map.empty,
