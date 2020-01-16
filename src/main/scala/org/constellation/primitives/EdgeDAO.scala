@@ -140,6 +140,15 @@ object MissingParents {
   def apply(cb: CheckpointBlock): MissingParents = new MissingParents(cb)
 }
 
+case class ContainsInvalidTransactionsException(cbHash: String, txsToExclude: List[String])
+    extends Exception(s"CheckpointBlock hash=$cbHash contains invalid transactions=$txsToExclude")
+
+object ContainsInvalidTransactionsException {
+
+  def apply(cb: CheckpointBlock, txsToExclude: List[String]): ContainsInvalidTransactionsException =
+    new ContainsInvalidTransactionsException(cb.baseHash, txsToExclude)
+}
+
 trait EdgeDAO {
 
   var metrics: Metrics

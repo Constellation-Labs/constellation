@@ -12,15 +12,14 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
-import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, GenesisObservation}
-import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.{HashSignature, Metrics}
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalamock.scalatest.MockFactory
@@ -329,7 +328,9 @@ class ValidationSpec
           )
         )
 
-        assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
+        val result = checkpointBlockValidator.simpleValidation(cb).unsafeRunSync()
+
+        assert(result.isInvalid)
       }
     }
 
@@ -420,6 +421,30 @@ class ValidationSpec
         )
 
         assert(!checkpointBlockValidator.simpleValidation(cb).unsafeRunSync().isValid)
+      }
+    }
+
+    "at least one transaction tries to reduce balance below the account value" should {
+      "not pass validation" in {
+        val kp = keyPairs.take(4)
+        val _ :: a :: b :: c :: _ = kp
+
+        val txs = Seq(
+          Fixtures.makeTransaction(getAddress(a), getAddress(b), 1000L, a),
+          Fixtures.makeTransaction(getAddress(a), getAddress(c), 1000L, a)
+        )
+
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(genesis))
+
+        fill(
+          Map(
+            getAddress(a) -> 200L
+          )
+        )
+
+        val result = checkpointBlockValidator.simpleValidation(cb).unsafeRunSync()
+
+        assert(result.isInvalid)
       }
     }
 
