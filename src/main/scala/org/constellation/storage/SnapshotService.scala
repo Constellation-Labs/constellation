@@ -9,7 +9,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.CheckpointService
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
@@ -57,9 +57,10 @@ class SnapshotService[F[_]: Concurrent](
 
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
 
-  def getAcceptedCBSinceSnapshot: F[Seq[String]] = for {
-    hashes <- acceptedCBSinceSnapshot.get
-  } yield hashes
+  def getAcceptedCBSinceSnapshot: F[Seq[String]] =
+    for {
+      hashes <- acceptedCBSinceSnapshot.get
+    } yield hashes
 
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
@@ -99,7 +100,7 @@ class SnapshotService[F[_]: Concurrent](
               nextSnapshot.lastSnapshot,
               nextHeightInterval - snapshotHeightInterval,
               predictedReputation
-            )
+          )
         )
       )
     } yield created
@@ -118,7 +119,7 @@ class SnapshotService[F[_]: Concurrent](
 //                  stream.write(KryoSerializer.serializeAnyRef(info))todo save in part files using chunked serialization
                 }.flatTap { _ =>
                   logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
-                }
+              }
             )
         }
       }
@@ -166,11 +167,14 @@ class SnapshotService[F[_]: Concurrent](
   def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Seq[String]): F[List[CheckpointCache]] =
     snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
 
+  def getCheckpointAcceptanceService = LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get)
+
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- retainOldData()
       _ <- snapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
+      _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)

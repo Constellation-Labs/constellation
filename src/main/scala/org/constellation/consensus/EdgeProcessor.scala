@@ -225,6 +225,7 @@ case class SnapshotInfo(
   snapshot: Snapshot,
   acceptedCBSinceSnapshot: Seq[String] = Seq(),
   acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
+  awaitingCbs: Set[CheckpointCache] = Set(),
   lastSnapshotHeight: Int = 0,
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
