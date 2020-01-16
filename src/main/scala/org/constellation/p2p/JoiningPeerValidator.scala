@@ -1,6 +1,5 @@
 package org.constellation.p2p
 
-import cats.data.Validated.{Invalid, Valid}
 import cats.data.ValidatedNel
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._

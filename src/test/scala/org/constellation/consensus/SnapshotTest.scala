@@ -9,17 +9,37 @@ import cats.implicits._
 import org.constellation._
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.CheckpointBlock
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.primitives.Schema.{CheckpointCache, GenesisObservation}
 import org.constellation.util.Metrics
-import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}
 
-class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
+class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers {
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao(
-    nodeConfig =
-      NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
-  )
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit var dao: DAO = _
+
+  def randomHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
+  var genesis: GenesisObservation = _
+
+  def randomCB =
+    CheckpointBlock
+      .createCheckpointBlockSOE(Seq.fill(10)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
+        Fixtures.tempKey1
+      )
+
+  before {
+    dao = TestHelpers.prepareRealDao(
+      nodeConfig =
+        NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
+    )
+    dao.snapshotPath.delete()
+    genesis = RandomData.go()
+  }
+
+  after {
+    dao.snapshotPath.delete()
+    dao.unsafeShutdown()
+  }
 
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =
@@ -46,23 +66,4 @@ class SnapshotTest extends FunSuite with BeforeAndAfterEach with Matchers {
     File(dao.snapshotPath.path, snaps.head.snapshot.hash).exists shouldBe true
     File(dao.snapshotPath.path, snaps.last.snapshot.hash).exists shouldBe true
   }
-
-  override protected def beforeEach(): Unit = {
-    super.beforeEach()
-    dao.snapshotPath.delete()
-  }
-
-  override protected def afterEach(): Unit = {
-    super.afterEach()
-    dao.snapshotPath.delete()
-  }
-
-  private def randomHash = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
-  private val genesis = RandomData.go()
-  private def randomCB =
-    CheckpointBlock
-      .createCheckpointBlockSOE(Seq.fill(10)(RandomData.randomTransaction), RandomData.startingTips(genesis))(
-        Fixtures.tempKey1
-      )
-
 }

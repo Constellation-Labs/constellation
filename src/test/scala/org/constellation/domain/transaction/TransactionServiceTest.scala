@@ -10,6 +10,7 @@ import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
+import org.constellation.storage.RateLimiting
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -33,6 +34,7 @@ class TransactionServiceTest
   var dao: DAO = _
   var txChain: TransactionChainService[IO] = _
   var txService: TransactionService[IO] = _
+  var rl: RateLimiting[IO] = _
 
   val hash = "ipsum"
 
@@ -50,7 +52,8 @@ class TransactionServiceTest
   before {
     dao = TestHelpers.prepareMockedDAO()
     txChain = TransactionChainService[IO]
-    txService = new TransactionService[IO](txChain, dao)
+    rl = RateLimiting[IO]()
+    txService = new TransactionService[IO](txChain, rl, dao)
   }
 
   "put" - {
@@ -352,6 +355,7 @@ class TransactionServiceTest
 
         tcd.transaction shouldReturn mock[Transaction]
         tcd.transaction.hash shouldReturn n.toString
+        tcd.hash shouldReturn n.toString
 
         tcd
       }

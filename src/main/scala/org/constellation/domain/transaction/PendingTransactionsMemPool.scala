@@ -5,11 +5,13 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
+import org.constellation.primitives.Schema.Address
 import org.constellation.primitives.TransactionCacheData
-import org.constellation.storage.PendingMemPool
+import org.constellation.storage.{PendingMemPool, RateLimiting}
 
 class PendingTransactionsMemPool[F[_]: Concurrent](
-  transactionChainService: TransactionChainService[F]
+  transactionChainService: TransactionChainService[F],
+  rateLimiting: RateLimiting[F]
 ) extends PendingMemPool[F, String, TransactionCacheData] {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -44,11 +46,14 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
       .mapValues(_.sortBy(_.transaction.ordinal))
       .toList
       .pure[F]
+      .flatMap(_.filterA {
+        case (addressHash, _) => rateLimiting.available(Address(addressHash)).map(_ > 0)
+      })
       .flatMap { t =>
         t.traverse {
-          case (hash, txs) =>
+          case (addressHash, txs) =>
             transactionChainService
-              .getLastAcceptedTransactionRef(hash)
+              .getLastAcceptedTransactionRef(addressHash)
               .flatTap { last =>
                 logger.info(s"${Console.YELLOW}Last accepted: ${last} | Txs head: ${txs.headOption
                   .map(_.transaction.lastTxRef)} hash=${txs.headOption.map(_.transaction.hash)}${Console.RESET}")
@@ -72,6 +77,6 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
 
 object PendingTransactionsMemPool {
 
-  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F]) =
-    new PendingTransactionsMemPool[F](transactionChainService)
+  def apply[F[_]: Concurrent](transactionChainService: TransactionChainService[F], rateLimiting: RateLimiting[F]) =
+    new PendingTransactionsMemPool[F](transactionChainService, rateLimiting)
 }

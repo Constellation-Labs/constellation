@@ -35,7 +35,13 @@ import scala.util.Random
 
 case class PeerAuthSignRequest(salt: Long)
 
-case class PeerRegistrationRequest(host: String, port: Int, id: Id, resourceInfo: ResourceInfo)
+case class PeerRegistrationRequest(
+  host: String,
+  port: Int,
+  id: Id,
+  resourceInfo: ResourceInfo,
+  isSimulation: Boolean = false
+)
 
 case class PeerUnregister(host: String, port: Int, id: Id)
 
@@ -106,7 +112,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 s"Received peer registration request $request on $ip"
               )
               logger.debug("Parsed host, sending peer manager request")
-              APIDirective.handle(dao.cluster.pendingRegistration(ip, request, isJoiningPeer = true))(
+              APIDirective.handle(dao.cluster.pendingRegistration(ip, request, request.isSimulation))(
                 _ => complete(StatusCodes.OK)
               )
             }
@@ -130,7 +136,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       get {
         pathPrefix("registration") {
           path("request") {
-            complete(dao.peerRegistrationRequest) // Include status also
+            complete(dao.peerRegistrationRequest()) // Include status also
           }
         }
       }

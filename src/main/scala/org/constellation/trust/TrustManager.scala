@@ -18,14 +18,20 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   private val predictedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
 
+  def calculateIdxMaps(scores: List[TrustDataInternal]): (Map[Id, Int], Map[Int, Id]) = {
+    val allNodeIds = scores.flatMap(_.view.keySet)
+    val scoringMap = calculateScoringMap(allNodeIds)
+    val idxMap = scoringMap.map(_.swap)
+    (scoringMap, idxMap)
+  }
+
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
     cluster.getPeerInfo.flatMap { peers =>
       if (peers.nonEmpty) {
         for {
           reputation <- getStoredReputation
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
-          scoringMap = calculateScoringMap(scores)
-          idxMap = scoringMap.map(_.swap)
+          (scoringMap, idxMap) = calculateIdxMaps(scores)
 
           idMappedScores = SelfAvoidingWalk
             .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId), calculateTrustNodes(scores, nodeId, scoringMap))
@@ -69,10 +75,10 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 //      .groupBy(_.signedObservationData.data.id)
 //      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
 
-  private def calculateScoringMap(scores: List[TrustDataInternal]): Map[Id, Int] =
-    scores.map(_.id).sortBy { _.hex }.zipWithIndex.toMap
+  def calculateScoringMap(scores: List[Id]): Map[Id, Int] =
+    scores.sortBy { _.hex }.zipWithIndex.toMap
 
-  private def calculateTrustNodes(
+  def calculateTrustNodes(
     scores: List[TrustDataInternal],
     currentNodeId: Id,
     scoringMap: Map[Id, Int]
@@ -88,7 +94,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           peerScores.map {
             case (peerId, score) =>
               println(s"${Console.RED}${score}${Console.RESET}")
-              TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)
+              TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)//todo need getOrElse here to add new peer as
           }.toSeq
         )
     }

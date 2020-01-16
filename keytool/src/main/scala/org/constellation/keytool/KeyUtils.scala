@@ -1,12 +1,16 @@
 package org.constellation.keytool
 
+import java.io.{FileOutputStream, OutputStreamWriter}
 import java.security.spec.{ECGenParameterSpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
 import java.security.{KeyFactory, SecureRandom, _}
-import java.util.Base64
 
+import cats.effect.{Resource, Sync}
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.StrictLogging
-import org.spongycastle.jce.provider.BouncyCastleProvider
+import org.apache.commons.codec.binary.Base64.decodeBase64
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
+import cats.implicits._
 
 /**
   * Need to compare this to:
@@ -31,7 +35,7 @@ object KeyUtils extends StrictLogging {
 
   def insertProvider(): BouncyCastleProvider = {
     import java.security.Security
-    val provider = new org.spongycastle.jce.provider.BouncyCastleProvider()
+    val provider = new org.bouncycastle.jce.provider.BouncyCastleProvider()
     val ret = Security.insertProviderAt(provider, 1)
     logger.debug(s"Insert provider return $ret")
     provider
@@ -39,7 +43,7 @@ object KeyUtils extends StrictLogging {
 
   val provider: BouncyCastleProvider = insertProvider()
 
-  private val ECDSA = "ECDsA"
+  val ECDSA = "ECDsA"
   private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
   private val secp256k = "secp256k1"
   val DefaultSignFunc = "SHA512withECDSA"
@@ -65,9 +69,9 @@ object KeyUtils extends StrictLogging {
   // Utilities for getting around conversion errors / passing around parameters
   // through strange APIs that might take issue with your strings
 
-  def base64(bytes: Array[Byte]): String = Base64.getEncoder.encodeToString(bytes)
+  def base64(bytes: Array[Byte]): String = java.util.Base64.getEncoder.encodeToString(bytes)
 
-  def fromBase64(b64Str: String): Array[Byte] = Base64.getDecoder.decode(b64Str)
+  def fromBase64(b64Str: String): Array[Byte] = java.util.Base64.getDecoder.decode(b64Str)
 
   def base64FromBytes(bytes: Array[Byte]): String = new String(bytes)
 
@@ -133,7 +137,26 @@ object KeyUtils extends StrictLogging {
     result
   }
 
+  def keyPairFromPemStr(privateKeyStr: String, publicKeyStr: String): KeyPair = {
+    val kf = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)
+    val privKey = pemToPrivateKey(privateKeyStr, kf)
+    val pubKey = pemToPublicKey(publicKeyStr,kf)
+    new KeyPair(pubKey, privKey)
+  }
+
   // https://stackoverflow.com/questions/42651856/how-to-decode-rsa-public-keyin-java-from-a-text-view-in-android-studio
+
+  def pemToPublicKey(publicKeyStr: String, kf: KeyFactory = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)) = {
+    val encodedPub = decodeBase64(publicKeyStr)
+    val pubKeySpec = new X509EncodedKeySpec(encodedPub)
+    kf.generatePublic(pubKeySpec)
+  }
+
+  def pemToPrivateKey(privateKeyStr: String, kf: KeyFactory = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)) = {
+    val encodedPriv = decodeBase64(privateKeyStr)
+    val privKeySpec = new PKCS8EncodedKeySpec(encodedPriv)
+    kf.generatePrivate(privKeySpec)
+  }
 
   def bytesToPublicKey(encodedBytes: Array[Byte]): PublicKey = {
     val spec = new X509EncodedKeySpec(encodedBytes)

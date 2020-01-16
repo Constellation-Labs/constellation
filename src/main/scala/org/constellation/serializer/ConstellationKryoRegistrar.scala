@@ -1,13 +1,12 @@
 package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.kryo.serializers.{DeflateSerializer, FieldSerializer}
 import com.esotericsoftware.minlog.Log
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
 import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationData, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}
 import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
-import org.constellation.primitives.{SignedData, _}
+import org.constellation.primitives._
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.schema.Id
@@ -19,6 +18,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     this.registerClasses(kryo)
 
   def registerClasses(kryo: Kryo): Unit = {
+
     kryo.register(classOf[ChannelMessageData])
     kryo.register(classOf[SignedData[ChannelMessageData]])
     kryo.register(classOf[SignedData[ObservationData]])

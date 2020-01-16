@@ -87,11 +87,19 @@ object RandomData {
   }
 }
 
-class RandomDataTest extends FlatSpec {
+class RandomDataTest extends FlatSpec with BeforeAndAfter {
 
   import RandomData._
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit var dao: DAO = _
+
+  before {
+    dao = TestHelpers.prepareRealDao()
+  }
+
+  after {
+    dao.unsafeShutdown()
+  }
 
   "Signatures combiners" should "be unique" in {
 

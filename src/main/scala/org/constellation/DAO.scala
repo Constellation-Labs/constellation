@@ -117,7 +117,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
-    transactionService = new TransactionService[IO](transactionChainService, this)
+    transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     joiningPeerValidator = JoiningPeerValidator[IO]
 
@@ -289,6 +289,22 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       IO.contextShift(ConstellationExecutionContext.bounded),
       ConstellationExecutionContext.unbounded
     )
+  }
+
+  def unsafeShutdown(): Unit = {
+    if (node != null) {
+      implicit val ec = ConstellationExecutionContext.unbounded
+
+      node.snapshotTrigger.cancel()
+      node.transactionGeneratorTrigger.cancel()
+      node.peerApiBinding.flatMap(_.terminate(1.second))
+      node.apiBinding.flatMap(_.terminate(1.second))
+      node.system.terminate()
+    }
+    if (actorMaterializer != null) actorMaterializer.shutdown()
+    List(peerHealthCheckWatcher, snapshotWatcher, trustDataPollingScheduler, consensusScheduler)
+      .filter(_ != null)
+      .map(_.cancel())
   }
 
   implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)

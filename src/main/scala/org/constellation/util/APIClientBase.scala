@@ -15,7 +15,11 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success}
 
-case class HostPort(host: String, port: Int)
+case class HostPort(
+  host: String,
+  port: Int,
+  isSimulation: Boolean = false
+)
 
 object APIClientBase {
 

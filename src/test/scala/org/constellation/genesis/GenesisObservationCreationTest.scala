@@ -4,11 +4,24 @@ import org.constellation.primitives.{Genesis, Schema}
 import org.constellation.util.AccountBalance
 import org.constellation.{DAO, TestHelpers}
 import org.mockito.ArgumentMatchersSugar
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FreeSpec, Matchers}
 
-class GenesisObservationCreationTest extends FreeSpec with ArgumentMatchersSugar with BeforeAndAfter with Matchers {
+class GenesisObservationCreationTest
+    extends FreeSpec
+    with ArgumentMatchersSugar
+    with BeforeAndAfter
+    with BeforeAndAfterAll
+    with Matchers {
 
-  implicit val dao: DAO = TestHelpers.prepareRealDao()
+  implicit var dao: DAO = _
+
+  before {
+    dao = TestHelpers.prepareRealDao()
+  }
+
+  after {
+    dao.unsafeShutdown()
+  }
 
   "genesis block should have coinbase tips" in {
     val go = Genesis.createGenesisObservation(Seq.empty)
