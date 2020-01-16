@@ -157,10 +157,10 @@ class SnapshotService[F[_]: Concurrent](
       fetched <- getCheckpointBlocksFromSnapshot(cbs)
       _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
       _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.applySnapshot))
-      soeHashes <- getSOEHashesFrom(cbs)
+//      soeHashes <- getSOEHashesFrom(cbs)
       _ <- checkpointService.applySnapshot(cbs)
-      _ <- soeService.applySnapshot(soeHashes)
-      _ <- logger.info(s"Removed soeHashes : $soeHashes")
+//      _ <- soeService.applySnapshot(soeHashes)
+//      _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
   def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Seq[String]): F[List[CheckpointCache]] =
@@ -399,10 +399,10 @@ class SnapshotService[F[_]: Concurrent](
         dao.metrics.updateMetricAsync("totalNumCBsInShapshots", total.toString)
       }
 
-      soeHashes <- getSOEHashesFrom(currentSnapshot.checkpointBlocks.toList)
+//      soeHashes <- getSOEHashesFrom(currentSnapshot.checkpointBlocks.toList)
       _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
-      _ <- soeService.applySnapshot(soeHashes)
-      _ <- logger.info(s"Removed soeHashes : $soeHashes")
+//      _ <- soeService.applySnapshot(soeHashes)
+//      _ <- logger.info(s"Removed soeHashes : $soeHashes")
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
       _ <- dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
     } yield ()
