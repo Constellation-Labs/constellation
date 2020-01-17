@@ -1,5 +1,6 @@
 #!/bin/sh
 ulimit -c unlimited
+ulimit -n 60036
 java "-Dcom.sun.management.jmxremote" \
 "-Dcom.sun.management.jmxremote.port=9010" \
 "-Dcom.sun.management.jmxremote.rmi.port=9011" \
