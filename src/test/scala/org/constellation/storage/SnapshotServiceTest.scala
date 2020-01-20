@@ -12,6 +12,7 @@ import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
@@ -38,6 +39,7 @@ class SnapshotServiceTest
 
     val cts = mock[ConcurrentTipService[IO]]
     val addressService = mock[AddressService[IO]]
+    val cloudStorage = mock[CloudStorage[IO]]
     val checkpointService = mock[CheckpointService[IO]]
     val messageService = mock[MessageService[IO]]
     val transactionService = mock[TransactionService[IO]]
@@ -50,6 +52,7 @@ class SnapshotServiceTest
 
     snapshotService = new SnapshotService[IO](
       cts,
+      cloudStorage,
       addressService,
       checkpointService,
       messageService,
@@ -108,7 +111,10 @@ class SnapshotServiceTest
       val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
       val cbs = Seq(CheckpointCache(cb1, 0, None), CheckpointCache(cb2, 0, None))
 
-      val snapshot = Snapshot("4d28a953f3a559faf2f41e32f71a7b7108a63c09739d4f60d341d9643d135ece", cbs.map(_.checkpointBlock.baseHash))
+      val snapshot = Snapshot(
+        "4d28a953f3a559faf2f41e32f71a7b7108a63c09739d4f60d341d9643d135ece",
+        cbs.map(_.checkpointBlock.baseHash)
+      )
       val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
       snapshotService.setSnapshot(info).unsafeRunSync()
       snapshotService.applySnapshot().value.unsafeRunSync()

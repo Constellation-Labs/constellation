@@ -112,6 +112,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
+    if (ConfigUtil.isEnabledAwsStorage) {
+      cloudStorage = new AwsStorage[IO]
+    } else if (ConfigUtil.isEnabledGcpStorage) {
+      cloudStorage = new GcpStorage[IO]
+    }
+
     rateLimiting = new RateLimiting[IO]
 
     blacklistedAddresses = BlacklistedAddresses[IO]
@@ -173,6 +179,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     snapshotService = SnapshotService[IO](
       concurrentTipService,
+      cloudStorage,
       addressService,
       checkpointService,
       messageService,
@@ -281,12 +288,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         genesisObservationPath.pathAsString
       )
     )
-
-    if (ConfigUtil.isEnabledAwsStorage) {
-      cloudStorage = new AwsStorage[IO]
-    } else if (ConfigUtil.isEnabledGcpStorage) {
-      cloudStorage = new GcpStorage[IO]
-    }
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
       cloudStorage,

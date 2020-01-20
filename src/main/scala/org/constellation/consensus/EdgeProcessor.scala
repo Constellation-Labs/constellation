@@ -322,10 +322,8 @@ case class SnapshotInfoSer(
 
   def write[T](
     writerProc: (Seq[(String, Array[Byte])], String) => T
-  )(infoSer: SnapshotInfoSer = this, basePath: String = "rollback_data/snapshot_info/"): T = {
-    val plan = getInfoSerPartsPlan(infoSer)
-    writerProc(plan, basePath)
-  }
+  )(infoSer: SnapshotInfoSer = this, basePath: String): T =
+    writerProc(getInfoSerPartsPlan(infoSer), basePath)
 
   def writeLocal(infoSer: SnapshotInfoSer = this, basePath: String = "rollback_data/snapshot_info/"): Unit =
     write[Unit](localWriterProc)(infoSer, basePath)
@@ -340,7 +338,7 @@ case class SnapshotInfoSer(
     }
   }
 
-  private def localWriterProc(plan: Seq[(String, Array[Byte])], basePath: String) =
+  private def localWriterProc(plan: Seq[(String, Array[Byte])], basePath: String): Unit =
     plan.foreach {
       case (path, part) => File(basePath, path).writeByteArray(part)
     }

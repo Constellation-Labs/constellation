@@ -20,12 +20,14 @@ import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
+  cloudStorage: CloudStorage[F],
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
@@ -108,7 +110,7 @@ class SnapshotService[F[_]: Concurrent](
       )
     } yield created
 
-  def writeSnapshotPart(path: String, part: Array[Byte]): F[Unit] =
+  def writeSnapshotFile(path: String, part: Array[Byte]): F[Unit] =
     Resource
       .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
       .use(
@@ -119,6 +121,12 @@ class SnapshotService[F[_]: Concurrent](
             logger.debug(s"SnapshotInfo part written for path: $path")
           }
       )
+
+  def writeSnapshotPart(path: String, part: Array[Byte]): F[Unit] =
+    for {
+      _ <- writeSnapshotFile(path, part)
+      _ <- if (ConfigUtil.isEnabledCloudStorage) cloudStorage.upload(Seq(File(path))).void else Sync[F].unit
+    } yield ()
 
   def snapshotInfoWriterProc(plan: Seq[(String, Array[Byte])], basePath: String): F[List[Unit]] =
     plan.toList.parTraverse {
@@ -520,6 +528,7 @@ object SnapshotService {
 
   def apply[F[_]: Concurrent](
     concurrentTipService: ConcurrentTipService[F],
+    cloudStorage: CloudStorage[F],
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],
     messageService: MessageService[F],
@@ -534,6 +543,7 @@ object SnapshotService {
   )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
       concurrentTipService,
+      cloudStorage,
       addressService,
       checkpointService,
       messageService,

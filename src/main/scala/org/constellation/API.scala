@@ -12,21 +12,18 @@ import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
-import cats.data.Validated
+import better.files.File
 import cats.data.Validated.{Invalid, Valid}
 import cats.effect.IO
 import cats.implicits._
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
-import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import org.constellation.api.TokenAuthenticator
-import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
-import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{ChangePeerState, Download, SetStateResult}
