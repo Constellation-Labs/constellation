@@ -12,15 +12,26 @@ object EigenTrustAgents {
   def empty(): EigenTrustAgents = EigenTrustAgents((Map.empty[Id, Int], Map.empty[Int, Id]))
 }
 
+case class AgentsIterator() extends Iterator[Int] {
+  var current: Int = 0;
+
+  override def hasNext: Boolean = current == Int.MaxValue
+
+  override def next(): Int = {
+    current = current + 1
+    current
+  }
+}
+
 /**
   * We need to pass Ids as agents to EigenTrust. Each agent is passed as Int but stringified Id is too long
   * to fit Int's size. Therefore we store the mappings between Id and random Int to make a bridge between
   * the https://github.com/djelenc/alpha-testbed EigenTrust and our app
   */
 case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int] = (Map.empty[Id, Int], Map.empty[Int, Id])) {
-  private val secureRandom = SecureRandom.getInstanceStrong
+  private val iterator = new AgentsIterator
 
-  def registerAgent(id: Id): EigenTrustAgents = this.copy(update(id, secureRandom.nextInt))
+  def registerAgent(id: Id): EigenTrustAgents = this.copy(update(id, iterator.next()))
 
   def unregisterAgent(agent: Int): EigenTrustAgents = this.copy(remove(agent))
   def unregisterAgent(agent: Id): EigenTrustAgents = this.copy(remove(agent))
@@ -36,6 +47,9 @@ case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int]
 
   def getUnsafe(id: Id): Int = get(id).get
   def getUnsafe(agent: Int): Id = get(agent).get
+
+  def getAllAsIds(): Map[Id, Int] = agentMappings._1
+  def getAllAsInts(): Map[Int, Id] = agentMappings._2
 
   def contains(agent: Int): Boolean = get(agent).isDefined
   def contains(id: Id): Boolean = get(id).isDefined

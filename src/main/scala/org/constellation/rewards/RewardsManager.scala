@@ -52,7 +52,7 @@ class RewardsManager[F[_]: Concurrent](
 
       _ <- reachedSnapshotHeightRedownloadDelayInterval(previouslyRewardedHeight, height).ifM(
         cache.values.toList.traverse(updateBySnapshot) >> snapshotCache.modify(c => (c.empty, ())),
-        logger.warn(s"[Rewards] snapshotHeightRedownloadDelayInterval (${snapshotHeightRedownloadDelayInterval + previouslyRewardedHeight}) not reached. Current interval: ${height - previouslyRewardedHeight}")
+        logger.warn(s"[Rewards] Next snapshotHeightRedownloadDelayInterval (${previouslyRewardedHeight + snapshotHeightRedownloadDelayInterval}) not reached. Current interval: ${height}")
       )
 
     } yield ()

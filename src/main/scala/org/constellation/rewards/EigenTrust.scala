@@ -93,7 +93,9 @@ class EigenTrust[F[_]: Concurrent](
   def registerAgent(id: Id): F[Unit] =
     agents
       .modify(a => (a.registerAgent(id), a))
-      .flatTap(agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id)}"))
+      .flatTap(
+        agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id)}")
+      )
       .void
 
   def unregisterAgent(id: Id): F[Unit] =
@@ -111,6 +113,7 @@ class EigenTrust[F[_]: Concurrent](
   def retrain(observations: Seq[Observation]): F[Unit] = {
     val observationData = observations.map(_.signedObservationData.data)
     for {
+      _ <- logger.debug(s"[EigenTrust] Retraining")
       agents <- getAgents()
       experiences = convertToExperiences(observationData, agents).asJava
       _ <- Concurrent[F].delay {
@@ -159,10 +162,12 @@ class EigenTrust[F[_]: Concurrent](
       .toMap
       .mapValues(_.toDouble)
 
-  def getTrustForIds: F[Map[Id, Double]] =
-    getAgents().map { a =>
-      getTrust.map { case (int, trust) => (a.getUnsafe(int), trust) }
+  def getTrustForIds: F[Map[Id, Double]] = getAgents().map { agents =>
+    val trust = getTrust
+    agents.getAllAsIds().transform {
+      case (_, int) => trust.getOrElse(int, 1.0)
     }
+  }
 
   /**
     * Normalizes trust t∈⟨-1;1⟩ to t∈⟨0;1⟩
