@@ -55,13 +55,13 @@ trait NodeData {
       externalPeerHTTPPort,
       id,
       ResourceInfo(
-        diskUsableBytes = new java.io.File(snapshotPath.pathAsString).getUsableSpace
+        diskUsableBytes = new java.io.File(snapshotPath).getUsableSpace
       ),
       isSimulation
     )
 
-  def snapshotPath: File =
-    File(s"tmp/${id.medium}/snapshots").createDirectoryIfNotExists()
+  def snapshotPath: String =
+    s"tmp/${id.medium}/snapshots"
 
   def snapshotInfoPath: File =
     File(s"tmp/${id.medium}/snapshot_info")

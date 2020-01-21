@@ -188,8 +188,7 @@ class HealthChecker[F[_]: Concurrent](
       )
 
       _ <- Snapshot.removeSnapshots(
-        diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
-        dao.snapshotPath.pathAsString
+        diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash)
       )
 
       _ <- logger.info(s"[${dao.id.short}] Re-download process finished")
