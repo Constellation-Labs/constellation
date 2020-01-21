@@ -143,6 +143,49 @@ class PeerAPI(override val ipManager: IPManager[IO])(
   private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
       pathPrefix("snapshot") {
+        path("info") {
+    entity(as[Seq[String]]) { curCheckpointHashes =>
+      val route = APIDirective.extractIP(socketAddress) { ip =>
+        val getInfo = idLookup(ip)
+          .flatMap(
+            maybePeer =>
+              maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
+                pd =>
+                  // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
+                  dao.observationService
+                    .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
+                    .void
+            )
+          )
+          .flatMap(
+            _ =>
+              dao.snapshotService.getSnapshotInfo.flatMap { info =>
+                logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
+                logger.warn(s"snapshot/info curCheckpointHashes.size - ${curCheckpointHashes.size}")
+
+                val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(curCheckpointHashes.toList)
+
+                logger.warn(s"snapshot/info checkpointsToGet.size - ${checkpointsToGet.size}")
+                logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet}")
+
+                checkpointsToGet.traverse {
+                  dao.checkpointService.fullData(_)
+                }.map(
+                  cbs =>
+                    KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
+                )
+            }
+          )
+
+        APIDirective.handle(
+          dao.cluster.getNodeState
+            .map(NodeState.canActAsDownloadSource)
+            .ifM(getInfo, IO.pure(Array[Byte]()))
+        )(complete(_))
+      }
+      route
+    }
+  } ~
         path("verify") {
           entity(as[SnapshotCreated]) { s =>
             APIDirective.handle(

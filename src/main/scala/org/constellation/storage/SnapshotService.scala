@@ -9,9 +9,10 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Resource, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.CheckpointService
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
@@ -33,6 +34,7 @@ class SnapshotService[F[_]: Concurrent](
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
   soeService: SOEService[F],
+  snapshotStorage: SnapshotStorage[F],
   dao: DAO
 )(implicit C: ContextShift[F]) {
 
@@ -52,10 +54,15 @@ class SnapshotService[F[_]: Concurrent](
   def exists(hash: String): F[Boolean] =
     for {
       last <- snapshot.get
-      hashes = Snapshot.snapshotHashes()
+      hashes <- snapshotStorage.getSnapshotHashes
     } yield last.hash == hash || hashes.contains(hash)
 
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
+
+  def getAcceptedCBSinceSnapshot: F[Seq[String]] =
+    for {
+      hashes <- acceptedCBSinceSnapshot.get
+    } yield hashes
 
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
@@ -111,7 +118,7 @@ class SnapshotService[F[_]: Concurrent](
             .use(
               stream =>
                 Sync[F].delay {
-                  stream.write(KryoSerializer.serializeAnyRef(info))
+//                  stream.write(KryoSerializer.serializeAnyRef(info))todo save in part files using chunked serialization
                 }.flatTap { _ =>
                   logger.debug(s"SnapshotInfo written for hash: ${info.snapshot.hash} in path: ${path}")
                 }
@@ -125,7 +132,7 @@ class SnapshotService[F[_]: Concurrent](
       s <- snapshot.get
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
-      hashes = dao.snapshotHashes
+      hashes <- snapshotStorage.getSnapshotHashes
       addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
       snapshotCache <- s.checkpointBlocks.toList
@@ -138,7 +145,7 @@ class SnapshotService[F[_]: Concurrent](
         s,
         accepted,
         lastSnapshotHeight = lastHeight,
-        snapshotHashes = hashes,
+        snapshotHashes = hashes.toList,
         addressCacheData = addressCacheData,
         tips = tips,
         snapshotCache = snapshotCache,
@@ -159,11 +166,17 @@ class SnapshotService[F[_]: Concurrent](
       _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
+  def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Seq[String]): F[List[CheckpointCache]] =
+    snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
+
+  def getCheckpointAcceptanceService = LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get)
+
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- retainOldData()
       _ <- snapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
+      _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
@@ -343,7 +356,7 @@ class SnapshotService[F[_]: Concurrent](
       }
   }
 
-  def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Path] =
+  def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
     Snapshot.writeSnapshot[F](snapshot)
 
   private def writeSnapshotToDisk(
@@ -376,9 +389,9 @@ class SnapshotService[F[_]: Concurrent](
                 dao.metrics
                   .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
                   .map(_ => SnapshotIOError(t)),
-              p =>
+              _ =>
                 logger
-                  .debug(s"Snapshot written at path: ${p.toAbsolutePath.toString}")
+                  .debug(s"Snapshot written: ${currentSnapshot.hash}")
                   .flatMap(_ => dao.metrics.incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.success))
             )
       }
@@ -505,6 +518,7 @@ object SnapshotService {
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
     soeService: SOEService[F],
+    snapshotStorage: SnapshotStorage[F],
     dao: DAO
   )(implicit C: ContextShift[F]) =
     new SnapshotService[F](
@@ -518,6 +532,7 @@ object SnapshotService {
       consensusManager,
       trustManager,
       soeService,
+      snapshotStorage,
       dao
     )
 }

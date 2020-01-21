@@ -151,6 +151,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
           } ~
+          path("snapshotInfo") {
+            val downloadedMajority = Download.getMajoritySnapshotTest()(dao, ConstellationExecutionContext.bounded)
+            val io = downloadedMajority.get
+
+            APIDirective.handle(io)(complete(_))
+          } ~
           pathPrefix("data") {
             path("channels") {
               complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
@@ -290,8 +296,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                   cmd.snapshotHash.flatMap { snapshotHash =>
                     tryWithMetric(
                       {
-                        import better.files._
-                        KryoSerializer.deserializeCast[StoredSnapshot](File(dao.snapshotPath, snapshotHash).byteArray)
+                        dao.snapshotStorage
+                          .readSnapshot(snapshotHash)
+                          .value
+                          .flatMap(IO.fromEither)
+                          .unsafeRunSync // TODO: get rid of unsafeRunSync
                       },
                       "readSnapshotForMessage"
                     ).toOption.map(makeProof(cmd, _))

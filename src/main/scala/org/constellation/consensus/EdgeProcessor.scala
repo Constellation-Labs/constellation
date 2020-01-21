@@ -225,6 +225,7 @@ case class SnapshotInfo(
   snapshot: Snapshot,
   acceptedCBSinceSnapshot: Seq[String] = Seq(),
   acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
+  awaitingCbs: Set[CheckpointCache] = Set(),
   lastSnapshotHeight: Int = 0,
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
@@ -247,7 +248,7 @@ object Snapshot extends StrictLogging {
 
   def writeSnapshot[F[_]: Concurrent](
     storedSnapshot: StoredSnapshot
-  )(implicit dao: DAO, C: ContextShift[F]): EitherT[F, Throwable, Path] =
+  )(implicit dao: DAO, C: ContextShift[F]): EitherT[F, Throwable, Unit] =
     for {
       serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(storedSnapshot)).attempt)
       write <- EitherT(
@@ -262,45 +263,44 @@ object Snapshot extends StrictLogging {
   )(
     implicit dao: DAO,
     C: ContextShift[F]
-  ): EitherT[F, Throwable, Path] =
+  ): EitherT[F, Throwable, Unit] =
     trialNumber match {
-      case x if x >= 3 => EitherT.leftT[F, Path](new IOException(s"Unable to write snapshot"))
-      case _ if isOverDiskCapacity(serialized.length) =>
-        EitherT(removeOldSnapshots().attempt) >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
+      case x if x >= 3 => EitherT.leftT[F, Unit](new Throwable(s"Unable to write snapshot"))
       case _ =>
-        EitherT(
-          withMetric(
-            Sync[F].delay(
-              Files.write(Paths.get(dao.snapshotPath.pathAsString, storedSnapshot.snapshot.hash), serialized)
-            ),
-            "writeSnapshot"
-          ).attempt
-        )
+        LiftIO[F].liftIO(isOverDiskCapacity(serialized.length)).attemptT.flatMap { isOver =>
+          if (isOver) {
+            removeOldSnapshots().attemptT >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
+          } else {
+            withMetric(
+              LiftIO[F].liftIO {
+                dao.snapshotStorage
+                  .writeSnapshot(storedSnapshot.snapshot.hash, serialized)
+                  .value
+                  .flatMap(IO.fromEither)
+              },
+              "writeSnapshot"
+            ).attemptT
+          }
+        }
     }
 
   def removeOldSnapshots[F[_]: Concurrent]()(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
       hashes <- LiftIO[F].liftIO(dao.snapshotBroadcastService.getRecentSnapshots.map(_.map(_.hash)))
-      diff = snapshotHashes().diff(hashes)
-      _ <- removeSnapshots(diff, dao.snapshotPath.pathAsString)
+      diff <- LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotHashes).map(_.toList.diff(hashes))
+      _ <- removeSnapshots(diff)
     } yield ()
 
   def removeSnapshots[F[_]: Concurrent](
-    snapshots: List[String],
-    snapshotPath: String
+    snapshots: List[String]
   )(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
-      _ <- if (shouldSendSnapshotsToCloud(snapshotPath)) {
+      _ <- if (shouldSendSnapshotsToCloud) {
         sendSnapshotsToCloud[F](snapshots)
       } else Sync[F].unit
       _ <- snapshots.distinct.traverse { snapId =>
         withMetric(
-          Sync[F].delay {
-            logger.debug(
-              s"[${dao.id.short}] removing snapshot at path ${Paths.get(snapshotPath, snapId).toAbsolutePath.toString}"
-            )
-            Files.delete(Paths.get(snapshotPath, snapId))
-          }.handleErrorWith {
+          LiftIO[F].liftIO(dao.snapshotStorage.removeSnapshot(snapId).value.flatMap(IO.fromEither)).handleErrorWith {
             case e: NoSuchFileException =>
               Sync[F].delay(logger.warn(s"Snapshot to delete doesn't exist: ${e.getMessage}"))
           },
@@ -314,61 +314,52 @@ object Snapshot extends StrictLogging {
   )(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
       files <- C.evalOn(ConstellationExecutionContext.unbounded)(
-        getFiles(snapshotsHash, dao.snapshotPath.pathAsString)
+        LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotFiles(snapshotsHash))
       )
-      blobsNames <- C.evalOn(ConstellationExecutionContext.unbounded)(LiftIO[F].liftIO(dao.cloudStorage.upload(files)))
+      blobsNames <- C.evalOn(ConstellationExecutionContext.unbounded)(
+        LiftIO[F].liftIO(dao.cloudStorage.upload(files.toList))
+      )
       _ <- Sync[F].delay(logger.debug(s"Snapshots send to cloud amount : ${blobsNames.size}"))
     } yield ()
 
   private def getFiles[F[_]: Concurrent](snapshotsHash: List[String], snapshotPath: String): F[List[File]] =
     snapshotsHash.traverse(hash => Sync[F].delay(File(snapshotPath, hash)))
 
-  private def shouldSendSnapshotsToCloud(snapshotsPath: String): Boolean =
+  private def shouldSendSnapshotsToCloud: Boolean =
     ConfigUtil.isEnabledCloudStorage
 
-  def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): Boolean = {
+  def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): IO[Boolean] = {
     val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
-    if (sizeDiskLimit == 0) return false
+    if (sizeDiskLimit == 0) return false.pure[IO]
 
-    val storageDir = new java.io.File(dao.snapshotPath.pathAsString)
-    val usableSpace = storageDir.getUsableSpace
-    val occupiedSpace = dao.snapshotPath.size
-    val isOver = occupiedSpace + bytesLengthToAdd > sizeDiskLimit || usableSpace < bytesLengthToAdd
-    if (isOver) {
-      logger.warn(
-        s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit} occupied space: $occupiedSpace usable space: $usableSpace"
-      )
+    val isOver = for {
+      occupiedSpace <- dao.snapshotStorage.getOccupiedSpace
+      usableSpace <- dao.snapshotStorage.getUsableSpace
+      isOverSpace = occupiedSpace + bytesLengthToAdd > sizeDiskLimit || usableSpace < bytesLengthToAdd
+    } yield isOverSpace
+
+    isOver.flatTap { over =>
+      IO.delay {
+        if (over) {
+          logger.warn(
+            s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit}"
+          )
+        }
+      }
     }
-    isOver
   }
 
   def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] =
     tryWithMetric(
-      {
-        KryoSerializer.deserializeCast[StoredSnapshot] {
-          val byteArray = Files.readAllBytes(Paths.get(dao.snapshotPath.pathAsString, snapshotHash))
-          //   val f = File(dao.snapshotPath, snapshotHash)
-          byteArray
-        }
-      },
+      dao.snapshotStorage.readSnapshot(snapshotHash).value.flatMap(IO.fromEither).unsafeRunSync,
       "loadSnapshot"
     )
 
   def loadSnapshotBytes(snapshotHash: String)(implicit dao: DAO): Try[Array[Byte]] =
     tryWithMetric(
-      {
-        val path = Paths.get(dao.snapshotPath.pathAsString, snapshotHash)
-        if (Files.exists(path)) {
-          val byteArray = Files.readAllBytes(path)
-          //   val f = File(dao.snapshotPath, snapshotHash)
-          byteArray
-        } else throw new RuntimeException(s"${dao.id.short} No snapshot found at $path")
-      },
+      dao.snapshotStorage.getSnapshotBytes(snapshotHash).value.flatMap(IO.fromEither).unsafeRunSync,
       "loadSnapshot"
     )
-
-  def snapshotHashes()(implicit dao: DAO): List[String] =
-    dao.snapshotPath.list.map { _.name }.toList
 
   def findLatestMessageWithSnapshotHash(
     depth: Int,
