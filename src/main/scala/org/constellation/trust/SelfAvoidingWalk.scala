@@ -209,18 +209,17 @@ object SelfAvoidingWalk {
     }
 
     val selfNode = nodes.filter { _.id == selfId }.head
-    val others = nodes.filterNot { _.id == selfId }.map { o =>
+    val others: Map[Int, TrustNode] = nodes.filterNot { _.id == selfId }.map { o =>
       o.id -> o
     }.toMap
 
     val negativeScores = merged.zipWithIndex.filterNot { _._2 == selfId }.flatMap {
       case (score, id) =>
-        val other = others(id)//todo how can/what to do if, this doesn't exist?
-        val negativeEdges = other.negativeEdges
+        val negativeEdges = others.get(id).map(_.negativeEdges).getOrElse(Seq())
         println(s"selfId: $selfId - negativeEdges: $negativeEdges")
         negativeEdges.filterNot { _.dst == selfId }.map { ne =>
           val nanTest = (ne.trust * score / negativeEdges.size)
-        println("nanTest =>" + nanTest)
+          println("nanTest =>" + nanTest)
           assert(!(nanTest == Double.NaN))
           ne.dst -> nanTest
         }
