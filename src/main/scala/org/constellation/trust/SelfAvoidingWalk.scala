@@ -116,7 +116,8 @@ object SelfAvoidingWalk {
 
   def normalizeScoresWithIndex(scores: Array[(Double, Int)]): Array[(Double, Int)] = {
     val sumScore = scores.map { _._1 }.sum
-    scores.map { case (k, v) => (k / sumScore) -> v }
+    if (sumScore == 0d) scores
+    else scores.map { case (k, v) => (k / sumScore) -> v }
   }
 
   // Need to change to fit to a distribution. Simple way to avoid that for now is splitting pos neg
@@ -199,8 +200,7 @@ object SelfAvoidingWalk {
 
     val negativeScores = merged.zipWithIndex.filterNot { _._2 == selfId }.flatMap {
       case (score, id) =>
-        val other = others(id)
-        val negativeEdges = other.negativeEdges
+        val negativeEdges = others.get(id).map(_.negativeEdges).getOrElse(Seq())
         println(s"selfId: $selfId - negativeEdges: $negativeEdges")
         negativeEdges.filterNot { _.dst == selfId }.map { ne =>
           val nanTest = (ne.trust * score / negativeEdges.size)
