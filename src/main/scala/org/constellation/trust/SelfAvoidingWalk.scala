@@ -101,9 +101,11 @@ object SelfAvoidingWalk {
       val (id, trust) = walkFromOrigin()
 //        println(s"Returning $id with trust $trust")
       if (id != n1.id) {
+        println(s"Returning $id with trust $trust")
         walkScores(id) += trust
       }
     }
+    println("walkScores - " + walkScores.toList)
     walkScores
   }
 
@@ -116,21 +118,30 @@ object SelfAvoidingWalk {
 
   def normalizeScoresWithIndex(scores: Array[(Double, Int)]): Array[(Double, Int)] = {
     val sumScore = scores.map { _._1 }.sum
-    scores.map { case (k, v) => (k / sumScore) -> v }
+    if (sumScore == 0d) scores
+    else scores.map { case (k, v) => (k / sumScore) -> v }
   }
 
   // Need to change to fit to a distribution. Simple way to avoid that for now is splitting pos neg
   def normalizeScoresWithNegative(scores: Array[Double]): Array[Double] = {
     val pos = scores.zipWithIndex.filter(_._1 > 0)
+    println(s"normalizeScoresWithNegative - pos ${pos.toList}")
     val neg = scores.zipWithIndex.filter(_._1 <= 0)
+    println(s"normalizeScoresWithNegative - neg ${neg.toList}")
+
     normalizeScoresWithIndex(pos).foreach {
       case (s, i) =>
+        println(s"normalizeScoresWithIndex(pos) - ${(s, i)}")
+
         scores(i) = s
     }
     normalizeScoresWithIndex(neg).foreach {
       case (s, i) =>
+        println(s"normalizeScoresWithIndex(neg) - ${(s, i)}")
         scores(i) = -1 * s
     }
+    println(s"normalizeScoresWithNegative - scores ${scores.toList}")
+
     scores
   }
 
@@ -174,6 +185,7 @@ object SelfAvoidingWalk {
 
     var walkScores = runWalkRaw(selfId, nodes, batchIterationSize)
     var walkProbability = normalizeScores(walkScores)
+    println(s"runWalkBatchesFeedback - walkScores ${walkScores.toList}")
 
     var merged = walkScores
 
@@ -183,7 +195,11 @@ object SelfAvoidingWalk {
     while (delta > epsilon && iterationNum < maxIterations) {
 
       val batchScores = runWalkRaw(selfId, nodes, batchIterationSize)
+      println(s"runWalkBatchesFeedback - Batch number $iterationNum with batchScores ${batchScores.toList}")
+      assert(!batchScores.contains(Double.NaN))
+
       merged = walkScores.zip(batchScores).map { case (s1, s2) => s1 + s2 }
+      println(s"runWalkBatchesFeedback - Batch number $iterationNum with merged ${merged.toList}")
       val renormalized = normalizeScores(merged)
       delta = renormalized.zip(walkProbability).map { case (s1, s2) => Math.pow(Math.abs(s1 - s2), 2) }.sum
       iterationNum += 1
@@ -199,12 +215,13 @@ object SelfAvoidingWalk {
 
     val negativeScores = merged.zipWithIndex.filterNot { _._2 == selfId }.flatMap {
       case (score, id) =>
-        val other = others(id)
+        val other = others(id)//todo how can/what to do if, this doesn't exist?
         val negativeEdges = other.negativeEdges
         println(s"selfId: $selfId - negativeEdges: $negativeEdges")
         negativeEdges.filterNot { _.dst == selfId }.map { ne =>
           val nanTest = (ne.trust * score / negativeEdges.size)
-//        println("nanTest =>" + nanTest)
+        println("nanTest =>" + nanTest)
+          assert(!(nanTest == Double.NaN))
           ne.dst -> nanTest
         }
     }.groupBy(_._1).mapValues(_.map { _._2 }.sum)
@@ -217,18 +234,28 @@ object SelfAvoidingWalk {
     val labelEdges = selfNode.edges.filter(_.isLabel)
     val labelDst = labelEdges.map { _.dst }
 
+    println(s"runWalkBatchesFeedback - renormalizedAfterNegative merged ${merged.toList}")
+    println(s"runWalkBatchesFeedback - normalizeScoresWithNegative(merged).zipWithIndex ${normalizeScoresWithNegative(merged).zipWithIndex.toList}")
+
     val renormalizedAfterNegative = normalizeScoresWithNegative(merged).zipWithIndex.filterNot {
       case (score, id) => labelDst.contains(id)
     }
+
+    println(s"runWalkBatchesFeedback - renormalizedAfterNegative ${renormalizedAfterNegative.toList}")
+
 
     val newEdges = renormalizedAfterNegative.map {
       case (score, id) =>
         TrustEdge(selfId, id, score)
     }
+    println(s"runWalkBatchesFeedback - newEdges ${newEdges.toList}")
 
     val updatedSelfNode = selfNode.copy(
       edges = labelEdges ++ newEdges
     )
+    println(s"runWalkBatchesFeedback - updatedSelfNode ${updatedSelfNode}")
+    println(s"runWalkBatchesFeedback - others.values.toSeq :+ updatedSelfNode ${others.values.toSeq :+ updatedSelfNode}")
+
     others.values.toSeq :+ updatedSelfNode
   }
 
@@ -310,12 +337,14 @@ object SelfAvoidingWalk {
     maxIterations: Int = 100,
     feedbackCycles: Int = 3
   ): TrustNode = {
-
+    //          _ <- logger.debug(s"handleTrustScoreUpdate trustNodes ${trustNodes.toList} for node $nodeId")
+println((s"handleTrustScoreUpdate trustNodes ${nodes.toList} for node $selfId"))
     var nodesCycle = nodes
     println(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
     (0 until feedbackCycles).foreach { cycle =>
-      println(s"feedback cycle $cycle for node $selfId")
       nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+      println(s"feedback cycle $cycle for node $selfId with nodesCycle ${nodesCycle.toList}")
+
     }
     val res: TrustNode = nodesCycle.filter(_.id == selfId).head
     println(s"runWalkFeedbackUpdateSingleNode res: TrustNode ${res} for node $selfId")

@@ -32,9 +32,19 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           reputation <- getStoredReputation
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
           (scoringMap, idxMap) = calculateIdxMaps(scores)
+          trustNodes = DataGeneration.generateFullyConnectedTestData(4)
+          _ <- logger.debug(s"handleTrustScoreUpdate scoringMap ${scoringMap.toList} for node ${scoringMap(nodeId)}")
+          _ <- logger.debug(s"handleTrustScoreUpdate peers ${peers.toList} for node ${scoringMap(nodeId)}")
 
-          idMappedScores = SelfAvoidingWalk
-            .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId), calculateTrustNodes(scores, nodeId, scoringMap))
+
+          //          _ <- logger.debug(s"handleTrustScoreUpdate trustNodes ${trustNodes.toList} for node $nodeId")
+          r = SelfAvoidingWalk
+            .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId), trustNodes)
+          _ <- logger.debug(s"handleTrustScoreUpdate trustNodes ${trustNodes.toList} for node ${scoringMap(nodeId)}")
+          _ <- logger.debug(s"handleTrustScoreUpdate scoringMap(nodeId) ${scoringMap(nodeId)} for node ${scoringMap(nodeId)}")
+          _ <- logger.debug(s"handleTrustScoreUpdate r ${r} for node ${scoringMap(nodeId)}")
+
+          idMappedScores = r//calculateTrustNodes(scores, nodeId, scoringMap))//
             .edges
             .map(e => idxMap(e.dst) -> e.trust)
             .toMap
@@ -93,7 +103,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           0d,
           peerScores.map {
             case (peerId, score) =>
-              println(s"${Console.RED}${score}${Console.RESET}")
+              println(s"peerScores - ${Console.RED}${score}${Console.RESET}")
               TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)//todo need getOrElse here to add new peer as
           }.toSeq
         )
