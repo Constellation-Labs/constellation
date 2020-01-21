@@ -18,23 +18,17 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   private val predictedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
 
-  def calculateIdxMaps(scores: List[TrustDataInternal]): (Map[Id, Int], Map[Int, Id]) = {
-    val allNodeIds = scores.flatMap(_.view.keySet)
-    val scoringMap = calculateScoringMap(allNodeIds)
-    val idxMap = scoringMap.map(_.swap)
-    (scoringMap, idxMap)
-  }
-
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
     cluster.getPeerInfo.flatMap { peers =>
       if (peers.nonEmpty) {
         for {
           reputation <- getStoredReputation
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
-          (scoringMap, idxMap) = calculateIdxMaps(scores)
+          (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
 
           idMappedScores = SelfAvoidingWalk
-            .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId), calculateTrustNodes(scores, nodeId, scoringMap))
+            .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId),
+                                             TrustManager.calculateTrustNodes(scores, nodeId, scoringMap))
             .edges
             .map(e => idxMap(e.dst) -> e.trust)
             .toMap
@@ -75,8 +69,32 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 //      .groupBy(_.signedObservationData.data.id)
 //      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
 
+  def observationScoring(event: ObservationEvent): Double = {
+    import org.constellation.domain.observation._
+
+    event match {
+      case _: CheckpointBlockWithMissingParents => -0.1
+      case _: CheckpointBlockWithMissingSoe     => -0.1
+      case _: RequestTimeoutOnConsensus         => -0.1
+      case _: RequestTimeoutOnResolving         => -0.1
+      case _: SnapshotMisalignment              => -0.1
+      case _: CheckpointBlockInvalid            => -0.1
+      case _                                    => 0d
+    }
+  }
+}
+
+object TrustManager {
+
   def calculateScoringMap(scores: List[Id]): Map[Id, Int] =
     scores.sortBy { _.hex }.zipWithIndex.toMap
+
+  def calculateIdxMaps(scores: List[TrustDataInternal]): (Map[Id, Int], Map[Int, Id]) = {
+    val allNodeIds = scores.flatMap(_.view.keySet)
+    val scoringMap = TrustManager.calculateScoringMap(allNodeIds)
+    val idxMap = scoringMap.map(_.swap)
+    (scoringMap, idxMap)
+  }
 
   def calculateTrustNodes(
     scores: List[TrustDataInternal],
@@ -94,26 +112,10 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           peerScores.map {
             case (peerId, score) =>
               println(s"${Console.RED}${score}${Console.RESET}")
-              TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)//todo need getOrElse here to add new peer as
+              TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)
           }.toSeq
         )
     }
 
-  def observationScoring(event: ObservationEvent): Double = {
-    import org.constellation.domain.observation._
-
-    event match {
-      case _: CheckpointBlockWithMissingParents => -0.1
-      case _: CheckpointBlockWithMissingSoe     => -0.1
-      case _: RequestTimeoutOnConsensus         => -0.1
-      case _: RequestTimeoutOnResolving         => -0.1
-      case _: SnapshotMisalignment              => -0.1
-      case _: CheckpointBlockInvalid            => -0.1
-      case _                                    => 0d
-    }
-  }
-}
-
-object TrustManager {
   def apply[F[_]: Concurrent](nodeId: Id, cluster: Cluster[F]): TrustManager[F] = new TrustManager[F](nodeId, cluster)
 }
