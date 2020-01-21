@@ -35,6 +35,7 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 import org.constellation.TestHelpers
+import org.constellation.domain.snapshot.SnapshotStorage
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -107,13 +108,15 @@ class PeerAPITest
     }
 
     "should return snapshot bytes when stored snapshot exist" in {
+      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
       dao.snapshotService shouldReturn mock[SnapshotService[IO]]
       dao.snapshotService.exists(*) shouldReturnF true
 
       File.usingTemporaryDirectory() { dir =>
         File.usingTemporaryFile("", "", Some(dir)) { file =>
           val snapshotHash = file.name
-          dao.snapshotPath shouldReturn dir
+          dao.snapshotPath shouldReturn dir.pathAsString
+          dao.snapshotStorage.getSnapshotBytes(*) shouldReturnF Array.emptyByteArray
 
           Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
             status shouldEqual StatusCodes.OK
@@ -124,13 +127,15 @@ class PeerAPITest
     }
 
     "should return snapshot not found when snapshot does not exist" in {
+      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
       dao.snapshotService shouldReturn mock[SnapshotService[IO]]
       dao.snapshotService.exists(*) shouldReturnF false
 
       File.usingTemporaryDirectory() { dir =>
         File.usingTemporaryFile("", "", Some(dir)) { _ =>
           val snapshotHash = "other_file"
-          dao.snapshotPath shouldReturn dir
+          dao.snapshotPath shouldReturn dir.pathAsString
+          dao.snapshotStorage.getSnapshotBytes(*) shouldReturnF Array.emptyByteArray
 
           Get(s"/storedSnapshot/$snapshotHash") ~> peerAPI.commonEndpoints ~> check {
             status shouldEqual StatusCodes.NotFound

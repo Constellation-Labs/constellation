@@ -32,12 +32,12 @@ class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers {
       nodeConfig =
         NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
     )
-    dao.snapshotPath.delete()
+    File(dao.snapshotPath).clear()
     genesis = RandomData.go()
   }
 
   after {
-    dao.snapshotPath.delete()
+    File(dao.snapshotPath).delete()
     dao.unsafeShutdown()
   }
 
@@ -46,7 +46,7 @@ class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers {
       StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash)), Seq.fill(50)(CheckpointCache(randomCB)))
     Snapshot.writeSnapshot[IO](ss).value.unsafeRunSync()
     Snapshot
-      .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash), dao.snapshotPath.pathAsString)
+      .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash))
       .unsafeRunSync()
   }
 
@@ -59,11 +59,11 @@ class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers {
       .updateRecentSnapshots(snaps.head.snapshot.hash, 2, Map.empty)
       .unsafeRunSync()
 
-    Snapshot.isOverDiskCapacity(ConfigUtil.snapshotSizeDiskLimit - 4096) shouldBe false
+    Snapshot.isOverDiskCapacity(ConfigUtil.snapshotSizeDiskLimit - 4096).unsafeRunSync shouldBe false
 
     snaps.traverse(Snapshot.writeSnapshot[IO]).value.unsafeRunSync
 
-    File(dao.snapshotPath.path, snaps.head.snapshot.hash).exists shouldBe true
-    File(dao.snapshotPath.path, snaps.last.snapshot.hash).exists shouldBe true
+    File(dao.snapshotPath, snaps.head.snapshot.hash).exists shouldBe true
+    File(dao.snapshotPath, snaps.last.snapshot.hash).exists shouldBe true
   }
 }

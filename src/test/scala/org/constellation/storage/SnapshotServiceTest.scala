@@ -8,6 +8,7 @@ import org.constellation._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
 import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
@@ -30,6 +31,7 @@ class SnapshotServiceTest
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
+  var snapshotStorage: SnapshotStorage[IO] = _
 
   before {
     dao = mockDAO
@@ -44,6 +46,7 @@ class SnapshotServiceTest
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
     val soeService = mock[SOEService[IO]]
+    snapshotStorage = mock[SnapshotStorage[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -56,6 +59,7 @@ class SnapshotServiceTest
       consensusManager,
       trustManager,
       soeService,
+      snapshotStorage,
       dao
     )
   }
@@ -66,7 +70,7 @@ class SnapshotServiceTest
 
       File.usingTemporaryDirectory() { dir =>
         File.usingTemporaryFile("", "", Some(dir)) { _ =>
-          dao.snapshotPath shouldReturn dir
+          snapshotStorage.getSnapshotHashes shouldReturnF Iterator("")
 
           snapshotService.exists(lastSnapshot.hash).unsafeRunSync shouldBe true
         }
@@ -77,7 +81,7 @@ class SnapshotServiceTest
   "should return true if snapshot hash exists" in {
     File.usingTemporaryDirectory() { dir =>
       File.usingTemporaryFile("", "", Some(dir)) { file =>
-        dao.snapshotPath shouldReturn dir
+        snapshotStorage.getSnapshotHashes shouldReturnF Iterator(file.name)
 
         snapshotService.exists(file.name).unsafeRunSync shouldBe true
       }
@@ -87,7 +91,7 @@ class SnapshotServiceTest
   "should return false if snapshot hash does not exist" in {
     File.usingTemporaryDirectory() { dir =>
       File.usingTemporaryFile("", "", Some(dir)) { _ =>
-        dao.snapshotPath shouldReturn dir
+        snapshotStorage.getSnapshotHashes shouldReturnF Iterator("unknown")
 
         snapshotService.exists("dontexist").unsafeRunSync shouldBe false
       }

@@ -60,7 +60,7 @@ trait CommonEndpoints extends Json4sSupport {
         APIDirective.handle(dao.concurrentTipService.getMinTipHeight(None).map((dao.id, _)))(complete(_))
       } ~
       path("snapshotHashes") {
-        complete(Snapshot.snapshotHashes())
+        APIDirective.handle(dao.snapshotStorage.getSnapshotHashes)(complete(_))
       } ~
       path("snapshot" / "recent") {
         APIDirective.handle(
