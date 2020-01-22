@@ -2,6 +2,7 @@ package org.constellation.rollback
 
 import better.files.File
 import org.constellation.consensus.{SnapshotInfo, SnapshotInfoSer, StoredSnapshot}
+import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
@@ -42,17 +43,17 @@ class RollbackLoader(
         v.map(_._2).sortBy(_._1.toInt).map(_._2).toArray
       }
     val serSnapInfo = SnapshotInfoSer(
-      snapInfoSerParts.getOrElse("snapshot", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("snapshotCheckpointBlocks", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("acceptedCBSinceSnapshot", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("acceptedCBSinceSnapshotCache", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("awaitingCbs", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("lastSnapshotHeight", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("snapshotHashes", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("addressCacheData", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("tips", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("snapshotCache", Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse("lastAcceptedTransactionRef", Array.empty[Array[Byte]])
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.SNAPSHOT.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.CHECKPOINT_BLOCKS.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT_CACHE.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.AWAITING_CBS.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.LAST_SNAPSHOT_HEIGHT.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.SNAPSHOT_HASHES.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.ADDRESS_CACHE_DATA.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.TIPS.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.SNAPSHOT_CACHE.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.LAST_ACCEPTED_TX_REF.name, Array.empty[Array[Byte]])
     )
     serSnapInfo.toSnapshotInfo()
   }
