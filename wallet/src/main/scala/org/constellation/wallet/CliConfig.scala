@@ -15,5 +15,10 @@ case class CliConfig(
   alias: String = null,
   storepass: Array[Char] = null,
   keypass: Array[Char] = null,
-  loadFromEnvArgs: String = null
+  loadFromEnvArgs: String = null,
+  destination: String = null,
+  prevTxPath: String = null,
+  txPath: String = null,
+  fee: Long = 0,
+  amount: Long = 0
 )

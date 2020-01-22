@@ -18,12 +18,12 @@ object Wallet extends IOApp {
     } yield ()
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  def runMethod[F[_]: Sync](cliParams: CliConfig, keypair: KeyPair): EitherT[F, Throwable, Unit] =
+  def runMethod[F[_]](cliParams: CliConfig, keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
     cliParams.method match {
       case CliMethod.ShowAddress =>
         displayAddress[F](keypair)
       case CliMethod.CreateTransaction =>
-        EitherT.leftT[F, Unit](new NotImplementedError("Command not implemented"))
+        createTransaction[F](cliParams, keypair).flatMap(storeTransaction[F](cliParams, _))
       case _ =>
         EitherT.leftT[F, Unit](new RuntimeException("Unknown command"))
     }
@@ -40,6 +40,34 @@ object Wallet extends IOApp {
 
   def displayAddress[F[_]](keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
     EitherT.liftF[F, Throwable, Unit] { F.delay { println(getAddress(keypair)) } }
+
+  def createTransaction[F[_]](cliParams: CliConfig, keypair: KeyPair)(
+    implicit F: Sync[F]
+  ): EitherT[F, Throwable, Transaction] =
+    for {
+      prevTx <- KeyStoreUtils
+        .readFromFileStream[F, Option[Transaction]](cliParams.prevTxPath, Transaction.transactionParser[F])
+      tx <- EitherT.liftF[F, Throwable, Transaction] {
+        F.delay {
+          Transaction.createTransaction(
+            prevTx,
+            getAddress(keypair),
+            cliParams.destination,
+            cliParams.amount,
+            keypair,
+            if (cliParams.fee > 0) cliParams.fee.some else none[Long]
+          )
+        }
+      }
+    } yield tx
+
+  def storeTransaction[F[_]](cliParams: CliConfig, transaction: Transaction)(
+    implicit F: Sync[F]
+  ): EitherT[F, Throwable, Unit] =
+    for {
+      buffer <- EitherT.liftF(Transaction.transactionWriter[F](transaction).pure[F])
+      _ <- KeyStoreUtils.storeWithFileStream[F](cliParams.txPath, buffer)
+    } yield ()
 
   def loadCliParams[F[_]: Sync](args: List[String]): EitherT[F, Throwable, CliConfig] = {
     val builder = OParser.builder[CliConfig]
@@ -64,17 +92,26 @@ object Wallet extends IOApp {
           .text("create-transaction")
           .children(
             opt[String]("destination").required
+              .valueName("<address>")
               .abbr("d")
-              .action((x, c) => c),
-            opt[String]("prev_tx").required
+              .action((x, c) => c.copy(destination = x)),
+            opt[String]("prevTx").required
+              .valueName("<file>")
               .abbr("p")
-              .action((x, c) => c),
-            opt[String]("fee").required
+              .action((x, c) => c.copy(prevTxPath = x)),
+            opt[String]("txFile").required
+              .valueName("<file>")
               .abbr("f")
-              .action((x, c) => c),
+              .action((x, c) => c.copy(txPath = x)),
+            opt[String]("fee").required
+              .valueName("<int>")
+              .action((x, c) => c.copy(fee = x.toDouble.toLong))
+              .validate(x => if (x.toDouble.toLong >= 0) success else failure("Value <fee> must be >=0")),
             opt[String]("amount").required
+              .valueName("<int>")
               .abbr("a")
-              .action((x, c) => c)
+              .action((x, c) => c.copy(amount = x.toDouble.toLong))
+              .validate(x => if (x.toDouble.toLong > 0) success else failure("Value <amount> must be >0"))
           ),
         cmd("show-address")
           .action((_, c) => c.copy(method = CliMethod.ShowAddress))
