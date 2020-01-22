@@ -272,6 +272,10 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
   private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String]): F[SnapshotInfo] = {
+    val serHashes = hashes
+      .grouped(100)
+      .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
+      .toArray
     def makeAttempt(clients: List[PeerData]): F[SnapshotInfo] =
       clients match {
         case Nil =>
@@ -282,8 +286,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           )
         case head :: tail =>
           head.client
-            .getNonBlockingArrayByteF("snapshot/info", timeout = 8.seconds)(C)
+            .postNonBlockingF[F, Array[Byte]]("snapshot/info", serHashes, timeout = 8.seconds)(C)
             .flatMap { res =>
+              logger.error(s"[${dao.id.short}] [Re-Download] res: ${res.toList}")
               chainSnapshotInfo(head)
             }
             .handleErrorWith(e => {
@@ -298,51 +303,62 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   def chainSnapshotInfo(peer: PeerData) =
     for {
-      snh <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCBS",
-                                                                      timeout = 45.seconds,
-                                                                      tag = "obj/snapshot")(C)
-      snapcbs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshot",
-                                                                          timeout = 45.seconds,
-                                                                          tag = "snapshotCBS")(C)
-      sncbs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/acceptedCBSinceSnapshot",
-                                                                        timeout = 45.seconds,
-                                                                        tag = "acceptedCBSinceSnapshot")(C)
-      sncbsc <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/acceptedCBSinceSnapshotCache",
-                                                                         timeout = 45.seconds,
-                                                                         tag = "acceptedCBSinceSnapshotCache")(C)
+      snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshot",
+                                                                               timeout = 45.seconds,
+                                                                               tag = "snapshot/obj/snapshot")(C)
+      snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCBs",
+                                                                              timeout = 45.seconds,
+                                                                              tag = "snapshot/obj/snapshotCBs")(C)
+      acceptedCBSinceSnapshot <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/acceptedCBSinceSnapshot",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/acceptedCBSinceSnapshot"
+      )(C)
+
+      acceptedCBSinceSnapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/acceptedCBSinceSnapshotCache",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/acceptedCBSinceSnapshotCache - re-download"
+      )(C)
       awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/awaiting",
                                                                            timeout = 45.seconds,
-                                                                           tag = "awaiting")(C)
+                                                                           tag = "snapshot/obj/awaiting")(C)
       lastSnapshotHeight <- peer.client
-        .getNonBlockingArrayByteF[F]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
+        .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
       snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotHashes",
                                                                                  timeout = 45.seconds,
-                                                                                 tag = "snapshotHashes")(C)
-      addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/addressCacheData",
-                                                                                   timeout = 45.seconds,
-                                                                                   tag = "addressCacheData")(C)
+                                                                                 tag = "snapshot/obj/snapshotHashes")(C)
+      addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/addressCacheData",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/addressCacheData"
+      )(C)
       tips <- peer.client
         .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag = "tips")(C)
       snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCache",
                                                                                 timeout = 45.seconds,
-                                                                                tag = "snapshotCache")(C)
+                                                                                tag = "snapshot/obj/snapshotCache")(C)
       lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/lastAcceptedTransactionRef",
         timeout = 45.seconds,
-        tag = "lastAcceptedTransactionRef"
+        tag = "snapshot/obj/lastAcceptedTransactionRef"
       )(C)
+      _ <- Sync[F]
+        .delay(logger.error(s"[${dao.id.short}] lastAcceptedTransactionRef: ${lastAcceptedTransactionRef}"))
     } yield
-      SnapshotInfoSer(snapcbs,
-                      snapcbs,
-                      sncbs,
-                      sncbsc,
-                      awaiting,
-                      Array(lastSnapshotHeight),
-                      snapshotHashes,
-                      addressCacheData,
-                      tips,
-                      snapshotCache,
-                      lastAcceptedTransactionRef).toSnapshotInfo()
+      SnapshotInfoSer(
+        snapshotHash,
+        snapshotCBs,
+        acceptedCBSinceSnapshot,
+        acceptedCBSinceSnapshotCache,
+        awaiting,
+        lastSnapshotHeight,
+        snapshotHashes,
+        addressCacheData,
+        tips,
+        snapshotCache,
+        lastAcceptedTransactionRef
+      ).toSnapshotInfo()
 
   private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
     Try {
