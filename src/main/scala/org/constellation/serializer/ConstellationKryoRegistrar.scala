@@ -81,7 +81,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointBlockInvalid])
     kryo.register(classOf[Observation])
     kryo.register(classOf[Seq[Observation]])
-
+    kryo.register(classOf[scala.collection.mutable.ArrayBuffer[String]])
+    kryo.register(classOf[Seq[String]])
     kryo.register(classOf[Set[String]])
     kryo.register(classOf[Seq[String]])
 
