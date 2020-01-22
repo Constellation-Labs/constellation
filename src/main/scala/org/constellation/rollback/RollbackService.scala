@@ -9,6 +9,7 @@ import org.constellation.DAO
 import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
 import org.constellation.primitives.Genesis
 import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.rewards.{RewardSnapshot, RewardsManager}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
 
@@ -16,7 +17,8 @@ class RollbackService[F[_]: Concurrent](
   dao: DAO,
   rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F],
-  rollbackLoader: RollbackLoader
+  rollbackLoader: RollbackLoader,
+  rewardsManager: RewardsManager[F],
 )(implicit C: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -59,6 +61,9 @@ class RollbackService[F[_]: Concurrent](
       _ <- acceptSnapshots(rollbackData._1)
       _ <- EitherT.liftF(logger.info("Snapshots restored on disk"))
 
+      _ <- EitherT.liftF(acceptRewards(rollbackData._1))
+      _ <- EitherT.liftF(logger.info("Rewards restored"))
+
       _ <- EitherT.liftF(acceptGenesis(rollbackData._3))
       _ <- EitherT.liftF(logger.info("GenesisObservation restored"))
 
@@ -79,6 +84,18 @@ class RollbackService[F[_]: Concurrent](
     snapshots.toList
       .traverse(snapshotService.addSnapshotToDisk)
       .bimap(_ => CannotWriteToDisk, _ => ())
+
+  private def acceptRewards(
+    snapshots: Seq[StoredSnapshot]
+  ): F[Unit] = {
+    val rewardSnapshots = snapshots
+      .map(s => {
+        val snapshotheight = s.checkpointCache.flatMap(_.height).maxBy(_.max).max
+        RewardSnapshot(s.snapshot.hash, snapshotheight, s.checkpointCache.flatMap(_.checkpointBlock.observations))
+      })
+
+    rewardSnapshots.toList.traverse(rewardsManager.attemptReward).void
+  }
 
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {

@@ -292,7 +292,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         snapshotPath,
         snapshotInfoPath.pathAsString,
         genesisObservationPath.pathAsString
-      )
+      ),
+      rewardsManager,
     )
 
     genesisObservationWriter = new GenesisObservationWriter[IO](

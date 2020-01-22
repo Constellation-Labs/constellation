@@ -12,6 +12,7 @@ import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.rewards.RewardsManager
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
@@ -32,6 +33,7 @@ class SnapshotServiceTest
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
+  var rewardsManager: RewardsManager[IO] = _
   var snapshotStorage: SnapshotStorage[IO] = _
 
   before {
@@ -62,6 +64,7 @@ class SnapshotServiceTest
       consensusManager,
       trustManager,
       soeService,
+      rewardsManager,
       snapshotStorage,
       dao
     )
