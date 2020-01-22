@@ -157,11 +157,6 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
   }
 
-  def getCCParams(cc: Product) = {
-    val values = cc.productIterator
-    cc.getClass.getDeclaredFields.map(_.getName -> values.next).toList
-  }
-
   def pprintInet(inetSocketAddress: InetSocketAddress): String =
     s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getAddress.getHostAddress}, " +
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
