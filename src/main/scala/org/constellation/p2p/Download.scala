@@ -19,6 +19,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging.logThread
 import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.consensus.EdgeProcessor.{chunkDeSerialize, chunkSerialize}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -271,17 +272,20 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
   private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String]): F[SnapshotInfo] = {
-    def makeAttempt(clients: List[PeerData]): F[Array[Byte]] =
+    def makeAttempt(clients: List[PeerData]): F[SnapshotInfo] =
       clients match {
         case Nil =>
-          Sync[F].raiseError[Array[Byte]](
+          Sync[F].raiseError[SnapshotInfo](
             new Exception(
               s"[${dao.id.short}] Unable to get majority snapshot run out of peers, peers size ${peers.size}"
             )
           )
         case head :: tail =>
           head.client
-            .postNonBlockingArrayByteF[F]("snapshot/info", hashes, Map(), timeout = 45.seconds)(C)
+            .getNonBlockingArrayByteF("snapshot/info", timeout = 8.seconds)(C)
+            .flatMap { res =>
+              chainSnapshotInfo(head)
+            }
             .handleErrorWith(e => {
               Sync[F]
                 .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
@@ -289,8 +293,56 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
             })
       }
 
-    makeAttempt(peers.values.toList).map(deserializeSnapshotInfo)
+    makeAttempt(peers.values.toList)
   }
+
+  def chainSnapshotInfo(peer: PeerData) =
+    for {
+      snh <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCBS",
+                                                                      timeout = 45.seconds,
+                                                                      tag = "obj/snapshot")(C)
+      snapcbs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshot",
+                                                                          timeout = 45.seconds,
+                                                                          tag = "snapshotCBS")(C)
+      sncbs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/acceptedCBSinceSnapshot",
+                                                                        timeout = 45.seconds,
+                                                                        tag = "acceptedCBSinceSnapshot")(C)
+      sncbsc <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/acceptedCBSinceSnapshotCache",
+                                                                         timeout = 45.seconds,
+                                                                         tag = "acceptedCBSinceSnapshotCache")(C)
+      awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/awaiting",
+                                                                           timeout = 45.seconds,
+                                                                           tag = "awaiting")(C)
+      lastSnapshotHeight <- peer.client
+        .getNonBlockingArrayByteF[F]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
+      snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotHashes",
+                                                                                 timeout = 45.seconds,
+                                                                                 tag = "snapshotHashes")(C)
+      addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/addressCacheData",
+                                                                                   timeout = 45.seconds,
+                                                                                   tag = "addressCacheData")(C)
+      tips <- peer.client
+        .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag = "tips")(C)
+      snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCache",
+                                                                                timeout = 45.seconds,
+                                                                                tag = "snapshotCache")(C)
+      lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/lastAcceptedTransactionRef",
+        timeout = 45.seconds,
+        tag = "lastAcceptedTransactionRef"
+      )(C)
+    } yield
+      SnapshotInfoSer(snapcbs,
+                      snapcbs,
+                      sncbs,
+                      sncbsc,
+                      awaiting,
+                      Array(lastSnapshotHeight),
+                      snapshotHashes,
+                      addressCacheData,
+                      tips,
+                      snapshotCache,
+                      lastAcceptedTransactionRef).toSnapshotInfo()
 
   private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
     Try {
@@ -380,7 +432,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
                   logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
                 } >> Sync[F].pure(None)
             }
-          }
+        }
       )
       .void
 
@@ -445,7 +497,7 @@ object Download extends StrictLogging {
                           logger.warn(
                             s"Download process error. Trying to set state back to ${oldState}. Result: ${recoverState}"
                           )
-                        )
+                      )
                     )
                 }
                 download.flatMap(
@@ -458,8 +510,8 @@ object Download extends StrictLogging {
                             logger.warn(
                               s"Download process finished. Trying to set state to ${NodeState.Ready}. Result: ${recoverState}"
                             )
-                          )
-                      )
+                        )
+                    )
                 )
               case SetStateResult(oldState, _) =>
                 IO.delay(

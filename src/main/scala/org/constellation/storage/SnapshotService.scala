@@ -54,6 +54,9 @@ class SnapshotService[F[_]: Concurrent](
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
+  val recentSnapshotInfo: Ref[F, Option[SnapshotInfoSer]] = Ref.unsafe(None)
+
+
   def exists(hash: String): F[Boolean] =
     for {
       last <- snapshot.get
