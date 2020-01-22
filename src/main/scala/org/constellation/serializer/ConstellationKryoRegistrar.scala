@@ -88,6 +88,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Id])
 
     kryo.register(classOf[Array[Byte]])
+    kryo.register(classOf[Array[Array[Byte]]])
     kryo.register(classOf[Option[Long]])
     kryo.register(classOf[String])
     kryo.register(classOf[Boolean])

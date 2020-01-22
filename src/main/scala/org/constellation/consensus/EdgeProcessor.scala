@@ -250,7 +250,7 @@ case class SnapshotInfo(
       Array(KryoSerializer.serialize[String](info.snapshot.lastSnapshot)),
       info.snapshot.checkpointBlocks
         .grouped(chunkSize)
-        .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
+        .map(t => chunkSerialize(t, "checkpointBlocks"))
         .toArray,
       info.acceptedCBSinceSnapshot
         .grouped(chunkSize)
@@ -299,22 +299,33 @@ case class SnapshotInfoSer(snapshot: Array[Array[Byte]],
     val lastSnapshot = info.snapshot.map(KryoSerializer.deserializeCast[String]).head
     val snapshotCheckpointBlocks =
       info.snapshotCheckpointBlocks.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "checkpointBlocks"))
+    val acceptedCBSinceSnapshot =
+      info.acceptedCBSinceSnapshot.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "acceptedCBSinceSnapshot"))
+    val acceptedCBSinceSnapshotCache = info.acceptedCBSinceSnapshotCache.toSeq
+      .flatMap(chunkDeSerialize[Seq[CheckpointCache]](_, "acceptedCBSinceSnapshotCache - toSnapshotInfo"))
+    val awaitingCbs = info.awaitingCbs.toSet.flatMap(chunkDeSerialize[Set[CheckpointCache]](_, "awaitingCbs"))
+    val lastSnapshotHeight = info.lastSnapshotHeight.map(KryoSerializer.deserializeCast[Int]).head
+    val snapshotHashes = info.snapshotHashes.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "snapshotHashes"))
+    val addressCacheData = info.addressCacheData.toSeq
+      .flatMap(chunkDeSerialize[Seq[(String, AddressCacheData)]](_, "addressCacheData"))
+      .toMap
+    val tips = info.tips.toSeq.flatMap(chunkDeSerialize[Seq[(String, TipData)]](_, "tips")).toMap
+    val snapshotCache = info.snapshotCache.toSeq.flatMap(chunkDeSerialize[Seq[CheckpointCache]](_, "snapshotCache"))
+    val lastAcceptedTransactionRef = info.lastAcceptedTransactionRef.toSeq
+      .flatMap(chunkDeSerialize[Seq[(String, LastTransactionRef)]](_, "lastAcceptedTransactionRef"))
+      .toMap
+
     SnapshotInfo(
       Snapshot(lastSnapshot, snapshotCheckpointBlocks),
-      info.acceptedCBSinceSnapshot.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "acceptedCBSinceSnapshot")),
-      info.acceptedCBSinceSnapshotCache.toSeq
-        .flatMap(chunkDeSerialize[Seq[CheckpointCache]](_, "acceptedCBSinceSnapshotCache")),
-      info.awaitingCbs.toSet.flatMap(chunkDeSerialize[Set[CheckpointCache]](_, "awaitingCbs")),
-      info.lastSnapshotHeight.map(KryoSerializer.deserializeCast[Int]).head,
-      info.snapshotHashes.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "snapshotHashes")),
-      info.addressCacheData.toSeq
-        .flatMap(chunkDeSerialize[Seq[(String, AddressCacheData)]](_, "addressCacheData"))
-        .toMap,
-      info.tips.toSeq.flatMap(chunkDeSerialize[Seq[(String, TipData)]](_, "tips")).toMap,
-      info.snapshotCache.toSeq.flatMap(chunkDeSerialize[Seq[CheckpointCache]](_, "snapshotCache")),
-      info.lastAcceptedTransactionRef.toSeq
-        .flatMap(chunkDeSerialize[Seq[(String, LastTransactionRef)]](_, "lastAcceptedTransactionRef"))
-        .toMap
+      acceptedCBSinceSnapshot,
+      acceptedCBSinceSnapshotCache,
+      awaitingCbs,
+      lastSnapshotHeight,
+      snapshotHashes,
+      addressCacheData,
+      tips,
+      snapshotCache,
+      lastAcceptedTransactionRef
     )
   }
 

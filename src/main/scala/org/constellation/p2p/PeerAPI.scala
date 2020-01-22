@@ -18,6 +18,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
+import org.constellation.consensus.EdgeProcessor.chunkDeSerialize
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
 import org.constellation.domain.trust.TrustData
@@ -146,26 +147,28 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     post {
       pathPrefix("snapshot") {
         path("info") {
-    entity(as[Seq[String]]) { curCheckpointHashes =>
+    entity(as[Array[Array[Byte]]]) { curCheckpointHashes =>
+      val deSerCheckpointHashes = curCheckpointHashes.flatMap(chunkDeSerialize[Seq[String]](_, "snapshot/info/curCheckpointHashes"))
       val res = dao.snapshotService.getSnapshotInfo.flatMap { info =>
               logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
-              logger.warn(s"snapshot/info curCheckpointHashes.size - ${curCheckpointHashes.size}")
+              logger.warn(s"snapshot/info curCheckpointHashes.size - ${deSerCheckpointHashes.size}")
 
-              val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(curCheckpointHashes.toList)
+              val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(deSerCheckpointHashes.toList)
 
               logger.warn(s"snapshot/info checkpointsToGet.size - ${checkpointsToGet.size}")
               logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet}")
 
-              checkpointsToGet.traverse {
+              val updatedRes = checkpointsToGet.traverse {
                 dao.checkpointService.fullData(_)
-              }.map { cbs =>
-                val inforSer = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten).toSnapshotInfoSer()
-                val res = dao.snapshotService.recentSnapshotInfo.modify { _ =>
+              }.flatMap { cbs =>
+                val infoSer = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten).toSnapshotInfoSer()
+                val res: IO[Array[Byte]] = dao.snapshotService.recentSnapshotInfo.modify { _ =>
                   logger.warn(s"snapshot/info recentSnapshotInfo updating")
-                  (Some(inforSer), Array.empty[Byte])
+                  (Some(infoSer), Array.empty[Byte])
                 }
                 res
               }
+        updatedRes
           }
       APIDirective.handle(res)(complete(_))
     }
@@ -368,8 +371,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         }
       }
     } ~ get {
-      //~
-      //      get {
               path("snapshot" / "obj" / "snapshot") {
                 APIDirective.extractIP(socketAddress) { ip =>
                   val snapshotHash: IO[Array[Array[Byte]]] =
@@ -381,10 +382,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                     }
                   APIDirective.handle(snapshotHash)(complete(_))
                 }
-              } ~ path("snapshot" / "obj" / "snapshotCBS") {
+              } ~ path("snapshot" / "obj" / "snapshotCBs") {
                 APIDirective.extractIP(socketAddress) { ip =>
                   val snapshotCBS = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
-                    logger.warn(s"snapshot/obj/snapshotCBS prev")
                     val res = sni.get.snapshotCheckpointBlocks
                     logger.warn(s"snapshot/obj/snapshotCBS num snapshotCBS: ${res.length}")
                     res
@@ -416,7 +416,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   APIDirective.extractIP(socketAddress) { ip =>
                     val awaiting = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
                       val res: Array[Array[Byte]] = sni.get.awaitingCbs
-                      logger.warn(s"snapshot/obj/res ${res.length}")
+                      logger.warn(s"snapshot/obj/awaiting ${res.length}")
                       res
                     }
                     APIDirective.handle(awaiting)(complete(_))
