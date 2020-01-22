@@ -103,7 +103,8 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
-      _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
+      // TODO: Uncomment to enable rewards
+//      _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
 
       created <- EitherT.liftF(
         trustManager.getPredictedReputation.map(
@@ -561,8 +562,8 @@ object SnapshotService {
       consensusManager,
       trustManager,
       soeService,
-      snapshotStorage,
       rewardsManager,
+      snapshotStorage,
       dao
     )
 }

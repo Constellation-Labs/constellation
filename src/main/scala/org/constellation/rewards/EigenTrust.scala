@@ -165,7 +165,8 @@ class EigenTrust[F[_]: Concurrent](
   def getTrustForIds: F[Map[Id, Double]] = getAgents().map { agents =>
     val trust = getTrust
     agents.getAllAsIds().transform {
-      case (_, int) => trust.getOrElse(int, 1.0)
+      // If node has no Experiences then it's entropy should be ~0
+      case (_, int) => trust.getOrElse(int, 0.0)
     }
   }
 
