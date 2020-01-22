@@ -10,12 +10,12 @@ class RollbackLoaderTest extends FreeSpec with ArgumentMatchersSugar with Before
 
   private val loaderForExistingFolder = new RollbackLoader(
     existingFolder + "snapshots",
-    existingFolder + "rollback_info",
+    existingFolder + "snapshot_info",
     existingFolder + "rollback_genesis"
   )
   private val loaderForNotExistingFolder = new RollbackLoader(
     notExistingFolder + "snapshots",
-    notExistingFolder + "rollback_info",
+    notExistingFolder + "snapshot_info",
     notExistingFolder + "rollback_genesis"
   )
 

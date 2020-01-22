@@ -21,27 +21,30 @@ sealed trait CloudStorage[F[_]] {
   def upload(files: Seq[File]): F[List[String]]
 }
 
-class GcpStorage[F[_]: Concurrent] extends CloudStorage[F] {
+class GCPStorage[F[_]: Concurrent] extends CloudStorage[F] {
 
-  val logger = Slf4jLogger.getLogger[F]
+  private val logger = Slf4jLogger.getLogger[F]
 
   override def upload(files: Seq[File]): F[List[String]] = {
     val upload = for {
       credentials <- createCredentials()
-      _ <- logger.debug("Credentials created successfully")
+      _ <- logger.debug("[CloudStorage] Credentials created successfully")
 
       service <- getStorage(credentials)
-      _ <- logger.debug("Service created successfully")
+      _ <- logger.debug("[CloudStorage] Service created successfully")
 
       bucket <- getBucket(service)
-      _ <- logger.debug("Bucket got successfully")
+      _ <- logger.debug("[CloudStorage] Bucket got successfully")
 
       blobs <- saveToBucket(bucket, files)
-      _ <- logger.debug("Files saved successfully")
+      _ <- logger.debug("[CloudStorage] Files saved successfully")
     } yield blobs.map(b => b.getName)
 
     upload.handleErrorWith(
-      err => logger.error(s"Cannot upload files : GCP : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
+      err =>
+        logger.error(s"[CloudStorage] Cannot upload files : GCP : ${err.getMessage}") >> Sync[F].pure(
+          List.empty[String]
+        )
     )
   }
 
@@ -82,9 +85,9 @@ class GcpStorage[F[_]: Concurrent] extends CloudStorage[F] {
     Sync[F].delay(ConfigUtil.get(configName))
 }
 
-class AwsStorage[F[_]: Concurrent] extends CloudStorage[F] {
+class AWSStorage[F[_]: Concurrent] extends CloudStorage[F] {
 
-  val logger = Slf4jLogger.getLogger[F]
+  private val logger = Slf4jLogger.getLogger[F]
 
   override def upload(files: Seq[File]): F[List[String]] = {
     val upload = for {
@@ -92,18 +95,21 @@ class AwsStorage[F[_]: Concurrent] extends CloudStorage[F] {
       secretKey <- getSecretKey
       region <- getRegion
       service <- getService(accessKey, secretKey, region)
-      _ <- logger.debug("Service created successfully")
+      _ <- logger.debug("[CloudStorage] Service created successfully")
 
       bucketName <- getBucketName
       _ <- checkBucket(service, bucketName)
-      _ <- logger.debug("Bucket got successfully")
+      _ <- logger.debug("[CloudStorage] Bucket got successfully")
 
       result <- saveToBucket(service, bucketName, files)
-      _ <- logger.debug("Files saved successfully")
+      _ <- logger.debug("[CloudStorage] Files saved successfully")
     } yield result.map(_._1)
 
     upload.handleErrorWith(
-      err => logger.error(s"Cannot upload files : AWS : ${err.getMessage}") >> Sync[F].pure(List.empty[String])
+      err =>
+        logger.error(s"[CloudStorage] Cannot upload files : AWS : ${err.getMessage}") >> Sync[F].pure(
+          List.empty[String]
+        )
     )
   }
 

@@ -37,7 +37,7 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, Roll
 import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
-import org.constellation.storage.external.{AwsStorage, GcpStorage}
+import org.constellation.storage.external.{AWSStorage, GCPStorage}
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
 
@@ -112,6 +112,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
+    if (ConfigUtil.isEnabledAWSStorage) {
+      cloudStorage = new AWSStorage[IO]
+    } else if (ConfigUtil.isEnabledGCPStorage) {
+      cloudStorage = new GCPStorage[IO]
+    }
+
     rateLimiting = new RateLimiting[IO]
 
     blacklistedAddresses = BlacklistedAddresses[IO]
@@ -173,6 +179,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     snapshotService = SnapshotService[IO](
       concurrentTipService,
+      cloudStorage,
       addressService,
       checkpointService,
       messageService,
@@ -281,12 +288,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         genesisObservationPath.pathAsString
       )
     )
-
-    if (ConfigUtil.isEnabledAwsStorage) {
-      cloudStorage = new AwsStorage[IO]
-    } else if (ConfigUtil.isEnabledGcpStorage) {
-      cloudStorage = new GcpStorage[IO]
-    }
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
       cloudStorage,
