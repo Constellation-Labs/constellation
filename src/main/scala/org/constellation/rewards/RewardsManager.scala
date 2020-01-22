@@ -77,14 +77,16 @@ class RewardsManager[F[_]: Concurrent](
 
       weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height)
       contributions = calculateContributions(trustMap.keySet.toSeq)
-      distribution = weightContributions(contributions).mapValues(_.toLong)
+      distribution = weightContributions(contributions)
 
       _ <- logger.debug(s"[Rewards] Distribution:")
       _ <- distribution.toList.traverse {
         case (id, reward) => logger.debug(s"[Rewards] Address: ${id.address}, Reward: ${reward}")
       }
 
-      _ <- updateAddressBalances(distribution)
+
+      // TODO: Uncomment when we are sure that rewards are calculated properly
+      // _ <- updateAddressBalances(distribution)
     } yield ()
 
   private def weightByEpoch(snapshotHeight: Long)(contributions: Map[Id, Double]): Map[Id, Double] =

@@ -2,7 +2,7 @@ package org.constellation.rewards
 
 import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
-import org.constellation.ConstellationExecutionContext
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData, SnapshotMisalignment}
 import org.constellation.schema.Id
 import org.constellation.trust.{TrustEdge, TrustManager}
@@ -30,12 +30,13 @@ class EigenTrustTest
 
   var trustManager: TrustManager[IO] = _
   var eigenTrust: EigenTrust[IO] = _
+  var dao: DAO = _
 
   before {
     trustManager = mockTrustManager
     trustManager.observationScoring(*) shouldReturn -0.1
 
-    eigenTrust = new EigenTrust[IO](trustManager)
+    eigenTrust = new EigenTrust[IO](trustManager, dao)
   }
 
   "Normalization from t∈⟨-1;1⟩ to t∈⟨0;1⟩" - {

@@ -9,17 +9,22 @@ import scala.collection.immutable.Map
 object EigenTrustAgents {
   type BiDirectionalMap[A, B] = (Map[A, B], Map[B, A])
 
+  val iterator: AgentsIterator = AgentsIterator()
+
   def empty(): EigenTrustAgents = EigenTrustAgents((Map.empty[Id, Int], Map.empty[Int, Id]))
 }
 
 case class AgentsIterator() extends Iterator[Int] {
   var current: Int = 0;
 
-  override def hasNext: Boolean = current == Int.MaxValue
+  override def hasNext: Boolean = current != Int.MaxValue
 
   override def next(): Int = {
-    current = current + 1
-    current
+    if (hasNext) {
+      current = current + 1
+      current
+    } else
+    -1
   }
 }
 
@@ -29,9 +34,9 @@ case class AgentsIterator() extends Iterator[Int] {
   * the https://github.com/djelenc/alpha-testbed EigenTrust and our app
   */
 case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int] = (Map.empty[Id, Int], Map.empty[Int, Id])) {
-  private val iterator = new AgentsIterator
 
-  def registerAgent(id: Id): EigenTrustAgents = this.copy(update(id, iterator.next()))
+  def registerAgent(id: Id): EigenTrustAgents =
+    this.copy(update(id, EigenTrustAgents.iterator.next()))
 
   def unregisterAgent(agent: Int): EigenTrustAgents = this.copy(remove(agent))
   def unregisterAgent(agent: Id): EigenTrustAgents = this.copy(remove(agent))

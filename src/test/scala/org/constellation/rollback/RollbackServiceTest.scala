@@ -50,6 +50,7 @@ class RollbackServiceTest
       .validate()
       .value
       .unsafeRunSync()
+
     result.isRight shouldBe true
   }
 

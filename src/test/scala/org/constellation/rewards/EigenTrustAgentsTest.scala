@@ -38,4 +38,15 @@ class EigenTrustAgentsTest
     updated.get(id).get shouldBe int
     updated.get(int).get shouldBe id
   }
+
+  "AgentsIterator" - {
+    "should return next int" in {
+      println(Integer.MAX_VALUE)
+      val iterator = AgentsIterator()
+      val next = iterator.next()
+      next shouldBe 1
+      val nextAfterNext = iterator.next()
+      nextAfterNext shouldBe 2
+    }
+  }
 }

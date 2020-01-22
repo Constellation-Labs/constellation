@@ -15,6 +15,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.DAO
 import org.constellation.rewards.EigenTrust.{opinionSampleNum, opinionSampleSD, satisfactoryThreshold, weight}
 
 import scala.util.Random
@@ -69,7 +70,8 @@ object EigenTrust {
 }
 
 class EigenTrust[F[_]: Concurrent](
-  trustManager: TrustManager[F]
+  trustManager: TrustManager[F],
+  dao: DAO
 ) {
   private final val secureRandom = SecureRandom.getInstanceStrong
   private final val agents: Ref[F, EigenTrustAgents] = Ref.unsafe(EigenTrustAgents.empty())
@@ -86,23 +88,29 @@ class EigenTrust[F[_]: Concurrent](
   eigenTrust.processExperiences(List().asJava)
   eigenTrust.calculateTrust()
 
+  def registerSelf(): F[Unit] = registerAgent(dao.id)
+
   def getAgents(): F[EigenTrustAgents] = agents.modify(a => (a, a))
 
   def clearAgents(): F[Unit] = agents.modify(a => (a.clear(), a)).void
 
   def registerAgent(id: Id): F[Unit] =
     agents
-      .modify(a => (a.registerAgent(id), a))
-      .flatTap(
+      .modify(a => {
+        val updated = a.registerAgent(id)
+        (updated, updated)
+      })
+      .flatMap(
         agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id)}")
       )
-      .void
 
   def unregisterAgent(id: Id): F[Unit] =
     agents
-      .modify(a => (a.unregisterAgent(id), a))
-      .flatTap(_ => logger.debug(s"[EigenTrust] Unregistered EigenTrust agent: ${id.address}"))
-      .void
+      .modify(a => {
+        val updated = a.unregisterAgent(id)
+        (updated, updated)
+      })
+      .flatMap(_ => logger.debug(s"[EigenTrust] Unregistered EigenTrust agent: ${id.address}"))
 
   def seed(trustEdges: Seq[TrustEdge]): F[Unit] = Concurrent[F].delay {
     val opinions = convertToOpinions(trustEdges)
