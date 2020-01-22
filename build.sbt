@@ -92,7 +92,13 @@ lazy val sharedDependencies = Seq(
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
   ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0",
+  "com.twitter" %% "chill" % "0.9.3",
+  "com.twitter" %% "algebird-core" % "0.13.5",
+  "org.json4s" %% "json4s-native" % versions.json4s,
+  "org.json4s" %% "json4s-ext" % versions.json4s,
+  "org.json4s" %% "json4s-jackson" % versions.json4s,
+  "org.json4s" %% "json4s-ast" % versions.json4s
 )
 
 lazy val keyToolSharedDependencies = Seq(
@@ -120,12 +126,6 @@ lazy val coreDependencies = Seq(
   "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
   "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
   "de.heikoseeberger" %% "akka-http-json4s" % "1.27.0",
-  "org.json4s" %% "json4s-native" % versions.json4s,
-  "org.json4s" %% "json4s-ext" % versions.json4s,
-  "org.json4s" %% "json4s-jackson" % versions.json4s,
-  "org.json4s" %% "json4s-ast" % versions.json4s,
-  "com.twitter" %% "chill" % "0.9.3",
-  "com.twitter" %% "algebird-core" % "0.13.5",
   //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
   //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
