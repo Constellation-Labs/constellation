@@ -249,19 +249,19 @@ case class SnapshotInfo(
       Array(KryoSerializer.serialize[String](info.snapshot.lastSnapshot)),
       info.snapshot.checkpointBlocks
         .grouped(chunkSize)
-        .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
+        .map(t => chunkSerialize(t, "snapshotCheckpointBlocks"))
         .toArray,
       info.acceptedCBSinceSnapshot
         .grouped(chunkSize)
         .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
         .toArray,
-      info.awaitingCbs
-        .grouped(chunkSize)
-        .map(t => chunkSerialize(t.toSeq, "awaitingCbs"))
-        .toArray,
       info.acceptedCBSinceSnapshotCache
         .grouped(chunkSize)
         .map(t => chunkSerialize(t, "acceptedCBSinceSnapshotCache"))
+        .toArray,
+      info.awaitingCbs
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toSeq, "awaitingCbs"))
         .toArray,
       Array(KryoSerializer.serialize[Int](info.lastSnapshotHeight)),
       info.snapshotHashes.grouped(chunkSize).map(t => chunkSerialize(t, "snapshotHashes")).toArray,
@@ -271,7 +271,7 @@ case class SnapshotInfo(
         .toArray,
       info.tips
         .grouped(chunkSize)
-        .map(partitionMap => chunkSerialize(partitionMap.toSeq, "acceptedCBSinceSnapshot"))
+        .map(partitionMap => chunkSerialize(partitionMap.toSeq, "tips"))
         .toArray,
       info.snapshotCache.grouped(chunkSize).map(t => chunkSerialize(t, "snapshotCache")).toArray,
       info.lastAcceptedTransactionRef
@@ -308,7 +308,7 @@ case class SnapshotInfoSer(
       info.awaitingCbs.toSet
         .flatMap(chunkDeSerialize[Set[CheckpointCache]](_, "awaitingCbs")),
       info.lastSnapshotHeight.map(KryoSerializer.deserializeCast[Int]).head,
-      info.snapshotHashes.toSeq.flatMap(chunkDeSerialize[Array[String]](_, "snapshotHashes")),
+      info.snapshotHashes.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "snapshotHashes")),
       info.addressCacheData.toSeq
         .flatMap(chunkDeSerialize[Seq[(String, AddressCacheData)]](_, "addressCacheData"))
         .toMap,
