@@ -9,6 +9,7 @@ import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
+import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -140,52 +141,35 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           }
         }
       }
+
   private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
       pathPrefix("snapshot") {
         path("info") {
     entity(as[Seq[String]]) { curCheckpointHashes =>
-      val route = APIDirective.extractIP(socketAddress) { ip =>
-        val getInfo = idLookup(ip)
-          .flatMap(
-            maybePeer =>
-              maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
-                pd =>
-                  // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
-                  dao.observationService
-                    .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
-                    .void
-            )
-          )
-          .flatMap(
-            _ =>
-              dao.snapshotService.getSnapshotInfo.flatMap { info =>
-                logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
-                logger.warn(s"snapshot/info curCheckpointHashes.size - ${curCheckpointHashes.size}")
+      val res = dao.snapshotService.getSnapshotInfo.flatMap { info =>
+              logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
+              logger.warn(s"snapshot/info curCheckpointHashes.size - ${curCheckpointHashes.size}")
 
-                val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(curCheckpointHashes.toList)
+              val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(curCheckpointHashes.toList)
 
-                logger.warn(s"snapshot/info checkpointsToGet.size - ${checkpointsToGet.size}")
-                logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet}")
+              logger.warn(s"snapshot/info checkpointsToGet.size - ${checkpointsToGet.size}")
+              logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet}")
 
-                checkpointsToGet.traverse {
-                  dao.checkpointService.fullData(_)
-                }.map(
-                  cbs =>
-                    KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
-                )
-            }
-          )
-
-        APIDirective.handle(
-          dao.cluster.getNodeState
-            .map(NodeState.canActAsDownloadSource)
-            .ifM(getInfo, IO.pure(Array[Byte]()))
-        )(complete(_))
-      }
-      route
+              checkpointsToGet.traverse {
+                dao.checkpointService.fullData(_)
+              }.map { cbs =>
+                val inforSer = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten).toSnapshotInfoSer()
+                val res = dao.snapshotService.recentSnapshotInfo.modify { _ =>
+                  logger.warn(s"snapshot/info recentSnapshotInfo updating")
+                  (Some(inforSer), Array.empty[Byte])
+                }
+                res
+              }
+          }
+      APIDirective.handle(res)(complete(_))
     }
-  } ~
+  }~
         path("verify") {
           entity(as[SnapshotCreated]) { s =>
             APIDirective.handle(
@@ -384,6 +368,120 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         }
       }
     } ~ get {
+      //~
+      //      get {
+              path("snapshot" / "obj" / "snapshot") {
+                APIDirective.extractIP(socketAddress) { ip =>
+                  val snapshotHash: IO[Array[Array[Byte]]] =
+                    dao.snapshotService.recentSnapshotInfo.get.map{
+                      sni =>
+                        val ser = sni.get.snapshot
+                        logger.warn(s"snapshot/obj/snapshot ${ser}")
+                        ser
+                    }
+                  APIDirective.handle(snapshotHash)(complete(_))
+                }
+              } ~ path("snapshot" / "obj" / "snapshotCBS") {
+                APIDirective.extractIP(socketAddress) { ip =>
+                  val snapshotCBS = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                    logger.warn(s"snapshot/obj/snapshotCBS prev")
+                    val res = sni.get.snapshotCheckpointBlocks
+                    logger.warn(s"snapshot/obj/snapshotCBS num snapshotCBS: ${res.length}")
+                    res
+                  }
+                  APIDirective.handle(snapshotCBS)(complete(_))
+                }
+              } ~
+                path("snapshot" / "obj" / "acceptedCBSinceSnapshot") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val acceptedCBSinceSnapshot = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res =  sni.get.acceptedCBSinceSnapshot
+                      logger.warn(s"snapshot/obj/acceptedCBSinceSnapshot num acceptedCBSinceSnapshot: ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(acceptedCBSinceSnapshot)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "acceptedCBSinceSnapshotCache") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val acceptedCBSinceSnapshotCache = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res = sni.get.acceptedCBSinceSnapshotCache
+                      logger.warn(s"snapshot/obj/acceptedCBSinceSnapshotCache ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(acceptedCBSinceSnapshotCache)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "awaiting") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val awaiting = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res: Array[Array[Byte]] = sni.get.awaitingCbs
+                      logger.warn(s"snapshot/obj/res ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(awaiting)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "lastSnapshotHeight") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val lastSnapshotHeight = dao.snapshotService.recentSnapshotInfo.get.map {sni =>
+                      val res = sni.get.lastSnapshotHeight
+                      logger.warn(s"snapshot/obj/lastSnapshotHeight ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(lastSnapshotHeight)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "snapshotHashes") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val snapshotHash = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res: Array[Array[Byte]] = sni.get.snapshotHashes
+                      logger.warn(s"snapshot/obj/snapshotHashes ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(snapshotHash)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "addressCacheData") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val addressCacheData = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res: Array[Array[Byte]] = sni.get.addressCacheData
+                      logger.warn(s"snapshot/obj/addressCacheData ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(addressCacheData)(complete(_))
+                  }
+                }~
+                path("snapshot" / "obj" / "tips") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val tips = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res: Array[Array[Byte]] = sni.get.tips
+                      logger.warn(s"snapshot/obj/tips ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(tips)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "snapshotCache") {//todo filter here too
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val snapshotCache = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res: Array[Array[Byte]] = sni.get.snapshotCache
+                      logger.warn(s"snapshot/obj/snapshotCache ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(snapshotCache)(complete(_))
+                  }
+                } ~
+                path("snapshot" / "obj" / "lastAcceptedTransactionRef") {
+                  APIDirective.extractIP(socketAddress) { ip =>
+                    val lastAcceptedTransactionRef = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+                      val res: Array[Array[Byte]] = sni.get.lastAcceptedTransactionRef
+                      logger.warn(s"snapshot/obj/lastAcceptedTransactionRef ${res.length}")
+                      res
+                    }
+                    APIDirective.handle(lastAcceptedTransactionRef)(complete(_))
+                  }
+                }~
       path("snapshot" / "info") {
         APIDirective.extractIP(socketAddress) { ip =>
           val getInfo = idLookup(ip)

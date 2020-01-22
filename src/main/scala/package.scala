@@ -147,6 +147,11 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   def byteToInt(byteBarray: Array[Byte]): Int =
     ByteBuffer.wrap(byteBarray).order(ByteOrder.BIG_ENDIAN).getInt
 
+  def getCCParams(cc: Product) = {
+    val values = cc.productIterator
+    cc.getClass.getDeclaredFields.map(_.getName -> values.next).toList
+  }
+
   implicit class HTTPHelp(httpResponse: HttpResponse)(implicit val materialize: ActorMaterializer) {
 
     def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]

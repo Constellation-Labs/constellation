@@ -1,7 +1,6 @@
 package org.constellation.consensus
 
-import java.io.IOException
-import java.nio.file.{NoSuchFileException, Path}
+import java.nio.file.NoSuchFileException
 
 import better.files.File
 import cats.data.Validated.{Invalid, Valid}
@@ -9,7 +8,7 @@ import cats.data.{EitherT, NonEmptyList}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
-import constellation._
+import constellation.{getCCParams, _}
 import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.p2p.PeerData
@@ -358,8 +357,6 @@ case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends
 case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache])
 
 case class DownloadComplete(latestSnapshot: Snapshot)
-
-import java.nio.file.{Files, Paths}
 
 object Snapshot extends StrictLogging {
 

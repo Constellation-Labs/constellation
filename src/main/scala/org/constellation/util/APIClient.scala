@@ -132,6 +132,19 @@ class APIClient private (
       }(ConstellationExecutionContext.unbounded)
     })
 
+  def getNonBlockingFLogged[F[_]: Async, T <: AnyRef](
+                                                       suffix: String,
+                                                       queryParams: Map[String, String] = Map(),
+                                                       timeout: Duration = 15.seconds,
+                                                       tag: String = "getNonBlockingLogged"
+                                                     )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
+    contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
+      FutureTimeTracker(getNonBlocking[T](suffix, queryParams, timeout))(ConstellationExecutionContext.unbounded).track(tag).onComplete {
+        case Success(value) => cb(Right(value))
+        case Failure(error) => cb(Left(error))
+      }(ConstellationExecutionContext.unbounded)
+    })
+
   def getNonBlockingF[F[_]: Async, T <: AnyRef](
     suffix: String,
     queryParams: Map[String, String] = Map(),
