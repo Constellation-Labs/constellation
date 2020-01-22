@@ -92,13 +92,7 @@ lazy val sharedDependencies = Seq(
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
   ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0",
-  "com.twitter" %% "chill" % "0.9.3",
-  "com.twitter" %% "algebird-core" % "0.13.5",
-  "org.json4s" %% "json4s-native" % versions.json4s,
-  "org.json4s" %% "json4s-ext" % versions.json4s,
-  "org.json4s" %% "json4s-jackson" % versions.json4s,
-  "org.json4s" %% "json4s-ast" % versions.json4s
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
 )
 
 lazy val keyToolSharedDependencies = Seq(
@@ -111,11 +105,16 @@ lazy val keyToolSharedDependencies = Seq(
   "org.bouncycastle" % "bcprov-jdk15on" % "1.63"
 ) ++ sharedDependencies
 
-lazy val walletSharedDependencies = sharedDependencies
+lazy val walletSharedDependencies = Seq(
+  "com.twitter" %% "chill" % versions.twitterChill,
+  "com.twitter" %% "algebird-core" % "0.13.5",
+  "org.json4s" %% "json4s-native" % versions.json4s,
+  "org.json4s" %% "json4s-ext" % versions.json4s,
+  "org.json4s" %% "json4s-jackson" % versions.json4s,
+  "org.json4s" %% "json4s-ast" % versions.json4s
+) ++ sharedDependencies
 
-lazy val schemaSharedDependencies = Seq(
-  "com.twitter" %% "chill" % versions.twitterChill
-) ++ keyToolSharedDependencies
+lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
 
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
