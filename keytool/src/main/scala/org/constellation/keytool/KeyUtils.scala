@@ -44,7 +44,11 @@ object KeyUtils extends StrictLogging {
   val provider: BouncyCastleProvider = insertProvider()
 
   val ECDSA = "ECDsA"
-  private val secureRandom: SecureRandom = SecureRandom.getInstance("NativePRNGNonBlocking")
+  private val secureRandom: SecureRandom = try {
+    SecureRandom.getInstance("NativePRNGNonBlocking")
+  } catch {
+    case _: Throwable => SecureRandom.getInstanceStrong
+  }
   private val secp256k = "secp256k1"
   val DefaultSignFunc = "SHA512withECDSA"
   private val PublicKeyHexPrefix: String = "3056301006072a8648ce3d020106052b8104000a03420004"
@@ -140,7 +144,7 @@ object KeyUtils extends StrictLogging {
   def keyPairFromPemStr(privateKeyStr: String, publicKeyStr: String): KeyPair = {
     val kf = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)
     val privKey = pemToPrivateKey(privateKeyStr, kf)
-    val pubKey = pemToPublicKey(publicKeyStr,kf)
+    val pubKey = pemToPublicKey(publicKeyStr, kf)
     new KeyPair(pubKey, privKey)
   }
 
@@ -152,7 +156,10 @@ object KeyUtils extends StrictLogging {
     kf.generatePublic(pubKeySpec)
   }
 
-  def pemToPrivateKey(privateKeyStr: String, kf: KeyFactory = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)) = {
+  def pemToPrivateKey(
+    privateKeyStr: String,
+    kf: KeyFactory = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)
+  ) = {
     val encodedPriv = decodeBase64(privateKeyStr)
     val privKeySpec = new PKCS8EncodedKeySpec(encodedPriv)
     kf.generatePrivate(privKeySpec)
