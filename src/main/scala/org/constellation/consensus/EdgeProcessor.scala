@@ -244,9 +244,9 @@ case class SnapshotInfo(
 ) {
   import EdgeProcessor.chunkSerialize
 
-  def toSnapshotInfoSer(info: SnapshotInfo, chunkSize: Int = 100) = //todo make chunk size config
+  def toSnapshotInfoSer(info: SnapshotInfo = this, chunkSize: Int = 100) = //todo make chunk size config
     SnapshotInfoSer(
-      KryoSerializer.serialize[String](info.snapshot.lastSnapshot),
+      Array(KryoSerializer.serialize[String](info.snapshot.lastSnapshot)),
       info.snapshot.checkpointBlocks
         .grouped(chunkSize)
         .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
@@ -257,7 +257,7 @@ case class SnapshotInfo(
         .toArray,
       info.awaitingCbs
         .grouped(chunkSize)
-        .map(t => chunkSerialize(t, "awaitingCbs"))
+        .map(t => chunkSerialize(t.toSeq, "awaitingCbs"))
         .toArray,
       info.acceptedCBSinceSnapshotCache
         .grouped(chunkSize)
@@ -296,7 +296,7 @@ case class SnapshotInfoSer(
 ) {
   import EdgeProcessor.chunkDeSerialize
 
-  def toSnapshotInfo(info: SnapshotInfoSer): SnapshotInfo = {
+  def toSnapshotInfo(info: SnapshotInfoSer = this): SnapshotInfo = {
     val lastSnapshot = info.snapshot.map(KryoSerializer.deserializeCast[String]).head
     val snapshotCheckpointBlocks =
       info.snapshotCheckpointBlocks.toSeq.flatMap(chunkDeSerialize[Seq[String]](_, "checkpointBlocks"))

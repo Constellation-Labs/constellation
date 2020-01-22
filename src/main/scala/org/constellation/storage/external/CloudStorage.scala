@@ -21,7 +21,7 @@ sealed trait CloudStorage[F[_]] {
   def upload(files: Seq[File]): F[List[String]]
 }
 
-class GcpStorage[F[_]: Concurrent] extends CloudStorage[F] {
+class GCPStorage[F[_]: Concurrent] extends CloudStorage[F] {
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -85,7 +85,7 @@ class GcpStorage[F[_]: Concurrent] extends CloudStorage[F] {
     Sync[F].delay(ConfigUtil.get(configName))
 }
 
-class AwsStorage[F[_]: Concurrent] extends CloudStorage[F] {
+class AWSStorage[F[_]: Concurrent] extends CloudStorage[F] {
 
   private val logger = Slf4jLogger.getLogger[F]
 

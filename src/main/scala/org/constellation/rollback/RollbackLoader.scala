@@ -46,6 +46,7 @@ class RollbackLoader(
       snapInfoSerParts.getOrElse("snapshotCheckpointBlocks", Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse("acceptedCBSinceSnapshot", Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse("acceptedCBSinceSnapshotCache", Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse("acceptedCbs", Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse("lastSnapshotHeight", Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse("snapshotHashes", Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse("addressCacheData", Array.empty[Array[Byte]]),

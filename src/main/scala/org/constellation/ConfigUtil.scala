@@ -51,12 +51,12 @@ object ConfigUtil {
   def getAuthPassword: String =
     configAuth.getString("password")
 
-  def isEnabledGcpStorage: Boolean =
+  def isEnabledGCPStorage: Boolean =
     Try(configStorage.getBoolean("gcp.enabled")).getOrElse(false)
 
-  def isEnabledAwsStorage: Boolean =
+  def isEnabledAWSStorage: Boolean =
     Try(configStorage.getBoolean("aws.enabled")).getOrElse(false)
 
   def isEnabledCloudStorage: Boolean =
-    isEnabledGcpStorage || isEnabledAwsStorage
+    isEnabledGCPStorage || isEnabledAWSStorage
 }
