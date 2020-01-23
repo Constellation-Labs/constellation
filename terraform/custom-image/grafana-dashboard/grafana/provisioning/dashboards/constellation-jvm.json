@@ -263,7 +263,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_transactionAccepted_total{application=\"$application\"}",
@@ -352,7 +352,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_checkpointAccepted_total{application=\"$application\"}",
@@ -804,7 +804,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_awaitingForAcceptance",
@@ -890,7 +890,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_allowedForAcceptance",
@@ -976,15 +976,15 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
-          "expr": "dag_reDownloadFinished",
+          "expr": "dag_reDownloadFinished_total{application=\"$application\"}",
           "legendFormat": "{{ instance }}",
           "refId": "A"
         },
         {
-          "expr": "dag_reDownloadError",
+          "expr": "dag_reDownloadError{application=\"$application\"}",
           "legendFormat": "{{ instance }}",
           "refId": "B"
         }
@@ -1545,7 +1545,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_lastSnapshotHeight{application=\"$application\"}",
@@ -1648,7 +1648,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_transactionService_accepted_size",
@@ -1737,7 +1737,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_transactionService_pending_size",
@@ -1826,7 +1826,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_transactionService_inConsensus_size",
@@ -1915,7 +1915,7 @@
       "seriesOverrides": [],
       "spaceLength": 10,
       "stack": false,
-      "steppedLine": false,
+      "steppedLine": true,
       "targets": [
         {
           "expr": "dag_transactionService_unknown_size",
