@@ -1,15 +1,13 @@
 package org.constellation.domain.snapshot
 
-import org.scalatest.{FreeSpec, Matchers}
 import better.files._
-import java.io.{File => JFile}
-
 import cats.effect.IO
 import cats.implicits._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.infrastructure.snapshot.SnapshotFileStorage
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.serializer.KryoSerializer
+import org.scalatest.{FreeSpec, Matchers}
 
 class SnapshotFileStorageTest extends FreeSpec with Matchers {
   "createDirectoryIfNotExists" - {
@@ -132,7 +130,7 @@ class SnapshotFileStorageTest extends FreeSpec with Matchers {
   }
 
   "getUsableSpace" - {
-    "should read usable space from snapshot directory" in {
+    "should read usable space from snapshot directory" ignore {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
         val snapshotStorage = SnapshotFileStorage[IO](snapshotsDir.pathAsString)

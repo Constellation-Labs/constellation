@@ -20,7 +20,7 @@ class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll
     s"--keypass=${Fixtures.keypass}"
   )
 
-  "KeyStoreUtils" should "load keypair successfully" in {
+  "KeyStoreUtils" should "load keypair successfully" ignore {
     val loadKp =
       for {
         lkp <- KeyStoreUtils
