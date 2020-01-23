@@ -17,34 +17,7 @@ class JoiningPeerValidator[F[_]: Concurrent](implicit cs: ContextShift[F]) {
     validation(client).map(_.isValid)
 
   def validation(client: APIClient): F[ValidationResult[String]] =
-    for {
-      validationBalance <- validateBalance(client)
-      validationGitCommitHash <- validateGitCommitHash(client)
-    } yield validationBalance.product(validationGitCommitHash).map(_._1)
-
-  private def validateBalance(client: APIClient): F[ValidationResult[String]] = {
-    val validate: F[ValidationResult[String]] = for {
-      peerAddressResponse <- client.getStringF("selfAddress")(cs)
-      peerAddress = peerAddressResponse.body.getOrElse("")
-      _ <- logger.debug(s"Joining peer address=$peerAddress")
-
-      peerBalanceResponse <- client.getStringF(s"balance/$peerAddress")(cs)
-      peerBalance = peerBalanceResponse.body.getOrElse("0L")
-      _ <- logger.debug(s"Joining peer balance=$peerBalance")
-
-      stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
-
-      isValid = peerBalance.toLong > stakingAmount
-
-      _ <- logger.info(s"Checking balance for joining peer=${client.hostName} : is valid=$isValid")
-    } yield if (!isValid) JoiningPeerHasInsufficientBalance(client.hostName).invalidNel else client.hostName.validNel
-
-    validate.handleErrorWith(
-      error =>
-        logger.info(s"Cannot get balance from joining peer : ${client.hostName} : $error") >>
-          Sync[F].delay(JoiningPeerUnavailable(client.hostName).invalidNel)
-    )
-  }
+    validateGitCommitHash(client)
 
   private def validateGitCommitHash(client: APIClient): F[ValidationResult[String]] = {
     val validate: F[ValidationResult[String]] = for {
