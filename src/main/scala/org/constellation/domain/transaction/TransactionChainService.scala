@@ -43,7 +43,7 @@ class TransactionChainService[F[_]: Concurrent] {
     keyPair: KeyPair,
     isDummy: Boolean,
     fee: Option[Long] = None,
-    normalized: Boolean = false
+    normalized: Boolean = true
   ): F[Transaction] =
     lastTransactionRef.modify { m =>
       val ref = m.getOrElse(src, LastTransactionRef.empty)
@@ -65,7 +65,7 @@ class TransactionChainService[F[_]: Concurrent] {
     keyPair: KeyPair,
     isDummy: Boolean,
     fee: Option[Long] = None,
-    normalized: Boolean = false,
+    normalized: Boolean = true,
     isTest: Boolean = false
   ): F[Transaction] = {
     val ref = LastTransactionRef.empty

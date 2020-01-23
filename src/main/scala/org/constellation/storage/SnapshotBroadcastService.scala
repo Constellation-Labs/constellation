@@ -20,7 +20,7 @@ import scala.concurrent.duration._
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
   cluster: Cluster[F],
-  val snapshotSelector: SnapshotSelector[F],
+  snapshotSelector: SnapshotSelector[F],
   contextShift: ContextShift[F],
   dao: DAO
 ) extends StrictLogging {

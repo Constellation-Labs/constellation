@@ -10,7 +10,7 @@ import org.constellation.consensus.Snapshot
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema.CheckpointEdge
-import org.constellation.primitives.{ChannelMessage, Transaction}
+import org.constellation.primitives.{ChannelMessage, Schema, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage.AddressService
 import org.constellation.trust.TrustEdge
@@ -31,7 +31,8 @@ class RewardsManager[F[_]: Concurrent](
     * We are caching there RewardSnapshots until we reach snapshotHeightRedownloadDelayInterval.
     * Then we are rewarding, clearing cache and caching next interval.
     */
-  private val snapshotCache: Ref[F, Map[String, RewardSnapshot]] = Ref.unsafe(Map.empty)
+  private val snapshotCache: Ref[F, Seq[RewardSnapshot]] = Ref.unsafe(Seq.empty)
+  private val accumulatedRewards: Ref[F, Map[Id, Long]] = Ref.unsafe(Map.empty)
   private val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
   val logger = Slf4jLogger.getLogger[F]
@@ -44,14 +45,14 @@ class RewardsManager[F[_]: Concurrent](
       _ <- logger.debug(s"[Rewards] Trying to reward nodes after acceptance of ${rewardSnapshot.hash}")
 
       cache <- snapshotCache.modify { c =>
-        val updated = c + (rewardSnapshot.hash -> rewardSnapshot)
+        val updated = c :+ rewardSnapshot
         (updated, updated)
       }
 
-      previouslyRewardedHeight = cache.values.minBy(_.height).height
+      previouslyRewardedHeight = cache.minBy(_.height).height
 
       _ <- reachedSnapshotHeightRedownloadDelayInterval(previouslyRewardedHeight, rewardSnapshot.height).ifM(
-        cache.values.toList.traverse(updateBySnapshot) >> snapshotCache.modify(c => (c.empty, ())),
+        cache.toList.traverse(updateBySnapshot) >> snapshotCache.modify(_ => (Seq.empty, ())),
         logger.warn(
           s"[Rewards] Next snapshotHeightRedownloadDelayInterval (${previouslyRewardedHeight + snapshotHeightRedownloadDelayInterval}) not reached. Current interval: ${rewardSnapshot.height}"
         )
@@ -72,22 +73,42 @@ class RewardsManager[F[_]: Concurrent](
   private def updateBySnapshot(rewardSnapshot: RewardSnapshot): F[Unit] =
     for {
       _ <- logger.debug(s"[Rewards] Updating rewards by snapshot: ${rewardSnapshot.hash}")
+      _ <- Concurrent[F].delay(rewardSnapshot.observations.isEmpty).ifM(
+        logger.debug(s"[Rewards] ${rewardSnapshot.hash} has no observations"),
+        logger.debug(s"[Rewards] ${rewardSnapshot.hash} contains following observations:").flatMap { _ =>
+          rewardSnapshot.observations.toList
+            .map(_.signedObservationData.data)
+            .traverse(o => logger.debug(s"[Rewards] Observation for ${o.id.address}, ${o.event}")).void
+        }
+      )
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
       trustMap <- eigenTrust.getTrustForIds
 
       weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height)
       contributions = calculateContributions(trustMap.keySet.toSeq)
       distribution = weightContributions(contributions)
-
+      normalizedDistribution = normalize(distribution)
       _ <- logger.debug(s"[Rewards] Distribution:")
-      _ <- distribution.toList.traverse {
+      _ <- normalizedDistribution.toList.traverse {
         case (id, reward) => logger.debug(s"[Rewards] Address: ${id.address}, Reward: ${reward}")
       }
 
+      acc <- accumulatedRewards.modify(r => {
+        val updated = r |+| normalizedDistribution
+        (updated, updated)
+      })
 
-      // TODO: Uncomment when we are sure that rewards are calculated properly
-      // _ <- updateAddressBalances(distribution)
+     _ <- acc.transform {
+       case (id, reward) => logger.debug(s"[Rewards] Accumulated rewards of ${id.address}: ${reward}")
+     }.values.toList.sequence
+
+      _ <- updateAddressBalances(normalizedDistribution)
     } yield ()
+
+  private def normalize(contributions: Map[Id, Double]): Map[Id, Long] =
+    contributions
+      .mapValues(Schema.NormalizationFactor * _)
+      .mapValues(_.toLong)
 
   private def weightByEpoch(snapshotHeight: Long)(contributions: Map[Id, Double]): Map[Id, Double] =
     contributions.mapValues(_ * RewardsManager.rewardDuringEpoch(snapshotHeight))
@@ -205,7 +226,8 @@ object RewardsManager {
   }
 
   // TODO: Move to RewardsManager
-  def weightContributions(contributions: Map[String, Double]
+  def weightContributions(
+    contributions: Map[String, Double]
   )(trustEntropyMap: Map[String, Double]): Map[String, Double] = {
     val weightedEntropy = contributions.transform {
       case (address, partitionSize) =>

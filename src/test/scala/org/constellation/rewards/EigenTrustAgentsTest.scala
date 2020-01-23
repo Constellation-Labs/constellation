@@ -41,7 +41,6 @@ class EigenTrustAgentsTest
 
   "AgentsIterator" - {
     "should return next int" in {
-      println(Integer.MAX_VALUE)
       val iterator = AgentsIterator()
       val next = iterator.next()
       next shouldBe 1

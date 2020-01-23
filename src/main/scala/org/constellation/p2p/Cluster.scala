@@ -351,7 +351,8 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
         _ <- ipManager.removeKnownIP(pm.host)
         _ <- peers.modify(a => (a - pm.id, a - pm.id))
-        _ <- LiftIO[F].liftIO(dao.eigenTrust.unregisterAgent(pm.id))
+        // Technically we shouldn't remove it from eigenTrust if we want to keep the trained model for that node
+//        _ <- LiftIO[F].liftIO(dao.eigenTrust.unregisterAgent(pm.id))
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),

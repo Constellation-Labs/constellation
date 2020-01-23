@@ -35,8 +35,13 @@ case class AgentsIterator() extends Iterator[Int] {
   */
 case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int] = (Map.empty[Id, Int], Map.empty[Int, Id])) {
 
-  def registerAgent(id: Id): EigenTrustAgents =
-    this.copy(update(id, EigenTrustAgents.iterator.next()))
+  def registerAgent(id: Id): EigenTrustAgents = {
+    if (contains(id)) {
+      this.copy(agentMappings)
+    } else {
+      this.copy(update(id, EigenTrustAgents.iterator.next()))
+    }
+  }
 
   def unregisterAgent(agent: Int): EigenTrustAgents = this.copy(remove(agent))
   def unregisterAgent(agent: Id): EigenTrustAgents = this.copy(remove(agent))
