@@ -1,10 +1,9 @@
-package org.constellation.domain.snapshot
+package org.constellation.infrastructure.snapshot
 
 import better.files._
 import cats.effect.IO
 import cats.implicits._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
-import org.constellation.infrastructure.snapshot.SnapshotFileStorage
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.{FreeSpec, Matchers}
