@@ -25,7 +25,7 @@ class RollbackServiceTest
   var snapshotService: SnapshotService[IO] = _
   var dao: DAO = _
 
-  val existingFolder = "src/test/resources/rollback_data/"
+  val existingFolder = getClass.getResource("/rollback_data/").getPath
 
   before {
     dao = mockDAO

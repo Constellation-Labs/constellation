@@ -33,8 +33,8 @@ class RollbackLoader(
     val snapInfoSerParts = File(snapshotInfoDir)
       .glob("**")
       .map { file =>
-        val Array(dataType, partId) = file.pathAsString.split("-")
-        val loadedPartFile = File(file.pathAsString).byteArray
+        val Array(dataType, partId) = file.name.split('-')
+        val loadedPartFile = file.byteArray
         (dataType.split("/").last, (partId, loadedPartFile))
       }
       .toSeq
