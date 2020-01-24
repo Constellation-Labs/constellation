@@ -53,7 +53,9 @@ resource "google_compute_instance" "default" {
   }
 
   metadata_startup_script = <<SCRIPT
+    sleep 120
     sudo apt update
+    sleep 120
     sudo apt -yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confnew install filebeat
   SCRIPT
 
@@ -81,7 +83,7 @@ resource "google_compute_instance" "default" {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
       user = var.ssh_user
-      timeout = "90s"
+      timeout = "240s"
     }
   }
 
@@ -93,7 +95,7 @@ resource "google_compute_instance" "default" {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
       user = var.ssh_user
-      timeout = "90s"
+      timeout = "240s"
     }
   }
 
@@ -105,7 +107,7 @@ resource "google_compute_instance" "default" {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
       user = var.ssh_user
-      timeout = "90s"
+      timeout = "240s"
     }
   }
 
@@ -117,7 +119,7 @@ resource "google_compute_instance" "default" {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
       user = var.ssh_user
-      timeout = "90s"
+      timeout = "240s"
     }
   }
 
