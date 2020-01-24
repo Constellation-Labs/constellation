@@ -94,7 +94,7 @@ case class ProcessingConfig(
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
-  recentSnapshotNumber: Int = 30,
+  recentSnapshotNumber: Int = 80,
   maxInvalidSnapshotRate: Int = 51,
   txGossipingFanout: Int = 2,
   leavingStandbyTimeout: Int = 30
@@ -150,7 +150,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val io = downloadedMajority.get
 
             APIDirective.handle(io)(complete(_))
-          }~
+          } ~
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
           } ~
