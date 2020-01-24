@@ -73,7 +73,7 @@ class SnapshotServiceTest
 
       File.usingTemporaryDirectory() { dir =>
         File.usingTemporaryFile("", "", Some(dir)) { _ =>
-          snapshotStorage.getSnapshotHashes shouldReturnF Iterator("")
+          snapshotStorage.getSnapshotHashes shouldReturnF List.empty
 
           snapshotService.exists(lastSnapshot.hash).unsafeRunSync shouldBe true
         }
@@ -84,7 +84,7 @@ class SnapshotServiceTest
   "should return true if snapshot hash exists" in {
     File.usingTemporaryDirectory() { dir =>
       File.usingTemporaryFile("", "", Some(dir)) { file =>
-        snapshotStorage.getSnapshotHashes shouldReturnF Iterator(file.name)
+        snapshotStorage.getSnapshotHashes shouldReturnF List(file.name)
 
         snapshotService.exists(file.name).unsafeRunSync shouldBe true
       }
@@ -94,7 +94,7 @@ class SnapshotServiceTest
   "should return false if snapshot hash does not exist" in {
     File.usingTemporaryDirectory() { dir =>
       File.usingTemporaryFile("", "", Some(dir)) { _ =>
-        snapshotStorage.getSnapshotHashes shouldReturnF Iterator("unknown")
+        snapshotStorage.getSnapshotHashes shouldReturnF List("unknown")
 
         snapshotService.exists("dontexist").unsafeRunSync shouldBe false
       }
