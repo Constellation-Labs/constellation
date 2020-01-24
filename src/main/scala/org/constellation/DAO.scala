@@ -175,7 +175,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
 
-    eigenTrust = new EigenTrust[IO](trustManager, this)
+    eigenTrust = new EigenTrust[IO](trustManager, id)
     rewardsManager = new RewardsManager[IO](
       eigenTrust = eigenTrust,
       checkpointService = checkpointService,

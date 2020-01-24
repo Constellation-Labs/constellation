@@ -36,7 +36,7 @@ class EigenTrustTest
     trustManager = mockTrustManager
     trustManager.observationScoring(*) shouldReturn -0.1
 
-    eigenTrust = new EigenTrust[IO](trustManager, dao)
+    eigenTrust = new EigenTrust[IO](trustManager, Id("self"))
   }
 
   "Normalization from t∈⟨-1;1⟩ to t∈⟨0;1⟩" - {

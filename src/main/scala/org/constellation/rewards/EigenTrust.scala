@@ -71,7 +71,7 @@ object EigenTrust {
 
 class EigenTrust[F[_]: Concurrent](
   trustManager: TrustManager[F],
-  dao: DAO
+  selfId: Id
 ) {
   private final val secureRandom = SecureRandom.getInstanceStrong
   private final val agents: Ref[F, EigenTrustAgents] = Ref.unsafe(EigenTrustAgents.empty())
@@ -88,7 +88,7 @@ class EigenTrust[F[_]: Concurrent](
   eigenTrust.processExperiences(List().asJava)
   eigenTrust.calculateTrust()
 
-  def registerSelf(): F[Unit] = registerAgent(dao.id)
+  def registerSelf(): F[Unit] = registerAgent(selfId)
 
   def getAgents(): F[EigenTrustAgents] = agents.modify(a => (a, a))
 
