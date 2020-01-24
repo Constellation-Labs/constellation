@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.snapshot
 
-import java.nio.file.Paths
+import java.nio.file.{DirectoryStream, Files, Path, Paths}
 
 import cats.data.EitherT
 import cats.implicits._
@@ -14,18 +14,19 @@ import org.constellation.serializer.KryoSerializer
 
 class SnapshotFileStorage[F[_]](dirPath: String)(implicit F: Sync[F]) extends SnapshotStorage[F] {
 
-  private lazy val dir: F[File] = F.pure(File(dirPath))
+  private lazy val dir: F[File] = F.delay { File(dirPath) }
 
-  private lazy val jDir: F[JFile] = dir.map(_.toJava)
+  private lazy val jDir: F[JFile] = dir.flatMap(a => F.delay { a.toJava })
 
   def createDirectoryIfNotExists(): EitherT[F, Throwable, Unit] =
     dir.flatMap { a =>
       F.delay { a.createDirectoryIfNotExists() }
     }.void.attemptT
 
-  def exists(hash: String): F[Boolean] = dir.map(_ / hash).flatMap { a =>
-    F.delay { a.exists }
-  }
+  def exists(hash: String): F[Boolean] =
+    dir.flatMap(a => {
+      F.delay { (a / hash).exists }
+    })
 
   def readSnapshot(hash: String): EitherT[F, Throwable, StoredSnapshot] =
     dir
@@ -68,15 +69,15 @@ class SnapshotFileStorage[F[_]](dirPath: String)(implicit F: Sync[F]) extends Sn
     F.delay { a.size }
   }
 
-  def getSnapshotHashes: F[Iterator[String]] = dir.flatMap { a =>
-    F.delay { a.children.map(_.name) }
+  def getSnapshotHashes: F[List[String]] = getSnapshotFiles.map(_.map(_.name))
+
+  def getSnapshotFiles: F[List[File]] = dir.flatMap { a =>
+    F.delay {
+      a.children.toList
+    }
   }
 
-  def getSnapshotFiles: F[Iterator[File]] = dir.flatMap { a =>
-    F.delay { a.children }
-  }
-
-  def getSnapshotFiles(hashes: List[String]): F[Iterator[File]] = getSnapshotFiles.map {
+  def getSnapshotFiles(hashes: List[String]): F[List[File]] = getSnapshotFiles.map {
     _.filter { file =>
       hashes.contains(file.name)
     }

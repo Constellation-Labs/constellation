@@ -20,11 +20,11 @@ trait SnapshotStorage[F[_]] {
 
   def getOccupiedSpace: F[Long]
 
-  def getSnapshotHashes: F[Iterator[String]]
+  def getSnapshotHashes: F[List[String]]
 
-  def getSnapshotFiles: F[Iterator[File]]
+  def getSnapshotFiles: F[List[File]]
 
-  def getSnapshotFiles(hashes: List[String]): F[Iterator[File]]
+  def getSnapshotFiles(hashes: List[String]): F[List[File]]
 
   def getSnapshotBytes(hash: String): EitherT[F, Throwable, Array[Byte]]
 }
