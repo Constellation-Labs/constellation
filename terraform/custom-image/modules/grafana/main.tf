@@ -36,7 +36,9 @@ resource "google_compute_instance" "grafana" {
   }
 
   metadata_startup_script = <<SCRIPT
+    sleep 120
     sudo apt update
+    sleep 120
     sudo sysctl -w vm.max_map_count=262144
   SCRIPT
 
@@ -64,7 +66,7 @@ resource "google_compute_instance" "grafana" {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
       user = var.ssh_user
-      timeout = "90s"
+      timeout = "240s"
     }
   }
 
@@ -76,7 +78,7 @@ resource "google_compute_instance" "grafana" {
       host = self.network_interface.0.access_config.0.nat_ip
       type = "ssh"
       user = var.ssh_user
-      timeout = "90s"
+      timeout = "240s"
     }
   }
 
