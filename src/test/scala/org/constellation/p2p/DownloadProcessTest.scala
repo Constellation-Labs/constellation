@@ -21,7 +21,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   dao.id shouldReturn Fixtures.id
 
-  val snapInfo: SnapshotInfo = SnapshotInfo(new Snapshot("abc", Seq.empty[String]))
+  val snapInfo: SnapshotInfo = SnapshotInfo(new Snapshot("abc", Seq.empty[String], Map.empty))
 
   val peers: Map[Id, PeerData] = TestHelpers.prepareFacilitators(3)
 

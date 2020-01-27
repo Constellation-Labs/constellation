@@ -107,7 +107,7 @@ class SnapshotBroadcastServiceTest
     "should return only recent snapshots in reversed order" in {
 
       (1 to 4).toList
-        .traverse(i => snapshotBroadcastService.updateRecentSnapshots(i.toString, 0, Map.empty))
+        .traverse(i => snapshotBroadcastService.updateRecentSnapshots(i.toString, i, Map.empty))
         .unsafeRunSync()
 
       snapshotBroadcastService.getRecentSnapshots
