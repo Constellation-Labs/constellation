@@ -11,7 +11,7 @@ object EigenTrustAgents {
 
   val iterator: AgentsIterator = AgentsIterator()
 
-  def empty(): EigenTrustAgents = EigenTrustAgents((Map.empty[Id, Int], Map.empty[Int, Id]))
+  def empty(): EigenTrustAgents = EigenTrustAgents((Map.empty[String, Int], Map.empty[Int, String]))
 }
 
 case class AgentsIterator() extends Iterator[Int] {
@@ -24,7 +24,7 @@ case class AgentsIterator() extends Iterator[Int] {
       current = current + 1
       current
     } else
-    -1
+      -1
   }
 }
 
@@ -33,57 +33,57 @@ case class AgentsIterator() extends Iterator[Int] {
   * to fit Int's size. Therefore we store the mappings between Id and random Int to make a bridge between
   * the https://github.com/djelenc/alpha-testbed EigenTrust and our app
   */
-case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[Id, Int] = (Map.empty[Id, Int], Map.empty[Int, Id])) {
+case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[String, Int] = (Map.empty[String, Int], Map.empty[Int, String])) {
 
-  def registerAgent(id: Id): EigenTrustAgents = {
-    if (contains(id)) {
+  def registerAgent(address: String): EigenTrustAgents = {
+    if (contains(address)) {
       this.copy(agentMappings)
     } else {
-      this.copy(update(id, EigenTrustAgents.iterator.next()))
+      this.copy(update(address, EigenTrustAgents.iterator.next()))
     }
   }
 
   def unregisterAgent(agent: Int): EigenTrustAgents = this.copy(remove(agent))
-  def unregisterAgent(agent: Id): EigenTrustAgents = this.copy(remove(agent))
+  def unregisterAgent(agent: String): EigenTrustAgents = this.copy(remove(agent))
 
-  def get(agent: Int): Option[Id] =
+  def get(agent: Int): Option[String] =
     agentMappings match {
-      case (_, intToId: Map[Int, Id]) => intToId.get(agent)
+      case (_, intToAddress: Map[Int, String]) => intToAddress.get(agent)
     }
-  def get(id: Id): Option[Int] =
+  def get(address: String): Option[Int] =
     agentMappings match  {
-      case (idToInd: Map[Id, Int], _) => idToInd.get(id)
+      case (addressToInt: Map[String, Int], _) => addressToInt.get(address)
     }
 
-  def getUnsafe(id: Id): Int = get(id).get
-  def getUnsafe(agent: Int): Id = get(agent).get
+  def getUnsafe(address: String): Int = get(address).get
+  def getUnsafe(agent: Int): String = get(agent).get
 
-  def getAllAsIds(): Map[Id, Int] = agentMappings._1
-  def getAllAsInts(): Map[Int, Id] = agentMappings._2
+  def getAllAsAddresses(): Map[String, Int] = agentMappings._1
+  def getAllAsInts(): Map[Int, String] = agentMappings._2
 
   def contains(agent: Int): Boolean = get(agent).isDefined
-  def contains(id: Id): Boolean = get(id).isDefined
+  def contains(address: String): Boolean = get(address).isDefined
 
   def clear(): EigenTrustAgents = EigenTrustAgents.empty
 
-  private def update(key: Id, value: Int): BiDirectionalMap[Id, Int] = {
+  private def update(key: String, value: Int): BiDirectionalMap[String, Int] = {
     agentMappings match {
-      case (idToInt: Map[Id, Int], intToId: Map[Int, Id]) if !contains(key) && !contains(value) =>
-        (idToInt + (key -> value), intToId + (value -> key))
+      case (addressToInt: Map[String, Int], intToAddress: Map[Int, String]) if !contains(key) && !contains(value) =>
+        (addressToInt + (key -> value), intToAddress + (value -> key))
       case _ => agentMappings
     }
   }
 
-  private def remove(agent: Int): BiDirectionalMap[Id, Int] = {
+  private def remove(agent: Int): BiDirectionalMap[String, Int] = {
     agentMappings match {
-      case (idToInt: Map[Id, Int], intToId: Map[Int, Id]) =>
-        (idToInt - intToId(agent), intToId - agent)
+      case (addressToInt: Map[String, Int], intToAddress: Map[Int, String]) =>
+        (addressToInt - intToAddress(agent), intToAddress - agent)
     }
   }
 
-  private def remove(id: Id): BiDirectionalMap[Id, Int] = {
+  private def remove(id: String): BiDirectionalMap[String, Int] = {
     agentMappings match {
-      case (idToInt: Map[Id, Int], intToId: Map[Int, Id]) =>
+      case (idToInt: Map[String, Int], intToId: Map[Int, String]) =>
         (idToInt - id, intToId - idToInt(id))
     }
   }

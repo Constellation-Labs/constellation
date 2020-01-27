@@ -4,6 +4,7 @@ import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData, SnapshotMisalignment}
+import org.constellation.keytool.KeyUtils
 import org.constellation.schema.Id
 import org.constellation.trust.{TrustEdge, TrustManager}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -21,12 +22,15 @@ class EigenTrustTest
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
 
-  val agent1 = Id("foo")
-  val agent2 = Id("bar")
+  val kp1 = KeyUtils.makeKeyPair()
+  val kp2 = KeyUtils.makeKeyPair()
+
+  val agent1 = Id(KeyUtils.publicKeyToHex(kp1.getPublic))
+  val agent2 = Id(KeyUtils.publicKeyToHex(kp2.getPublic))
 
   val agents = EigenTrustAgents.empty
-    .registerAgent(agent1)
-    .registerAgent(agent2)
+    .registerAgent(agent1.address)
+    .registerAgent(agent2.address)
 
   var trustManager: TrustManager[IO] = _
   var eigenTrust: EigenTrust[IO] = _
@@ -60,10 +64,10 @@ class EigenTrustTest
     "should convert ObservationEvent to Experience" in {
       val observations: List[ObservationData] = List(
         ObservationData(agent1, SnapshotMisalignment(), 321),
-        ObservationData(agent1, CheckpointBlockWithMissingSoe("foo"), 123),
-        ObservationData(agent2, CheckpointBlockWithMissingSoe("bar"), 123),
-        ObservationData(agent2, CheckpointBlockWithMissingSoe("bar"), 123),
-        ObservationData(agent2, CheckpointBlockWithMissingSoe("bar"), 123),
+        ObservationData(agent1, CheckpointBlockWithMissingSoe(agent1.address), 123),
+        ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
+        ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
+        ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
       )
 
       val experiences = eigenTrust.convertToExperiences(observations, agents)

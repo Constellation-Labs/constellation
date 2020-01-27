@@ -15,28 +15,28 @@ class EigenTrustAgentsTest
 
   "should register agent" in {
     val agents = EigenTrustAgents.empty()
-    val id = Id("foo")
-    val updated = agents.registerAgent(id)
-    updated.contains(id) shouldBe true
+    val addr = "DAGfoo"
+    val updated = agents.registerAgent(addr)
+    updated.contains(addr) shouldBe true
   }
 
   "should unregister agent" in {
     val agents = EigenTrustAgents.empty()
-    val id = Id("foo")
-    val updated = agents.registerAgent(id)
-    updated.contains(id) shouldBe true
-    val cleared = updated.unregisterAgent(id)
-    cleared.contains(id) shouldBe false
+    val addr = "DAGfoo"
+    val updated = agents.registerAgent(addr)
+    updated.contains(addr) shouldBe true
+    val cleared = updated.unregisterAgent(addr)
+    cleared.contains(addr) shouldBe false
   }
 
-  "Int to Id should be synchronized with Id to Int" in {
+  "Int to address should be synchronized with address to Int" in {
     val agents = EigenTrustAgents.empty()
-    val id = Id("foo")
-    val updated = agents.registerAgent(id)
-    val int = updated.get(id).get
+    val addr = "DAGfoo"
+    val updated = agents.registerAgent(addr)
+    val int = updated.get(addr).get
 
-    updated.get(id).get shouldBe int
-    updated.get(int).get shouldBe id
+    updated.get(addr).get shouldBe int
+    updated.get(int).get shouldBe addr
   }
 
   "AgentsIterator" - {
