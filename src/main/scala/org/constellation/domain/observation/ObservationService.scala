@@ -21,4 +21,10 @@ class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: D
       .accept(o)
       .flatTap(_ => trustManager.updateStoredReputation(o))
       .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAccepted"))
+
+  def applyAfterRedownload(o: Observation, cpc: Option[CheckpointCache]): F[Unit] =
+    super
+      .accept(o)
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAccepted"))
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAcceptedFromRedownload"))
 }

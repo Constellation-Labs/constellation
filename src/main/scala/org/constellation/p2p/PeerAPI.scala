@@ -442,6 +442,16 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             APIDirective.handle(snapshotHash)(complete(_))
           }
         } ~
+        path("snapshot" / "obj" / "snapshotPublicReputation") {
+          APIDirective.extractIP(socketAddress) { _ =>
+            val snapshotPublicReputation = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
+              val res = sni.get.snapshotPublicReputation
+              logger.debug(s"snapshot/obj/snapshotPublicReputation ${res.length}")
+              res
+            }
+            APIDirective.handle(snapshotPublicReputation)(complete(_))
+          }
+        } ~
         path("snapshot" / "obj" / "addressCacheData") {
           APIDirective.extractIP(socketAddress) { _ =>
             val addressCacheData = dao.snapshotService.recentSnapshotInfo.get.map { sni =>
