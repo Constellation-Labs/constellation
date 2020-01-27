@@ -189,6 +189,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       .toSet
     val localCps =
       localSnapshotCacheData.filter(cpc => majoritySnapCpHashesToGet.contains(cpc.checkpointBlock.baseHash)).distinct
+    val localCpHashes = localCps.map(_.checkpointBlock.baseHash)
     val acceptedCBSinceSnapshotCacheInfo = majoritySnapshot.acceptedCBSinceSnapshotCache
     //    val updatedMajority = for {
     //      localSnapshotCacheData <- LiftIO[F].liftIO(dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(majoritySnapshot.acceptedCBSinceSnapshot.filter(localCps.contains).toArray))
@@ -204,9 +205,13 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     logger.debug(
       s"updateSnapInfo hashes == ? ${res.acceptedCBSinceSnapshot.toSet == res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash).toSet}"
     )
+    val updateSnapInfoDiff = res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))
     //    println(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache}")
     logger.debug(
-      s"updateSnapInfo diff: ${res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))}"
+      s"updateSnapInfo diff: ${updateSnapInfoDiff}"
+    )
+    logger.debug(
+      s"updateSnapInfo diff local: ${updateSnapInfoDiff.filter(localCpHashes.contains)}"
     )
 
     res
