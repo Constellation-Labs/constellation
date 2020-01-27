@@ -38,6 +38,13 @@ class TransactionService[F[_]: Concurrent](
       if (txs.isEmpty) createDummyTransactions(1) else txs.pure[F]
     }
 
+  def applyAfterRedownload(tx: TransactionCacheData, cpc: Option[CheckpointCache]): F[Unit] =
+    super
+      .accept(tx, cpc)
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
+      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAcceptedFromRedownload"))
+      .flatTap(_ => logger.debug(s"Accepting transaction after redownload with hash=${tx.hash}"))
+
   def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
     List
       .fill(count) {

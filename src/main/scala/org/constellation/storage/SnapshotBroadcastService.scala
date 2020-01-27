@@ -7,6 +7,7 @@ import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.DAO
+import org.constellation.consensus.SnapshotInfo
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{NodeState, NodeType}
@@ -25,9 +26,12 @@ class SnapshotBroadcastService[F[_]: Concurrent](
   dao: DAO
 ) extends StrictLogging {
 
-  private val recentSnapshots: Ref[F, List[RecentSnapshot]] = Ref.unsafe(List.empty[RecentSnapshot])
+  private val recentSnapshots: Ref[F, Map[Long, RecentSnapshot]] = Ref.unsafe(Map.empty)
 
   val clusterCheckPending = new AtomicBoolean(false)
+
+  def applyAfterRedownload(snapshotInfo: SnapshotInfo): F[Unit] =
+    Sync[F].unit
 
   def broadcastSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double]): F[Unit] =
     for {
@@ -51,31 +55,21 @@ class SnapshotBroadcastService[F[_]: Concurrent](
                   .flatMap(_ => Sync[F].pure[Option[SnapshotVerification]](None))
             )
         )
-      maybeDownload = snapshotSelector.selectSnapshotFromBroadcastResponses(responses, ownRecent)
-      _ <- maybeDownload.fold(Sync[F].unit)(
-        d =>
-          healthChecker
-            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
-            .flatMap(
-              _ => recentSnapshots.modify(_ => (d._2, ()))
-            )
-      )
+      maybeDownload = snapshotSelector.selectSnapshotFromBroadcastResponses(responses, ownRecent.values.toList)
+      _ <- maybeDownload.fold(Sync[F].unit) {
+        case (diff, _) => healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
+      }
     } yield ()
 
   def verifyRecentSnapshots(): F[Unit] = {
     val verify = for {
-      ownRecent <- getRecentSnapshots
+      ownRecent <- recentSnapshots.get
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
-      maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent)
-      _ <- maybeDownload.fold(Sync[F].unit)(
-        d =>
-          healthChecker
-            .startReDownload(d._1, peers.filter(p => d._1.peers.contains(p._1)))
-            .flatMap(
-              _ => recentSnapshots.modify(_ => (d._2, ()))
-            )
-      )
+      maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent.values.toList)
+      _ <- maybeDownload.fold(Sync[F].unit) {
+        case (diff, _) => healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
+      }
     } yield ()
 
     if (clusterCheckPending.compareAndSet(false, true)) {
@@ -91,7 +85,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     }
   }
 
-  def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.get
+  def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.get.map(_.values.toSeq.sortBy(-_.height).toList)
 
   def runClusterCheck: F[Unit] =
     cluster.getNodeState
@@ -99,16 +93,23 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       .ifM(
         getRecentSnapshots
           .flatMap(healthChecker.checkClusterConsistency)
-          .flatMap(
-            maybeUpdate => maybeUpdate.fold(Sync[F].unit)(a => recentSnapshots.modify(_ => (a, ())))
-          ),
+          .void, // Assumes that checkClusterConsistency returns None
         Sync[F].unit
       )
 
-  def updateRecentSnapshots(hash: String, height: Long, publicReputation: Map[Id, Double]): F[List[RecentSnapshot]] =
+  def updateRecentSnapshots(
+    hash: String,
+    height: Long,
+    publicReputation: Map[Id, Double]
+  ): F[Map[Long, RecentSnapshot]] =
     recentSnapshots.modify { snaps =>
-      val updated =
-        (RecentSnapshot(hash, height, publicReputation) :: snaps).slice(0, dao.processingConfig.recentSnapshotNumber)
+      val snap = (height -> RecentSnapshot(
+        hash,
+        height,
+        publicReputation
+      ))
+
+      val updated = (snaps + snap).toList.sortBy(-_._2.height).slice(0, dao.processingConfig.recentSnapshotNumber).toMap
       (updated, updated)
     }
 

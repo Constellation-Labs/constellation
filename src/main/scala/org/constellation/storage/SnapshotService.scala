@@ -58,7 +58,6 @@ class SnapshotService[F[_]: Concurrent](
 
   val recentSnapshotInfo: Ref[F, Option[SnapshotInfoSer]] = Ref.unsafe(None)
 
-
   def exists(hash: String): F[Boolean] =
     for {
       last <- snapshot.get
@@ -86,7 +85,8 @@ class SnapshotService[F[_]: Concurrent](
       allBlocks = blocksWithinHeightInterval.map(_.get)
 
       hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash).sorted
-      nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot))
+      publicReputation <- EitherT.liftF(trustManager.getPredictedReputation)
+      nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot, publicReputation))
 
       _ <- EitherT.liftF(
         logger.debug(
@@ -105,15 +105,10 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
 
-      created <- EitherT.liftF(
-        trustManager.getPredictedReputation.map(
-          predictedReputation =>
-            SnapshotCreated(
-              nextSnapshot.lastSnapshot,
-              nextHeightInterval - snapshotHeightInterval,
-              predictedReputation
-            )
-        )
+      created = SnapshotCreated(
+        nextSnapshot.lastSnapshot,
+        nextHeightInterval - snapshotHeightInterval,
+        publicReputation
       )
     } yield created
 
@@ -211,16 +206,12 @@ class SnapshotService[F[_]: Concurrent](
         soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
           dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
-          h.checkpointBlock.transactions.toList
-            .traverse(
-              tx =>
-                transactionService
-                  .accept(TransactionCacheData(tx), Some(h))
-                  .flatTap(_ => dao.metrics.incrementMetricAsync("transactionAccepted"))
-            ) >>
-          h.checkpointBlock.observations.toList
-            .traverse(obs => observationService.accept(obs, Some(h)))
-            .flatTap(_ => dao.metrics.incrementMetricAsync("observationAccepted"))
+          h.checkpointBlock.transactions.toList.traverse { tx =>
+            transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
+          } >>
+          h.checkpointBlock.observations.toList.traverse { obs =>
+            observationService.applyAfterRedownload(obs, Some(h))
+          }
       }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
@@ -361,10 +352,10 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
-  private def getNextSnapshot(hashesForNextSnapshot: Seq[String]): F[Snapshot] =
+  private def getNextSnapshot(hashesForNextSnapshot: Seq[String], publicReputation: Map[Id, Double]): F[Snapshot] =
     snapshot.get
       .map(_.hash)
-      .map(hash => Snapshot(hash, hashesForNextSnapshot))
+      .map(hash => Snapshot(hash, hashesForNextSnapshot, publicReputation))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>

@@ -251,6 +251,10 @@ case class SnapshotInfo(
         .grouped(chunkSize)
         .map(t => chunkSerialize(t, SnapshotInfoChunk.CHECKPOINT_BLOCKS.name))
         .toArray,
+      info.snapshot.publicReputation
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.PUBLIC_REPUTATION.name))
+        .toArray,
       info.acceptedCBSinceSnapshot
         .grouped(chunkSize)
         .map(t => chunkSerialize(t, SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT.name))
@@ -287,6 +291,7 @@ case class SnapshotInfo(
 case class SnapshotInfoSer(
   snapshot: Array[Array[Byte]],
   snapshotCheckpointBlocks: Array[Array[Byte]],
+  snapshotPublicReputation: Array[Array[Byte]],
   acceptedCBSinceSnapshot: Array[Array[Byte]],
   acceptedCBSinceSnapshotCache: Array[Array[Byte]],
   awaitingCbs: Array[Array[Byte]],
@@ -304,8 +309,12 @@ case class SnapshotInfoSer(
     val snapshotCheckpointBlocks =
       info.snapshotCheckpointBlocks.toSeq
         .flatMap(chunkDeSerialize[Seq[String]](_, SnapshotInfoChunk.CHECKPOINT_BLOCKS.name))
+    val snapshotPublicReputation =
+      info.snapshotPublicReputation.toSeq
+        .flatMap(chunkDeSerialize[Seq[(Id, Double)]](_, SnapshotInfoChunk.PUBLIC_REPUTATION.name))
+        .toMap
     SnapshotInfo(
-      Snapshot(lastSnapshot, snapshotCheckpointBlocks),
+      Snapshot(lastSnapshot, snapshotCheckpointBlocks, snapshotPublicReputation),
       info.acceptedCBSinceSnapshot.toSeq
         .flatMap(chunkDeSerialize[Seq[String]](_, SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT.name)),
       info.acceptedCBSinceSnapshotCache.toSeq
@@ -352,9 +361,18 @@ case class SnapshotInfoSer(
 
 case object GetMemPool
 
-case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String]) extends Signable
+case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: Map[Id, Double])
+    extends Signable
 
-case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache])
+case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache]) {
+
+  def height: Long =
+    checkpointCache.toList
+      .maxBy(_.height.map(_.min).getOrElse(0L))
+      .height
+      .map(_.min)
+      .getOrElse(0L)
+}
 
 case class DownloadComplete(latestSnapshot: Snapshot)
 
@@ -436,9 +454,6 @@ object Snapshot extends StrictLogging {
       _ <- Sync[F].delay(logger.debug(s"Snapshots send to cloud amount : ${blobsNames.size}"))
     } yield ()
 
-  private def getFiles[F[_]: Concurrent](snapshotsHash: List[String], snapshotPath: String): F[List[File]] =
-    snapshotsHash.traverse(hash => Sync[F].delay(File(snapshotPath, hash)))
-
   private def shouldSendSnapshotsToCloud: Boolean =
     ConfigUtil.isEnabledCloudStorage
 
@@ -505,7 +520,7 @@ object Snapshot extends StrictLogging {
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
 
-  val snapshotZero = Snapshot("", Seq())
-  val snapshotZeroHash: String = Snapshot("", Seq()).hash
+  val snapshotZero = Snapshot("", Seq(), Map.empty)
+  val snapshotZeroHash: String = Snapshot("", Seq(), Map.empty).hash
 
 }
