@@ -11,9 +11,12 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema.{CheckpointCache, GenesisObservation}
 import org.constellation.util.Metrics
+import org.mockito.IdiomaticMockito
+import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}
 
-class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers {
+class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with IdiomaticMockito
+  with IdiomaticMockitoCats {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit var dao: DAO = _

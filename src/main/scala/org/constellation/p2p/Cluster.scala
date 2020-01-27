@@ -106,6 +106,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         ip = peerData.client.hostName
         _ <- ipManager.addKnownIP(ip)
         _ <- logger.debug(s"Added $ip to known peers.")
+        _ <- LiftIO[F].liftIO(dao.registerAgent(peerData.peerMetadata.id))
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),
@@ -307,6 +308,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
     )
 
   // mwadon: Is it correct implementation?
+  // TODO: Unused method?
   def forgetPeer(pd: PeerData): F[Unit] =
     logThread(
       for {
@@ -349,7 +351,8 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
         _ <- ipManager.removeKnownIP(pm.host)
         _ <- peers.modify(a => (a - pm.id, a - pm.id))
-
+        // Technically we shouldn't remove it from eigenTrust if we want to keep the trained model for that node
+//        _ <- LiftIO[F].liftIO(dao.eigenTrust.unregisterAgent(pm.id))
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),
@@ -559,6 +562,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         ips <- ipManager.listKnownIPs
         _ <- ips.toList.traverse(ipManager.removeKnownIP)
         _ <- peers.modify(_ => (Map.empty, Map.empty))
+        _ <- LiftIO[F].liftIO(dao.eigenTrust.clearAgents())
         _ <- updateMetrics()
         _ <- updatePersistentStore()
 

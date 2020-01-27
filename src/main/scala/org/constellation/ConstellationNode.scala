@@ -156,6 +156,8 @@ class ConstellationNode(
 
   MDC.put("node_id", dao.id.short)
 
+  dao.eigenTrust.registerSelf().unsafeRunSync()
+
   logger.info(
     s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"
   )

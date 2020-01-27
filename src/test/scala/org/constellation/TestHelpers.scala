@@ -30,7 +30,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
   def prepareRealDao(
     facilitators: Map[Id, PeerData] = prepareFacilitators(1),
-    nodeConfig: NodeConfig = NodeConfig()
+    nodeConfig: NodeConfig = NodeConfig(),
   ): DAO = {
     val dao: DAO = new DAO {
       override def readyPeers: IO[
@@ -40,6 +40,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
       override def peerInfo: IO[
         Map[Id, PeerData]
       ] = IO.pure(facilitators)
+
+      override def registerAgent(id: Id): IO[Unit] = IO.unit
     }
 
     dao.nodeConfig = nodeConfig

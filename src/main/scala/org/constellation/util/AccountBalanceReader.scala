@@ -1,5 +1,7 @@
 package org.constellation.util
 
+import org.constellation.primitives.Schema
+
 import scala.io.Source
 
 trait AccountBalanceReader {
@@ -15,7 +17,8 @@ class AccountBalanceCSVReader(val filePath: String) extends AccountBalanceReader
     val values = for {
       line <- source.getLines().filter(_.nonEmpty).toVector
       values = line.split(",").map(_.trim)
-    } yield AccountBalance(values(0), values(1).toLong)
+      // Data needs to be provided in non-normalized manner
+    } yield AccountBalance(values(0), (values(1).toDouble * Schema.NormalizationFactor).toLong)
 
     source.close()
     values

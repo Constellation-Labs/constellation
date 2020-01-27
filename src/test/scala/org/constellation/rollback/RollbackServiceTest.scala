@@ -3,6 +3,7 @@ package org.constellation.rollback
 import cats.effect.{ContextShift, IO}
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.rewards.RewardsManager
 import org.constellation.storage.SnapshotService
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -23,6 +24,7 @@ class RollbackServiceTest
   var rollbackAccountBalances: RollbackAccountBalances = _
   var rollbackService: RollbackService[IO] = _
   var snapshotService: SnapshotService[IO] = _
+  var rewardsManager: RewardsManager[IO] = _
   var dao: DAO = _
 
   val existingFolder = getClass.getResource("/rollback_data/").getPath
@@ -38,7 +40,8 @@ class RollbackServiceTest
         existingFolder + "snapshots",
         existingFolder + "snapshot_info",
         existingFolder + "rollback_genesis"
-      )
+      ),
+      rewardsManager,
     )
   }
 
@@ -47,6 +50,7 @@ class RollbackServiceTest
       .validate()
       .value
       .unsafeRunSync()
+
     result.isRight shouldBe true
   }
 

@@ -12,6 +12,7 @@ import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
@@ -48,6 +49,7 @@ class SnapshotServiceTest
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
     val soeService = mock[SOEService[IO]]
+    val rewardsManager = mock[RewardsManager[IO]]
     snapshotStorage = mock[SnapshotStorage[IO]]
 
     snapshotService = new SnapshotService[IO](
@@ -62,6 +64,7 @@ class SnapshotServiceTest
       consensusManager,
       trustManager,
       soeService,
+      rewardsManager,
       snapshotStorage,
       dao
     )
@@ -100,7 +103,7 @@ class SnapshotServiceTest
       }
     }
   }
-
+  
   "set snapshot state" - {
     "should set necessary data to perform apply function and store data" in {
       val dao = TestHelpers.prepareRealDao()

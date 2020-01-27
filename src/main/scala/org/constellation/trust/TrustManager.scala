@@ -4,11 +4,12 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.{Observation, ObservationEvent}
+import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationEvent, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
+
 
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 
@@ -54,7 +55,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
   }
 
   def updateStoredReputation(o: Observation): F[Unit] = {
-    val score = observationScoring(o.signedObservationData.data.event)
+    val score = TrustManager.observationScoring(o.signedObservationData.data.event)
     val id = o.signedObservationData.data.id
 
     storedReputation.modify { reputation =>
@@ -68,10 +69,10 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 //      .flatMap(_.checkpointCache.flatMap(_.checkpointBlock.flatMap(_.observations.toList)))
 //      .groupBy(_.signedObservationData.data.id)
 //      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
+}
 
+object TrustManager {
   def observationScoring(event: ObservationEvent): Double = {
-    import org.constellation.domain.observation._
-
     event match {
       case _: CheckpointBlockWithMissingParents => -0.1
       case _: CheckpointBlockWithMissingSoe     => -0.1
@@ -82,9 +83,6 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
       case _                                    => 0d
     }
   }
-}
-
-object TrustManager {
 
   def calculateScoringMap(scores: List[Id]): Map[Id, Int] =
     scores.sortBy { _.hex }.zipWithIndex.toMap

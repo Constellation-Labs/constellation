@@ -19,6 +19,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
+import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
 import org.constellation.genesis.GenesisObservationWriter
@@ -29,6 +30,7 @@ import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.snapshot.HeightIdBasedSnapshotSelector
@@ -173,6 +175,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
 
+    eigenTrust = new EigenTrust[IO](id)
+    rewardsManager = new RewardsManager[IO](
+      eigenTrust = eigenTrust,
+      checkpointService = checkpointService,
+      addressService = addressService,
+    )
+
     snapshotService = SnapshotService[IO](
       concurrentTipService,
       cloudStorage,
@@ -186,6 +195,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       trustManager,
       soeService,
       snapshotStorage,
+      rewardsManager,
       this
     )
 
@@ -282,7 +292,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         snapshotPath,
         snapshotInfoPath.pathAsString,
         genesisObservationPath.pathAsString
-      )
+      ),
+      rewardsManager,
     )
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
@@ -334,6 +345,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
   def getActiveMinHeight: IO[Option[Long]] =
     consensusManager.getActiveMinHeight // TODO: wkoszycki temporary fix to check cluster stability
+
+  // TODO: kpudlik ugly temp fix to make registerAgent mockable in real dao (as we can overwrite DAO methods only)
+  def registerAgent(id: Id): IO[Unit] =
+    eigenTrust.registerAgent(id)
 
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
     readyPeers(NodeType.Full).map(_.filter {
