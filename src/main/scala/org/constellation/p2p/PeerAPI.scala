@@ -286,6 +286,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
                   val bcs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
+                  // TODO: makeCallback returns side-effectful Future inside IO.map
                   val callback = dao.checkpointAcceptanceService.acceptWithNodeCheck(fc)(cs).map { result =>
                     replyToOpt
                       .map(URI.create)
