@@ -1,5 +1,6 @@
 package org.constellation.p2p
 
+import cats.data.EitherT
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -101,13 +102,19 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
 
   private def acceptSnapshot(hash: String, rawSnapshot: Array[Byte]): F[Unit] =
     C.evalOn(ConstellationExecutionContext.unbounded) {
-      snapshotStorage.writeSnapshot(hash, rawSnapshot).value.flatMap(Concurrent[F].fromEither)
-    }
+      (for {
+        _ <- snapshotStorage.writeSnapshot(hash, rawSnapshot)
 
-  private def deserializeStoredSnapshot(storedSnapshotArrayBytes: Array[Byte]) =
-    Try(KryoSerializer.deserializeCast[StoredSnapshot](storedSnapshotArrayBytes)).toOption match {
-      case Some(value) => value
-      case None        => throw new Exception(s"Unable to parse storedSnapshot")
+        snapshot <- snapshotStorage.readSnapshot(hash)
+
+        height = snapshot.height
+
+        _ <- EitherT.liftF[F, Throwable, Unit](
+          LiftIO[F].liftIO(
+            dao.snapshotBroadcastService.updateRecentSnapshots(hash, height, snapshot.snapshot.publicReputation).void
+          )
+        )
+      } yield ()).value.flatMap(a => Concurrent[F].fromEither(a))
     }
 }
 
@@ -303,31 +310,43 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   def chainSnapshotInfo(peer: PeerData) =
     for {
-      snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshot",
-                                                                               timeout = 45.seconds,
-                                                                               tag = "snapshot/obj/snapshot")(C)
-      snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCBs",
-                                                                              timeout = 45.seconds,
-                                                                              tag = "snapshot/obj/snapshotCBs")(C)
+      snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/snapshot",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/snapshot"
+      )(C)
+      snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/snapshotCBs",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/snapshotCBs"
+      )(C)
+      snapshotPublicReputation <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/snapshotPublicReputation",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/snapshotPublicReputation"
+      )(C)
       acceptedCBSinceSnapshot <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/acceptedCBSinceSnapshot",
         timeout = 45.seconds,
         tag = "snapshot/obj/acceptedCBSinceSnapshot"
       )(C)
-
       acceptedCBSinceSnapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/acceptedCBSinceSnapshotCache",
         timeout = 45.seconds,
         tag = "snapshot/obj/acceptedCBSinceSnapshotCache - re-download"
       )(C)
-      awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/awaiting",
-                                                                           timeout = 45.seconds,
-                                                                           tag = "snapshot/obj/awaiting")(C)
+      awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/awaiting",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/awaiting"
+      )(C)
       lastSnapshotHeight <- peer.client
         .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
-      snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotHashes",
-                                                                                 timeout = 45.seconds,
-                                                                                 tag = "snapshot/obj/snapshotHashes")(C)
+      snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/snapshotHashes",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/snapshotHashes"
+      )(C)
       addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/addressCacheData",
         timeout = 45.seconds,
@@ -335,9 +354,11 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       )(C)
       tips <- peer.client
         .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag = "tips")(C)
-      snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/snapshotCache",
-                                                                                timeout = 45.seconds,
-                                                                                tag = "snapshot/obj/snapshotCache")(C)
+      snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/snapshotCache",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/snapshotCache"
+      )(C)
       lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/lastAcceptedTransactionRef",
         timeout = 45.seconds,
@@ -349,6 +370,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       SnapshotInfoSer(
         snapshotHash,
         snapshotCBs,
+        snapshotPublicReputation,
         acceptedCBSinceSnapshot,
         acceptedCBSinceSnapshotCache,
         awaiting,
@@ -396,6 +418,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     for {
       _ <- setSnapshot(snapshot)
       _ <- acceptSnapshotCacheData(snapshot)
+      _ <- LiftIO[F].liftIO(dao.snapshotBroadcastService.applyAfterRedownload(snapshot))
       _ <- storeSnapshotInfo
       _ <- setDownloadFinishedTime()
     } yield ()
@@ -445,10 +468,13 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
                 Sync[F].pure(None)
               case unknownError =>
                 Sync[F].delay {
-                  logger.error(s"[${dao.id.short}] Failed to accept majority checkpoint block", unknownError)
+                  logger.error(
+                    s"[${dao.id.short}] Sync buffer - failed to accept majority checkpoint block from ${h.checkpointCacheData.checkpointBlock.baseHash}",
+                    unknownError
+                  )
                 } >> Sync[F].pure(None)
             }
-        }
+          }
       )
       .void
 
@@ -513,7 +539,7 @@ object Download extends StrictLogging {
                           logger.warn(
                             s"Download process error. Trying to set state back to ${oldState}. Result: ${recoverState}"
                           )
-                      )
+                        )
                     )
                 }
                 download.flatMap(
@@ -526,8 +552,8 @@ object Download extends StrictLogging {
                             logger.warn(
                               s"Download process finished. Trying to set state to ${NodeState.Ready}. Result: ${recoverState}"
                             )
-                        )
-                    )
+                          )
+                      )
                 )
               case SetStateResult(oldState, _) =>
                 IO.delay(

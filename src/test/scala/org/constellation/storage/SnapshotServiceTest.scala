@@ -116,7 +116,8 @@ class SnapshotServiceTest
 
       val snapshot = Snapshot(
         "4d28a953f3a559faf2f41e32f71a7b7108a63c09739d4f60d341d9643d135ece",
-        cbs.map(_.checkpointBlock.baseHash)
+        cbs.map(_.checkpointBlock.baseHash),
+        Map.empty
       )
       val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
       snapshotService.setSnapshot(info).unsafeRunSync()

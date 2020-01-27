@@ -76,7 +76,7 @@ class SnapshotFileStorageTest extends FreeSpec with Matchers with BeforeAndAfter
         val snapshotStorage = SnapshotFileStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        val snapshot = Snapshot("lastHash", Seq.empty[String])
+        val snapshot = Snapshot("lastHash", Seq.empty[String], Map.empty)
         val storedSnapshot = StoredSnapshot(snapshot, Seq.empty[CheckpointCache])
 
         val hash = "abc123"
