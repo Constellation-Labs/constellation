@@ -217,6 +217,8 @@ class SnapshotService[F[_]: Concurrent](
         "acceptedCBCacheMatchesAcceptedSize",
         (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
       )
+      _ <- logger.info(s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}")
+      _ <- logger.info(s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}")
       _ <- updateMetricsAfterSnapshot()
     } yield ()
 
