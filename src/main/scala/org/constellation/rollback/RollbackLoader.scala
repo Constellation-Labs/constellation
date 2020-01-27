@@ -53,7 +53,8 @@ class RollbackLoader(
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.ADDRESS_CACHE_DATA.name, Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.TIPS.name, Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.SNAPSHOT_CACHE.name, Array.empty[Array[Byte]]),
-      snapInfoSerParts.getOrElse(SnapshotInfoChunk.LAST_ACCEPTED_TX_REF.name, Array.empty[Array[Byte]])
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.LAST_ACCEPTED_TX_REF.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.PUBLIC_REPUTATION.name, Array.empty[Array[Byte]])
     )
     serSnapInfo.toSnapshotInfo()
   }

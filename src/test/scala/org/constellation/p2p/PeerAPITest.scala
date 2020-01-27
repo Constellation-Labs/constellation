@@ -275,7 +275,7 @@ class PeerAPITest
           val pd = mock[PeerData]
           pd.peerMetadata shouldReturn mock[PeerMetadata]
           pd.peerMetadata.id shouldReturn Id("foo")
-          dao.snapshotService.getSnapshotInfo shouldReturnF SnapshotInfo(Snapshot("hash", Seq.empty))
+          dao.snapshotService.getSnapshotInfo shouldReturnF SnapshotInfo(Snapshot("hash", Seq.empty, Map.empty))
           dao.observationService.put(*) shouldReturnF mock[Observation]
           val observationCapture = ArgCaptor[Observation]
           dao.cluster.getPeerData("127.0.0.1") shouldReturnF Some(pd)
