@@ -33,10 +33,7 @@ class EigenTrustTest
   var dao: DAO = _
 
   before {
-    trustManager = mockTrustManager
-    trustManager.observationScoring(*) shouldReturn -0.1
-
-    eigenTrust = new EigenTrust[IO](trustManager, Id("self"))
+    eigenTrust = new EigenTrust[IO](Id("self"))
   }
 
   "Normalization from t∈⟨-1;1⟩ to t∈⟨0;1⟩" - {
@@ -92,6 +89,4 @@ class EigenTrustTest
       }
     }
   }
-
-  private def mockTrustManager: TrustManager[IO] = mock[TrustManager[IO]]
 }

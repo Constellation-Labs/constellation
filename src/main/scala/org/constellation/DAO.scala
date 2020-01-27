@@ -175,7 +175,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
 
-    eigenTrust = new EigenTrust[IO](trustManager, id)
+    eigenTrust = new EigenTrust[IO](id)
     rewardsManager = new RewardsManager[IO](
       eigenTrust = eigenTrust,
       checkpointService = checkpointService,
@@ -345,6 +345,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
   def getActiveMinHeight: IO[Option[Long]] =
     consensusManager.getActiveMinHeight // TODO: wkoszycki temporary fix to check cluster stability
+
+  // TODO: kpudlik ugly temp fix to make registerAgent mockable in real dao (as we can overwrite DAO methods only)
+  def registerAgent(id: Id): IO[Unit] =
+    eigenTrust.registerAgent(id)
 
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
     readyPeers(NodeType.Full).map(_.filter {

@@ -69,10 +69,7 @@ object EigenTrust {
 
 }
 
-class EigenTrust[F[_]: Concurrent](
-  trustManager: TrustManager[F],
-  selfId: Id
-) {
+class EigenTrust[F[_]: Concurrent](selfId: Id) {
   private final val secureRandom = SecureRandom.getInstanceStrong
   private final val agents: Ref[F, EigenTrustAgents] = Ref.unsafe(EigenTrustAgents.empty())
   private implicit val logger = Slf4jLogger.getLogger[F]
@@ -141,7 +138,7 @@ class EigenTrust[F[_]: Concurrent](
     */
   def calculateExperienceOutcome(observationEvents: Seq[ObservationEvent]): Double = {
     val bestExperience = 1.0
-    val negativeExperiences = observationEvents.map(trustManager.observationScoring).sum
+    val negativeExperiences = observationEvents.map(TrustManager.observationScoring).sum
     val outcome = bestExperience + negativeExperiences
     if (outcome > 0) outcome else 0.0
   }

@@ -106,7 +106,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         ip = peerData.client.hostName
         _ <- ipManager.addKnownIP(ip)
         _ <- logger.debug(s"Added $ip to known peers.")
-        _ <- LiftIO[F].liftIO(dao.eigenTrust.registerAgent(peerData.peerMetadata.id))
+        _ <- LiftIO[F].liftIO(dao.registerAgent(peerData.peerMetadata.id))
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),
