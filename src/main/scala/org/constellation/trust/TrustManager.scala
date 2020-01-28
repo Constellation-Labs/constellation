@@ -21,6 +21,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
     cluster.getPeerInfo.flatMap { peers =>
+      logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
       if (peers.nonEmpty) {
         for {
           reputation <- getStoredReputation
