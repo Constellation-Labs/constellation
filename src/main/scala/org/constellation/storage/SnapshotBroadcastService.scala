@@ -57,7 +57,9 @@ class SnapshotBroadcastService[F[_]: Concurrent](
         )
       maybeDownload = snapshotSelector.selectSnapshotFromBroadcastResponses(responses, ownRecent.values.toList)
       _ <- maybeDownload.fold(Sync[F].unit) {
-        case (diff, _) => healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
+        case (diff, _) =>
+          logger.warn(s"broadcastSnapshot - start reDownloadWith: ${diff} - peers: ${peers.filter(p => diff.peers.contains(p._1))}")
+          healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
       }
     } yield ()
 
@@ -67,8 +69,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       responses <- snapshotSelector.collectSnapshot(peers)(contextShift)
       maybeDownload = snapshotSelector.selectSnapshotFromRecent(responses, ownRecent.values.toList)
+      _ <- Sync[F].delay(logger.warn(s"verifyRecentSnapshots - maybeDownload: ${maybeDownload}"))
       _ <- maybeDownload.fold(Sync[F].unit) {
-        case (diff, _) => healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
+        case (diff, _) =>
+          logger.warn(s"verifyRecentSnapshots - start reDownloadWith: ${diff} - peers: ${peers.filter(p => diff.peers.contains(p._1))}")
+          healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
       }
     } yield ()
 
