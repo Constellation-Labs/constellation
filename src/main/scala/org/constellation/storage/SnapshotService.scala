@@ -407,7 +407,11 @@ class SnapshotService[F[_]: Concurrent](
               t =>
                 dao.metrics
                   .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
-                  .map(_ => SnapshotIOError(t)),
+                  .map{
+                    _ =>
+                      logger.debug("t.getStackTrace: "+ t.getStackTrace)
+                      SnapshotIOError(t)
+                  },
               _ =>
                 logger
                   .debug(s"Snapshot written: ${currentSnapshot.hash}")
