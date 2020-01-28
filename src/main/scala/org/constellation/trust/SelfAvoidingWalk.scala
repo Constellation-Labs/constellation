@@ -91,7 +91,7 @@ object SelfAvoidingWalk {
     val maxPathLength = nodes.size - 1
 
     def walkFromOrigin() = {
-      val totalPathLength = Random.nextInt(maxPathLength - 1) + 1
+      val totalPathLength = Random.nextInt(maxPathLength - 1) + 1//note, need min of 3 nodes
       walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1d)
     }
 
@@ -312,10 +312,12 @@ object SelfAvoidingWalk {
   ): TrustNode = {
 
     var nodesCycle = nodes
-    println(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
-    (0 until feedbackCycles).foreach { cycle =>
-      println(s"feedback cycle $cycle for node $selfId")
-      nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+    if (nodesCycle.size > 2){//note, need min of 3 nodes
+      println(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
+      (0 until feedbackCycles).foreach { cycle =>
+        println(s"feedback cycle $cycle for node $selfId")
+        nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+      }
     }
     val res: TrustNode = nodesCycle.filter(_.id == selfId).head
     println(s"runWalkFeedbackUpdateSingleNode res: TrustNode ${res} for node $selfId")
