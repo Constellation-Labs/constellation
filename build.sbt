@@ -27,6 +27,8 @@ lazy val versions = new {
   val akka = "2.5.25"
   val akkaHttp = "10.1.9"
   val akkaHttpCors = "0.4.1"
+  val circe = "0.12.3"
+  val http4s = "0.20.17"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.2.1"
   val prometheus = "0.6.0"
@@ -113,6 +115,17 @@ lazy val walletSharedDependencies = Seq(
   "org.json4s" %% "json4s-jackson" % versions.json4s,
   "org.json4s" %% "json4s-ast" % versions.json4s
 ) ++ sharedDependencies
+
+lazy val alertsSharedDependencies = Seq(
+  "org.http4s" %% "http4s-dsl",
+  "org.http4s" %% "http4s-blaze-client",
+  "org.http4s" %% "http4s-circe",
+  "org.http4s" %% "http4s-dsl",
+).map(_ % versions.http4s) ++ Seq(
+  "io.circe" %% "circe-core",
+  "io.circe" %% "circe-generic",
+  "io.circe" %% "circe-parser"
+).map(_ % versions.circe) ++ sharedDependencies
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
 
@@ -233,6 +246,17 @@ lazy val wallet = (project in file("wallet"))
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.wallet.Wallet"),
     libraryDependencies ++= walletSharedDependencies
+  )
+
+lazy val alerts = (project in file("alerts"))
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation.alerts",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    libraryDependencies ++= (alertsSharedDependencies ++ testDependencies)
   )
 
 lazy val schema = (project in file("schema"))
