@@ -12,7 +12,6 @@ import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.pattern.CircuitBreaker
 import akka.util.Timeout
-import better.files.File
 import cats.data.Validated.{Invalid, Valid}
 import cats.effect.IO
 import cats.implicits._
@@ -32,7 +31,6 @@ import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
 import org.constellation.util._
 import org.json4s.native.Serialization
 import org.json4s.{JValue, native}
@@ -145,12 +143,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
           }
         } ~
-          path("snapshotInfo") {
-            val downloadedMajority = Download.getMajoritySnapshotTest()(dao, ConstellationExecutionContext.bounded)
-            val io = downloadedMajority.get
-
-            APIDirective.handle(io)(complete(_))
-          }~
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
           } ~
@@ -159,35 +151,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             val io = downloadedMajority.get
 
             APIDirective.handle(io)(complete(_))
-          } ~
-          pathPrefix("data") {
-            path("channels") {
-              complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
-            } ~
-              path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.lookup(channelId).unsafeRunSync().map { cmd =>
-                  SingleChannelUIOutput(
-                    cmd.channelOpen,
-                    cmd.totalNumMessages,
-                    cmd.last25MessageHashes,
-                    cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
-                  )
-                })
-              } ~
-              path("channel" / Segment / "schema") { channelId =>
-                complete(
-                  dao.channelService
-                    .lookup(channelId)
-                    .unsafeRunSync()
-                    .flatMap { cmd =>
-                      cmd.channelOpen.jsonSchema
-                    }
-                    .map { schemaStr =>
-                      import org.json4s.native.JsonMethods._
-                      pretty(render(parse(schemaStr)))
-                    }
-                )
-              }
           } ~
           pathPrefix("data") {
             path("channels") {
