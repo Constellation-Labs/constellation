@@ -17,6 +17,7 @@ import org.constellation.storage.VerificationStatus.VerificationStatus
 import org.constellation.util.HealthChecker
 
 import scala.concurrent.duration._
+import scala.util.Try
 
 class SnapshotBroadcastService[F[_]: Concurrent](
   healthChecker: HealthChecker[F],
@@ -37,7 +38,8 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     for {
       ownRecent <- updateRecentSnapshots(hash, height, publicReputation)
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
-      responses <- peers.values.toList
+      _ <- Sync[F].delay{logger.warn(s"broadcastSnapshot for Id: ${dao.id} - ownRecent: ${ownRecent}")}
+        responses <- peers.values.toList
         .traverse(
           _.client
             .postNonBlockingF[F, SnapshotVerification](
@@ -90,13 +92,22 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     }
   }
 
-  def getRecentSnapshots: F[List[RecentSnapshot]] = recentSnapshots.get.map(_.values.toSeq.sortBy(-_.height).toList)
+  def getRecentSnapshots(snapHash: Option[String] = None): F[List[RecentSnapshot]] = {
+    logger.debug(s"begin getRecentSnapshots for ${snapHash.toString}")
+    val recentSnaps = Try{recentSnapshots.get.map(_.values.toSeq.sortBy(-_.height).toList)}
+    if (recentSnaps.isFailure){
+      logger.debug(s"getRecentSnapshots failed with - ${recentSnaps} for ${snapHash.toString}")
+      Sync[F].delay(Nil)
+    }
+    logger.debug(s"finish getRecentSnapshots with - ${recentSnaps} for ${snapHash.toString}")
+    recentSnaps.get
+  }
 
   def runClusterCheck: F[Unit] =
     cluster.getNodeState
       .map(NodeState.canRunClusterCheck)
       .ifM(
-        getRecentSnapshots
+        getRecentSnapshots()
           .flatMap(healthChecker.checkClusterConsistency)
           .void, // Assumes that checkClusterConsistency returns None
         Sync[F].unit

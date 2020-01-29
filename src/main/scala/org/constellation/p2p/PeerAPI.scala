@@ -176,25 +176,34 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           path("verify") {
             entity(as[SnapshotCreated]) { s =>
               APIDirective.handle(
-                dao.snapshotBroadcastService.getRecentSnapshots
+                dao.snapshotBroadcastService.getRecentSnapshots(Some(s.hash))
               ) { result =>
                 logger.debug(s"snapshot received ${s}")
                 // TODO: wkoszycki maybe move it SnapshotBroadcastService ?
                 val response = result match {
-                  case Nil => SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
+                  case Nil =>
+                    logger.debug(s"[PeerAPI] SnapshotVerification Nil - with result: ${SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result).toString} - for SnapshotCreated ${s.toString}")
+                    SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
                   case lastSnap :: _ if lastSnap.height < s.height =>
+                    logger.debug(s"[PeerAPI] SnapshotVerification - lastSnap :: _ if lastSnap.height < s.height => - for SnapshotCreated ${s.toString}")
                     if (lastSnap.height + snapshotHeightRedownloadDelayInterval < s.height) {
+                      logger.debug(s"[PeerAPI] SnapshotVerification - lastSnap.height + snapshotHeightRedownloadDelayInterval < s.height - for SnapshotCreated ${s.toString}")
                       (IO
                         .contextShift(ConstellationExecutionContext.bounded)
                         .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
                     }
+                    logger.debug(s"[PeerAPI] SnapshotVerification - ${VerificationStatus.SnapshotHeightAbove} - for SnapshotCreated ${s.toString}")
                     SnapshotVerification(dao.id, VerificationStatus.SnapshotHeightAbove, result)
                   case list if list.contains(RecentSnapshot(s.hash, s.height, s.publicReputation)) =>
+                    logger.debug(s"[PeerAPI] SnapshotVerification ${VerificationStatus.SnapshotCorrect} list.contains(RecentSnapshot - for SnapshotCreated ${s.toString}")
                     SnapshotVerification(dao.id, VerificationStatus.SnapshotCorrect, result)
-                  case _ =>
-                    (IO
-                      .contextShift(ConstellationExecutionContext.bounded)
-                      .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
+                  case _ @ thing =>
+                    logger.debug(s"[PeerAPI] thing ${thing.toString()} with result: ${SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result).toString} - for SnapshotCreated ${s.toString}")
+
+//                    (IO
+//                      .contextShift(ConstellationExecutionContext.bounded)
+//                      .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
+                    logger.debug(s"[PeerAPI] SnapshotVerification ${VerificationStatus.SnapshotInvalid} with result: ${SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result).toString} - for SnapshotCreated ${s.toString}")
                     SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result)
                 }
                 complete(response)
