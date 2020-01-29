@@ -80,6 +80,20 @@ class TransactionService[F[_]: Concurrent](
   def createDummyTransaction(src: String, dst: String, keyPair: KeyPair): F[Transaction] =
     TransactionService.createDummyTransaction(src, dst, keyPair)(transactionChainService)
 
+  override def returnToPending(as: Seq[String]): F[List[TransactionCacheData]] =
+    as.toList
+      .traverse(inConsensus.lookup)
+      .map(_.flatten)
+      .flatMap { txs =>
+        txs.traverse(tx => withLock("inConsensusUpdate", inConsensus.remove(tx.hash))) >>
+          txs.filterNot(_.transaction.isDummy).traverse(put)
+      }
+      .flatTap(
+        txs =>
+          if (txs.nonEmpty) logger.info(s"TransactionService returningToPending with hashes=${txs.map(_.hash)}")
+          else Sync[F].unit
+      )
+
 }
 
 object TransactionService {
