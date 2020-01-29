@@ -4,6 +4,7 @@ import java.security.KeyPair
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
+import better.files.File
 import cats.implicits._
 import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
@@ -48,7 +49,7 @@ object TestNode {
     val node = new ConstellationNode(
       config
     )
-
+    File(s"tmp/${node.dao.id.medium}/snapshot_info").createDirectoryIfNotExists()
     nodes = nodes :+ node
     node
   }

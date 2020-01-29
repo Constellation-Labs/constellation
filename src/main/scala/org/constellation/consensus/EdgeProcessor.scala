@@ -401,6 +401,7 @@ object Snapshot extends StrictLogging {
       case _ =>
         LiftIO[F].liftIO(isOverDiskCapacity(serialized.length)).attemptT.flatMap { isOver =>
           if (isOver) {
+            logger.warn(s"removeOldSnapshots in writeSnapshot")
             removeOldSnapshots().attemptT >> writeSnapshot(storedSnapshot, serialized, trialNumber + 1)
           } else {
             withMetric(
@@ -418,7 +419,7 @@ object Snapshot extends StrictLogging {
 
   def removeOldSnapshots[F[_]: Concurrent]()(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
-      hashes <- LiftIO[F].liftIO(dao.snapshotBroadcastService.getRecentSnapshots.map(_.map(_.hash)))
+      hashes <- LiftIO[F].liftIO(dao.snapshotBroadcastService.getRecentSnapshots().map(_.map(_.hash)))
       diff <- LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotHashes).map(_.toList.diff(hashes))
       _ <- removeSnapshots(diff)
     } yield ()

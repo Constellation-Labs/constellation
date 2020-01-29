@@ -64,12 +64,12 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("snapshot" / "recent") {
         APIDirective.handle(
-          dao.snapshotBroadcastService.getRecentSnapshots
+          dao.snapshotBroadcastService.getRecentSnapshots()
         )(complete(_))
       } ~
       path("snapshot" / "reputation") {
         APIDirective.handle(
-          dao.snapshotBroadcastService.getRecentSnapshots
+          dao.snapshotBroadcastService.getRecentSnapshots()
         )(complete(_))
       } ~
       path("snapshot" / "nextHeight") {

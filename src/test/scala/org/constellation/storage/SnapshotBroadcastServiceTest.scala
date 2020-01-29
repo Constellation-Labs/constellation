@@ -110,7 +110,7 @@ class SnapshotBroadcastServiceTest
         .traverse(i => snapshotBroadcastService.updateRecentSnapshots(i.toString, i, Map.empty))
         .unsafeRunSync()
 
-      snapshotBroadcastService.getRecentSnapshots
+      snapshotBroadcastService.getRecentSnapshots()
         .unsafeRunSync()
         .map(_.hash) shouldBe List("4", "3", "2")
     }
