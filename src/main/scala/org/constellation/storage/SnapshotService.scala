@@ -47,7 +47,7 @@ class SnapshotService[F[_]: Concurrent](
 
   implicit val shadowDao: DAO = dao
 
-  val acceptedCBSinceSnapshot: Ref[F, Seq[String]] = Ref.unsafe(Seq())
+  val acceptedCBSinceSnapshot: Ref[F, Seq[String]] = Ref.unsafe(Seq.empty)
   val syncBuffer: Ref[F, Map[String, FinishedCheckpoint]] = Ref.unsafe(Map.empty)
   val snapshot: Ref[F, Snapshot] = Ref.unsafe(Snapshot.snapshotZero)
 
@@ -217,8 +217,12 @@ class SnapshotService[F[_]: Concurrent](
         "acceptedCBCacheMatchesAcceptedSize",
         (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
       )
-      _ <- logger.info(s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}")
-      _ <- logger.info(s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}")
+      _ <- logger.info(
+        s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}"
+      )
+      _ <- logger.info(
+        s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}"
+      )
       _ <- updateMetricsAfterSnapshot()
     } yield ()
 
@@ -407,10 +411,9 @@ class SnapshotService[F[_]: Concurrent](
               t =>
                 dao.metrics
                   .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
-                  .map{
-                    _ =>
-                      logger.debug("t.getStackTrace: "+ t.getStackTrace)
-                      SnapshotIOError(t)
+                  .map { _ =>
+                    logger.debug("t.getStackTrace: " + t.getStackTrace)
+                    SnapshotIOError(t)
                   },
               _ =>
                 logger
