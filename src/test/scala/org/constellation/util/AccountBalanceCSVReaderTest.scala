@@ -5,7 +5,7 @@ import org.scalatest.Matchers._
 
 class AccountBalanceCSVReaderTest extends FunSuite {
 
-  val src = getClass.getResource("/test.csv")
+  private val src = getClass.getResource("/test.csv")
 
   test("Load CSV file with account balances and normalize") {
     val values = new AccountBalanceCSVReader(src.getPath).read()
