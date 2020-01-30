@@ -200,9 +200,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   case _ @ thing =>
                     logger.debug(s"[PeerAPI] thing ${thing.toString()} with result: ${SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result).toString} - for SnapshotCreated ${s.toString}")
 
-//                    (IO
-//                      .contextShift(ConstellationExecutionContext.bounded)
-//                      .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
+                    (IO
+                      .contextShift(ConstellationExecutionContext.bounded)
+                      .shift >> dao.snapshotBroadcastService.verifyRecentSnapshots()).unsafeRunAsyncAndForget
                     logger.debug(s"[PeerAPI] SnapshotVerification ${VerificationStatus.SnapshotInvalid} with result: ${SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result).toString} - for SnapshotCreated ${s.toString}")
                     SnapshotVerification(dao.id, VerificationStatus.SnapshotInvalid, result)
                 }
