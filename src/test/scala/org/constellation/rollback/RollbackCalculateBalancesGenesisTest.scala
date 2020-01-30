@@ -58,7 +58,7 @@ class RollbackCalculateBalancesGenesisTest
     "should return right balance for distribution address" in {
       val balances = rollbackAccountBalances.calculate(genesisObservationWithInitialBalances)
       initialBalances.foreach(ab => {
-        balances.right.get.get(ab.accountHash) shouldBe Some(ab.balance * 100000000)
+        balances.right.get.get(ab.accountHash) shouldBe Some(ab.balance)
       })
     }
   }
