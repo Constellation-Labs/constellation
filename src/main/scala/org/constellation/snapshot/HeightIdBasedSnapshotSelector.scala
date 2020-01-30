@@ -11,7 +11,8 @@ import org.constellation.storage.{RecentSnapshot, SnapshotVerification, Verifica
 import org.constellation.util.SnapshotDiff
 
 class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
-    extends SnapshotSelector[F] with StrictLogging {
+    extends SnapshotSelector[F]
+    with StrictLogging {
 
   implicit val implicitLogger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
@@ -49,11 +50,10 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
             highestSnapshot,
             clusterWithCorrectState._1
           )
-          if (check){
+          if (check) {
             logger.debug(s"selectSnapshotFromRecent - check")
             None
-          }
-          else {
+          } else {
             val res = (
               createDiff(clusterWithCorrectState._1, ownSnapshots, clusterWithCorrectState._2),
               clusterWithCorrectState._1
@@ -81,40 +81,42 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
     def getByStatus(status: VerificationStatus) =
       grouped.getOrElse(status, List.empty).map(s => (s.id -> s.recentSnapshot)).toMap
 
+    val above = getByStatus(VerificationStatus.SnapshotHeightAbove)
     val invalid = getByStatus(VerificationStatus.SnapshotInvalid)
     val correct = getByStatus(VerificationStatus.SnapshotCorrect)
 
-    val maybeSelected = (invalid.size, correct.size + 1) match { // +1 because own node treats it as correct too
-      case (i, c) if i > c =>
-        logger.debug(s"selectSnapshotFromBroadcastResponses - (i, c) if i > c => - invalid: ${invalid}")
-        selectMostRecentCorrectSnapshot(invalid).some
-      case (i, c) if i < c => None
-      case (i, c) if i == c =>
-        val combined = invalid ++ correct
-        val highestSnapshot = ownSnapshots.maxBy(_.height)
-        val correctSnapshotAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(
-          highestSnapshot,
-          combined
-        )
-        val info = (invalid ++ correct + (nodeId -> ownSnapshots)).filter(_._2.nonEmpty)
-
-        if (info.nonEmpty) {
-          logger.debug(s"selectSnapshotFromBroadcastResponses - info.nonEmpty - info: ${info}")
-          val clusterWithCorrectState = selectMostRecentCorrectSnapshot(info)
-          val check = correctSnapshotAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+    val maybeSelected =
+      (invalid.size, correct.size + 1, above.size) match { // +1 because own node treats it as correct too
+        case (i, c, a) if a > (i + c) => None
+        case (i, c, _) if i > c =>
+          logger.debug(s"selectSnapshotFromBroadcastResponses - (i, c) if i > c => - invalid: ${invalid}")
+          selectMostRecentCorrectSnapshot(invalid).some
+        case (i, c, _) if i < c => None
+        case (i, c, _) if i == c =>
+          val combined = invalid ++ correct
+          val highestSnapshot = ownSnapshots.maxBy(_.height)
+          val correctSnapshotAtGivenHeight = selectCorrectRecentSnapshotAtGivenHeight(
             highestSnapshot,
-            clusterWithCorrectState._1
+            combined
           )
-          if (check) {
-            logger.debug(s"selectSnapshotFromBroadcastResponses - check - info: ${info}")
-            None
-          }
-          else {
-            logger.debug(s"selectSnapshotFromBroadcastResponses - !check - info: ${info}")
-            clusterWithCorrectState.some
-          }
-        } else None
-    }
+          val info = (invalid ++ correct + (nodeId -> ownSnapshots)).filter(_._2.nonEmpty)
+
+          if (info.nonEmpty) {
+            logger.debug(s"selectSnapshotFromBroadcastResponses - info.nonEmpty - info: ${info}")
+            val clusterWithCorrectState = selectMostRecentCorrectSnapshot(info)
+            val check = correctSnapshotAtGivenHeight._1 == highestSnapshot && !isBelowInterval(
+              highestSnapshot,
+              clusterWithCorrectState._1
+            )
+            if (check) {
+              logger.debug(s"selectSnapshotFromBroadcastResponses - check - info: ${info}")
+              None
+            } else {
+              logger.debug(s"selectSnapshotFromBroadcastResponses - !check - info: ${info}")
+              clusterWithCorrectState.some
+            }
+          } else None
+      }
 
     maybeSelected.map { s =>
       (createDiff(s._1, ownSnapshots, s._2), s._1)
@@ -144,20 +146,19 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
     */
   private[snapshot] def selectMostRecentCorrectSnapshot(
     clusterState: Map[Id, List[RecentSnapshot]]
-  ): (List[RecentSnapshot], List[Id]) =
-    {
-      logger.debug(s"selectSnapshotFromBroadcastResponses - info: ${clusterState}")
+  ): (List[RecentSnapshot], List[Id]) = {
+    logger.debug(s"selectSnapshotFromBroadcastResponses - info: ${clusterState}")
 
-      val res = clusterState.groupBy { case (_, snapshots) => snapshots.maxBy(_.height) }
-        .mapValues(m => (m.values.head, m.keys))
-        .values
-        .maxBy {
-          case (snapshots, ids) => (snapshots.head.height, weightByTrustProposers(snapshots, ids.toList), ids.map(_.hex))
-        }
-        .map(_.toList)
-      logger.debug(s"selectMostRecentCorrectSnapshot: ${res}")
-      res
-    }
+    val res = clusterState.groupBy { case (_, snapshots) => snapshots.maxBy(_.height) }
+      .mapValues(m => (m.values.head, m.keys))
+      .values
+      .maxBy {
+        case (snapshots, ids) => (snapshots.head.height, weightByTrustProposers(snapshots, ids.toList), ids.map(_.hex))
+      }
+      .map(_.toList)
+    logger.debug(s"selectMostRecentCorrectSnapshot: ${res}")
+    res
+  }
 
   def weightByTrustProposers(snapshots: List[RecentSnapshot], ids: List[Id]): Double = {
     val proposedTrustViews = snapshots.map(_.publicReputation).combineAll
