@@ -13,7 +13,7 @@ resource "null_resource" "grafana" {
     host = var.grafana_ip
     type = "ssh"
     user = var.ssh_user
-    timeout = "90s"
+    timeout = "240s"
   }
 
   provisioner "file" {
