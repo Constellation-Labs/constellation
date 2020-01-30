@@ -31,56 +31,74 @@ class RewardsManager[F[_]: Concurrent](
     * We are caching there RewardSnapshots until we reach snapshotHeightRedownloadDelayInterval.
     * Then we are rewarding, clearing cache and caching next interval.
     */
-  private val snapshotCache: Ref[F, Seq[RewardSnapshot]] = Ref.unsafe(Seq.empty)
+  private val snapshotCacheByHeight: Ref[F, Map[Long, RewardSnapshot]] = Ref.unsafe(Map.empty)
   private val accumulatedRewards: Ref[F, Map[String, Long]] = Ref.unsafe(Map.empty)
+
   private val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+  private val snapshotInterval: Int =
+    ConfigUtil.constellation.getInt("snapshot.snapshotInterval")
+
   val logger = Slf4jLogger.getLogger[F]
 
   def createRewardSnapshot(snapshot: Snapshot, height: Long): F[RewardSnapshot] =
     observationsFromSnapshot(snapshot).map(RewardSnapshot(snapshot.hash, height, _))
 
+  def getSnapshotDelayedByRedownloadIntervalFromLastHeight(lastHeight: Long, cache: Map[Long, RewardSnapshot]): F[Option[RewardSnapshot]] = {
+    val candidateHeight = lastHeight - snapshotHeightRedownloadDelayInterval - snapshotInterval
+
+    cache.get(candidateHeight) match {
+      case None =>
+        logger
+          .warn(
+            s"[Rewards] Skipping rewards. Couldn't find snapshot delayed by ${snapshotHeightRedownloadDelayInterval + snapshotInterval} from last height $lastHeight."
+          )
+          .map(_ => None)
+      case Some(rs) =>
+        logger
+          .debug(
+            s"[Rewards] Found snapshot (${rs.hash}) at height ${rs.height} which is delayed by ${snapshotHeightRedownloadDelayInterval + snapshotInterval} from last height $lastHeight."
+          )
+          .map(_ => Some(rs))
+    }
+  }
+
   def attemptReward(rewardSnapshot: RewardSnapshot): F[Unit] =
     for {
       _ <- logger.debug(s"[Rewards] Trying to reward nodes after acceptance of ${rewardSnapshot.hash}")
 
-      cache <- snapshotCache.modify { c =>
-        val updated = c :+ rewardSnapshot
+      cache <- snapshotCacheByHeight.modify { c =>
+        val updated = c + (rewardSnapshot.height -> rewardSnapshot)
         (updated, updated)
       }
 
-      previouslyRewardedHeight = cache.minBy(_.height).height
+      candidate <- getSnapshotDelayedByRedownloadIntervalFromLastHeight(rewardSnapshot.height, cache)
 
-      _ <- reachedSnapshotHeightRedownloadDelayInterval(previouslyRewardedHeight, rewardSnapshot.height).ifM(
-        cache.toList.traverse(updateBySnapshot) >> snapshotCache.modify(_ => (Seq.empty, ())),
-        logger.warn(
-          s"[Rewards] Next snapshotHeightRedownloadDelayInterval (${previouslyRewardedHeight + snapshotHeightRedownloadDelayInterval}) not reached. Current interval: ${rewardSnapshot.height}"
-        )
-      )
-
+      _ <- candidate.fold(Concurrent[F].unit) { rs =>
+        updateBySnapshot(rs) >> snapshotCacheByHeight.modify(c => (c - rs.height, ()))
+      }
     } yield ()
 
   def attemptReward(snapshot: Snapshot, height: Long): F[Unit] =
     createRewardSnapshot(snapshot, height)
       .flatMap(attemptReward)
 
-  private[rewards] def reachedSnapshotHeightRedownloadDelayInterval(
-    minAcceptedHeight: Long,
-    maxAcceptedHeight: Long
-  ): F[Boolean] =
-    Concurrent[F].pure(maxAcceptedHeight - minAcceptedHeight >= snapshotHeightRedownloadDelayInterval)
-
   private def updateBySnapshot(rewardSnapshot: RewardSnapshot): F[Unit] =
     for {
-      _ <- logger.debug(s"[Rewards] Updating rewards by snapshot: ${rewardSnapshot.hash}")
-      _ <- Concurrent[F].delay(rewardSnapshot.observations.isEmpty).ifM(
-        logger.debug(s"[Rewards] ${rewardSnapshot.hash} has no observations"),
-        logger.debug(s"[Rewards] ${rewardSnapshot.hash} contains following observations:").flatMap { _ =>
-          rewardSnapshot.observations.toList
-            .map(_.signedObservationData.data)
-            .traverse(o => logger.debug(s"[Rewards] Observation for ${o.id}, ${o.event}")).void
-        }
+      _ <- logger.debug(
+        s"[Rewards] Updating rewards by snapshot ${rewardSnapshot.hash} at height ${rewardSnapshot.height}"
       )
+      _ <- Concurrent[F]
+        .pure(rewardSnapshot.observations.isEmpty)
+        .ifM(
+          logger.debug(s"[Rewards] ${rewardSnapshot.hash} has no observations"),
+          logger.debug(s"[Rewards] ${rewardSnapshot.hash} contains following observations:").flatMap { _ =>
+            rewardSnapshot.observations.toList
+              .map(_.signedObservationData.data)
+              .traverse(o => logger.debug(s"[Rewards] Observation for ${o.id}, ${o.event}"))
+              .void
+          }
+        )
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
       trustMap <- eigenTrust.getTrustForAddresses
 
@@ -98,9 +116,9 @@ class RewardsManager[F[_]: Concurrent](
         (updated, updated)
       })
 
-     _ <- acc.transform {
-       case (address, reward) => logger.debug(s"[Rewards] Accumulated rewards of ${address}: ${reward}")
-     }.values.toList.sequence
+      _ <- acc.transform {
+        case (address, reward) => logger.debug(s"[Rewards] Accumulated rewards of ${address}: ${reward}")
+      }.values.toList.sequence
 
       _ <- updateAddressBalances(normalizedDistribution)
     } yield ()
