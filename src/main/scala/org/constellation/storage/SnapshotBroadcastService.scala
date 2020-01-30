@@ -60,7 +60,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       maybeDownload = snapshotSelector.selectSnapshotFromBroadcastResponses(responses, ownRecent.values.toList)
       _ <- maybeDownload.fold(Sync[F].unit) {
         case (diff, _) =>
-          logger.warn(s"broadcastSnapshot - start reDownloadWith: ${diff} - peers: ${peers.filter(p => diff.peers.contains(p._1))}")
+          logger.warn ("Redownload - broadcastSnapshot():")
+          logger.warn ("Redownload - snapshots to delete:")
+          diff.snapshotsToDelete.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
+          logger.warn ("Redownload - snapshots to download:")
+          diff.snapshotsToDownload.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
           healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
       }
     } yield ()
@@ -74,7 +78,13 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       _ <- Sync[F].delay(logger.warn(s"verifyRecentSnapshots - maybeDownload: ${maybeDownload}"))
       _ <- maybeDownload.fold(Sync[F].unit) {
         case (diff, _) =>
-          logger.warn(s"verifyRecentSnapshots - start reDownloadWith: ${diff} - peers: ${peers.filter(p => diff.peers.contains(p._1))}")
+//          logger.warn(s"verifyRecentSnapshots - start reDownloadWith: ${diff} - peers: ${peers.filter(p => diff.peers.contains(p._1))}")
+
+          logger.warn ("Redownload - verifyRecentSnapshots():")
+          logger.warn ("Redownload - snapshots to delete:")
+          diff.snapshotsToDelete.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
+          logger.warn ("Redownload - snapshots to download:")
+          diff.snapshotsToDownload.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
           healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
       }
     } yield ()
