@@ -103,11 +103,11 @@ class HealthChecker[F[_]: Concurrent](
 //      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
       result <- if (shouldReDownload(ownSnapshots, diff)) {
         logger.info(
-          s"[${dao.id.short}] Re-download process with : " +
-            s"Snapshot to download : ${diff.snapshotsToDownload} " +
-            s"Snapshot to delete : ${diff.snapshotsToDelete} " +
-            s"From peers : ${diff.peers} " +
-            s"Own snapshots : $ownSnapshots " +
+          s"[${dao.id.short}] Re-download process with : \n" +
+            s"Snapshot to download : ${diff.snapshotsToDownload.map(a => (a.height, a.hash))} \n" +
+            s"Snapshot to delete : ${diff.snapshotsToDelete.map(a => (a.height, a.hash))} \n" +
+            s"From peers : ${diff.peers} \n" +
+            s"Own snapshots : ${ownSnapshots.map(a => (a.height, a.hash))} \n" +
             s"Major state : $major"
         ) >>
           startReDownload(diff, peers.filterKeys(diff.peers.contains))
@@ -166,7 +166,7 @@ class HealthChecker[F[_]: Concurrent](
     ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
 
   private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
-    (maxOrZero(ownSnapshots) + snapshotHeightRedownloadDelayInterval) < maxOrZero(
+    (maxOrZero(ownSnapshots) + snapshotHeightDelayInterval) < maxOrZero(
       snapshotsToDownload
     )
 
