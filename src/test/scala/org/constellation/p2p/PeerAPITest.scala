@@ -212,63 +212,6 @@ class PeerAPITest
     }
 
     "mixedEndpoints" - {
-      "PUT transaction" - {
-
-        "should observe received transaction" ignore {
-          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
-          dao.transactionGossiping.observe(*) shouldReturnF mock[TransactionCacheData]
-          dao.transactionGossiping.selectPeers(*)(scala.util.Random) shouldReturnF Set()
-          dao.peerInfo shouldReturnF Map()
-
-          val a = KeyUtils.makeKeyPair()
-          val b = KeyUtils.makeKeyPair()
-
-          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
-
-          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
-            dao.transactionGossiping.observe(*).was(called)
-          }
-        }
-
-        "should broadcast transaction to others".ignore {
-          val a = KeyUtils.makeKeyPair()
-          val b = KeyUtils.makeKeyPair()
-
-          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
-          val tcd = mock[TransactionCacheData]
-
-          val id = Fixtures.id2
-          val peerData = mock[PeerData]
-          peerData.client shouldReturn mock[APIClient]
-          peerData.client.putAsync(*, *, *)(*) shouldReturnF mock[Response[String]]
-
-          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
-          dao.transactionGossiping.observe(*) shouldReturnF tcd
-          dao.transactionGossiping.selectPeers(tcd)(scala.util.Random) shouldReturnF Set(id)
-          dao.peerInfo shouldReturnF Map(id -> peerData)
-
-          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
-            peerData.client.putAsync(*, *, *)(*).was(called)
-          }
-        }
-
-        "should return StatusCodes.OK" in {
-          dao.transactionGossiping shouldReturn mock[TransactionGossiping[IO]]
-          dao.transactionGossiping.observe(*) shouldReturnF mock[TransactionCacheData]
-          dao.transactionGossiping.selectPeers(*)(scala.util.Random) shouldReturnF Set()
-          dao.peerInfo shouldReturnF Map()
-
-          val a = KeyUtils.makeKeyPair()
-          val b = KeyUtils.makeKeyPair()
-
-          val tx = Fixtures.makeTransaction(a.address, b.address, 5L, a)
-
-          Put(s"/transaction", TransactionGossip(tx)) ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
-            status shouldEqual StatusCodes.OK
-          }
-        }
-      }
-
       "GET snapshot info" - {
 
         "should get snapshot info" in {

@@ -27,7 +27,7 @@ import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage._
 import org.constellation.util._
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, ResourceInfo}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, DevAPI, ResourceInfo}
 import org.json4s.native
 import org.json4s.native.Serialization
 
@@ -80,7 +80,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         }
     }
 
-  val snapshotHeightRedownloadDelayInterval =
+  val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
 
   private val authEnabled: Boolean = ConfigUtil.getAuthEnabled
@@ -250,13 +250,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             }
           }
         } ~
-        path("deregister") {
-          entity(as[PeerUnregister]) { request =>
-            APIDirective.handle(dao.cluster.deregister(request.host, request.port, request.id)) { _ =>
-              complete(StatusCodes.OK)
-            }
-          }
-        } ~
         pathPrefix("request") {
           path("signature") {
             APIDirective.extractIP(socketAddress) { ip =>
@@ -341,36 +334,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     )
 
   private[p2p] def mixedEndpoints(socketAddress: InetSocketAddress) =
-    path("transaction") {
-      put {
-        entity(as[TransactionGossip]) { gossip =>
-          logger.debug(s"Received transaction tx=${gossip.hash} with path=${gossip.path}")
-          dao.metrics.incrementMetric("transactionRXByPeerAPI")
-
-          implicit val random: Random = scala.util.Random
-
-          /* TEMPORARY DISABLED todo: enable ignored tests as well org/constellation/p2p/PeerAPITest.scala:196
-          val rebroadcast = for {
-            tcd <- dao.transactionGossiping.observe(TransactionCacheData(gossip.tx, path = gossip.path))
-            peers <- dao.transactionGossiping.selectPeers(tcd)
-            peerData <- dao.peerInfo.map(_.filterKeys(peers.contains).values.toList)
-            _ <- contextShift.evalOn(ConstellationExecutionContext.callbacks)(
-              peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
-            )
-            _ <- dao.metrics.incrementMetricAsync[IO]("transactionGossipingSent")
-          } yield ()
-
-          rebroadcast.unsafeRunAsyncAndForget()
-           */
-
-          (IO.contextShift(ConstellationExecutionContext.bounded).shift >> dao.transactionGossiping.observe(
-            TransactionCacheData(gossip.tx, path = gossip.path)
-          )).unsafeRunAsyncAndForget()
-
-          complete(StatusCodes.OK)
-        }
-      }
-    } ~ get {
+    get {
       path("snapshot" / "obj" / "snapshot") {
         APIDirective.extractIP(socketAddress) { ip =>
           val snapshotHash: IO[Array[Array[Byte]]] =

@@ -42,37 +42,7 @@ class APIClientTest extends FlatSpec with Matchers with BeforeAndAfterEach with 
     assert(keyPair.getPublic.toId == id)
   }
 
-  "POST to /peer" should "add the peer correctly" in {
-    val node1 = TestNode()
-    val node2 = TestNode()
-
-    val rpc1 = APIClient(node1.nodeConfig.hostName, port = node1.nodeConfig.httpPort)
-    val rpc2 = APIClient(node2.nodeConfig.hostName, port = node2.nodeConfig.httpPort)
-
-    val addPeerResponse = rpc2.postSync("peer/add", node1.dao.peerHostPort)
-
-    assert(addPeerResponse.isSuccess)
-    // TODO: Change this to AddPeerFromLocal request on REST
-    /*
-    assert(addPeerResponse.isSuccess)
-
-    // TODO: bug here with lookup of peer, execution context issue, timing?
-
-    val peers1 = rpc1.getBlocking[Map[Id, PeerData]]("peers")
-    val peers2 = rpc2.getBlocking[Map[Id, PeerData]]("peers")
-
-    assert(peers1.contains(node2.data.id))
-    assert(peers2.contains(node1.data.id))
-     */
-
-    // Re-enable after we allow peer adding from authenticated peer.
-    // assert(peers1 == Peers(Seq(node2Path)))
-    //  assert(peers2 == Peers(Seq(node1Path)))
-
-  }
-
   override def afterAll() {
     system.terminate()
   }
-
 }
