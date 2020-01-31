@@ -10,7 +10,7 @@ import org.constellation.storage.VerificationStatus.VerificationStatus
 import org.constellation.storage.{RecentSnapshot, SnapshotVerification, VerificationStatus}
 import org.constellation.util.SnapshotDiff
 
-class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeightRedownloadDelayInterval: Int)
+class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeightDelayInterval: Int)
     extends SnapshotSelector[F]
     with StrictLogging {
 
@@ -167,7 +167,7 @@ class HeightIdBasedSnapshotSelector[F[_]: Concurrent](nodeId: Id, snapshotHeight
   }
 
   private def isBelowInterval(ownSnapshots: RecentSnapshot, snapshotsToDownload: List[RecentSnapshot]) =
-    (ownSnapshots.height + snapshotHeightRedownloadDelayInterval) < (snapshotsToDownload match {
+    (ownSnapshots.height + snapshotHeightDelayInterval) < (snapshotsToDownload match {
       case Nil      => 0
       case nonEmpty => nonEmpty.map(_.height).max
     })
