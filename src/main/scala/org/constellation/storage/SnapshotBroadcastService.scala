@@ -37,6 +37,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
   def broadcastSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double]): F[Unit] =
     for {
       ownRecent <- updateRecentSnapshots(hash, height, publicReputation)
+      /*
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       _ <- Sync[F].delay{logger.warn(s"broadcastSnapshot for Id: ${dao.id} - ownRecent: ${ownRecent}")}
         responses <- peers.values.toList
@@ -66,10 +67,12 @@ class SnapshotBroadcastService[F[_]: Concurrent](
           logger.warn ("Redownload - snapshots to download:")
           diff.snapshotsToDownload.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
           healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
-      }
+      }*/
     } yield ()
 
-  def verifyRecentSnapshots(): F[Unit] = {
+  def verifyRecentSnapshots(): F[Unit] =
+    Sync[F].unit
+  /*
     val verify = for {
       ownRecent <- recentSnapshots.get
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
@@ -80,10 +83,10 @@ class SnapshotBroadcastService[F[_]: Concurrent](
         case (diff, _) =>
 //          logger.warn(s"verifyRecentSnapshots - start reDownloadWith: ${diff} - peers: ${peers.filter(p => diff.peers.contains(p._1))}")
 
-          logger.warn ("Redownload - verifyRecentSnapshots():")
-          logger.warn ("Redownload - snapshots to delete:")
+          logger.warn("Redownload - verifyRecentSnapshots():")
+          logger.warn("Redownload - snapshots to delete:")
           diff.snapshotsToDelete.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
-          logger.warn ("Redownload - snapshots to download:")
+          logger.warn("Redownload - snapshots to download:")
           diff.snapshotsToDownload.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
           healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
       }
@@ -100,12 +103,12 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     } else {
       Sync[F].unit
     }
-  }
+   */
 
   def getRecentSnapshots(snapHash: Option[String] = None): F[List[RecentSnapshot]] = {
     logger.debug(s"begin getRecentSnapshots for ${snapHash.toString}")
-    val recentSnaps = Try{recentSnapshots.get.map(_.values.toSeq.sortBy(-_.height).toList)}
-    if (recentSnaps.isFailure){
+    val recentSnaps = Try { recentSnapshots.get.map(_.values.toSeq.sortBy(-_.height).toList) }
+    if (recentSnaps.isFailure) {
       logger.debug(s"getRecentSnapshots failed with - ${recentSnaps} for ${snapHash.toString}")
       Sync[F].delay(Nil)
     }
@@ -119,7 +122,10 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       .ifM(
         getRecentSnapshots()
           .flatMap(healthChecker.checkClusterConsistency)
-          .void, // Assumes that checkClusterConsistency returns None
+          .flatMap(
+            maybeUpdate =>
+              maybeUpdate.fold(Sync[F].unit)(a => recentSnapshots.modify(_ => (a.map(b => (b.height -> b)).toMap, ())))
+          ),
         Sync[F].unit
       )
 
