@@ -94,27 +94,27 @@ class HealthChecker[F[_]: Concurrent](
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
 
-//      major <- majorityStateChooser
-//        .chooseMajorityState(peersSnapshots :+ (dao.id, ownSnapshots), maxOrZero(ownSnapshots))
-//        .getOrElse((Seq[RecentSnapshot](), Set[Id]()))
-//
-//      diff <- compareSnapshotState(major, ownSnapshots)
+      major <- majorityStateChooser
+        .chooseMajorityState(peersSnapshots :+ (dao.id, ownSnapshots), maxOrZero(ownSnapshots))
+        .getOrElse((Seq[RecentSnapshot](), Set[Id]()))
 
-      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
-//      result <- if (shouldReDownload(ownSnapshots, diff)) {
-//        logger.info(
-//          s"[${dao.id.short}] Re-download process with : " +
-//            s"Snapshot to download : ${diff.snapshotsToDownload} " +
-//            s"Snapshot to delete : ${diff.snapshotsToDelete} " +
-//            s"From peers : ${diff.peers} " +
-//            s"Own snapshots : $ownSnapshots " +
-//            s"Major state : $major"
-//        ) >>
-//          startReDownload(diff, peers.filterKeys(diff.peers.contains))
-//            .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
-//      } else {
-//        Sync[F].pure[Option[List[RecentSnapshot]]](None)
-//      }
+      diff <- compareSnapshotState(major, ownSnapshots)
+
+//      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
+      result <- if (shouldReDownload(ownSnapshots, diff)) {
+        logger.info(
+          s"[${dao.id.short}] Re-download process with : " +
+            s"Snapshot to download : ${diff.snapshotsToDownload} " +
+            s"Snapshot to delete : ${diff.snapshotsToDelete} " +
+            s"From peers : ${diff.peers} " +
+            s"Own snapshots : $ownSnapshots " +
+            s"Major state : $major"
+        ) >>
+          startReDownload(diff, peers.filterKeys(diff.peers.contains))
+            .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
+      } else {
+        Sync[F].pure[Option[List[RecentSnapshot]]](None)
+      }
     } yield result
 
     check.recoverWith {
