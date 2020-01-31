@@ -19,9 +19,19 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.domain.snapshot.SnapshotStorage
-import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.snapshot.SnapshotFileStorage
@@ -179,7 +189,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     rewardsManager = new RewardsManager[IO](
       eigenTrust = eigenTrust,
       checkpointService = checkpointService,
-      addressService = addressService,
+      addressService = addressService
     )
 
     snapshotService = SnapshotService[IO](
@@ -246,7 +256,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     val snapshotSelector =
       new HeightIdBasedSnapshotSelector[IO](
         this.id,
-        ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+        ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
       )
     snapshotBroadcastService = {
 
@@ -293,7 +303,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         snapshotInfoPath.pathAsString,
         genesisObservationPath.pathAsString
       ),
-      rewardsManager,
+      rewardsManager
     )
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
