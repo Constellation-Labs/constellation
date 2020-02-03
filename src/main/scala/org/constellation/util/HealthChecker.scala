@@ -127,8 +127,8 @@ class HealthChecker[F[_]: Concurrent](
 
   private[util] def compareSnapshotState(major: (Seq[RecentSnapshot], Set[Id]), ownSnapshots: List[RecentSnapshot]) =
     SnapshotDiff(
-      ownSnapshots.diff(major._1).sortBy(_.height).reverse,
-      major._1.diff(ownSnapshots).toList.sortBy(_.height).reverse,
+      ownSnapshots.diff(major._1).sortBy(-_.height),
+      major._1.diff(ownSnapshots).toList.sortBy(-_.height),
       major._2.toList
     ).pure[F]
 

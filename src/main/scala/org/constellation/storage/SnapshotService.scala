@@ -88,11 +88,11 @@ class SnapshotService[F[_]: Concurrent](
       publicReputation <- EitherT.liftF(trustManager.getPredictedReputation)
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot, publicReputation))
 
-      _ <- EitherT.liftF(logger.debug(s"Blocks for the next snapshot at height: ${nextHeightInterval} - ${hashesForNextSnapshot}"))
+      _ <- EitherT.liftF(logger.debug(s"Blocks for the next snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} at height: ${nextHeightInterval} - ${hashesForNextSnapshot}"))
 
       _ <- EitherT.liftF(
         logger.debug(
-          s"conclude snapshot: ${nextSnapshot.lastSnapshot} with height ${nextHeightInterval}"
+          s"conclude snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} with height ${nextHeightInterval}"
         )
       )
       _ <- applySnapshot()
@@ -108,7 +108,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
 
       created = SnapshotCreated(
-        nextSnapshot.lastSnapshot,
+        nextSnapshot.hash,
         nextHeightInterval,
         publicReputation
       )
