@@ -189,13 +189,13 @@ object TransactionEdge {
     src: String,
     dst: String,
     lastTxRef: LastTransactionRef,
-    amount: Long,
+    amount: Double,
     keyPair: KeyPair,
-    fee: Option[Long] = None,
-    normalized: Boolean = true
+    fee: Option[Double] = None
   ): Edge[TransactionEdgeData] = {
-    val amountToUse = if (normalized) amount * 1e8.toLong else amount
-    val txData = TransactionEdgeData(amountToUse, lastTxRef, fee)
+    val amountToUse = amount * 1e8.toLong
+    val feeToUse = fee.map(_ * 1e8.toLong).map(_.toLong)
+    val txData = TransactionEdgeData(amountToUse.toLong, lastTxRef, feeToUse)
     val oe = ObservationEdge(
       Seq(
         TypedEdgeHash(src, EdgeHashType.AddressHash),
