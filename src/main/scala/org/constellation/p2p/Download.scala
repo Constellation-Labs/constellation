@@ -148,20 +148,21 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         )
         majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash))
         updatedMajoritySnapshot = updateSnapInfo(majoritySnapshot, localSnapshotCacheData)
-        _ <- if (snapshotHashes.forall(updatedMajoritySnapshot.snapshotHashes.contains)) Sync[F].unit
+        reversedHashes = snapshotHashes.reverse
+        _ <- if (reversedHashes.forall(updatedMajoritySnapshot.snapshotHashes.contains)) Sync[F].unit
         else
           Sync[F].raiseError[Unit](
             new RuntimeException(
-              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${snapshotHashes
+              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${reversedHashes
                 .filterNot(updatedMajoritySnapshot.snapshotHashes.contains)}"
             )
           )
         snapshotClient <- getSnapshotClient(peers)
-        alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(snapshotHashes)(
+        alreadyDownloaded <- downloadAndProcessSnapshotsFirstPass(reversedHashes)(
           snapshotClient,
           peers
         )
-        _ <- downloadAndProcessSnapshotsSecondPass(snapshotHashes.filterNot(alreadyDownloaded.contains))(
+        _ <- downloadAndProcessSnapshotsSecondPass(reversedHashes.filterNot(alreadyDownloaded.contains))(
           snapshotClient,
           peers
         )
