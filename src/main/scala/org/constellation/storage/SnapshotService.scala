@@ -64,6 +64,9 @@ class SnapshotService[F[_]: Concurrent](
       hashes <- snapshotStorage.getSnapshotHashes
     } yield last.hash == hash || hashes.contains(hash)
 
+  def isStored(hash: String): F[Boolean] =
+    snapshotStorage.getSnapshotHashes.map(_.contains(hash))
+
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
 
   def getAcceptedCBSinceSnapshot: F[Seq[String]] =
