@@ -92,7 +92,7 @@ case class ProcessingConfig(
   formCheckpointTimeout: Int = 60,
   maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
-  recentSnapshotNumber: Int = 40, // must be equal to snapshotHeightRedownloadDelayInterval from application.conf
+  recentSnapshotNumber: Int = 80, // must be equal to snapshotHeightRedownloadDelayInterval from application.conf
   maxInvalidSnapshotRate: Int = 51,
   txGossipingFanout: Int = 2,
   leavingStandbyTimeout: Int = 30
