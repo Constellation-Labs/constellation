@@ -13,12 +13,13 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, GenesisObservation}
 import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.util.{HashSignature, Metrics}
+import org.constellation.util.HashSignature
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

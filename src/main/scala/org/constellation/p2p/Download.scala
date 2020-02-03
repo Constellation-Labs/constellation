@@ -17,9 +17,10 @@ import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging.logThread
-import org.constellation.util.{APIClient, Distance, Metrics}
+import org.constellation.util.{APIClient, Distance}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.consensus.EdgeProcessor.{chunkDeSerialize, chunkSerialize}
+import org.constellation.metrics.Metrics
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}

@@ -16,6 +16,7 @@ import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
@@ -23,7 +24,6 @@ import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
-import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 class SnapshotService[F[_]: Concurrent](

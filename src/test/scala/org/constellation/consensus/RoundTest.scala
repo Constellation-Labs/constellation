@@ -17,7 +17,7 @@
 //import org.constellation.primitives.Schema._
 //import org.constellation.primitives._
 //import org.constellation.storage.{CheckpointService, MessageService, TransactionService}
-//import org.constellation.util.Metrics
+//import org.constellation.metrics.Metrics
 //import org.constellation.{DAO, Fixtures, PeerMetadata}
 //import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 //import org.scalatest.{BeforeAndAfter, FunSuiteLike, Ignore, Matchers}

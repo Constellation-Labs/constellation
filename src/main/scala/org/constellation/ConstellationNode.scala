@@ -23,10 +23,11 @@ import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Metrics}
+import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader}
 import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}

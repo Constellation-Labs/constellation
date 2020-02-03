@@ -199,6 +199,7 @@ lazy val protobuf = (project in file("proto"))
 
 lazy val root = (project in file("."))
   .dependsOn(protobuf, schema)
+  .dependsOn(alerts)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .configs(E2ETest)
@@ -256,7 +257,7 @@ lazy val alerts = (project in file("alerts"))
     ),
     buildInfoPackage := "org.constellation.alerts",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
-    libraryDependencies ++= (alertsSharedDependencies ++ testDependencies)
+    libraryDependencies ++= alertsSharedDependencies
   )
 
 lazy val schema = (project in file("schema"))

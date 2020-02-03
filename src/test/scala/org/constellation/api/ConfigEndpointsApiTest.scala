@@ -8,10 +8,10 @@ import akka.util.Timeout
 import cats.effect.IO
 import org.constellation.keytool.KeyUtils
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
-import org.constellation.util.Metrics
 import org.constellation.{API, BuildInfo, DAO}
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats

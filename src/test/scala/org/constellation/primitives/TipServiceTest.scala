@@ -7,15 +7,9 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointParentService, CheckpointService}
 import org.constellation.consensus.RandomData
 import org.constellation.domain.configuration.NodeConfig
-import org.constellation.primitives.Schema.{
-  CheckpointCacheMetadata,
-  EdgeHashType,
-  Height,
-  SignedObservationEdge,
-  TypedEdgeHash
-}
+import org.constellation.metrics.Metrics
+import org.constellation.primitives.Schema.{CheckpointCacheMetadata, EdgeHashType, Height, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.storage.SOEService
-import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

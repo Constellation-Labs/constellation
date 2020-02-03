@@ -6,6 +6,7 @@ import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.{ConsensusManager, Snapshot}
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}

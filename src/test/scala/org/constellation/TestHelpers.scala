@@ -16,13 +16,14 @@ import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, JoiningPeerValidator, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager
-import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.util.{APIClient, HostPort}
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 

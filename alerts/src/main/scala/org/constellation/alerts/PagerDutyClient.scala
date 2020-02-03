@@ -2,6 +2,7 @@ package org.constellation.alerts
 
 import java.time.LocalDateTime
 
+import cats.implicits._
 import cats.effect.{Concurrent, ConcurrentEffect, ContextShift, Timer}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
@@ -13,10 +14,15 @@ import org.http4s.{Header, Request, _}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
+
+trait AlertClient[F[_]] {
+  def sendAlert(alert: Alert): F[Unit]
+}
+
 class PagerDutyClient[F[_]: Concurrent: ContextShift: ConcurrentEffect: Timer](
   selfIp: String,
   integrationKey: String
-) {
+) extends AlertClient[F] {
 
   private val client = BlazeClientBuilder[F](global)
   private val uri = uri"https://events.pagerduty.com/v2/enqueue"
@@ -24,7 +30,7 @@ class PagerDutyClient[F[_]: Concurrent: ContextShift: ConcurrentEffect: Timer](
   private val logger = Slf4jLogger.getLogger[F]
 
   def sendAlert(alert: Alert): F[Unit] = client.resource.use { c =>
-    c.status(createRequest(alert)) // TODO: Retry in case of error
+    c.status(createRequest(alert)).void // TODO: Retry in case of error
   }
 
   private def createRequest(alert: Alert): Request[F] = {

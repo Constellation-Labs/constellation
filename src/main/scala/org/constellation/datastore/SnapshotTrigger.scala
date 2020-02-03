@@ -3,11 +3,12 @@ package org.constellation.datastore
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.domain.exception.InvalidNodeState
+import org.constellation.metrics.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.storage.{HeightIntervalConditionNotMet, SnapshotError, SnapshotIllegalState}
-import org.constellation.util.{Metrics, PeriodicIO}
+import org.constellation.util.PeriodicIO
 import org.constellation.util.Logging._
 
 import scala.async.internal.StateSet

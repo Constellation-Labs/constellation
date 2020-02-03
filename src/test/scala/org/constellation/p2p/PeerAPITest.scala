@@ -25,7 +25,7 @@ import org.constellation.primitives.{IPManager, TransactionCacheData, Transactio
 import org.constellation.schema.Id
 import org.constellation.storage.VerificationStatus.{SnapshotCorrect, SnapshotHeightAbove}
 import org.constellation.storage._
-import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.util.{APIClient, HostPort}
 import org.constellation.{DAO, Fixtures, PeerMetadata, ProcessingConfig}
 import org.joda.time.DateTimeUtils
 import org.json4s.native
@@ -36,6 +36,7 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 import org.constellation.TestHelpers
 import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.metrics.Metrics
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}

@@ -12,12 +12,13 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
 import org.constellation.domain.observation.{CheckpointBlockInvalid, Observation, ObservationService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.util.{Metrics, PeerApiClient}
+import org.constellation.util.PeerApiClient
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._

@@ -12,6 +12,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
 import org.constellation.consensus.Snapshot
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{NodeState, NodeType}

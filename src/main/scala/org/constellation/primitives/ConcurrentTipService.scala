@@ -10,12 +10,12 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{Height, SignedObservationEdge}
 import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
-import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.util.Random

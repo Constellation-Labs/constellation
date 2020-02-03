@@ -10,12 +10,12 @@ import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, Snap
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
-import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}

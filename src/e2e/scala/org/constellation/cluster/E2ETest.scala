@@ -8,10 +8,11 @@ import cats.effect.{ContextShift, IO}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.keytool.KeyUtils
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
 import org.constellation.primitives._
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{APIClient, AccountBalance, Metrics, Simulation}
+import org.constellation.util.{APIClient, AccountBalance, Simulation}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

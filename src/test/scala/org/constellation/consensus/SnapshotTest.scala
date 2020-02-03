@@ -8,9 +8,9 @@ import com.google.common.hash.Hashing
 import cats.implicits._
 import org.constellation._
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.CheckpointBlock
 import org.constellation.primitives.Schema.{CheckpointCache, GenesisObservation}
-import org.constellation.util.Metrics
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}

@@ -10,16 +10,13 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
-import org.constellation.rollback.{
-  CannotLoadGenesisObservationFile,
-  CannotLoadSnapshotInfoFile,
-  CannotLoadSnapshotsFiles
-}
+import org.constellation.rollback.{CannotLoadGenesisObservationFile, CannotLoadSnapshotInfoFile, CannotLoadSnapshotsFiles}
 import org.constellation.schema.Id
 import org.constellation.util.Logging._
 import org.constellation.util._

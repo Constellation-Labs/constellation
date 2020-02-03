@@ -6,10 +6,11 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
-import org.constellation.util.{HashSignature, Metrics}
+import org.constellation.util.HashSignature
 import org.constellation.{ConfigUtil, DAO}
 
 object CheckpointBlockValidator {

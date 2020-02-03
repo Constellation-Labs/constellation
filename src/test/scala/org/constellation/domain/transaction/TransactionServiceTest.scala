@@ -8,10 +8,10 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.constellation.storage.RateLimiting
-import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

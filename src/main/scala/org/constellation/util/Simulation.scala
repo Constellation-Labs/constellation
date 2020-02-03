@@ -8,6 +8,7 @@ import com.softwaremill.sttp.Response
 import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.metrics.Metrics
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id

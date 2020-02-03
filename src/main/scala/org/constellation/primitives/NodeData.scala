@@ -9,9 +9,9 @@ import constellation._
 import org.constellation.ResourceInfo
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.keytool.KeyUtils
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.schema.Id
-import org.constellation.util.Metrics
 
 case class LocalNodeConfig(
   externalIP: String

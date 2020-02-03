@@ -7,7 +7,8 @@ import com.softwaremill.sttp.SttpBackend
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.typesafe.scalalogging.Logger
-import org.constellation.util.{APIClient, HealthChecker, Metrics}
+import org.constellation.metrics.Metrics
+import org.constellation.util.{APIClient, HealthChecker}
 import org.scalatest.{BeforeAndAfterAll, CancelAfterFailure, FlatSpecLike}
 import org.slf4j.LoggerFactory
 

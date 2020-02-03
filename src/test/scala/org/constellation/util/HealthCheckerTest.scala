@@ -5,6 +5,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
+import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, DownloadProcess, SetStateResult}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
