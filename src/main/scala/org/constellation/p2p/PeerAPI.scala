@@ -150,7 +150,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             entity(as[Array[Array[Byte]]]) { curCheckpointHashes =>
               val deSerCheckpointHashes =
                 curCheckpointHashes.flatMap(chunkDeSerialize[Seq[String]](_, "snapshot/info/curCheckpointHashes"))
-              val res = dao.snapshotService.getSnapshotInfo.flatMap { info =>
+              val getInfo = dao.snapshotService.getSnapshotInfo.flatMap { info =>
                 logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
                 logger.warn(s"snapshot/info curCheckpointHashes.size - ${deSerCheckpointHashes.size}")
 
@@ -166,10 +166,18 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   dao.snapshotService.recentSnapshotInfo
                     .put(ip, infoSer)
                     .flatTap(_ => IO { logger.warn(s"snapshot/info recentSnapshotInfo updating") })
-                    .map(_ => Array.empty[Byte])
+                    .map(_ => Array.empty[Byte].some)
                 }
               }
-              APIDirective.handle(res)(complete(_))
+
+              APIDirective.handle {
+                dao.cluster.getNodeState
+                  .map(NodeState.canActAsDownloadSource)
+                  .ifM(getInfo, IO.pure(None))
+                  } {
+                    case None => complete(StatusCodes.NotFound)
+                    case _ => complete(StatusCodes.OK, Array.empty[Byte])
+                  }
             }
           }
         } ~
