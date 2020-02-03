@@ -36,16 +36,17 @@ class MajorityStateChooser[F[_]: Concurrent] {
 
   private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], ownHeight: Long) =
     for {
-      highestSnapshot <- OptionT.fromOption[F](getHighest(nodeSnapshots))
+      // highestSnapshot <- OptionT.fromOption[F](getHighest(nodeSnapshots))
       // useHighest <- OptionT.liftF(shouldUseHighest(highestSnapshot, ownHeight))
-      // majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots))
+      majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots))
 
       _ <- OptionT.liftF(
         logger.debug(
-          s"The highest snapshot : $highestSnapshot"
+//          s"The highest snapshot : $highestSnapshot"
+          s"The major snapshot: $majorSnapshot"
         )
       )
-    } yield highestSnapshot
+    } yield majorSnapshot
 
   private def dropToCurrentState(nodeSnapshot: NodeSnapshots, major: SnapshotNodes): (Seq[RecentSnapshot], Set[Id]) =
     (nodeSnapshot._2.sortBy(-_.height).dropWhile(_ != major._1), Set(nodeSnapshot._1))
