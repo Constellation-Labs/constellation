@@ -61,15 +61,15 @@ object Transaction {
     prevTx: Option[Transaction] = None,
     src: String,
     dst: String,
-    amount: Long,
+    amount: Double,
     keyPair: KeyPair,
-    fee: Option[Long] = None
+    fee: Option[Double] = None
   ): Transaction = {
     val lastTxRef =
       prevTx
         .map(tx => LastTransactionRef(Hashable.hash(tx.edge.signedObservationEdge), tx.lastTxRef.ordinal + 1))
         .getOrElse(LastTransactionRef.empty)
-    val edge = TransactionEdge.createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee, true)
+    val edge = TransactionEdge.createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
 
     Transaction(edge, lastTxRef, false, false)
   }
