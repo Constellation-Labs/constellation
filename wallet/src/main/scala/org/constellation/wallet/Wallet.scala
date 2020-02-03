@@ -55,7 +55,7 @@ object Wallet extends IOApp {
             cliParams.destination,
             cliParams.amount,
             keypair,
-            if (cliParams.fee > 0) cliParams.fee.some else none[Long]
+            if (cliParams.fee > 0) cliParams.fee.some else none[Double]
           )
         }
       }
@@ -105,13 +105,13 @@ object Wallet extends IOApp {
               .action((x, c) => c.copy(txPath = x)),
             opt[String]("fee").required
               .valueName("<int>")
-              .action((x, c) => c.copy(fee = x.toDouble.toLong))
-              .validate(x => if (x.toDouble.toLong >= 0) success else failure("Value <fee> must be >=0")),
+              .action((x, c) => c.copy(fee = x.toDouble))
+              .validate(x => if (x.toDouble >= 0) success else failure("Value <fee> must be >=0")),
             opt[String]("amount").required
               .valueName("<int>")
               .abbr("a")
-              .action((x, c) => c.copy(amount = x.toDouble.toLong))
-              .validate(x => if (x.toDouble.toLong > 0) success else failure("Value <amount> must be >0"))
+              .action((x, c) => c.copy(amount = x.toDouble))
+              .validate(x => if (x.toDouble > 0) success else failure("Value <amount> must be >0"))
           ),
         cmd("show-address")
           .action((_, c) => c.copy(method = CliMethod.ShowAddress))
