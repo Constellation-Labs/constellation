@@ -100,8 +100,8 @@ class HealthChecker[F[_]: Concurrent](
 
       diff <- compareSnapshotState(major, ownSnapshots)
 
-//      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
-      result <- if (shouldReDownload(ownSnapshots, diff)) {
+      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
+/*      result <- if (shouldReDownload(ownSnapshots, diff)) {
         logger.info(
           s"[${dao.id.short}] Re-download process with : \n" +
             s"Snapshot to download : ${diff.snapshotsToDownload.map(a => (a.height, a.hash))} \n" +
@@ -115,6 +115,7 @@ class HealthChecker[F[_]: Concurrent](
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
       }
+*/
     } yield result
 
     check.recoverWith {
