@@ -107,7 +107,7 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
 
         snapshot <- snapshotStorage.readSnapshot(hash)
 
-        _ <- EitherT.liftF(unsafeLogger.debug(s"Accept downloaded snapshot hash=$hash lastSnapshot=${snapshot.snapshot.lastSnapshot} at height=${snapshot.height} with blocks: ${snapshot.snapshot.checkpointBlocks}"))
+        _ <- EitherT.liftF(unsafeLogger.debug(s"Accept downloaded snapshot hash=$hash lastSnapshot=${snapshot.snapshot.lastSnapshot} at height=${snapshot.height}\nwith blocks: ${snapshot.snapshot.checkpointBlocks}"))
 
         height = snapshot.height
 
