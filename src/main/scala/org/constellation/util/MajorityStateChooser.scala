@@ -32,23 +32,23 @@ class MajorityStateChooser[F[_]: Concurrent] {
       nodeId <- OptionT.fromOption[F](chooseNodeId(majorState))
       node: (Id, Seq[RecentSnapshot]) <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
       _ <- OptionT.liftF(logger.debug(s"Re-download from node : ${node}"))
-    } yield dropToCurrentState(node, majorState)
+    } yield (node._2, Set(node._1))
 
   private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], ownHeight: Long) =
     for {
       highestSnapshot <- OptionT.fromOption[F](getHighest(nodeSnapshots))
-      useHighest <- OptionT.liftF(shouldUseHighest(highestSnapshot, ownHeight))
-      majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots))
+      // useHighest <- OptionT.liftF(shouldUseHighest(highestSnapshot, ownHeight))
+      // majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots))
 
       _ <- OptionT.liftF(
         logger.debug(
-          s"The highest snapshot : $highestSnapshot : major snapshot : $majorSnapshot : use highest = $majorSnapshot"
+          s"The highest snapshot : $highestSnapshot"
         )
       )
-    } yield if (useHighest) highestSnapshot else majorSnapshot
+    } yield highestSnapshot
 
-  private def dropToCurrentState(nodeSnapshot: NodeSnapshots, major: SnapshotNodes) =
-    (nodeSnapshot._2.sortBy(_.height).reverse.dropWhile(_ != major._1), Set(nodeSnapshot._1))
+  private def dropToCurrentState(nodeSnapshot: NodeSnapshots, major: SnapshotNodes): (Seq[RecentSnapshot], Set[Id]) =
+    (nodeSnapshot._2.sortBy(-_.height).dropWhile(_ != major._1), Set(nodeSnapshot._1))
 
   private def findNode(nodeSnapshots: Seq[NodeSnapshots], nodeId: Id) =
     nodeSnapshots.find(_._1 == nodeId)
@@ -76,12 +76,19 @@ class MajorityStateChooser[F[_]: Concurrent] {
 
   private def sortByHeightAndHash(nodeSnapshots: Seq[NodeSnapshots]) =
     nodeSnapshots
-      .flatMap(s => s._2.map((s._1, _)))
-      .groupBy(_._2)
+      .flatMap {
+        case (id, snapshots) => snapshots.map((id, _))
+      }
+      .groupBy {
+        case (_, snapshot) => snapshot
+      }
       .toList
-      .sortBy(_._1.height)
-      .reverse
-      .map(s => (s._1, s._2.map(_._1)))
+      .sortBy {
+        case (snapshot, _) => snapshot.height
+      }
+      .map {
+        case (snapshot, idsMap) => (snapshot, idsMap.map(_._1))
+      }
 
   private def checkIfNodeContainsSnapshotsInConsistentState(nodeSnapshots: NodeSnapshots) = {
     val nodeSnapshotsHeights: Seq[Long] = nodeSnapshots._2.map(a => a.height)
