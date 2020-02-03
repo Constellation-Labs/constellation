@@ -37,6 +37,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
   def broadcastSnapshot(hash: String, height: Long, publicReputation: Map[Id, Double]): F[Unit] =
     for {
       ownRecent <- updateRecentSnapshots(hash, height, publicReputation)
+      /*
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       _ <- Sync[F].delay{logger.warn(s"broadcastSnapshot for Id: ${dao.id} - ownRecent: ${ownRecent}")}
         responses <- peers.values.toList
@@ -66,11 +67,12 @@ class SnapshotBroadcastService[F[_]: Concurrent](
           logger.warn ("Redownload - snapshots to download:")
           diff.snapshotsToDownload.foreach(s => logger.warn(s" ${s.height} - ${s.hash}"))
           healthChecker.startReDownload(diff, peers.filter(p => diff.peers.contains(p._1)))
-      }
+      }*/
     } yield ()
 
   def verifyRecentSnapshots(): F[Unit] =
     Sync[F].unit
+  /*
     val verify = for {
       ownRecent <- recentSnapshots.get
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
@@ -101,6 +103,7 @@ class SnapshotBroadcastService[F[_]: Concurrent](
     } else {
       Sync[F].unit
     }
+   */
 
   def getRecentSnapshots(snapHash: Option[String] = None): F[List[RecentSnapshot]] = {
     logger.debug(s"begin getRecentSnapshots for ${snapHash.toString}")
