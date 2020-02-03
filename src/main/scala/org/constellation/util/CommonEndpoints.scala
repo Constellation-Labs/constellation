@@ -11,7 +11,7 @@ import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.Snapshot
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema.{NodeState, NodeType}
@@ -91,10 +91,19 @@ trait CommonEndpoints extends Json4sSupport {
       path("storedSnapshot" / Segment) { s =>
         val getSnapshot = for {
           exists <- dao.snapshotService.exists(s)
-          bytes <- if (exists) {
+          isStored <- dao.snapshotService.isStored(s)
+          bytes <- if (exists && isStored) {
             IO(Snapshot.loadSnapshotBytes(s).toOption)
           } else None.pure[IO]
-        } yield bytes
+          memBytes <- if (exists && !isStored) {
+            for {
+              latestSnapshot <- dao.snapshotService.snapshot.get
+              blocks <- latestSnapshot.checkpointBlocks.toList.traverse(hash => dao.checkpointService.fullData(hash)).map(_.flatten)
+              storedSnapshot = StoredSnapshot(latestSnapshot, blocks.toSeq)
+              b <- IO { KryoSerializer.serializeAnyRef(storedSnapshot) }
+            } yield b.some
+          } else None.pure[IO]
+        } yield bytes.orElse(memBytes)
 
         APIDirective.onHandle(getSnapshot) { res =>
           val httpResponse: HttpResponse = res match {
