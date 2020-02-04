@@ -98,6 +98,8 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
         majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
 
       result._1 shouldBe List(
+        RecentSnapshot("6", 6, Map.empty),
+        RecentSnapshot("4", 4, Map.empty),
         RecentSnapshot("2", 2, Map.empty),
         RecentSnapshot("0", 0, Map.empty)
       )
@@ -136,6 +138,9 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
         majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
 
       result._1 shouldBe List(
+        RecentSnapshot("8", 8, Map.empty),
+        RecentSnapshot("6", 6, Map.empty),
+        RecentSnapshot("4", 4, Map.empty),
         RecentSnapshot("2", 2, Map.empty),
         RecentSnapshot("0", 0, Map.empty)
       )
