@@ -102,7 +102,6 @@ resource "google_compute_instance" "default" {
   provisioner "remote-exec" {
     inline = [
       "git clone https://github.com/Constellation-Labs/constellation.git",
-      "cd constellation && ./assemble.sh"
     ]
     connection {
       host = self.network_interface.0.access_config.0.nat_ip
