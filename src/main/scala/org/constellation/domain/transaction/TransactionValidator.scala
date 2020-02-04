@@ -11,9 +11,7 @@ object TransactionValidator {
 
   def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] = {
     val isValid = tx.signatures.exists { hs ⇒
-      hs.publicKey.address == tx.src.address && hs.valid(
-        tx.signaturesHash
-      )
+      hs.publicKey.address == tx.src.address && hs.valid(tx.signaturesHash)
     }
 
     if (isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel
@@ -56,9 +54,10 @@ class TransactionValidator[F[_]: Sync](
         tx.validNel
     }
 
-  def validateTransaction(tx: Transaction
-  ): F[Validated[NonEmptyList[TransactionValidationError],
-                 (((((Transaction, Transaction), Transaction), Transaction), Transaction), Transaction)]] =
+  def validateTransaction(tx: Transaction): F[Validated[
+    NonEmptyList[TransactionValidationError],
+    (((((Transaction, Transaction), Transaction), Transaction), Transaction), Transaction)
+  ]] =
     for {
       staticValidation <- Sync[F].delay(
         validateSourceSignature(tx)
@@ -68,7 +67,7 @@ class TransactionValidator[F[_]: Sync](
           .product(validateFee(tx))
       )
       duplicateValidation <- validateDuplicate(tx)
-    } yield staticValidation.product(duplicateValidation)//.map(_ ⇒ tx)
+    } yield staticValidation.product(duplicateValidation) //.map(_ ⇒ tx)
 
 }
 
