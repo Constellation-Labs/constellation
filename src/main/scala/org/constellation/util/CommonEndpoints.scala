@@ -85,7 +85,7 @@ trait CommonEndpoints extends Json4sSupport {
         }
 
         APIDirective.handle(
-          dao.cluster.getNodeState.map(NodeState.canActAsDownloadSource).ifM(getInfo, IO.pure(none[Array[Byte]]))
+          dao.cluster.getNodeState.map(NodeState.canActAsRedownloadSource).ifM(getInfo, IO.pure(none[Array[Byte]]))
         )(complete(_))
       } ~
       path("storedSnapshot" / Segment) { s =>
