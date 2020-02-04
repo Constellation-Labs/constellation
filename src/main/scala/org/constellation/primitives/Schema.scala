@@ -59,12 +59,15 @@ object Schema {
 
     val validForLettingOthersDownload: Set[NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
 
+    val validForLettingOthersRedownload: Set[NodeState.Value] = Set(Ready, Leaving)
+
     val validForCheckpointAcceptance: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
-    val validForCheckpointPendingAcceptance: Set[NodeState.Value] =
-      Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
+    val validForCheckpointPendingAcceptance: Set[NodeState.Value] = validDuringDownload
 
     def canActAsDownloadSource(current: NodeState): Boolean = validForLettingOthersDownload.contains(current)
+
+    def canActAsRedownloadSource(current: NodeState): Boolean = validForLettingOthersRedownload.contains(current)
 
     def canRunClusterCheck(current: NodeState): Boolean = validForRedownload.contains(current)
 
