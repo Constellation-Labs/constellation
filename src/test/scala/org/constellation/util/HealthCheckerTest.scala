@@ -4,6 +4,7 @@ import java.net.SocketException
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.alerts.AlertClient
 import org.constellation.consensus.ConsensusManager
 import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, DownloadProcess, SetStateResult}
@@ -35,6 +36,7 @@ class HealthCheckerTest
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
   val cluster: Cluster[IO] = mock[Cluster[IO]]
   val majorState: MajorityStateChooser[IO] = mock[MajorityStateChooser[IO]]
+  val alertClient: AlertClient[IO] = mock[AlertClient[IO]]
 
   val healthChecker =
     new HealthChecker[IO](
@@ -44,7 +46,8 @@ class HealthCheckerTest
       IO.contextShift(ConstellationExecutionContext.bounded),
       downloadProcess,
       cluster,
-      majorState
+      majorState,
+      alertClient,
     )(
       IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)),
       IO.contextShift(ConstellationExecutionContext.bounded)

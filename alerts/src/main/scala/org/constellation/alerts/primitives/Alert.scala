@@ -15,12 +15,16 @@ case class CheckpointAcceptanceRateAlert() extends Alert {
   override def severity: Severity = Severity.Critical
 }
 
-case class DataMigrationAlert(throwable: Throwable) extends Alert {
+case class DataMigrationAlert() extends Alert {
   override def title: String = s"Data migration"
   override def severity: Severity = Severity.Critical
 }
 
-case class PeriodicSnapshotAlignmentAlert() extends Alert {
+case class PeriodicSnapshotAlignmentAlert(
+  ownSnapshots: Seq[String],
+  snapshotsToDownload: Seq[String],
+  snapshotsToDelete: Seq[String],
+) extends Alert {
   override def title: String = s"Periodic snapshot alignment"
   override def severity: Severity = Severity.Critical
 }
@@ -48,10 +52,10 @@ case class ErrorAlert(error: String) extends Alert {
 object Alert {
   implicit val encodeEvent: Encoder[Alert] = Encoder.instance {
     case a @ CheckpointAcceptanceRateAlert()  => a.asJson
-    case a @ PeriodicSnapshotAlignmentAlert() => a.asJson
+    case a @ PeriodicSnapshotAlignmentAlert(_, _, _) => a.asJson
     case a @ JVMHeapSizeAlert(_, _)           => a.asJson
     case a @ JVMCPUUsageAlert(_)              => a.asJson
-    case a @ DataMigrationAlert(_)            => a.asJson
+    case a @ DataMigrationAlert()            => a.asJson
     case a @ ExceptionAlert(_)                => a.asJson
     case a @ ErrorAlert(_)                    => a.asJson
     case _                                    => throw new Throwable("Can't encode Alert")

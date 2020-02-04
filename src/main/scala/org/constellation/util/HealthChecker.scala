@@ -5,6 +5,8 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.alerts.AlertClient
+import org.constellation.alerts.primitives.PeriodicSnapshotAlignmentAlert
 import org.constellation.consensus.{ConsensusManager, Snapshot}
 import org.constellation.metrics.Metrics
 import org.constellation.p2p.{Cluster, DownloadProcess, PeerData}
@@ -76,6 +78,7 @@ class HealthChecker[F[_]: Concurrent](
   downloader: DownloadProcess[F],
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser[F],
+  alertClient: AlertClient[F],
 )(implicit C: ContextShift[F]) {
 
   implicit val shadedDao: DAO = dao
@@ -110,7 +113,11 @@ class HealthChecker[F[_]: Concurrent](
             s"From peers : ${diff.peers} " +
             s"Own snapshots : $ownSnapshots " +
             s"Major state : $major"
-        ) >>
+        ) >> alertClient.sendAlert(PeriodicSnapshotAlignmentAlert(
+          ownSnapshots.map(_.hash),
+          diff.snapshotsToDownload.map(_.hash),
+          diff.snapshotsToDelete.map(_.hash),
+        )) >>
           startReDownload(diff, peers.filterKeys(diff.peers.contains))
             .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
       } else {

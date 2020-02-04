@@ -243,7 +243,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       IO.contextShift(ConstellationExecutionContext.bounded),
       downloadProcess,
       cluster,
-      majorityStateChooser
+      majorityStateChooser,
+      alertClient,
     )
 
     val snapshotSelector =

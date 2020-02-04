@@ -45,7 +45,7 @@ class GCPStorage[F[_]: Concurrent](alertClient: AlertClient[F]) extends CloudSto
     upload.handleErrorWith(
       err =>
         logger.error(s"[CloudStorage] Cannot upload files : GCP : ${err.getMessage}") >> alertClient.sendAlert(
-          DataMigrationAlert(err)
+          DataMigrationAlert()
         ) >> Sync[F].pure(List.empty[String])
     )
   }
@@ -110,7 +110,7 @@ class AWSStorage[F[_]: Concurrent](alertClient: AlertClient[F]) extends CloudSto
     upload.handleErrorWith(
       err =>
         logger.error(s"[CloudStorage] Cannot upload files : AWS : ${err.getMessage}") >> alertClient.sendAlert(
-          DataMigrationAlert(err)
+          DataMigrationAlert()
         ) >> Sync[F].pure(List.empty[String])
     )
   }
