@@ -12,6 +12,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.alerts.PagerDutyClient
 import org.constellation.checkpoint._
 import org.constellation.consensus._
 import org.constellation.crypto.SimpleWalletLike
@@ -111,9 +112,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     if (ConfigUtil.isEnabledAWSStorage) {
-      cloudStorage = new AWSStorage[IO]
+      cloudStorage = new AWSStorage[IO](alertClient)
     } else if (ConfigUtil.isEnabledGCPStorage) {
-      cloudStorage = new GCPStorage[IO]
+      cloudStorage = new GCPStorage[IO](alertClient)
     }
 
     rateLimiting = new RateLimiting[IO]
@@ -123,6 +124,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     joiningPeerValidator = JoiningPeerValidator[IO]
+
+    alertClient = new PagerDutyClient[IO](nodeConfig.cliConfig.externalIp.getHostAddress, nodeConfig.cliConfig.pagerDutyIntegrationKey)
 
     ipManager = IPManager[IO]()
     cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, this)

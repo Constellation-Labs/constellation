@@ -13,6 +13,8 @@ import com.google.cloud.storage._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
+import org.constellation.alerts.AlertClient
+import org.constellation.alerts.primitives.DataMigrationAlert
 
 import scala.util.{Failure, Success, Try}
 
@@ -21,7 +23,7 @@ sealed trait CloudStorage[F[_]] {
   def upload(files: Seq[File]): F[List[String]]
 }
 
-class GCPStorage[F[_]: Concurrent] extends CloudStorage[F] {
+class GCPStorage[F[_]: Concurrent](alertClient: AlertClient[F]) extends CloudStorage[F] {
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -42,9 +44,9 @@ class GCPStorage[F[_]: Concurrent] extends CloudStorage[F] {
 
     upload.handleErrorWith(
       err =>
-        logger.error(s"[CloudStorage] Cannot upload files : GCP : ${err.getMessage}") >> Sync[F].pure(
-          List.empty[String]
-        )
+        logger.error(s"[CloudStorage] Cannot upload files : GCP : ${err.getMessage}") >> alertClient.sendAlert(
+          DataMigrationAlert(err)
+        ) >> Sync[F].pure(List.empty[String])
     )
   }
 
@@ -85,7 +87,7 @@ class GCPStorage[F[_]: Concurrent] extends CloudStorage[F] {
     Sync[F].delay(ConfigUtil.get(configName))
 }
 
-class AWSStorage[F[_]: Concurrent] extends CloudStorage[F] {
+class AWSStorage[F[_]: Concurrent](alertClient: AlertClient[F]) extends CloudStorage[F] {
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -107,9 +109,9 @@ class AWSStorage[F[_]: Concurrent] extends CloudStorage[F] {
 
     upload.handleErrorWith(
       err =>
-        logger.error(s"[CloudStorage] Cannot upload files : AWS : ${err.getMessage}") >> Sync[F].pure(
-          List.empty[String]
-        )
+        logger.error(s"[CloudStorage] Cannot upload files : AWS : ${err.getMessage}") >> alertClient.sendAlert(
+          DataMigrationAlert(err)
+        ) >> Sync[F].pure(List.empty[String])
     )
   }
 

@@ -15,7 +15,7 @@ case class CheckpointAcceptanceRateAlert() extends Alert {
   override def severity: Severity = Severity.Critical
 }
 
-case class DataMigrationAlert() extends Alert {
+case class DataMigrationAlert(throwable: Throwable) extends Alert {
   override def title: String = s"Data migration"
   override def severity: Severity = Severity.Critical
 }
@@ -51,7 +51,7 @@ object Alert {
     case a @ PeriodicSnapshotAlignmentAlert() => a.asJson
     case a @ JVMHeapSizeAlert(_, _)           => a.asJson
     case a @ JVMCPUUsageAlert(_)              => a.asJson
-    case a @ DataMigrationAlert()             => a.asJson
+    case a @ DataMigrationAlert(_)            => a.asJson
     case a @ ExceptionAlert(_)                => a.asJson
     case a @ ErrorAlert(_)                    => a.asJson
     case _                                    => throw new Throwable("Can't encode Alert")

@@ -75,7 +75,7 @@ class HealthChecker[F[_]: Concurrent](
   calculationContext: ContextShift[F],
   downloader: DownloadProcess[F],
   cluster: Cluster[F],
-  majorityStateChooser: MajorityStateChooser[F]
+  majorityStateChooser: MajorityStateChooser[F],
 )(implicit C: ContextShift[F]) {
 
   implicit val shadedDao: DAO = dao

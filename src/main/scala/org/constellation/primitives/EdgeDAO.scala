@@ -4,6 +4,7 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
+import org.constellation.alerts.AlertClient
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointParentService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
@@ -193,6 +194,7 @@ trait EdgeDAO {
   var eigenTrust: EigenTrust[IO] = _
   var rewardsManager: RewardsManager[IO] = _
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
+  var alertClient: AlertClient[IO] = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()

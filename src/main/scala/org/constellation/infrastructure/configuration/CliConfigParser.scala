@@ -50,6 +50,10 @@ object CliConfigParser {
       opt[String]("alias")
         .action((x, c) => c.copy(alias = x))
         .text("Alias for keypair in provided keystore file"),
+      opt[String]("integrationkey")
+          .action((x, c) => c.copy(pagerDutyIntegrationKey = x))
+          .text("PagerDuty integration key")
+          .required(),
       help("help").text("prints this usage text"),
       version("version").text(s"Constellation v${BuildInfo.version}"),
       checkConfig(

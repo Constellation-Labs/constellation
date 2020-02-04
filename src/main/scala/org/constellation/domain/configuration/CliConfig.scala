@@ -14,5 +14,6 @@ case class CliConfig(
   startOfflineMode: Boolean = false,
   lightNode: Boolean = false,
   genesisNode: Boolean = false,
-  testMode: Boolean = false
+  testMode: Boolean = false,
+  pagerDutyIntegrationKey: String = null
 )
