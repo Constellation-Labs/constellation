@@ -11,9 +11,7 @@ object TransactionValidator {
 
   def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] = {
     val isValid = tx.signatures.exists { hs ⇒
-      hs.publicKey.address == tx.src.address && hs.valid(
-        tx.signaturesHash
-      )
+      hs.publicKey.address == tx.src.address && hs.valid(tx.signaturesHash)
     }
 
     if (isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel
@@ -67,7 +65,6 @@ class TransactionValidator[F[_]: Sync](
       )
       duplicateValidation <- validateDuplicate(tx)
     } yield staticValidation.product(duplicateValidation).map(_ ⇒ tx)
-
 }
 
 sealed trait TransactionValidationError {
