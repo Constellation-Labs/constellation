@@ -29,10 +29,10 @@ class MajorityStateChooser[F[_]: Concurrent] {
         nodeSnapshots.filter(checkIfNodeContainsSnapshotsInConsistentState),
         ownHeight
       )
-      nodeId <- OptionT.fromOption[F](chooseNodeId(majorState))
+      nodeId <- OptionT.fromOption[F](chooseNodeId(majorState, nodeSnapshots))
       node: (Id, Seq[RecentSnapshot]) <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
       _ <- OptionT.liftF(logger.debug(s"Re-download from node : ${node}"))
-    } yield (node._2, Set(node._1))
+    } yield (node._2.sortBy(-_.height), Set(node._1))
 
   private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], ownHeight: Long) =
     for {
@@ -54,11 +54,8 @@ class MajorityStateChooser[F[_]: Concurrent] {
   private def findNode(nodeSnapshots: Seq[NodeSnapshots], nodeId: Id) =
     nodeSnapshots.find(_._1 == nodeId)
 
-  private def chooseNodeId(snapshotNodes: SnapshotNodes) =
-    Random.shuffle(snapshotNodes._2) match {
-      case Nil    => None
-      case x :: _ => Some(x)
-    }
+  private def chooseNodeId(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
+    nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).sortBy(-_._2.size).headOption.map(_._1)
 
   private def shouldUseHighest(snapshotNodes: SnapshotNodes, ownHeight: Long) =
     ((snapshotNodes._1.height - ownHeight) >= differenceInSnapshotHeightToReDownloadFromLeader).pure[F]
@@ -85,7 +82,7 @@ class MajorityStateChooser[F[_]: Concurrent] {
       }
       .toList
       .sortBy {
-        case (snapshot, _) => snapshot.height
+        case (snapshot, _) => -snapshot.height
       }
       .map {
         case (snapshot, idsMap) => (snapshot, idsMap.map(_._1))
