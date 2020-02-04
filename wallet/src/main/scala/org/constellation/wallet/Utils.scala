@@ -148,7 +148,7 @@ case class SignatureBatch(
     x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 }
 
-case class SignedObservationEdge(signatureBatch: SignatureBatch) {
+case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
   def baseHash: String = signatureBatch.hash
 }
 
@@ -205,5 +205,18 @@ object TransactionEdge {
     )
     val soe = SignHelp.signedObservationEdge(oe)(keyPair)
     Edge(oe, soe, txData)
+  }
+}
+
+object Implicits {
+  implicit class KryoSerExt(anyRef: AnyRef) {
+    def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
+  }
+
+  implicit class SHA256ByteExt(arr: Array[Byte]) {
+
+    def sha256: String = Hashing.sha256().hashBytes(arr).toString
+
+    def sha256Bytes: Array[Byte] = Hashing.sha256().hashBytes(arr).asBytes()
   }
 }

@@ -1,6 +1,6 @@
 package org.constellation.domain.transaction
 
-import cats.data.ValidatedNel
+import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import cats.effect.Sync
 import cats.implicits._
 import constellation._
@@ -56,7 +56,9 @@ class TransactionValidator[F[_]: Sync](
         tx.validNel
     }
 
-  def validateTransaction(tx: Transaction): F[ValidationResult[Transaction]] =
+  def validateTransaction(tx: Transaction
+  ): F[Validated[NonEmptyList[TransactionValidationError],
+                 (((((Transaction, Transaction), Transaction), Transaction), Transaction), Transaction)]] =
     for {
       staticValidation <- Sync[F].delay(
         validateSourceSignature(tx)
@@ -66,7 +68,7 @@ class TransactionValidator[F[_]: Sync](
           .product(validateFee(tx))
       )
       duplicateValidation <- validateDuplicate(tx)
-    } yield staticValidation.product(duplicateValidation).map(_ ⇒ tx)
+    } yield staticValidation.product(duplicateValidation)//.map(_ ⇒ tx)
 
 }
 

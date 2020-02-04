@@ -186,6 +186,7 @@ lazy val protobuf = (project in file("proto"))
 
 lazy val root = (project in file("."))
   .dependsOn(protobuf, schema)
+  .aggregate(keytool, wallet)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .configs(E2ETest)

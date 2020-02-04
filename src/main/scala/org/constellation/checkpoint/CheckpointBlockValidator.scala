@@ -133,7 +133,13 @@ class CheckpointBlockValidator[F[_]: Sync](
   def validateTransactionIntegrity(t: Transaction): F[ValidationResult[Transaction]] =
     transactionValidator
       .validateTransaction(t)
-      .map(v => if (v.isValid) t.validNel else InvalidTransaction(t).invalidNel)
+      .map{ v =>
+        if (v.isValid) t.validNel
+        else {
+          println("validateTransactionIntegrity - "+v.toString())
+          InvalidTransaction(t).invalidNel
+        }
+      }
 
   def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): F[ValidationResult[Transaction]] =
     addressService

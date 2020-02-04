@@ -4,11 +4,12 @@ import java.io.{FileInputStream, FileOutputStream}
 import java.security.KeyPair
 
 import cats.effect.{IO, Sync}
+import com.google.common.hash.Hashing
 import org.constellation.keytool.KeyStoreUtils
 import org.json4s.ext.EnumNameSerializer
 import org.json4s.{CustomKeySerializer, DefaultFormats, Extraction, Formats, JValue}
 import org.json4s.native.{Serialization, parseJsonOpt}
-
+import Implicits._
 case class Transaction(
   edge: Edge[TransactionEdgeData],
   lastTxRef: LastTransactionRef,
@@ -29,6 +30,16 @@ object SerializerFormats {
               id.hex
           })
       )
+}
+
+trait Signable {
+
+  def signInput: Array[Byte] = hash.getBytes()
+
+  def hash: String = this.kryo.sha256
+
+  def short: String = hash.slice(0, 5)
+
 }
 
 object Transaction {
@@ -67,7 +78,7 @@ object Transaction {
   ): Transaction = {
     val lastTxRef =
       prevTx
-        .map(tx => LastTransactionRef(Hashable.hash(tx.edge.signedObservationEdge), tx.lastTxRef.ordinal + 1))
+        .map(tx => LastTransactionRef(tx.edge.signedObservationEdge.hash, tx.lastTxRef.ordinal + 1))
         .getOrElse(LastTransactionRef.empty)
     val edge = TransactionEdge.createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
 

@@ -594,7 +594,11 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               isDummy = false,
               normalized = sendRequest.normalized
             )
-            .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx, path = Set(dao.id))))
+            .flatMap{
+              tx =>
+                logger.info(s"send transaction created with tx hash ${tx.hash}")
+                dao.transactionService.put(TransactionCacheData(tx, path = Set(dao.id)))
+            }
             .map(_.hash)
 
           APIDirective.handle(tx)(complete(_))
