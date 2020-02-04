@@ -172,7 +172,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
               APIDirective.handle {
                 dao.cluster.getNodeState
-                  .map(NodeState.canActAsDownloadSource)
+                  .map(NodeState.canActAsRedownloadSource)
                   .ifM(getInfo, IO.pure(None))
                   } {
                     case None => complete(StatusCodes.NotFound)
@@ -535,7 +535,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
             APIDirective.handle(
               dao.cluster.getNodeState
-                .map(NodeState.canActAsDownloadSource)
+                .map(NodeState.canActAsRedownloadSource)
                 .ifM(getInfo, IO.pure(none[Array[Byte]]))
             )(complete(_))
           }
