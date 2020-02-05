@@ -32,5 +32,5 @@ do
   java -jar cl-keytool.jar --keystore "data/key-${i}.p12" --alias alias --storepass storepass --keypass keypass
   address=$(java -jar cl-wallet.jar show-address --keystore "data/key-${i}.p12" --alias alias --storepass storepass --keypass keypass)
   echo -e "Created new key with address : $GREEN $address $NC"
-  echo "${address},1000" >> ${WORKING_DIR}/${FILENAME}
+  echo "${address},90000000" >> ${WORKING_DIR}/${FILENAME}
 done
