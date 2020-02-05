@@ -34,11 +34,11 @@ class MajorityStateChooser[F[_]: Concurrent] {
       _ <- OptionT.liftF(logger.debug(s"Re-download from node : ${node}"))
     } yield (node._2.sortBy(-_.height), Set(node._1))
 
-  private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], ownHeight: Long) =
+  private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], height: Long) =
     for {
       // highestSnapshot <- OptionT.fromOption[F](getHighest(nodeSnapshots))
       // useHighest <- OptionT.liftF(shouldUseHighest(highestSnapshot, ownHeight))
-      majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots))
+      majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots, height))
 
       _ <- OptionT.liftF(
         logger.debug(
