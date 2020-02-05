@@ -27,9 +27,6 @@ else
   echo -e "${GREEN}Load balancer address is set to = $LOAD_BALANCER_ADDRESS $NC";
 fi
 
-rm -rf $WORKING_DIR/prev_tx-*
-rm -rf $WORKING_DIR/new_tx-*
-
 N=0
 ARR=()
 
@@ -52,14 +49,8 @@ SIZE=${#ARR[@]}
 for (( i=0; i<SIZE; i++ ))
 do
   address="$(cut -d',' -f1 <<<"${ARR[i]}")"
-  echo -e "Address : ${GREEN}${address}${NC}"
-  touch $WORKING_DIR/prev_tx-${i}
+  echo -e "\nAddress : ${GREEN}${address}${NC}"
 
-  java -jar cl-wallet.jar create-transaction --keystore "${WORKING_DIR}/key-${i}.p12" --alias alias --storepass storepass --keypass keypass -d DAG8eaKi2W7ZirqMJBEnKkEUu5kHoL9gvwaT5BQ7 -p "${WORKING_DIR}/prev_tx-${i}" -f "${WORKING_DIR}/new_tx-${i}" --fee 0 --amount 1
-  echo -e "${GREEN}Transaction created for address : ${address} ${NC}"
-
-  url=http://"${LOAD_BALANCER_ADDRESS}":9000/transaction
-  path=${WORKING_DIR}/new_tx-${i}
-  curl -X POST "$url" -H "Content-type: application/json" --data-binary @"${path}"
-  echo -e "\n${GREEN}Transaction created for address : ${address} sent to ${LOAD_BALANCER_ADDRESS} ${NC}\n"
+  url=http://"${LOAD_BALANCER_ADDRESS}":9000/balance/"${address}"
+  curl -X GET "$url"
 done
