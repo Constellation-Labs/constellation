@@ -61,5 +61,5 @@ do
   url=http://"${LOAD_BALANCER_ADDRESS}":9000/transaction
   path=${WORKING_DIR}/new_tx-${i}
   curl -X POST "$url" -H "Content-type: application/json" --data-binary @"${path}"
-  echo -e "${GREEN}Transaction created for address : ${address} sent to ${LOAD_BALANCER_ADDRESS} ${NC}"
+  echo -e "\n${GREEN}Transaction created for address : ${address} sent to ${LOAD_BALANCER_ADDRESS} ${NC}\n"
 done
