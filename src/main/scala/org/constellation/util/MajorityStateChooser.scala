@@ -9,7 +9,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class MajorityStateChooser[F[_]: Concurrent] {
 
@@ -22,23 +22,28 @@ class MajorityStateChooser[F[_]: Concurrent] {
 
   def chooseMajorityState(
     nodeSnapshots: List[NodeSnapshots],
-    ownHeight: Long
+    ownHeight: Long,
+    allPeers: Seq[Id]
   ): OptionT[F, (Seq[RecentSnapshot], Set[Id])] =
     for {
       majorState <- chooseMajoritySnapshot(
         nodeSnapshots.filter(checkIfNodeContainsSnapshotsInConsistentState),
-        ownHeight
+        ownHeight,
+        allPeers
       )
-      nodeId <- OptionT.fromOption[F](chooseNodeId(majorState, nodeSnapshots))
-      node: (Id, Seq[RecentSnapshot]) <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
-      _ <- OptionT.liftF(logger.debug(s"Re-download from node : ${node}"))
-    } yield (node._2.sortBy(-_.height), Set(node._1))
+      snapsThoughMaj <- OptionT.fromOption[F](getAllSnapsUntilMaj(majorState._2, nodeSnapshots))
+//      node <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
+      nodeIds <- OptionT.fromOption[F](chooseMajNodeIds(majorState._2, nodeSnapshots))
 
-  private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], height: Long) =
+      _ <- OptionT.liftF(logger.debug(s"Re-download from nodes : ${nodeIds}"))
+    } yield (snapsThoughMaj.sortBy(-_.height), nodeIds.toSet)
+
+  private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], height: Long,
+                                     allPeers: Seq[Id]) =
     for {
       // highestSnapshot <- OptionT.fromOption[F](getHighest(nodeSnapshots))
       // useHighest <- OptionT.liftF(shouldUseHighest(highestSnapshot, ownHeight))
-      majorSnapshot <- OptionT.fromOption[F](chooseMajor(nodeSnapshots, height))
+      majorSnapshot <- OptionT.fromOption[F](chooseMajorWinner(allPeers, nodeSnapshots))//def chooseMajorWinner(allPeers: Seq[Id])(nodeSnapshots: Seq[NodeSnapshots])
 
       _ <- OptionT.liftF(
         logger.debug(
@@ -57,11 +62,61 @@ class MajorityStateChooser[F[_]: Concurrent] {
   private def chooseNodeId(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
     nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).sortBy(-_._2.size).headOption.map(_._1)
 
+  private def getAllSnapsUntilMaj(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
+    nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).headOption.map{ case (_, snaps) => snaps.filter(_.height <= snapshotNodes._1.height)}
+
+  private def chooseMajNodeIds(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]): Option[Seq[Id]] =
+    nodeSnapshots
+      .filter(ns =>
+      snapshotNodes._2.contains(ns._1))
+      .sortBy(-_._2.size)
+      .map(_._1) match {
+      case Nil => None
+      case majNodIds@(id :: _) => Some(majNodIds)
+    }
+
   private def shouldUseHighest(snapshotNodes: SnapshotNodes, ownHeight: Long) =
     ((snapshotNodes._1.height - ownHeight) >= differenceInSnapshotHeightToReDownloadFromLeader).pure[F]
 
+
+
+  def selectMajSnap(totalPeers: Int, allSnapshotNodes: Seq[SnapshotNodes]) = {
+    val numNodesWithSnapAtThisHeight = allSnapshotNodes.flatMap(_._2).length
+    val snapVotes: Seq[(RecentSnapshot, Int)] = allSnapshotNodes.map{ case (recSnap, ids) => (recSnap, ids.length) }
+    val simpleMaj: Option[RecentSnapshot] = snapVotes.find { case (recSnap, count) => count - (totalPeers / 2) >= 0 }.map(_._1)
+    if (simpleMaj.isDefined) simpleMaj
+    else if (totalPeers == numNodesWithSnapAtThisHeight) {//todo need actual logic to get majority from a distribution. This could be improved
+      val votedMajority: Option[RecentSnapshot] = snapVotes.sortBy { case (recSnap, count) => (count, recSnap.hash)}.map(_._1).headOption
+      votedMajority
+    }
+    else None
+  }
+
+  def chooseMajorWinner(allPeers: Seq[Id], nodeSnapshots: Seq[NodeSnapshots]) = {//todo instantiate with total peers
+    val snapshotToProposers: Seq[(RecentSnapshot, Seq[(Id, RecentSnapshot)])] = nodeSnapshots
+      .flatMap {
+        case (id, snapshots) => snapshots.map((id, _))
+      }
+      .groupBy {
+        case (_, snapshot) => snapshot
+      }
+      .toList
+    val snapsGroupedByHeight: Map[Long, Seq[(RecentSnapshot, Seq[Id])]] = snapshotToProposers.map { case (recentSnap, idRecentSnapTups) => (recentSnap, idRecentSnapTups.map(_._1)) }.groupBy(_._1.height)
+    val res = Try {snapsGroupedByHeight
+      .flatMap { case (height, allSnapshotNodes) =>
+        val getMajOpt = selectMajSnap(allPeers.length, allSnapshotNodes)
+        allSnapshotNodes.find(sn => getMajOpt.contains(sn._1)).map(maj => (height, maj))
+      }.maxBy(_._1)
+    }.toOption
+    res
+  }
+
   private def chooseMajor(nodeSnapshots: Seq[NodeSnapshots]) =
-    sortByHeightAndHash(nodeSnapshots).filter(_._2.lengthCompare(nodeSnapshots.count(_._2.nonEmpty) / 2) > 0) match {
+    sortByHeightAndHash(nodeSnapshots).filter{ case (recentSnap, ids) =>
+      val nodeWithSnapAtThisHeight = nodeSnapshots.count(ns => ns._2.nonEmpty)
+      val comp = ids.length - ( nodeWithSnapAtThisHeight / 2) >= 0
+      comp
+    } match {
       case Nil    => None
       case x :: _ => Some(x)
     }

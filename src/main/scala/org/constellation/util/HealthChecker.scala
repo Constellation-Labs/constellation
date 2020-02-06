@@ -95,7 +95,7 @@ class HealthChecker[F[_]: Concurrent](
       _ <- clearStaleTips(peersSnapshots)
 
       major <- majorityStateChooser
-        .chooseMajorityState(peersSnapshots :+ (dao.id, ownSnapshots), maxOrZero(ownSnapshots))
+        .chooseMajorityState(peersSnapshots :+ (dao.id, ownSnapshots), maxOrZero(ownSnapshots), peers.keys.toSeq)
         .getOrElse((Seq[RecentSnapshot](), Set[Id]()))
 
       diff <- compareSnapshotState(major, ownSnapshots)
