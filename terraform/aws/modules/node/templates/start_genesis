@@ -1,0 +1,18 @@
+#!/bin/sh
+#ulimit -c unlimited
+#ulimit -n 60036
+export CL_STOREPASS=storepass && export CL_KEYPASS=keypass && \
+java "-Dcom.sun.management.jmxremote" \
+"-Dcom.sun.management.jmxremote.port=9010" \
+"-Dcom.sun.management.jmxremote.rmi.port=9011" \
+"-Dcom.sun.management.jmxremote.local.only=false" \
+"-Dcom.sun.management.jmxremote.authenticate=false" \
+"-Dcom.sun.management.jmxremote.ssl=false" \
+"-Dlogback.configurationFile=/home/admin/constellation/logback.xml" \
+"-XX:+HeapDumpOnOutOfMemoryError" \
+"-Xms1024M" \
+"-Xmx8G" \
+"-Xss256K" \
+-Djava.rmi.server.hostname=$(cat external_host_ip) \
+-agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=n \
+-jar dag.jar --ip=$(cat external_host_ip) --port=9000 -k key.p12 --alias alias -f data.csv -g
