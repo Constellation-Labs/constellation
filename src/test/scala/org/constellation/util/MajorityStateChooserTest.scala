@@ -22,7 +22,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
   "choose majority state" - {
     "when node creates a correct snapshot" - {
-      "chooses own node if majority at given height is equal" in {
+      "still chooses other nodes if majority at given height is equal" in {
+        val allPeers = Id("node1") :: Id("node2") :: Id("ownNode") :: Nil
         val node1 = Id("node1") -> List(0, 2, 4, 6).map(toRecentSnapshot)
         val node2 = Id("node2") -> List(0, 2, 4, 6).map(toRecentSnapshot)
 
@@ -30,14 +31,16 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
         val height = 2L
 
-        val result = majorityState.chooseMajorityState(List(node1, node2, ownNode), height).value.unsafeRunSync.get
+        val result = majorityState.chooseMajorityState(List(node1, node2, ownNode), height, allPeers).value.unsafeRunSync.get
 
-        result._1 shouldBe List(2, 0).map(toRecentSnapshot)
+        result._1 shouldBe List(6, 4, 2, 0).map(toRecentSnapshot)
       }
     }
 
     "when node creates an incorrect snapshot" - {
       "chooses all nodes who has the majority at given height if all of them have same amount of snapshots" in {
+        val allPeers = Id("node1") :: Id("node2") :: Id("node3") :: Id("ownNode") :: Nil
+
         val node1 = Id("node1") -> List(0, 2, 4, 6, 8).map(toRecentSnapshot)
         val node2 = Id("node2") -> List(0, 2, 4, 6, 8).map(toRecentSnapshot)
         val node3 = Id("node3") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6, 8).map(toRecentSnapshotWithPrefix("a")))
@@ -46,13 +49,14 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
         val height = 6L
 
-        val result = majorityState.chooseMajorityState(List(node1, node2, node3, ownNode), height).value.unsafeRunSync.get
+        val result = majorityState.chooseMajorityState(List(node1, node2, node3, ownNode), height, allPeers).value.unsafeRunSync.get
 
         result._1 shouldBe List(8, 6, 4, 2, 0).map(toRecentSnapshot)
-        result._2 shouldBe List(Id("node1"), Id("node2"))
+        result._2 shouldBe Set(Id("node1"), Id("node2"))
       }
 
-      "chooses the node with most snapshots who has the majority at given height" in {
+      "choose the majority at the majority height when other peers heights are above majority" in {
+        val allPeers = Id("node1") :: Id("node2") :: Id("node3") :: Id("ownNode") :: Nil
         val node1 = Id("node1") -> List(0, 2, 4, 6, 8, 10).map(toRecentSnapshot)
         val node2 = Id("node2") -> List(0, 2, 4, 6, 8).map(toRecentSnapshot)
         val node3 = Id("node3") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6, 8).map(toRecentSnapshotWithPrefix("a")))
@@ -61,25 +65,29 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
         val height = 6L
 
-        val result = majorityState.chooseMajorityState(List(node1, node2, node3, ownNode), height).value.unsafeRunSync.get
+        val result = majorityState.chooseMajorityState(List(node1, node2, node3, ownNode), height, allPeers).value.unsafeRunSync.get
 
-        result._1 shouldBe List(10, 8, 6, 4, 2, 0).map(toRecentSnapshot)
-        result._2 shouldBe List(Id("node1"))
+        result._1 shouldBe List(8, 6, 4, 2, 0).map(toRecentSnapshot)
+        result._2 shouldBe Set(Id("node1"), Id("node2"))
       }
 
-      "chooses the node with most snapshots and the highest snapshot who has the majority at given height" in {
+      "chooses correct majority when encountering non-50% split" in {
+        val allPeers2 = Id("node1") :: Id("node2") :: Id("node3") :: Id("node4") :: Id("node5") :: Id("ownNode") :: Nil
+
         val node1 = Id("node1") -> List(2, 4, 6, 8, 10).map(toRecentSnapshot)
         val node2 = Id("node2") -> List(0, 2, 4, 6, 8).map(toRecentSnapshot)
         val node3 = Id("node3") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6, 8).map(toRecentSnapshotWithPrefix("a")))
+        val node4 = Id("node4") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6, 8).map(toRecentSnapshotWithPrefix("a")))
+        val node5 = Id("node5") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6).map(toRecentSnapshotWithPrefix("b")))
 
         val ownNode = Id("ownNode") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6).map(toRecentSnapshotWithPrefix("b")))
 
         val height = 6L
 
-        val result = majorityState.chooseMajorityState(List(node1, node2, node3, ownNode), height).value.unsafeRunSync.get
+        val result = majorityState.chooseMajorityState(List(node1, node2, node3, node4, node5, ownNode), height, allPeers2).value.unsafeRunSync.get
 
-        result._1 shouldBe List(10, 8, 6, 4, 2).map(toRecentSnapshot)
-        result._2 shouldBe List(Id("node1"))
+        result._1 shouldBe List(6, 4, 2).map(toRecentSnapshot)
+        result._2 shouldBe Set(Id("node1"), Id("node2"))
       }
     }
   }
@@ -92,6 +100,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val majorityState = new MajorityStateChooser[IO]
+  val allPeers = Id("node1") :: Id("node2") :: Id("ownNode") :: Nil
 
   describe("Should return correct major state") {
     it("after receiving the snapshots") {
@@ -100,7 +109,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -118,7 +127,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -136,7 +145,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -154,7 +163,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -172,7 +181,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -190,7 +199,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2, 4).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("14", 14, Map.empty),
@@ -212,7 +221,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val ownNode = Id("ownNode") -> List(0, 2, 4, 6, 8).map(i => RecentSnapshot(s"$i", i, Map.empty))
 
       val result =
-        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2)).value.unsafeRunSync().get
+        majorityState.chooseMajorityState(List(node1, node2, ownNode), maxOrZero(ownNode._2), allPeers).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("8", 8, Map.empty),
@@ -230,24 +239,28 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List()
       val ownNode = Id("ownNode") -> List()
 
-      val result = majorityState.chooseMajorityState(List(node1, node2, ownNode), 2).value.unsafeRunSync()
+      val result = majorityState.chooseMajorityState(List(node1, node2, ownNode), 2, allPeers).value.unsafeRunSync()
 
       result shouldBe None
     }
 
     it("after receiving not consistent lists from all nodes") {
+      val allPeers3 = Id("node1") :: Id("node2") :: Id("node3") :: Id("ownNode") :: Nil
+
       val node1 = Id("node1") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val node3 = Id("node3") -> List(0, 2, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, node3, ownNode)
 
-      val result = majorityState.chooseMajorityState(nodeList, maxOrZero(ownNode._2)).value.unsafeRunSync().get
+      val result = majorityState.chooseMajorityState(nodeList, maxOrZero(ownNode._2), allPeers3).value.unsafeRunSync().get
 
       result._2.subsetOf(Set(Id("node1"), Id("node2"))) shouldBe true
     }
 
     it("after receiving snapshots with different hashes") {
+      val allPeers4 = Id("node1") :: Id("node2") :: Id("node3") :: Id("node4") :: Nil
+
       val clusterSnapshots = List(
         (
           Id("node1"),
@@ -284,7 +297,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
         )
       )
 
-      val result = majorityState.chooseMajorityState(clusterSnapshots, 4).value.unsafeRunSync().get
+      val result = majorityState.chooseMajorityState(clusterSnapshots, 4, allPeers4).value.unsafeRunSync().get
 
       result._1 shouldBe List(
         RecentSnapshot("foo", 4, Map.empty),
