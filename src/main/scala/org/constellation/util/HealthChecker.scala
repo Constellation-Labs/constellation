@@ -2,14 +2,11 @@ package org.constellation.util
 
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
-import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.{ConsensusManager, Snapshot}
 import org.constellation.p2p.{Cluster, DownloadProcess, PeerData}
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.p2p.Download.logger
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.util.HealthChecker.maxOrZero
@@ -30,6 +27,7 @@ case class SnapshotDiff(
 )
 
 object HealthChecker {
+  val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
   private def maxOrZero(list: List[RecentSnapshot]): Long =
     list match {
@@ -53,6 +51,37 @@ object HealthChecker {
     }
     lastCheck
   }
+
+  def compareSnapshotState(major: (Seq[RecentSnapshot], Set[Id]), ownSnapshots: List[RecentSnapshot]) = SnapshotDiff(
+    ownSnapshots.diff(major._1).sortBy(-_.height),
+    major._1.diff(ownSnapshots).toList.sortBy(-_.height),
+    major._2.toList
+  )
+
+  private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
+    ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
+
+  private def isAboveInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
+    (maxOrZero(ownSnapshots) - snapshotHeightDelayInterval) > maxOrZero(
+      snapshotsToDownload
+    )
+
+  private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
+    (maxOrZero(ownSnapshots) + snapshotHeightDelayInterval) < maxOrZero(
+      snapshotsToDownload
+    )
+
+  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
+    diff match {
+      case SnapshotDiff(_, _, Nil) => false
+      case SnapshotDiff(_, Nil, _) => false
+      case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
+        val above = isAboveInterval(ownSnapshots, snapshotsToDownload)
+        val below = isBelowInterval(ownSnapshots, snapshotsToDownload)
+        val misaligned =
+          isMisaligned(ownSnapshots, (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap)
+        above || below || misaligned
+    }
 
   def checkLocalMetrics(metrics: Map[String, String], nodeId: String): Either[MetricFailure, Unit] =
     hasEmptyHeight(metrics, nodeId)
@@ -82,7 +111,6 @@ class HealthChecker[F[_]: Concurrent](
   val logger = Slf4jLogger.getLogger[F]
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
-  val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
   val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
@@ -98,10 +126,10 @@ class HealthChecker[F[_]: Concurrent](
         .chooseMajorityState(peersSnapshots :+ (dao.id, ownSnapshots), maxOrZero(ownSnapshots), peers.keys.toSeq)
         .getOrElse((Seq[RecentSnapshot](), Set[Id]()))
 
-      diff <- compareSnapshotState(major, ownSnapshots)
+      diff = HealthChecker.compareSnapshotState(major, ownSnapshots)
 
 //      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
-      result <- if (shouldReDownload(ownSnapshots, diff)) {
+      result <- if (HealthChecker.shouldReDownload(ownSnapshots, diff)) {
         logger.info(
           s"[${dao.id.short}] Re-download process with : \n" +
             s"Snapshot to download : ${diff.snapshotsToDownload.map(a => (a.height, a.hash))} \n" +
@@ -125,13 +153,6 @@ class HealthChecker[F[_]: Concurrent](
     }
   }
 
-  private[util] def compareSnapshotState(major: (Seq[RecentSnapshot], Set[Id]), ownSnapshots: List[RecentSnapshot]) =
-    SnapshotDiff(
-      ownSnapshots.diff(major._1).sortBy(-_.height),
-      major._1.diff(ownSnapshots).toList.sortBy(-_.height),
-      major._2.toList
-    ).pure[F]
-
   def clearStaleTips(clusterSnapshots: List[(Id, List[RecentSnapshot])]): F[Unit] = {
     val nodesWithHeights = clusterSnapshots.filter(_._2.nonEmpty)
     if (clusterSnapshots.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
@@ -150,25 +171,6 @@ class HealthChecker[F[_]: Concurrent](
         s"[Clear staletips] ClusterSnapshots size=${clusterSnapshots.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
       )
   }
-
-  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
-    diff match {
-      case SnapshotDiff(_, _, Nil) => false
-      case SnapshotDiff(_, Nil, _) => false
-      case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
-        val below = isBelowInterval(ownSnapshots, snapshotsToDownload)
-        val misaligned =
-          isMisaligned(ownSnapshots, (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap)
-        below || misaligned
-    }
-
-  private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
-    ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
-
-  private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
-    (maxOrZero(ownSnapshots) + snapshotHeightDelayInterval) < maxOrZero(
-      snapshotsToDownload
-    )
 
   def startReDownload(
     diff: SnapshotDiff,
