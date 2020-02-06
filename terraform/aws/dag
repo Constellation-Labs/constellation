@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+
+set -e
+
+red='\033[1;31m'
+grn='\033[1;32m'
+yel='\033[1;33m'
+blu='\033[1;36m'
+pnk='\033[1;35m'
+clr='\033[0m'
+
+# TODO: Check for pssh
+
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+
+### Functions
+
+checkTag() {
+  TAG=$(terraform workspace show)
+}
+
+checkHosts() {
+  if [ -z "${HOSTS_FILE:-}" ]; then
+    echo -e "${red}HOSTS_FILE was not set${clr}"
+    exit 1
+  fi
+}
+
+setHosts() {
+  HOSTS_FILE=$(pwd)/hosts-$(terraform workspace show)
+}
+
+assemble() {
+  echo -e "${blu} Assembling${clr}"
+
+  ./assemble.sh
+}
+
+upload() {
+  checkTag
+
+  jarName="constellation-assembly-1.0.12.jar"
+
+  echo -e "${blu} Uploading ${yel}$jarName${blu} to S3 bucket${clr} as ${yel}dag-$TAG.jar${clr}"
+
+  aws s3 cp ../../target/scala-2.12/$jarName s3://constellationlabs-dag/cluster/dag-$TAG.jar --acl public-read-write
+  echo -e "dag-$TAG.jar has been sent to s3://constellationlabs-dag/cluster/dag-$TAG.jar"
+}
+
+updateJar() {
+  checkHosts
+  checkTag
+  echo -e "${blu} Updating jar${clr}"
+
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo aws s3 cp s3://constellationlabs-dag/cluster/dag-$TAG.jar /home/admin/constellation/dag.jar" && \
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo chown -R admin:admin /home/admin/constellation"
+}
+
+start() {
+  checkHosts
+  echo -e "${blu} Starting a cluster${clr}"
+
+  ip=`head -1 $HOSTS_FILE`
+
+  echo -e "${blu} Using: ${grn}$ip${blu} as a genesis node.${clr}"
+
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo cp /home/admin/constellation/start_node /home/admin/constellation/start'
+
+  ssh admin@$ip -o StrictHostKeyChecking=no 'sudo cp /home/admin/constellation/start_genesis /home/admin/constellation/start'
+
+  restart
+}
+
+restart() {
+  checkHosts
+  echo -e "${blu} Restarting${clr}"
+
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/tmp && sudo rm -f /home/admin/constellation/logs/app.log && sudo systemctl restart constellation && sudo service filebeat restart'
+
+  sleep 10
+
+  ip=`head -1 $HOSTS_FILE`
+  grep "" $HOSTS_FILE | tail -n +2 | xargs -I {} curl -s -X POST http://\{\}:9001/join -H "Content-type: application/json" -d "{ \"host\": \"$ip\", \"port\": 9001 }"
+}
+
+stop() {
+  checkHosts
+  echo -e "${blu} Stopping nodes${clr}"
+
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo systemctl stop constellation'
+}
+
+exportIPs() {
+  checkTag
+
+  ./ips_to_hosts_file.sh > ./hosts-$TAG
+
+  echo "$(pwd)/hosts-$TAG"
+}
+
+redeploy() {
+  echo -e "${blu} Re-deploying${clr}"
+
+  assemble
+  upload
+  updateJar
+  restart
+}
+
+autostart() {
+  assemble
+  upload
+
+  terraform apply -auto-approve -var "instance_count=$2"
+
+  exportIPs
+  setHosts
+
+  start
+}
+
+############
+
+usage="${blu} Usage: ${grn}$0${clr} {${yel}assemble${clr} | ${yel}upload${clr} | ${yel}start${clr} | ${yel}restart${clr} | ${yel}stop${clr} | ${yel}exportIPs${clr} | ${yel}redeploy${clr} | ${yel}autostart${clr}}"
+
+if [[ $1 == "" ]]; then
+  echo -e "$usage"
+  exit 1
+fi
+
+case "$1" in
+  assemble)
+    assemble
+    ;;
+  upload)
+    upload
+    ;;
+  start)
+    start
+    ;;
+  restart)
+    restart
+    ;;
+  stop)
+    stop
+    ;;
+  redeploy)
+    redeploy
+    ;;
+  exportIPs)
+    exportIPs
+    ;;
+  autostart)
+    autostart "$@"
+    ;;
+  *)
+    echo -e "$usage"
+    exit 1
+esac
+
+exit 0
