@@ -1,9 +1,7 @@
 package org.constellation.util
 import java.net.SocketException
 
-import cats.effect.{ContextShift, IO}
-import cats.implicits._
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import cats.effect.IO
 import org.constellation.consensus.ConsensusManager
 import org.constellation.p2p.{Cluster, DownloadProcess, SetStateResult}
 import org.constellation.primitives.ConcurrentTipService
@@ -14,8 +12,6 @@ import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, Processi
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
-
-import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class HealthCheckerTest
     extends FunSpecLike
@@ -54,7 +50,7 @@ class HealthCheckerTest
       val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val majorState = (List(7, 6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i, Map.empty)), Set(Id("node1")))
 
-      val diff = healthChecker.compareSnapshotState(majorState, ownSnapshots).unsafeRunSync()
+      val diff = HealthChecker.compareSnapshotState(majorState, ownSnapshots) //.unsafeRunSync()
 
       diff.snapshotsToDelete shouldBe List()
       diff.snapshotsToDownload shouldBe List(RecentSnapshot("7", 7, Map.empty))
@@ -65,7 +61,7 @@ class HealthCheckerTest
       val ownSnapshots = List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val majorState = (List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i, Map.empty)), Set[Id]())
 
-      val diff = healthChecker.compareSnapshotState(majorState, ownSnapshots).unsafeRunSync()
+      val diff = HealthChecker.compareSnapshotState(majorState, ownSnapshots) //.unsafeRunSync()
 
       diff.snapshotsToDelete shouldBe List()
       diff.snapshotsToDownload shouldBe List()
@@ -241,26 +237,26 @@ class HealthCheckerTest
           List(Id("peer"))
         )
 
-      healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
     }
     it("should return true when there are snaps to delete and nothing to download") {
       val diff =
         SnapshotDiff(List(RecentSnapshot("someSnap", height, Map.empty)), List.empty, List(Id("peer")))
 
-      healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
     }
 
     it("should return false when height is too small") {
       val diff =
         SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height, Map.empty)), List(Id("peer")))
 
-      healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
     }
 
     it("should return true when height below interval") {
       val diff =
         SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height + (interval * 2), Map.empty)), List(Id("peer")))
-      healthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
     }
   }
 
