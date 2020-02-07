@@ -50,6 +50,7 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
           case Right(created) =>
             resetNodeState(stateSet)
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
+              .flatMap(_ => dao.redownloadService.persistOwnSnapshot(created.height, created.hash))
         }
       } yield (),
       IO.unit
