@@ -101,8 +101,8 @@ lazy val keyToolSharedDependencies = Seq(
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.63"
+  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle
+//  "org.bouncycastle" % "bcprov-jdk15on" % "1.63"
 ) ++ sharedDependencies
 
 lazy val walletSharedDependencies = Seq(
@@ -219,6 +219,8 @@ lazy val keytool = (project in file("keytool"))
     buildInfoPackage := "org.constellation.keytool",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.keytool.KeyTool"),
+    unmanagedJars in Runtime += file("core-1.64.jar"),
+    unmanagedJars in Runtime += file("prov-1.64.jar"),
     libraryDependencies ++= keyToolSharedDependencies
   )
 
