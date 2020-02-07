@@ -11,6 +11,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
@@ -224,7 +225,7 @@ class ValidationSpec
     dao.snapshotService
       .setSnapshot(
         SnapshotInfo(
-          Snapshot.snapshotZero,
+          StoredSnapshot(Snapshot.snapshotZero, Seq.empty),
           Seq(go.genesis.baseHash, go.initialDistribution.baseHash, go.initialDistribution2.baseHash),
           Seq(),
           Set(),

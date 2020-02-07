@@ -6,7 +6,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation._
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo}
+import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.domain.transaction.TransactionService
@@ -72,7 +72,7 @@ class SnapshotServiceTest
 
   "exists" - {
     "should return true if snapshot hash is the latest snapshot" in {
-      val lastSnapshot: Snapshot = snapshotService.snapshot.get.unsafeRunSync
+      val lastSnapshot: Snapshot = snapshotService.storedSnapshot.get.map(_.snapshot).unsafeRunSync
 
       File.usingTemporaryDirectory() { dir =>
         File.usingTemporaryFile("", "", Some(dir)) { _ =>
@@ -103,7 +103,7 @@ class SnapshotServiceTest
       }
     }
   }
-  
+
   "set snapshot state" - {
     "should set necessary data to perform apply function and store data" in {
       val dao = TestHelpers.prepareRealDao()
@@ -114,10 +114,13 @@ class SnapshotServiceTest
       val cb2 = RandomData.randomBlock(RandomData.startingTips(go)(dao))
       val cbs = Seq(CheckpointCache(cb1, 0, None), CheckpointCache(cb2, 0, None))
 
-      val snapshot = Snapshot(
-        "4d28a953f3a559faf2f41e32f71a7b7108a63c09739d4f60d341d9643d135ece",
-        cbs.map(_.checkpointBlock.baseHash),
-        Map.empty
+      val snapshot = StoredSnapshot(
+        Snapshot(
+          "4d28a953f3a559faf2f41e32f71a7b7108a63c09739d4f60d341d9643d135ece",
+          cbs.map(_.checkpointBlock.baseHash),
+          Map.empty
+        ),
+        Seq.empty
       )
       val info: SnapshotInfo = SnapshotInfo(snapshot, snapshotCache = cbs)
       snapshotService.setSnapshot(info).unsafeRunSync()

@@ -321,6 +321,11 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         timeout = 45.seconds,
         tag = "snapshot/obj/snapshot"
       )(C)
+      storedSnapshotCheckpointBlocks <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+        "snapshot/obj/storedSnapshotCheckpointBlocks",
+        timeout = 45.seconds,
+        tag = "snapshot/obj/storedSnapshotCheckpointBlocks"
+      )(C)
       snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotCBs",
         timeout = 45.seconds,
@@ -375,6 +380,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     } yield
       SnapshotInfoSer(
         snapshotHash,
+        storedSnapshotCheckpointBlocks,
         snapshotCBs,
         snapshotPublicReputation,
         acceptedCBSinceSnapshot,
