@@ -172,10 +172,10 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 dao.cluster.getNodeState
                   .map(NodeState.canActAsRedownloadSource)
                   .ifM(getInfo, IO.pure(None))
-                  } {
-                    case None => complete(StatusCodes.NotFound)
-                    case _ => complete(StatusCodes.OK, Array.empty[Byte])
-                  }
+              } {
+                case None => complete(StatusCodes.NotFound)
+                case _    => complete(StatusCodes.OK, Array.empty[Byte])
+              }
             }
           }
         }
@@ -370,6 +370,17 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           APIDirective.handle(snapshotCBS)(complete(_))
         }
       } ~
+        path("snapshot" / "obj" / "storedSnapshotCheckpointBlocks") {
+          APIDirective.extractIP(socketAddress) { ip =>
+            val storedSnapshotCheckpointBlocks = dao.snapshotService.recentSnapshotInfo.lookup(ip).map { sni =>
+              val res = sni.get.storedSnapshotCheckpointBlocks
+              logger
+                .debug(s"snapshot/obj/storedSnapshotCheckpointBlocks num storedSnapshotCheckpointBlocks: ${res.length}")
+              res
+            }
+            APIDirective.handle(storedSnapshotCheckpointBlocks)(complete(_))
+          }
+        } ~
         path("snapshot" / "obj" / "acceptedCBSinceSnapshot") {
           APIDirective.extractIP(socketAddress) { ip =>
             val acceptedCBSinceSnapshot = dao.snapshotService.recentSnapshotInfo.lookup(ip).map { sni =>

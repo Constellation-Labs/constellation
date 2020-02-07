@@ -231,7 +231,7 @@ object EdgeProcessor extends StrictLogging {
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
 
 case class SnapshotInfo(
-  snapshot: Snapshot,
+  snapshot: StoredSnapshot,
   acceptedCBSinceSnapshot: Seq[String] = Seq(),
   acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
   awaitingCbs: Set[CheckpointCache] = Set(),
@@ -246,12 +246,16 @@ case class SnapshotInfo(
 
   def toSnapshotInfoSer(info: SnapshotInfo = this, chunkSize: Int = 100): SnapshotInfoSer = //todo make chunk size config
     SnapshotInfoSer(
-      Array(KryoSerializer.serialize[String](info.snapshot.lastSnapshot)),
-      info.snapshot.checkpointBlocks
+      Array(KryoSerializer.serialize[String](info.snapshot.snapshot.lastSnapshot)),
+      info.snapshot.checkpointCache
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t, SnapshotInfoChunk.STORED_SNAPSHOT_CHECKPOINT_BLOCKS.name))
+        .toArray,
+      info.snapshot.snapshot.checkpointBlocks
         .grouped(chunkSize)
         .map(t => chunkSerialize(t, SnapshotInfoChunk.CHECKPOINT_BLOCKS.name))
         .toArray,
-      info.snapshot.publicReputation
+      info.snapshot.snapshot.publicReputation
         .grouped(chunkSize)
         .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.PUBLIC_REPUTATION.name))
         .toArray,
@@ -290,6 +294,7 @@ case class SnapshotInfo(
 
 case class SnapshotInfoSer(
   snapshot: Array[Array[Byte]],
+  storedSnapshotCheckpointBlocks: Array[Array[Byte]],
   snapshotCheckpointBlocks: Array[Array[Byte]],
   snapshotPublicReputation: Array[Array[Byte]],
   acceptedCBSinceSnapshot: Array[Array[Byte]],
@@ -313,8 +318,12 @@ case class SnapshotInfoSer(
       info.snapshotPublicReputation.toSeq
         .flatMap(chunkDeSerialize[Seq[(Id, Double)]](_, SnapshotInfoChunk.PUBLIC_REPUTATION.name))
         .toMap
+    val storedSnapshotCheckpointBlocks = 
+      info.storedSnapshotCheckpointBlocks.toSeq
+        .flatMap(chunkDeSerialize[Seq[CheckpointCache]](_, SnapshotInfoChunk.STORED_SNAPSHOT_CHECKPOINT_BLOCKS.name))
+
     SnapshotInfo(
-      Snapshot(lastSnapshot, snapshotCheckpointBlocks, snapshotPublicReputation),
+      StoredSnapshot(Snapshot(lastSnapshot, snapshotCheckpointBlocks, snapshotPublicReputation), storedSnapshotCheckpointBlocks),
       info.acceptedCBSinceSnapshot.toSeq
         .flatMap(chunkDeSerialize[Seq[String]](_, SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT.name)),
       info.acceptedCBSinceSnapshotCache.toSeq

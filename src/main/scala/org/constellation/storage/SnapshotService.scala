@@ -49,7 +49,7 @@ class SnapshotService[F[_]: Concurrent](
 
   val acceptedCBSinceSnapshot: Ref[F, Seq[String]] = Ref.unsafe(Seq.empty)
   val syncBuffer: Ref[F, Map[String, FinishedCheckpoint]] = Ref.unsafe(Map.empty)
-  val snapshot: Ref[F, Snapshot] = Ref.unsafe(Snapshot.snapshotZero)
+  val storedSnapshot: Ref[F, StoredSnapshot] = Ref.unsafe(StoredSnapshot(Snapshot.snapshotZero, Seq.empty))
 
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
@@ -60,9 +60,9 @@ class SnapshotService[F[_]: Concurrent](
 
   def exists(hash: String): F[Boolean] =
     for {
-      last <- snapshot.get
+      last <- storedSnapshot.get
       hashes <- snapshotStorage.getSnapshotHashes
-    } yield last.hash == hash || hashes.contains(hash)
+    } yield last.snapshot.hash == hash || hashes.contains(hash)
 
   def isStored(hash: String): F[Boolean] =
     snapshotStorage.getSnapshotHashes.map(_.contains(hash))
@@ -85,13 +85,17 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
-      allBlocks = blocksWithinHeightInterval.map(_.get)
+      allBlocks = blocksWithinHeightInterval.map(_.get).sortBy(_.checkpointBlock.baseHash)
 
-      hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash).sorted
+      hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash)
       publicReputation <- EitherT.liftF(trustManager.getPredictedReputation)
       nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot, publicReputation))
 
-      _ <- EitherT.liftF(logger.debug(s"Blocks for the next snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} at height: ${nextHeightInterval} - ${hashesForNextSnapshot}"))
+      _ <- EitherT.liftF(
+        logger.debug(
+          s"Blocks for the next snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} at height: ${nextHeightInterval} - ${hashesForNextSnapshot}"
+        )
+      )
 
       _ <- EitherT.liftF(
         logger.debug(
@@ -104,7 +108,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
-      _ <- EitherT.liftF(snapshot.set(nextSnapshot))
+      _ <- EitherT.liftF(storedSnapshot.set(StoredSnapshot(nextSnapshot, allBlocks.toSeq)))
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
@@ -148,23 +152,19 @@ class SnapshotService[F[_]: Concurrent](
   ): EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
       getSnapshotInfoWithFullData.flatMap { info =>
-        if (info.snapshot == Snapshot.snapshotZero) Sync[F].unit
+        if (info.snapshot.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else writeSnapshotInfoParts(info, overWritePath).map(_ => ())
       }
     }.leftMap(SnapshotInfoIOError)
 
   def getSnapshotInfo: F[SnapshotInfo] =
     for {
-      s <- snapshot.get
+      s <- storedSnapshot.get
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
       hashes <- snapshotStorage.getSnapshotHashes
       addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
-      snapshotCache <- s.checkpointBlocks.toList
-        .map(checkpointService.fullData)
-        .sequence
-        .map(_.flatten)
       lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
     } yield
       SnapshotInfo(
@@ -174,15 +174,15 @@ class SnapshotService[F[_]: Concurrent](
         snapshotHashes = hashes.toList,
         addressCacheData = addressCacheData,
         tips = tips,
-        snapshotCache = snapshotCache,
+        snapshotCache = s.checkpointCache.toList,
         lastAcceptedTransactionRef = lastAcceptedTransactionRef
       )
 
   def retainOldData(): F[Unit] =
     for {
-      snap <- snapshot.get
+      snap <- storedSnapshot.get
       accepted <- acceptedCBSinceSnapshot.get
-      cbs = (snap.checkpointBlocks ++ accepted).toList
+      cbs = (snap.snapshot.checkpointBlocks ++ accepted).toList
       fetched <- getCheckpointBlocksFromSnapshot(cbs)
       _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
       _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.applySnapshot))
@@ -200,7 +200,7 @@ class SnapshotService[F[_]: Concurrent](
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
       _ <- retainOldData()
-      _ <- snapshot.modify(_ => (snapshotInfo.snapshot, ()))
+      _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
@@ -364,8 +364,8 @@ class SnapshotService[F[_]: Concurrent](
   }
 
   private def getNextSnapshot(hashesForNextSnapshot: Seq[String], publicReputation: Map[Id, Double]): F[Snapshot] =
-    snapshot.get
-      .map(_.hash)
+    storedSnapshot.get
+      .map(_.snapshot.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot, publicReputation))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
@@ -376,8 +376,9 @@ class SnapshotService[F[_]: Concurrent](
         _ <- applyAfterSnapshot(currentSnapshot)
       } yield ()
 
-    snapshot.get.attemptT
+    storedSnapshot.get.attemptT
       .leftMap(SnapshotUnexpectedError)
+      .map(_.snapshot)
       .flatMap { currentSnapshot =>
         if (currentSnapshot == Snapshot.snapshotZero) EitherT.rightT[F, SnapshotError](())
         else write(currentSnapshot)
