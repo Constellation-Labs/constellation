@@ -71,8 +71,6 @@ object Schema {
 
     def canRunClusterCheck(current: NodeState): Boolean = validForRedownload.contains(current)
 
-    def canVerifyRecentSnapshots(current: NodeState): Boolean = validForDownload.contains(current)
-
     def canCreateSnapshot(current: NodeState): Boolean = validForSnapshotCreation.contains(current)
 
     def canGenerateTransactions(current: NodeState): Boolean = validForTransactionGeneration.contains(current)

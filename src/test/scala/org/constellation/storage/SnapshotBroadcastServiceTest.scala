@@ -48,30 +48,6 @@ class SnapshotBroadcastServiceTest
     )
   }
 
-  "broadcastSnapshot" - {
-
-    "should broadcastSnapshots " in {
-      val readyFacilitators: Map[Id, PeerData] = Map(prepareFacilitator("a"), prepareFacilitator("b"))
-      dao.readyPeers(NodeType.Full) shouldReturnF readyFacilitators
-      dao.processingConfig shouldReturn ProcessingConfig(maxInvalidSnapshotRate = 20)
-      dao.cluster.getNodeState shouldReturnF NodeState.Ready
-
-      readyFacilitators(Id("a")).client
-        .postNonBlockingF[IO, SnapshotVerification](*, *, *, *)(*)(*, *, *) shouldReturn IO.pure(
-        SnapshotVerification(Id("a"), VerificationStatus.SnapshotCorrect, List.empty)
-      )
-
-      readyFacilitators(Id("b")).client
-        .postNonBlockingF[IO, SnapshotVerification](*, *, *, *)(*)(*, *, *) shouldReturn IO
-        .raiseError[SnapshotVerification](new SocketTimeoutException("timeout"))
-
-      snapshotSelector.selectSnapshotFromBroadcastResponses(*, *) shouldReturn None
-      val response = snapshotBroadcastService.broadcastSnapshot("snap1", 2, Map.empty)
-      response.unsafeRunSync()
-
-      healthChecker.startReDownload(*, *).wasNever(called)
-    }
-  }
   "shouldRunClusterCheck" - {
 
     "should return true when minimum invalid response were reached" in {
