@@ -83,6 +83,26 @@ class PeerAPITest
       }
     }
   }
+
+  "GET snapshot/own" - {
+    "response should return empty map if there are no snapshots" in {
+      dao.redownloadService.getOwnSnapshots() shouldReturnF Map.empty
+
+      Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[Map[Long, String]] shouldBe Map.empty
+      }
+    }
+
+    "response should return map with all own snapshots" in {
+      val ownSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
+
+      dao.redownloadService.getOwnSnapshots() shouldReturnF ownSnapshots
+
+      Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[Map[Long, String]] shouldBe ownSnapshots
+      }
+    }
+  }
 }
 
 //import java.net.InetSocketAddress

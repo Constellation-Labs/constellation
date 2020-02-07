@@ -359,6 +359,11 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
         APIDirective.handle(hashes)(complete(_))
       } ~
+        path("snapshot" / "own") {
+          val snapshots = dao.redownloadService.getOwnSnapshots()
+
+          APIDirective.handle(snapshots)(complete(_))
+        } ~
         path("snapshot" / "obj" / "snapshot") {
           APIDirective.extractIP(socketAddress) { ip =>
             val snapshotHash: IO[Array[Array[Byte]]] =
