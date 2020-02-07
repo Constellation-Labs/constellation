@@ -1,5 +1,110 @@
-//package org.constellation.p2p
-//
+package org.constellation.p2p
+
+import java.net.InetSocketAddress
+
+import akka.actor.ActorSystem
+import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.util.Timeout
+import cats.effect.IO
+import cats.effect.concurrent.Ref
+import constellation._
+import de.heikoseeberger.akkahttpjson4s.Json4sSupport
+import org.constellation.TestHelpers
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.primitives.IPManager
+import org.json4s.native.Serialization
+import org.mockito.IdiomaticMockito
+import org.mockito.cats.IdiomaticMockitoCats
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+
+import scala.concurrent.duration._
+
+class PeerAPITest
+    extends FreeSpec
+    with Matchers
+    with BeforeAndAfter
+    with ScalatestRouteTest
+    with Json4sSupport
+    with IdiomaticMockito
+    with IdiomaticMockitoCats {
+
+  implicit val serialization = Serialization
+  implicit val s: ActorSystem = system
+  implicit val cs = IO.contextShift(system.dispatcher)
+  implicit val dao = TestHelpers.prepareMockedDAO()
+
+  val socketAddress = new InetSocketAddress("localhost", 9001)
+  val ipManager: IPManager[IO] = IPManager[IO]()
+  var peerAPI: PeerAPI = _
+
+  before {
+    peerAPI = new PeerAPI(ipManager)
+  }
+
+  "GET snapshot/stored" - {
+    "response should return the zero snapshot hash if there are no snapshots" in {
+      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
+      dao.snapshotStorage.getSnapshotHashes shouldReturnF List.empty
+
+      dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
+        StoredSnapshot(Snapshot.snapshotZero, Seq.empty)
+      )
+
+      Get("/snapshot/stored") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[List[String]] shouldBe List(Snapshot.snapshotZeroHash)
+      }
+    }
+
+    "response should return all snapshots stored on disk" in {
+      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
+      dao.snapshotStorage.getSnapshotHashes shouldReturnF List("aa", "bb")
+
+      dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
+        StoredSnapshot(Snapshot.snapshotZero, Seq.empty)
+      )
+
+      Get("/snapshot/stored") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[List[String]] shouldBe List(Snapshot.snapshotZeroHash, "aa", "bb")
+      }
+    }
+
+    "response should contain the snapshot hash from the most recent snapshot info" in {
+      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
+      dao.snapshotStorage.getSnapshotHashes shouldReturnF List("aa", "bb")
+
+      val snapshot = Snapshot("cc", Seq.empty, Map.empty)
+      dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
+        StoredSnapshot(snapshot, Seq.empty)
+      )
+
+      Get("/snapshot/stored") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[List[String]] shouldBe List(snapshot.hash, "aa", "bb")
+      }
+    }
+  }
+
+  "GET snapshot/own" - {
+    "response should return empty map if there are no snapshots" in {
+      dao.redownloadService.getOwnSnapshots() shouldReturnF Map.empty
+
+      Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[Map[Long, String]] shouldBe Map.empty
+      }
+    }
+
+    "response should return map with all own snapshots" in {
+      val ownSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
+
+      dao.redownloadService.getOwnSnapshots() shouldReturnF ownSnapshots
+
+      Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[Map[Long, String]] shouldBe ownSnapshots
+      }
+    }
+  }
+}
+
 //import java.net.InetSocketAddress
 //
 //import akka.actor.ActorSystem

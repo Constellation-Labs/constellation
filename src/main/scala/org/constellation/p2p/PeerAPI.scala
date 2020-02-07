@@ -350,17 +350,31 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         }
       }
     } ~ get {
-      path("snapshot" / "obj" / "snapshot") {
-        APIDirective.extractIP(socketAddress) { ip =>
-          val snapshotHash: IO[Array[Array[Byte]]] =
-            dao.snapshotService.recentSnapshotInfo.lookup(ip).map { sni =>
-              val ser = sni.get.snapshot
-              logger.debug(s"snapshot/obj/snapshot $ser")
-              ser
-            }
-          APIDirective.handle(snapshotHash)(complete(_))
+      path("snapshot" / "stored") {
+        val storedSnapshots = dao.snapshotStorage.getSnapshotHashes
+        val recentSnapshot = dao.snapshotService.storedSnapshot.get.map(_.snapshot.hash)
+        val hashes = storedSnapshots.flatMap { h =>
+          recentSnapshot.map(hh => List(hh) ++ h)
         }
-      } ~ path("snapshot" / "obj" / "snapshotCBs") {
+
+        APIDirective.handle(hashes)(complete(_))
+      } ~
+        path("snapshot" / "own") {
+          val snapshots = dao.redownloadService.getOwnSnapshots()
+
+          APIDirective.handle(snapshots)(complete(_))
+        } ~
+        path("snapshot" / "obj" / "snapshot") {
+          APIDirective.extractIP(socketAddress) { ip =>
+            val snapshotHash: IO[Array[Array[Byte]]] =
+              dao.snapshotService.recentSnapshotInfo.lookup(ip).map { sni =>
+                val ser = sni.get.snapshot
+                logger.debug(s"snapshot/obj/snapshot $ser")
+                ser
+              }
+            APIDirective.handle(snapshotHash)(complete(_))
+          }
+        } ~ path("snapshot" / "obj" / "snapshotCBs") {
         APIDirective.extractIP(socketAddress) { ip =>
           val snapshotCBS = dao.snapshotService.recentSnapshotInfo.lookup(ip).map { sni =>
             val res = sni.get.snapshotCheckpointBlocks
