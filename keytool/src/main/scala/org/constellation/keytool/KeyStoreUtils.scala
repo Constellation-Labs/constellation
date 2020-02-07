@@ -11,8 +11,9 @@ import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 
 object KeyStoreUtils {
-  val storeType = "PKCS12"
-  val storeExtension = "p12"
+
+  private val storeType: String = "PKCS12"
+  private val storeExtension: String = "p12"
 
   private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
@@ -60,7 +61,6 @@ object KeyStoreUtils {
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {
-      val keyPair = KeyUtils.makeKeyPair()
       // TODO: Maybe move to config
       val dn = DistinguishedName(
         commonName = "constellationnetwork.io",
@@ -70,7 +70,6 @@ object KeyStoreUtils {
       val validity = 365 * 1000 // // 1000 years of validity should be enough I guess
 
       val certificate = SelfSignedCertificate.generate(dn.toString, keyPair, validity, KeyUtils.DefaultSignFunc)
-
       Array(certificate)
     }
 
@@ -136,6 +135,25 @@ object KeyStoreUtils {
           for {
             keyStore <- createEmptyKeyStore(storePassword)
             keyPair <- KeyUtils.makeKeyPair().pure[F]
+            chain <- generateCertificateChain(keyPair)
+            _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
+            _ <- store(stream, storePassword)(keyStore)
+          } yield keyStore
+      )
+      .attemptT
+
+  def keyPairToStorePathFrom[F[_]: Sync](
+    keyPair: KeyPair,
+    path: String,
+    alias: String,
+    storePassword: Array[Char],
+    keyPassword: Array[Char]
+  ): EitherT[F, Throwable, KeyStore] =
+    writer(withExtension(path))
+      .use(
+        stream =>
+          for {
+            keyStore <- createEmptyKeyStore(storePassword)
             chain <- generateCertificateChain(keyPair)
             _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
             _ <- store(stream, storePassword)(keyStore)
