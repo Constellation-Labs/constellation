@@ -97,9 +97,7 @@ trait CommonEndpoints extends Json4sSupport {
           } else None.pure[IO]
           memBytes <- if (exists && !isStored) {
             for {
-              latestSnapshot <- dao.snapshotService.snapshot.get
-              blocks <- latestSnapshot.checkpointBlocks.toList.traverse(hash => dao.checkpointService.fullData(hash)).map(_.flatten)
-              storedSnapshot = StoredSnapshot(latestSnapshot, blocks.toSeq)
+              storedSnapshot <- dao.snapshotService.storedSnapshot.get
               b <- IO { KryoSerializer.serializeAnyRef(storedSnapshot) }
             } yield b.some
           } else None.pure[IO]
