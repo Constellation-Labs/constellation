@@ -41,7 +41,6 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
         _ <- snapshotResult match {
           case Left(SnapshotIllegalState) =>
             handleError(SnapshotIllegalState, stateSet)
-              .flatMap(_ => contextShift.shift >> dao.snapshotBroadcastService.verifyRecentSnapshots())
           case Left(err @ HeightIntervalConditionNotMet) =>
             resetNodeState(stateSet) >>
               IO(logger.warn(s"Snapshot attempt: ${err.message}")) >>
@@ -51,10 +50,6 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
           case Right(created) =>
             resetNodeState(stateSet)
               .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
-              .flatMap(
-                _ =>
-                  dao.snapshotBroadcastService.broadcastSnapshot(created.hash, created.height, created.publicReputation)
-              )
         }
       } yield (),
       IO.unit
