@@ -144,7 +144,7 @@ class RandomDataTest extends FlatSpec with BeforeAndAfter {
 
     val convMap = TrieMap[String, Int]()
 
-    val snapshotInterval = 10
+    val snapshotHeightInterval = 10
 
     while (blockNum < maxNumBlocks) {
 
