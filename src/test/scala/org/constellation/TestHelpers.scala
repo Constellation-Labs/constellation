@@ -15,6 +15,7 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
@@ -30,7 +31,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
   def prepareRealDao(
     facilitators: Map[Id, PeerData] = prepareFacilitators(1),
-    nodeConfig: NodeConfig = NodeConfig(),
+    nodeConfig: NodeConfig = NodeConfig()
   ): DAO = {
     val dao: DAO = new DAO {
       override def readyPeers: IO[
@@ -90,6 +91,9 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao.dbPath shouldReturn f
 
     dao.id shouldReturn Fixtures.id
+
+    val rds = mock[RedownloadService[IO]]
+    dao.redownloadService shouldReturn rds
 
     val ss = mock[SOEService[IO]]
     dao.soeService shouldReturn ss
