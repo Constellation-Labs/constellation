@@ -10,7 +10,6 @@ import org.constellation.storage.{HeightIntervalConditionNotMet, SnapshotError, 
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._
 
-import scala.async.internal.StateSet
 import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])

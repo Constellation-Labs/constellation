@@ -80,6 +80,7 @@ case class ProcessingConfig(
   maxMessagesInBlock: Int = 1,
   peerInfoTimeout: Int = 3,
   snapshotTriggeringTimeSeconds: Int = 5,
+  redownloadPeriodicCheckTimeSeconds: Int = 30,
   formUndersizedCheckpointAfterSeconds: Int = 30,
   numFacilitatorPeers: Int = 2,
   metricCheckInterval: Int = 10,

@@ -22,6 +22,7 @@ import org.constellation.crypto.KeyUtilsOld
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
+import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
@@ -165,6 +166,10 @@ class ConstellationNode(
   val snapshotTrigger = new SnapshotTrigger(
     dao.processingConfig.snapshotTriggeringTimeSeconds
   )(dao, dao.cluster)
+
+  val redownloadPeriodicCheck = new RedownloadPeriodicCheck(
+    dao.processingConfig.redownloadPeriodicCheckTimeSeconds
+  )(dao)
 
   val transactionGeneratorTrigger = new TransactionGeneratorTrigger(
     ConfigUtil.constellation.getInt("transaction.generator.randomTransactionLoopTimeSeconds")
