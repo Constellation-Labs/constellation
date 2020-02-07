@@ -16,14 +16,14 @@ import scala.concurrent.duration._
 class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])
     extends PeriodicIO("SnapshotTrigger") {
 
-  val snapshotInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotInterval")
+  val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
   val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   private val preconditions = cluster.getNodeState
     .map(NodeState.canCreateSnapshot)
     .map {
-      _ && executionNumber.get() % snapshotInterval == 0
+      _ && executionNumber.get() % snapshotHeightInterval == 0
     }
 
   private def triggerSnapshot(): IO[Unit] =
