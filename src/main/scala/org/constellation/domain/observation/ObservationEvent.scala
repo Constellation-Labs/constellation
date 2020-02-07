@@ -11,6 +11,5 @@ case class CheckpointBlockWithMissingParents(checkpointBaseHash: String) extends
 case class CheckpointBlockWithMissingSoe(checkpointBaseHash: String) extends ObservationEvent
 case class RequestTimeoutOnConsensus(roundId: RoundId) extends ObservationEvent
 case class RequestTimeoutOnResolving(endpoint: String, hashes: List[String]) extends ObservationEvent
-case class SnapshotMisalignment() extends ObservationEvent
 case class CheckpointBlockInvalid(checkpointBaseHash: String, reason: ValidationResult[CheckpointBlock])
     extends ObservationEvent

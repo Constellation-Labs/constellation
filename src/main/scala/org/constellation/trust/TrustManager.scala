@@ -4,7 +4,7 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationEvent, RequestTimeoutOnConsensus, RequestTimeoutOnResolving, SnapshotMisalignment}
+import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationEvent, RequestTimeoutOnConsensus, RequestTimeoutOnResolving}
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
@@ -79,7 +79,6 @@ object TrustManager {
       case _: CheckpointBlockWithMissingSoe     => -0.1
       case _: RequestTimeoutOnConsensus         => -0.1
       case _: RequestTimeoutOnResolving         => -0.1
-      case _: SnapshotMisalignment              => -0.1
       case _: CheckpointBlockInvalid            => -0.1
       case _                                    => 0d
     }
