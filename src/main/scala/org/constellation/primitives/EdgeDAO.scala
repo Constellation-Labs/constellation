@@ -4,16 +4,27 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointParentService, CheckpointService}
+import org.constellation.checkpoint.{
+  CheckpointAcceptanceService,
+  CheckpointBlockValidator,
+  CheckpointParentService,
+  CheckpointService
+}
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
+import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
-import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rewards.{EigenTrust, RewardsManager}
@@ -181,6 +192,7 @@ trait EdgeDAO {
   var rollbackService: RollbackService[IO] = _
   var cloudStorage: CloudStorage[IO] = _
   var majorityStateChooser: MajorityStateChooser[IO] = _
+  var redownloadService: RedownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
   var genesisObservationWriter: GenesisObservationWriter[IO] = _
