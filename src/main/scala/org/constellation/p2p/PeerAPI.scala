@@ -19,13 +19,11 @@ import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.EdgeProcessor.chunkDeSerialize
 import org.constellation.consensus.{ConsensusRoute, _}
-import org.constellation.domain.observation.{Observation, SnapshotMisalignment}
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage._
 import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
@@ -475,16 +473,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         path("snapshot" / "info") {
           APIDirective.extractIP(socketAddress) { ip =>
             val getInfo = idLookup(ip)
-              .flatMap(
-                maybePeer =>
-                  maybePeer.fold(IO(logger.warn(s"Unable to map ip: ${ip} to peer")))(
-                    pd =>
-                      // mwadon: Is it correct? Every time the node asks for "snapshot/info" it means SnapshotMisalignment?
-                      dao.observationService
-                        .put(Observation.create(pd.peerMetadata.id, SnapshotMisalignment())(dao.keyPair))
-                        .void
-                  )
-              )
               .flatMap(
                 _ =>
                   dao.snapshotService.getSnapshotInfo.flatMap { info =>
