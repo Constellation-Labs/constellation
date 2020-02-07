@@ -36,8 +36,8 @@ class RewardsManager[F[_]: Concurrent](
 
   private val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-  private val snapshotInterval: Int =
-    ConfigUtil.constellation.getInt("snapshot.snapshotInterval")
+  private val snapshotHeightDelayInterval: Int =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
   val logger = Slf4jLogger.getLogger[F]
 
@@ -45,19 +45,19 @@ class RewardsManager[F[_]: Concurrent](
     observationsFromSnapshot(snapshot).map(RewardSnapshot(snapshot.hash, height, _))
 
   def getSnapshotDelayedByRedownloadIntervalFromLastHeight(lastHeight: Long, cache: Map[Long, RewardSnapshot]): F[Option[RewardSnapshot]] = {
-    val candidateHeight = lastHeight - snapshotHeightRedownloadDelayInterval - snapshotInterval
+    val candidateHeight = lastHeight - snapshotHeightRedownloadDelayInterval - snapshotHeightDelayInterval
 
     cache.get(candidateHeight) match {
       case None =>
         logger
           .warn(
-            s"[Rewards] Skipping rewards. Couldn't find snapshot delayed by ${snapshotHeightRedownloadDelayInterval + snapshotInterval} from last height $lastHeight."
+            s"[Rewards] Skipping rewards. Couldn't find snapshot delayed by ${snapshotHeightRedownloadDelayInterval + snapshotHeightDelayInterval} from last height $lastHeight."
           )
           .map(_ => None)
       case Some(rs) =>
         logger
           .debug(
-            s"[Rewards] Found snapshot (${rs.hash}) at height ${rs.height} which is delayed by ${snapshotHeightRedownloadDelayInterval + snapshotInterval} from last height $lastHeight."
+            s"[Rewards] Found snapshot (${rs.hash}) at height ${rs.height} which is delayed by ${snapshotHeightRedownloadDelayInterval + snapshotHeightDelayInterval} from last height $lastHeight."
           )
           .map(_ => Some(rs))
     }
