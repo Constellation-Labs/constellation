@@ -88,7 +88,6 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
         classOf[CheckpointBlockWithMissingSoe],
         classOf[RequestTimeoutOnConsensus],
         classOf[RequestTimeoutOnResolving],
-        classOf[SnapshotMisalignment],
         classOf[CheckpointBlockInvalid]
       )
     )
