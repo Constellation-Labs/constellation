@@ -45,7 +45,7 @@ class RollbackServiceTest
     )
   }
 
-  test("should pass for data from test resources") {
+  ignore("should pass for data from test resources") {
     val result = rollbackService
       .validate()
       .value
