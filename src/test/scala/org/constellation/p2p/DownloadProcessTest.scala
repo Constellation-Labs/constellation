@@ -1,6 +1,6 @@
 package org.constellation.p2p
 import cats.effect.IO
-import org.constellation.consensus.{Snapshot, SnapshotInfo}
+import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.infrastructure.snapshot.SnapshotFileStorage
 import org.constellation.primitives.Schema
@@ -10,6 +10,7 @@ import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelp
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSuite, Matchers}
 
+import org.constellation.consensus.StoredSnapshot
 import scala.concurrent.ExecutionContextExecutor
 
 class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
@@ -21,7 +22,7 @@ class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMa
 
   dao.id shouldReturn Fixtures.id
 
-  val snapInfo: SnapshotInfo = SnapshotInfo(new Snapshot("abc", Seq.empty[String], Map.empty))
+  val snapInfo: SnapshotInfo = SnapshotInfo(StoredSnapshot(Snapshot("abc", Seq.empty[String], Map.empty), Seq.empty))
 
   val peers: Map[Id, PeerData] = TestHelpers.prepareFacilitators(3)
 

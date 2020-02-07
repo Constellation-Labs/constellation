@@ -44,6 +44,7 @@ class RollbackLoader(
       }
     val serSnapInfo = SnapshotInfoSer(
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.SNAPSHOT.name, Array.empty[Array[Byte]]),
+      snapInfoSerParts.getOrElse(SnapshotInfoChunk.STORED_SNAPSHOT_CHECKPOINT_BLOCKS.name, Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.CHECKPOINT_BLOCKS.name, Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT.name, Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT_CACHE.name, Array.empty[Array[Byte]]),
