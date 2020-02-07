@@ -1,25 +1,13 @@
 package org.constellation.serializer
 
 import com.esotericsoftware.kryo.Kryo
-import com.esotericsoftware.minlog.Log
-import com.esotericsoftware.kryo.serializers.{DeflateSerializer, FieldSerializer}
-import com.esotericsoftware.minlog.Log
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
-import org.constellation.domain.observation.{
-  CheckpointBlockInvalid,
-  CheckpointBlockWithMissingParents,
-  CheckpointBlockWithMissingSoe,
-  Observation,
-  ObservationData,
-  RequestTimeoutOnConsensus,
-  RequestTimeoutOnResolving,
-  SnapshotMisalignment
-}
-import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
-import org.constellation.primitives.{SignedData, _}
-import org.constellation.primitives.Schema._
+import org.constellation.domain.observation._
 import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
+import org.constellation.primitives.Schema._
+import org.constellation.primitives.{SignedData, _}
 import org.constellation.schema.Id
 import org.constellation.util.{HashSignature, SignatureBatch}
 
@@ -82,7 +70,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[CheckpointBlockWithMissingSoe])
     kryo.register(classOf[RequestTimeoutOnConsensus])
     kryo.register(classOf[RequestTimeoutOnResolving])
-    kryo.register(classOf[SnapshotMisalignment])
     kryo.register(classOf[CheckpointBlockInvalid])
     kryo.register(classOf[Observation])
     kryo.register(classOf[Seq[Observation]])

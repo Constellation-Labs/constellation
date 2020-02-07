@@ -3,7 +3,7 @@ package org.constellation.rewards
 import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
 import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData, SnapshotMisalignment}
+import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData}
 import org.constellation.keytool.KeyUtils
 import org.constellation.schema.Id
 import org.constellation.trust.{TrustEdge, TrustManager}
@@ -63,7 +63,6 @@ class EigenTrustTest
   "TrustManager to EigenTrust mappings" - {
     "should convert ObservationEvent to Experience" in {
       val observations: List[ObservationData] = List(
-        ObservationData(agent1, SnapshotMisalignment(), 321),
         ObservationData(agent1, CheckpointBlockWithMissingSoe(agent1.address), 123),
         ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
         ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
