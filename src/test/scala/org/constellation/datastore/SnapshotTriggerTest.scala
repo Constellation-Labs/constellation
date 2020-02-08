@@ -6,7 +6,7 @@ import cats.implicits._
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.storage.{SnapshotCreated, SnapshotError}
+import org.constellation.storage.{RecentSnapshot, SnapshotCreated, SnapshotError}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -31,19 +31,20 @@ class SnapshotTriggerTest
     "if snapshot has been created" - {
       "calls redownload service to persist own snapshot" in {
         val snapshotTrigger = new SnapshotTrigger()
+        val newSnapshot =  RecentSnapshot("aaa", 2L, Map.empty)
         dao.redownloadService.persistOwnSnapshot(*, *) shouldReturnF Unit
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
 
         dao.snapshotService.attemptSnapshot() shouldReturn EitherT.pure[IO, SnapshotError](
-          SnapshotCreated("aaa", 2L, Map.empty)
+          newSnapshot
         )
 
         val trigger = snapshotTrigger.trigger()
         val cancel = snapshotTrigger.cancel()
 
         (trigger >> cancel).unsafeRunSync
-        dao.redownloadService.persistOwnSnapshot(2L, "aaa").was(called)
+        dao.redownloadService.persistOwnSnapshot(2L, newSnapshot).was(called)
       }
     }
   }

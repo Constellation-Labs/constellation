@@ -74,7 +74,7 @@ class SnapshotService[F[_]: Concurrent](
       hashes <- acceptedCBSinceSnapshot.get
     } yield hashes
 
-  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
+  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, RecentSnapshot] =
     for {
       _ <- validateMaxAcceptedCBHashesInMemory()
       _ <- validateAcceptedCBsSinceSnapshot()
@@ -114,7 +114,7 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
 
-      created = SnapshotCreated(
+      created = RecentSnapshot(
         nextSnapshot.hash,
         nextHeightInterval,
         publicReputation
