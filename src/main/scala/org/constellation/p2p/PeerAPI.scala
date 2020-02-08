@@ -18,7 +18,8 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
-import org.constellation.consensus.EdgeProcessor.chunkDeSerialize
+import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkDeSerialize}
+import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
@@ -361,9 +362,11 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         APIDirective.handle(hashes)(complete(_))
       } ~
         path("snapshot" / "own") {
-          val snapshots = dao.redownloadService.getOwnSnapshots()
-
-          APIDirective.handle(snapshots)(complete(_))
+          val snapshots = dao.redownloadService.getLocalSnapshots()
+          val chunkedSnaps = snapshots.map { snapMap =>
+            snapMap.grouped(KryoSerializer.chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
+          }
+          APIDirective.handle(chunkedSnaps)(complete(_))
         } ~
         path("snapshot" / "obj" / "snapshot") {
           APIDirective.extractIP(socketAddress) { ip =>

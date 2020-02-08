@@ -3,11 +3,13 @@ package org.constellation.util
 import cats.effect.{ContextShift, IO}
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConstellationExecutionContext
+import org.constellation.{ConstellationExecutionContext, Fixtures}
+import org.constellation.TestHelpers.randomHash
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.mockito.ArgumentMatchersSugar
 import org.scalatest.{FreeSpec, FunSpecLike, Matchers}
+import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
 
 class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
@@ -16,8 +18,6 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
   val majorityState = new MajorityStateChooser[IO]
 
-  def toRecentSnapshot(i: Int) = RecentSnapshot(i.toString, i, Map.empty)
-  def toRecentSnapshotWithPrefix(prefix: String)(i: Int) = RecentSnapshot(s"$prefix$i", i, Map.empty)
 
   "choose majority state" - {
     "when node creates a correct snapshot" - {
@@ -114,6 +114,25 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
         result._1 shouldBe List(6, 4, 2, 0).map(toRecentSnapshot)
         result._2 shouldBe Set(Id("node1"), Id("node2"))
+      }
+
+      "chooses correct majority when encountering a 1/3 split" in {
+        val allPeers = Id("node1") :: Id("node2") :: Id("node3") :: Nil
+
+        val node1 = Id("node1") -> (List(0, 2, 4, 6, 8).map(toRecentSnapshot) ++ List(toRecentSnapshotWithPrefix("a")(10)))
+        val node2 = Id("node2") -> (List(0, 2, 4, 6, 8).map(toRecentSnapshot) ++ List(toRecentSnapshotWithPrefix("b")(10)))
+        val node3 = Id("node3") -> (List(0, 2, 4, 6, 8).map(toRecentSnapshot) ++ List(toRecentSnapshotWithPrefix("c")(10)))
+
+        val height = 6L
+
+        val result = majorityState
+          .chooseMajorityState(List(node1, node2), height, allPeers)
+          .value
+          .unsafeRunSync
+          .get
+
+        result._1 shouldBe List(toRecentSnapshotWithPrefix("a")(10)) ++ List(8, 6, 4, 2, 0).map(toRecentSnapshot)
+        result._2 shouldBe Set(Id("node1"))
       }
     }
 

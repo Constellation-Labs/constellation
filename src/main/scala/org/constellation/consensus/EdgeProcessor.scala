@@ -40,7 +40,6 @@ case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators
 case class FinishedCheckpointResponse(isSuccess: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
-
   private def requestBlockSignature(
     checkpointBlock: CheckpointBlock,
     finalFacilitators: Set[
@@ -216,16 +215,6 @@ object EdgeProcessor extends StrictLogging {
       },
       "handleSignatureRequest"
     )(ConstellationExecutionContext.bounded, dao)
-
-  def chunkSerialize[T](chunk: Seq[T], tag: String): Array[Byte] = {
-    logger.debug(s"ChunkSerialize : $tag")
-    KryoSerializer.serializeAnyRef(chunk)
-  }
-
-  def chunkDeSerialize[T](chunk: Array[Byte], tag: String): T = {
-    logger.debug(s"ChunkDeSerialize : $tag")
-    KryoSerializer.deserializeCast[T](chunk)
-  }
 }
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
@@ -242,9 +231,9 @@ case class SnapshotInfo(
   snapshotCache: Seq[CheckpointCache] = Seq(),
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
 ) {
-  import EdgeProcessor.chunkSerialize
+  import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkSize}
 
-  def toSnapshotInfoSer(info: SnapshotInfo = this, chunkSize: Int = 100): SnapshotInfoSer = //todo make chunk size config
+  def toSnapshotInfoSer(info: SnapshotInfo = this, chunkSize: Int = chunkSize): SnapshotInfoSer =
     SnapshotInfoSer(
       Array(KryoSerializer.serialize[String](info.snapshot.snapshot.lastSnapshot)),
       info.snapshot.checkpointCache
@@ -307,7 +296,7 @@ case class SnapshotInfoSer(
   snapshotCache: Array[Array[Byte]],
   lastAcceptedTransactionRef: Array[Array[Byte]]
 ) {
-  import EdgeProcessor.chunkDeSerialize
+  import org.constellation.serializer.KryoSerializer.chunkDeSerialize
 
   def toSnapshotInfo(info: SnapshotInfoSer = this): SnapshotInfo = {
     val lastSnapshot = info.snapshot.map(KryoSerializer.deserializeCast[String]).head

@@ -23,7 +23,7 @@ import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager
-import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.util.{APIClient, HealthChecker, HostPort, Metrics}
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 
@@ -127,6 +127,9 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
     val snapS = mock[SnapshotService[IO]]
     dao.snapshotService shouldReturn snapS
+
+    val hc = mock[HealthChecker[IO]]
+    dao.healthChecker shouldReturn hc
 
     val keyPair = KeyUtils.makeKeyPair()
     dao.keyPair shouldReturn keyPair

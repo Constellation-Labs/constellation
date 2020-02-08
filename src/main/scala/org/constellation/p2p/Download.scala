@@ -20,7 +20,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging.logThread
 import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
-import org.constellation.consensus.EdgeProcessor.{chunkDeSerialize, chunkSerialize}
+import org.constellation.serializer.KryoSerializer.{chunkDeSerialize, chunkSerialize}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -318,7 +318,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     for {
       snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshot",
-        timeout = 45.seconds,
+        timeout = 45.seconds,//todo change these?
         tag = "snapshot/obj/snapshot"
       )(C)
       storedSnapshotCheckpointBlocks <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](

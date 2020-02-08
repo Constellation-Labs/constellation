@@ -2,11 +2,14 @@ package org.constellation.serializer
 
 import akka.util.ByteString
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
-import scala.util.Random
+import com.typesafe.scalalogging.StrictLogging
+import org.constellation.ConfigUtil
+import org.constellation.consensus.EdgeProcessor.logger
 
+import scala.util.Random
 import org.constellation.p2p.SerializedUDPMessage
 
-object KryoSerializer {
+object KryoSerializer extends StrictLogging{
 
   def guessThreads: Int = {
     val cores = Runtime.getRuntime.availableProcessors
@@ -22,6 +25,8 @@ object KryoSerializer {
     32,
     -1
   )
+
+  val chunkSize: Int = ConfigUtil.constellation.getInt("chunkSize")
 
   def serializeGrouped[T](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {
 
@@ -74,4 +79,13 @@ object KryoSerializer {
   def deserialize[T](message: Array[Byte], cls: Class[T]): T =
     kryoPool.fromBytes(message, cls)
 
+  def chunkSerialize[T](chunk: Seq[T], tag: String): Array[Byte] = {
+    logger.debug(s"ChunkSerialize : $tag")
+    KryoSerializer.serializeAnyRef(chunk)
+  }
+
+  def chunkDeSerialize[T](chunk: Array[Byte], tag: String): T = {
+    logger.debug(s"ChunkDeSerialize : $tag")
+    KryoSerializer.deserializeCast[T](chunk)
+  }
 }
