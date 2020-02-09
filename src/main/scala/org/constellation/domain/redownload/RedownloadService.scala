@@ -1,7 +1,6 @@
 package org.constellation.domain.redownload
 
-import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{ContextShift, LiftIO, Sync}
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
@@ -21,7 +20,8 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
 
   // TODO: Consider Height/Hash type classes
   private[redownload] val ownSnapshots: Ref[F, Map[Long, RecentSnapshot]] = Ref.unsafe(Map.empty)
-  private[redownload] val peersProposals: Ref[F, Map[Long, Seq[NodeSnapshots]]] = Ref.unsafe(Map.empty)//todo join/leave?
+  private[redownload] val peersProposals
+    : Ref[F, Map[Long, Seq[NodeSnapshots]]] = Ref.unsafe(Map.empty) //todo join/leave?
 
   def persistOwnSnapshot(height: Long, recentSnapshot: RecentSnapshot): F[Unit] =
     ownSnapshots.modify { m =>
@@ -53,14 +53,13 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
       val updatedProposals = fetchedProposals.foldLeft(m) {
         case (prevPeerProps, (id, recentSnap)) =>
           val proposalsAtHeight: Seq[(Id, Seq[RecentSnapshot])] = prevPeerProps.getOrElse(recentSnap.height, Seq())
-          val hasMadeProposal = proposalsAtHeight.exists(_._1 == id) //todo Observation of new proposal, dupes ok for now
+          val hasMadeProposal = proposalsAtHeight.exists(_._1 == id) //todo Observation of new proposal
           if (!hasMadeProposal) prevPeerProps.updated(recentSnap.height, proposalsAtHeight :+ (id, Seq(recentSnap)))
           else prevPeerProps
       }
       (updatedProposals, updatedProposals)
     }
 
-  // TODO: Use cluster peers to fetch "/snapshot/own" and merge with peersProposals Map
   def fetchAndSetPeersProposals() = {
     val fetchedProposals = getProposals().map { proposals =>
       proposals.map(RedownloadService.deSerProps).flatMap {
@@ -70,44 +69,23 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
     fetchedProposals.flatMap(updatePeerProps)
   }
 
-
-
-//  // TODO: Check for the majority snapshot and store under a variable
-//  def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] = for {
-//      peerProps <- peersProposals.get
-//      ownProps <- ownSnapshots.get
-//      ownPropsNormalized = ownProps.mapValues(snap => List((dao.id, Seq(snap))))
-//      allProposals = (peerProps.mapValues(_.toList) |+| ownPropsNormalized).flatMap(_._2.toSeq).toList
-//      peers <- LiftIO[F].liftIO(dao.readyPeers) //todo need testing around join leave, this could cause divergence
-//      majority = MajorityStateChooser.chooseMajorWinner(peers.keys.toSeq, allProposals)
-//      snapsThroughMaj = majority.flatMap(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, allProposals))
-//      majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposals))
-//    } yield (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
-
-  // TODO: Check for the majority snapshot and store under a variable
-  def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] = {
-    val maps = for {
+  def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] =
+    for {
       peerProps <- peersProposals.get
       ownProps <- ownSnapshots.get
       ownPropsNormalized = ownProps.mapValues(snap => List((dao.id, Seq(snap))))
       allProposals = peerProps.mapValues(_.toList) |+| ownPropsNormalized
-    } yield allProposals
-
-    for {
-      props <- maps
-      test = props.values.flatten.toList
-      allProposals = props.values.flatten.toList//props.flatMap(_._2.toSeq).toList
+      allProposalsNormalized = allProposals.values.flatten.toList
       peers <- LiftIO[F].liftIO(dao.readyPeers) //todo need testing around join leave, this could cause divergence
-      //todo bubug here ^ only sees one peer
-      majority = MajorityStateChooser.chooseMajorWinner(peers.keys.toSeq, allProposals)
-      groupedProposals = allProposals.toSeq.groupBy(_._1).map{ case (id, tupList) => (id, tupList.flatMap(_._2))}.toList
+      majority = MajorityStateChooser.chooseMajorWinner(peers.keys.toSeq, allProposalsNormalized)
+      groupedProposals = allProposalsNormalized
+        .groupBy(_._1)
+        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
+        .toList
       snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      //todo bubug here ^ only sees one peer
-      majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposals))
+      majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposalsNormalized))
     } yield (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
-  }
 
-  // TODO: Check for the alignment ownSnapshots <-> majoritySnapshot and call redownload if needed
   def checkForAlignmentWithMajoritySnapshot(): F[Option[List[RecentSnapshot]]] =
     for {
       peers <- LiftIO[F].liftIO(dao.readyPeers)

@@ -8,11 +8,13 @@ import java.util.Random
 import cats.effect.{ContextShift, IO}
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.TestHelpers.randomHash
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
 import org.constellation.schema.Id
+import org.constellation.storage.RecentSnapshot
 import org.constellation.util.{APIClient, SignHelp}
 
 import scala.concurrent.ExecutionContext
@@ -108,6 +110,9 @@ object Fixtures {
   val idSet4 = Set(id1, id2, id3, id4)
   val idSet4B = Set(id1, id2, id3, id5)
   val idSet5 = Set(id1, id2, id3, id4, id5)
+
+  def toRecentSnapshot(i: Int) = RecentSnapshot(i.toString, i, Map.empty)
+  def toRecentSnapshotWithPrefix(prefix: String = randomHash)(i: Int) = RecentSnapshot(s"$prefix$i", i, Map.empty)
 
   def getRandomElement[T](list: Seq[T], random: Random): T = list(random.nextInt(list.length))
 

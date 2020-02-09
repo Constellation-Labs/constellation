@@ -320,8 +320,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
           .createBlockBuildingRoundRoutes()
     )
 
-//  private[p2p]
-  def mixedEndpoints(socketAddress: InetSocketAddress) =
+  private[p2p] def mixedEndpoints(socketAddress: InetSocketAddress) =
     path("transaction") {
       put {
         entity(as[TransactionGossip]) { gossip =>

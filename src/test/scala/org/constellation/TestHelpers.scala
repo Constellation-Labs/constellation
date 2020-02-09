@@ -54,12 +54,12 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
     dao
   }
 
-  def prepareFacilitators(size: Int, realAPIClient: Boolean = false): Map[Id, PeerData] =
+  def prepareFacilitators(size: Int): Map[Id, PeerData] =
     Seq
       .fill(size) {
         val hash = randomHash
         val facilitatorId1 = Id(hash)
-        val peerData1 = spy(PeerData(null, null, null))//(withSettings.lenient())
+        val peerData1: PeerData = mock[PeerData]
         peerData1.peerMetadata shouldReturn mock[PeerMetadata]
         peerData1.peerMetadata.id shouldReturn facilitatorId1
         peerData1.peerMetadata.timeAdded shouldReturn System
@@ -67,12 +67,9 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
         peerData1.peerMetadata.nodeType shouldReturn NodeType.Full
         peerData1.peerMetadata.nodeState shouldReturn NodeState.Ready
         peerData1.notification shouldReturn Seq()
-        if (realAPIClient) APIClient(port=9000)(null, null)
-        else {
-          peerData1.client shouldReturn mock[APIClient]//todo config to use actual peer APIs or mock?
-          peerData1.client.hostPortForLogging shouldReturn HostPort(s"http://$hash", 9000)
-          peerData1.client.id shouldReturn facilitatorId1
-        }
+        peerData1.client shouldReturn mock[APIClient]
+        peerData1.client.hostPortForLogging shouldReturn HostPort(s"http://$hash", 9000)
+        peerData1.client.id shouldReturn facilitatorId1
 
         facilitatorId1 -> peerData1
       }
