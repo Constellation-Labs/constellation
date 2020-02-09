@@ -3,12 +3,13 @@ package org.constellation.util
 import cats.effect.{ContextShift, IO}
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConstellationExecutionContext
+import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.constellation.TestHelpers.randomHash
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.mockito.ArgumentMatchersSugar
 import org.scalatest.{FreeSpec, FunSpecLike, Matchers}
+import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
 
 class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
@@ -17,8 +18,6 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
   val majorityState = new MajorityStateChooser[IO]
 
-  def toRecentSnapshot(i: Int) = RecentSnapshot(i.toString, i, Map.empty)
-  def toRecentSnapshotWithPrefix(prefix: String = randomHash)(i: Int) = RecentSnapshot(s"$prefix$i", i, Map.empty)
 
   "choose majority state" - {
     "when node creates a correct snapshot" - {
