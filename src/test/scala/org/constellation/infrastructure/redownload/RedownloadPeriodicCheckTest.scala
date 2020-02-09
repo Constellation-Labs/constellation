@@ -4,6 +4,8 @@ import cats.effect.IO
 import cats.implicits._
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.Cluster
+import org.constellation.schema.Id
+import org.constellation.storage.RecentSnapshot
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -21,9 +23,9 @@ class RedownloadPeriodicCheckTest
   before {
     dao = TestHelpers.prepareMockedDAO()
 
-    dao.redownloadService.fetchPeersProposals() shouldReturnF Unit
-    dao.redownloadService.recalculateMajoritySnapshot() shouldReturnF Unit
-    dao.redownloadService.checkForAlignmentWithMajoritySnapshot() shouldReturnF Unit
+    dao.redownloadService.fetchAndSetPeersProposals() shouldReturnF Map()
+    dao.redownloadService.recalculateMajoritySnapshot() shouldReturnF (Seq[RecentSnapshot](), Set[Id]())
+    dao.redownloadService.checkForAlignmentWithMajoritySnapshot() shouldReturnF Some(List())
   }
 
   "triggerRedownloadCheck" - {
@@ -35,7 +37,7 @@ class RedownloadPeriodicCheckTest
 
       (trigger >> cancel).unsafeRunSync
 
-      dao.redownloadService.fetchPeersProposals().was(called)
+      dao.redownloadService.fetchAndSetPeersProposals().was(called)
     }
 
     "calls recalculate majority snapshot" in {

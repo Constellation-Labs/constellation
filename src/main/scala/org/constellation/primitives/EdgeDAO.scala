@@ -33,7 +33,7 @@ import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
+import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher, HealthChecker}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
@@ -204,6 +204,7 @@ trait EdgeDAO {
   var eigenTrust: EigenTrust[IO] = _
   var rewardsManager: RewardsManager[IO] = _
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
+  var healthChecker: HealthChecker[IO] = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
