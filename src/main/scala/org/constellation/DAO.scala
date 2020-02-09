@@ -246,7 +246,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
         IO.contextShift(ConstellationExecutionContext.bounded)
       )
 
-    val healthChecker = new HealthChecker[IO](
+    healthChecker = new HealthChecker[IO](
       this,
       concurrentTipService,
       consensusManager,
