@@ -10,7 +10,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.TestHelpers.prepareFacilitators
 import org.constellation.consensus.EdgeProcessor
-import org.constellation.consensus.EdgeProcessor.chunkSerialize
+import org.constellation.serializer.KryoSerializer.chunkSerialize
 import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.p2p.{PeerAPI, PeerData}
 import org.constellation.primitives.IPManager
@@ -22,11 +22,13 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import org.constellation.serializer.KryoSerializer
 
 class RedownloadServiceTest
     extends FreeSpec
     with Matchers
-    with BeforeAndAfter
+    with BeforeAndAfterAll
     with ScalatestRouteTest
     with ArgumentMatchersSugar
     with Json4sSupport
@@ -48,13 +50,13 @@ class RedownloadServiceTest
     4L -> RecentSnapshot("4", 4L, Map.empty),
     6L -> RecentSnapshot("6", 6L, Map.empty))
   val serializedResponse = ownSnapshots
-    .grouped(EdgeProcessor.chunkSize)
+    .grouped(KryoSerializer.chunkSize)
     .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name))
     .toArray
-  val deSer = facilitators.map { case (id, _) => RedownloadService.deSerProps((id, serializedResponse)) }.toSeq
+  val deSer = facilitators.map { case (id, _) => RedownloadService.deserializeProposals((id, serializedResponse)) }.toSeq
   val proposals = deSer.flatMap { case (id, recentSnaps) => recentSnaps.map(snap => (id, snap)) }
 
-  before {
+  override def beforeAll(): Unit = {
     peerAPI = new PeerAPI(ipManager)
     dao.healthChecker.startReDownload(*, *) shouldReturn IO.pure[Unit](())
   }
@@ -64,7 +66,7 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aabbcc", 2L, Map.empty)
 
-      val persist = redownloadService.persistOwnSnapshot(2L, newSnapshot)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.ownSnapshots.get.map(_.get(2L))
 
       (persist >> check).unsafeRunSync shouldBe RecentSnapshot("aabbcc", 2L, Map.empty).some
@@ -75,8 +77,8 @@ class RedownloadServiceTest
       val firstSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val secondSnapshot = RecentSnapshot("bbbb", 2L, Map.empty)
 
-      val persistFirst = redownloadService.persistOwnSnapshot(2L, firstSnapshot)
-      val persistSecond = redownloadService.persistOwnSnapshot(2L, secondSnapshot)
+      val persistFirst = redownloadService.persistOwnSnapshot(firstSnapshot)
+      val persistSecond = redownloadService.persistOwnSnapshot(secondSnapshot)
       val check = redownloadService.ownSnapshots.get.map(_.get(2L))
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe RecentSnapshot("aaaa", 2L, Map.empty).some
@@ -96,8 +98,8 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](dao)
       val firstSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val secondSnapshot = RecentSnapshot("bbbb", 4L, Map.empty)
-      val persistFirst = redownloadService.persistOwnSnapshot(2L, firstSnapshot)
-      val persistSecond = redownloadService.persistOwnSnapshot(4L, secondSnapshot)
+      val persistFirst = redownloadService.persistOwnSnapshot(firstSnapshot)
+      val persistSecond = redownloadService.persistOwnSnapshot(secondSnapshot)
       val check = redownloadService.getOwnSnapshots()
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty),
@@ -110,7 +112,7 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
 
-      val persist = redownloadService.persistOwnSnapshot(2L, newSnapshot)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.getOwnSnapshot(2L)
 
       (persist >> check).unsafeRunSync shouldBe RecentSnapshot("aaaa", 2L, Map.empty).some
@@ -128,7 +130,7 @@ class RedownloadServiceTest
   "fetchPeersProposals" - {
     "should update peersProposals" in {
       val redownloadService = RedownloadService[IO](dao)
-      val updateNewProps = redownloadService.updatePeerProps(proposals)
+      val updateNewProps = redownloadService.updatePeerProposals(proposals)
 
       updateNewProps.unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
@@ -136,7 +138,7 @@ class RedownloadServiceTest
     "should not update peersProposals if a new proposal at the same height as an old proposal is recieved" in {
       val redownloadService = RedownloadService[IO](dao)
       val invalidProposdals = proposals :+ (proposals.head._1, RecentSnapshot("invalidProposdals", 0L, Map.empty))
-      val res = redownloadService.updatePeerProps(invalidProposdals).unsafeRunSync()
+      val res = redownloadService.updatePeerProposals(invalidProposdals).unsafeRunSync()
 
       res.values.forall(_.size == numFacilitators) shouldBe true
     }
@@ -144,7 +146,7 @@ class RedownloadServiceTest
     "should not update peersProposals with a duplicate proposal" in {
       val redownloadService = RedownloadService[IO](dao)
       val invalidProposdals = proposals :+ proposals.head
-      val res = redownloadService.updatePeerProps(invalidProposdals).unsafeRunSync()
+      val res = redownloadService.updatePeerProposals(invalidProposdals).unsafeRunSync()
       val check = res.values.forall(_.size == numFacilitators)
       check shouldBe true
     }
@@ -160,7 +162,7 @@ class RedownloadServiceTest
         }
         .toSeq
       val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
-      val updateProps = redownloadService.updatePeerProps(newProps)
+      val updateProps = redownloadService.updatePeerProposals(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
       val correctSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
@@ -176,7 +178,7 @@ class RedownloadServiceTest
         case (id, idx) => (id, RecentSnapshot(s"$idx", 8L, Map.empty))
       }.toSeq
       val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
-      val updateProps = redownloadService.updatePeerProps(newProps)
+      val updateProps = redownloadService.updatePeerProposals(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
       val correctSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
@@ -189,7 +191,7 @@ class RedownloadServiceTest
     "should not include an invalid snaphot when calculating new majority" in {
       val redownloadService = RedownloadService[IO](dao)
       val invalidProposdals = proposals :+ (proposals.head._1, RecentSnapshot("invalidProposdals", 0L, Map.empty))
-      val updateProps = redownloadService.updatePeerProps(invalidProposdals)
+      val updateProps = redownloadService.updatePeerProposals(invalidProposdals)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res = (updateProps >> newMajority).unsafeRunSync()
       val correctSnaps = List(6, 4, 2, 0).map(toRecentSnapshot)
@@ -200,7 +202,7 @@ class RedownloadServiceTest
 
     "should return empty diff if not enough snaps for a majority" in {
       val redownloadService = RedownloadService[IO](dao)
-      val updateProps = redownloadService.updatePeerProps(Seq())
+      val updateProps = redownloadService.updatePeerProposals(Seq())
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res = (updateProps >> newMajority).unsafeRunSync()
       res._1 shouldBe Seq()
@@ -212,8 +214,8 @@ class RedownloadServiceTest
     "should trigger download if should redownload" in {
       val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
-      val updateProps = redownloadService.updatePeerProps(proposals)
-      val persist = redownloadService.persistOwnSnapshot(2L, newSnapshot)
+      val updateProps = redownloadService.updatePeerProposals(proposals)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.checkForAlignmentWithMajoritySnapshot()
       val res = (updateProps >> persist >> check).unsafeRunSync()
       res shouldBe List(6, 4, 2, 0).map(toRecentSnapshot).some
@@ -222,7 +224,7 @@ class RedownloadServiceTest
     "should not trigger download if aligned with majority" in {
       val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
-      val persist = redownloadService.persistOwnSnapshot(2L, newSnapshot)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.checkForAlignmentWithMajoritySnapshot()
       val res = (persist >> check).unsafeRunSync()
       res shouldBe None
