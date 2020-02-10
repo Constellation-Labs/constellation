@@ -152,8 +152,11 @@ class SnapshotService[F[_]: Concurrent](
   ): EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
       getSnapshotInfoWithFullData.flatMap { info =>
+        val path = File(overWritePath.concat(s"/${info.lastSnapshotHeight}_${info.snapshot.snapshot.hash}/"))
+          .createDirectoryIfNotExists()
+          .pathAsString
         if (info.snapshot.snapshot == Snapshot.snapshotZero) Sync[F].unit
-        else writeSnapshotInfoParts(info, overWritePath).map(_ => ())
+        else writeSnapshotInfoParts(info, path).map(_ => ())
       }
     }.leftMap(SnapshotInfoIOError)
 
