@@ -48,16 +48,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
         val node1 = Id("node1") -> List(0, 2, 4, 6).map(toRecentSnapshot)
         val node2 = Id("node2") -> List(0, 2, 4, 6).map(toRecentSnapshot)
         val ownNode = Id("ownNode") -> List(0, 2).map(toRecentSnapshot)
-        val proposals = List(node1, node2, ownNode)
-        val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-        val groupedProposals = proposals
-          .groupBy(_._1)
-          .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-          .toList
-        val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-        val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-        val (sortedSnaps, nodeIdsWithSnaps) =
-          (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+        val nodeList = List(node1, node2, ownNode)
+        val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
         sortedSnaps shouldBe List(6, 4, 2, 0).map(toRecentSnapshot)
       }
@@ -74,16 +66,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
         val ownNode = Id("ownNode") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6).map(
           toRecentSnapshotWithPrefix("b")
         ))
-        val proposals = List(node1, node2, node3, ownNode)
-        val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-        val groupedProposals = proposals
-          .groupBy(_._1)
-          .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-          .toList
-        val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-        val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-        val (sortedSnaps, nodeIdsWithSnaps) =
-          (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+        val nodeList = List(node1, node2, node3, ownNode)
+        val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
         sortedSnaps shouldBe List(8, 6, 4, 2, 0).map(toRecentSnapshot)
         nodeIdsWithSnaps shouldBe Set(Id("node1"), Id("node2"))
@@ -100,16 +84,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
         val ownNode = Id("ownNode") -> (List(0, 2, 4).map(toRecentSnapshot) ++ List(6).map(
           toRecentSnapshotWithPrefix("b")
         ))
-        val proposals = List(node1, node2, node3, ownNode)
-        val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-        val groupedProposals = proposals
-          .groupBy(_._1)
-          .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-          .toList
-        val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-        val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-        val (sortedSnaps, nodeIdsWithSnaps) =
-          (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+        val nodeList = List(node1, node2, node3, ownNode)
+        val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
         sortedSnaps shouldBe List(8, 6, 4, 2, 0).map(toRecentSnapshot)
         nodeIdsWithSnaps shouldBe Set(Id("node1"), Id("node2"))
@@ -132,16 +108,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
           toRecentSnapshotWithPrefix("b")
         ))
 
-        val proposals = List(node1, node2, node3, node4, node5, ownNode)
-        val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-        val groupedProposals = proposals
-          .groupBy(_._1)
-          .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-          .toList
-        val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-        val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-        val (sortedSnaps, nodeIdsWithSnaps) =
-          (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+        val nodeList = List(node1, node2, node3, node4, node5, ownNode)
+        val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
         sortedSnaps shouldBe List(6, 4, 2, 0).map(toRecentSnapshot)
         nodeIdsWithSnaps shouldBe Set(Id("node1"), Id("node2"))
@@ -160,16 +128,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
           toRecentSnapshotWithPrefix("c")(10)
         ))
 
-        val proposals = List(node1, node2, node3)
-        val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-        val groupedProposals = proposals
-          .groupBy(_._1)
-          .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-          .toList
-        val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-        val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-        val (sortedSnaps, nodeIdsWithSnaps) =
-          (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+        val nodeList = List(node1, node2, node3)
+        val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
         sortedSnaps shouldBe List(toRecentSnapshotWithPrefix("a")(10)) ++ List(8, 6, 4, 2, 0).map(toRecentSnapshot)
         nodeIdsWithSnaps shouldBe Set(Id("node1"))
@@ -194,17 +154,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
 
       val ownNode = Id("ownNode") -> (List(0, 2, 4).map(toRecentSnapshot) ++ snapsToDelete)
 
-      val proposals = List(node1, node2, node3, node4, node5, ownNode)
-
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-      val groupedProposals = proposals
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val nodeList = List(node1, node2, node3, node4, node5, ownNode)
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       val diff = MajorityStateChooser.compareSnapshotState((sortedSnaps, nodeIdsWithSnaps), ownNode._2)
       val willReDownload = RedownloadService.shouldReDownload(ownNode._2, diff)
@@ -235,16 +186,8 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
         .tabulate(20)(n => 2 * n)
         .map(toRecentSnapshot) ++ List.tabulate(25)(n => 2 * n).takeRight(5).map(toRecentSnapshotWithPrefix("b")))
 
-      val proposals = List(node1, node2, node3, node4, node5, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, proposals)
-      val groupedProposals = proposals
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, proposals))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val nodeList = List(node1, node2, node3, node4, node5, ownNode)
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       val diff = MajorityStateChooser.compareSnapshotState((sortedSnaps, nodeIdsWithSnaps), ownNode._2)
       val willReDownload = RedownloadService.shouldReDownload(ownNode._2, diff)
@@ -271,15 +214,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -296,15 +231,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -321,15 +248,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(6, 4, 2, 0).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -346,15 +265,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(4, 6, 2, 0).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -371,15 +282,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2, 4, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("6", 6, Map.empty),
@@ -396,15 +299,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2, 4).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("14", 14, Map.empty),
@@ -425,15 +320,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List(2, 0).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2, 4, 6, 8).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("8", 8, Map.empty),
@@ -451,15 +338,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node2 = Id("node2") -> List()
       val ownNode = Id("ownNode") -> List()
       val nodeList = List(node1, node2, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers)
 
       sortedSnaps shouldBe Seq()
       nodeIdsWithSnaps shouldBe Set()
@@ -473,15 +352,7 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
       val node3 = Id("node3") -> List(0, 2, 6).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val ownNode = Id("ownNode") -> List(0, 2).map(i => RecentSnapshot(s"$i", i, Map.empty))
       val nodeList = List(node1, node2, node3, ownNode)
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers3, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers3)
 
       nodeIdsWithSnaps.subsetOf(Set(Id("node1"), Id("node2"), Id("node3"))) shouldBe true
     }
@@ -523,23 +394,13 @@ class MajorityStateChooserTest extends FunSpecLike with ArgumentMatchersSugar wi
           )
         )
       )
-
-      val majority = MajorityStateChooser.chooseMajorWinner(allPeers4, nodeList)
-      val groupedProposals = nodeList
-        .groupBy(_._1)
-        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-        .toList
-      val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
-      val majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, nodeList))
-      val (sortedSnaps, nodeIdsWithSnaps) =
-        (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
+      val (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(nodeList, allPeers4)
 
       sortedSnaps shouldBe List(
         RecentSnapshot("foo", 4, Map.empty),
         RecentSnapshot("bar", 2, Map.empty),
         RecentSnapshot("0", 0, Map.empty)
       )
-
       nodeIdsWithSnaps.subsetOf(Set(Id("node1"), Id("node2"), Id("node3"))) shouldBe true
     }
   }

@@ -222,7 +222,7 @@ class RedownloadServiceTest
   }
 
   "recalculateMajoritySnapshot" - {
-    "should return a majority snapshot when 50% majority achieved" in {
+    "should return a majority snapshot when simple majority achieved" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val (peersWithnNewSnap, _) = facilitators.keySet.splitAt(numFacilitators / 2)
       val newMajorityProposals = proposals ++ peersWithnNewSnap.map(id => (id, RecentSnapshot("8", 8L, Map.empty)))
