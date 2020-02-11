@@ -91,7 +91,7 @@ class PeerAPITest
     "response should return empty map if there are no snapshots" in {
       val emptyResponse = Map[Long, RecentSnapshot]()
       val serializedResponse = emptyResponse.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
-      dao.redownloadService.getOwnSnapshots() shouldReturnF Map.empty
+      dao.redownloadService.getLocalSnapshots() shouldReturnF Map.empty
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
         responseAs[Array[Array[Byte]]] shouldBe serializedResponse
@@ -101,7 +101,7 @@ class PeerAPITest
     "response should return map with all own snapshots" in {
       val ownSnapshots = Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty), 4L -> RecentSnapshot("bbbb", 4L, Map.empty), 6L -> RecentSnapshot("cccc", 6L, Map.empty))
       val serializedResponse = ownSnapshots.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
-      dao.redownloadService.getOwnSnapshots() shouldReturnF ownSnapshots
+      dao.redownloadService.getLocalSnapshots() shouldReturnF ownSnapshots
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
         responseAs[Array[Array[Byte]]] shouldBe serializedResponse

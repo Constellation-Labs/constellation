@@ -362,7 +362,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         APIDirective.handle(hashes)(complete(_))
       } ~
         path("snapshot" / "own") {
-          val snapshots = dao.redownloadService.getOwnSnapshots()//todo return RecentSnapshot
+          val snapshots = dao.redownloadService.getLocalSnapshots()
           val chunkedSnaps = snapshots.map { snapMap =>
             snapMap.grouped(KryoSerializer.chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
           }
