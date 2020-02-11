@@ -4,6 +4,8 @@ import cats.data.OptionT
 import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.redownload.ReDownloadPlan
+import org.constellation.domain.redownload.RedownloadService.Proposals
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 
@@ -27,19 +29,24 @@ object MajorityStateChooser {
       case majNodIds @ (id :: _) => Some(majNodIds)
     }
 
-  def reDownloadPlan(allProposalsNormalized: Seq[(Id, Seq[RecentSnapshot])],
-                     peers: Seq[Id]): (Seq[RecentSnapshot], Set[Id]) = {
+  def planReDownload(allProposals: Map[Id, Map[Long, RecentSnapshot]],
+                     peers: Seq[Id],
+                     id: Id): ReDownloadPlan = {
+    val allProposalsNormalized = allProposals.toSeq.flatMap {
+      case (id, proposals: Map[Long, RecentSnapshot]) =>
+        proposals.toSeq.map { case (height, recentSnapshot) => (id, Seq(recentSnapshot)) }
+    }
     val majority = MajorityStateChooser.chooseMajorWinner(peers, allProposalsNormalized)
     val groupedProposals = allProposalsNormalized
       .groupBy { case (id, recentSnapSeq) => id }
       .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
-      .toList
-    val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
+    val snapsThroughMaj = majority.map { case (height, (snap, nodes)) => MajorityStateChooser.getAllSnapsUntilMaj((snap, nodes), groupedProposals.toList) }
     val majNodeIds =
       majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposalsNormalized.toList))
     val (sortedSnaps, nodeIdsWithSnaps) =
       (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
-    (sortedSnaps, nodeIdsWithSnaps)
+    val diff = MajorityStateChooser.compareSnapshotState((sortedSnaps, nodeIdsWithSnaps), allProposals.getOrElse(id, Map()).values.toList)
+    ReDownloadPlan(id, sortedSnaps, nodeIdsWithSnaps, diff, groupedProposals)
   }
 
   def selectMajSnap(totalPeers: Int, allSnapshotNodes: Seq[SnapshotNodes]) = {
@@ -61,7 +68,7 @@ object MajorityStateChooser {
   def getAllSnapsUntilMaj(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) = {
     val (nodeWithMajority, allSnapshots): (Id, Seq[RecentSnapshot]) = nodeSnapshots.filter {
       case (id, snaps) => snapshotNodes._2.contains(id)
-    }.maxBy(snaps => snaps._2.maxBy(snap => snap.height).height)
+    }.maxBy(snaps => snaps._2.length)
     allSnapshots.filter(_.height <= snapshotNodes._1.height)//todo filter such that, download peers contain current node's
     // snap/height or rather there is an intersection without missing heights
   }
