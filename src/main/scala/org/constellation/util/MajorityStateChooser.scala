@@ -5,7 +5,6 @@ import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.redownload.ReDownloadPlan
-import org.constellation.domain.redownload.RedownloadService.Proposals
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 

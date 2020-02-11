@@ -16,7 +16,6 @@ class RedownloadPeriodicCheck(periodSeconds: Int = 30)(implicit dao: DAO)
   private def triggerRedownloadCheck(): IO[Unit] =
     for {
       _ <- dao.redownloadService.fetchAndSetPeerProposals()
-//      _ <- dao.redownloadService.recalculateMajoritySnapshot()
       _ <- dao.redownloadService.checkForAlignmentWithMajoritySnapshot()
     } yield ()
 
