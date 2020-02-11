@@ -9,34 +9,29 @@ import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.MajorityStateChooser.NodeSnapshots
 import org.constellation.util.{HealthChecker, MajorityStateChooser, SnapshotDiff}
 
 import scala.concurrent.duration._
 
 class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit F: Concurrent[F],
                                                                                     C: ContextShift[F]) {
+  type Proposals = Map[Id, RecentSnapshot]
   val logger = Slf4jLogger.getLogger[F]
 
   // TODO: Consider Height/Hash type classes
-  private[redownload] val proposedSnapshots: Ref[F, Map[Long, Seq[NodeSnapshots]]] = Ref.unsafe(Map.empty)
+  private[redownload] val proposedSnapshots: Ref[F, Map[Long, Proposals]] = Ref.unsafe(Map.empty)
 
   def persistLocalSnapshot(recentSnapshot: RecentSnapshot) = updateProposedSnapshots(Seq((cluster.id, recentSnapshot)))
 
   def getLocalSnapshots() = proposedSnapshots.get.map { snapshots =>
-    snapshots.flatMap {
-      case (height, nodeSnaps) =>
-        val localSnapshotSeq = nodeSnaps.filter { case (id, recentSnapshotSeq) => id == cluster.id }.flatMap {
-          case (id, recentSnapshotSeq) => recentSnapshotSeq.map(height -> _)
-        }
-        localSnapshotSeq
-    }
+    snapshots.values.flatMap { proposalsForHeight =>
+      proposalsForHeight.get(cluster.id)
+    }.toSeq
   }
 
   def getLocalSnapshotAtHeight(height: Long): F[Option[RecentSnapshot]] = proposedSnapshots.get.map { proposedSnaps =>
-    val snapshotsAtHeight: Seq[(Id, Seq[RecentSnapshot])] = proposedSnaps.getOrElse(height, Seq())
-    val localSnapshotsAtHeight = snapshotsAtHeight.find(_._1 == cluster.id)
-    localSnapshotsAtHeight.flatMap { case (id, recentSnapshot) => recentSnapshot.headOption }
+    val snapshotsAtHeight = proposedSnaps.getOrElse(height, Map())
+    snapshotsAtHeight.get(cluster.id)
   }
 
   private[redownload] def fetchPeerProposals(): F[List[(Id, RecentSnapshot)]] =
@@ -58,13 +53,15 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
       }
     } yield deSerializedPeerProposals
 
-  private[redownload] def updateProposedSnapshots(fetchedProposals: Seq[(Id, RecentSnapshot)]) = proposedSnapshots.modify { m =>
+  private[redownload] def updateProposedSnapshots(fetchedProposals: Seq[(Id, RecentSnapshot)]) =
+    proposedSnapshots.modify { m =>
       val updatedProposals = fetchedProposals.foldLeft(m) {
-        case (prevPeerProps, (id, recentSnap)) =>
-          val proposalsAtHeight: Seq[(Id, Seq[RecentSnapshot])] = prevPeerProps.getOrElse(recentSnap.height, Seq())
-          val hasMadeProposal = proposalsAtHeight.exists(_._1 == id) //todo Observation of new proposal
-          if (!hasMadeProposal) prevPeerProps.updated(recentSnap.height, proposalsAtHeight :+ (id, Seq(recentSnap)))
-          else prevPeerProps
+        case (prevProposals, (id, recentSnap)) =>
+          val proposalsAtHeight = prevProposals.getOrElse(recentSnap.height, Map())
+          val hasMadeProposal = proposalsAtHeight.get(id).isDefined //todo Observation of new proposal
+          val test = prevProposals.updated(recentSnap.height, proposalsAtHeight + (id -> recentSnap))
+          if (!hasMadeProposal) test
+          else prevProposals
       }
       (updatedProposals, ())
     }
@@ -74,7 +71,10 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
   def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] =
     for {
       allProposals <- proposedSnapshots.get
-      allProposalsNormalized = allProposals.values.flatten.toList
+      allProposalsNormalized = allProposals.toSeq.flatMap {
+        case (height, proposals: Map[Id, RecentSnapshot]) =>
+          proposals.map { case (id, recentSnapshot) => (id, Seq(recentSnapshot)) }.toSeq
+      }
       peers <- cluster.readyPeers //todo need testing around join leave, this will cause cluster to stall if cluster.readyPeers not updated when peer leaves
       (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(allProposalsNormalized, peers.keySet.toList)
     } yield (sortedSnaps, nodeIdsWithSnaps)
@@ -83,17 +83,16 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
     for {
       peers <- cluster.readyPeers
       majSnapsIds <- recalculateMajoritySnapshot()
-      ownSnaps <- proposedSnapshots.get
-      allOwnSnaps = ownSnaps.values.flatMap(snapsAtHeight => snapsAtHeight.filter(_._1 == cluster.id).map(_._2)).flatten
-      diff = MajorityStateChooser.compareSnapshotState(majSnapsIds, allOwnSnaps.toList)
-      shouldRedownload = RedownloadService.shouldReDownload(allOwnSnaps.toList, diff)
+      ownSnaps <- getLocalSnapshots()
+      diff = MajorityStateChooser.compareSnapshotState(majSnapsIds, ownSnaps.toList)
+      shouldRedownload = RedownloadService.shouldReDownload(ownSnaps.toList, diff)
       result <- if (shouldRedownload) {
         logger.info(
           s"[${cluster.id}] Re-download process with : \n" +
             s"Snapshot to download : ${diff.snapshotsToDownload.map(a => (a.height, a.hash))} \n" +
             s"Snapshot to delete : ${diff.snapshotsToDelete.map(a => (a.height, a.hash))} \n" +
             s"From peers : ${diff.peers} \n" +
-            s"Own snapshots : ${allOwnSnaps.map(a => (a.height, a.hash))} \n" +
+            s"Own snapshots : ${ownSnaps.map(a => (a.height, a.hash))} \n" +
             s"Major state : $majSnapsIds"
         ) >>
           healthChecker
@@ -108,6 +107,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
 object RedownloadService {
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
   val fetchSnapshotProposals = "fetchSnapshotProposals"
+
   val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
 
