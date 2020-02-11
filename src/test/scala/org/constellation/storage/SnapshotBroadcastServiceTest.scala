@@ -38,7 +38,7 @@ class SnapshotBroadcastServiceTest
     dao.processingConfig shouldReturn ProcessingConfig(recentSnapshotNumber = 3)
     dao.cluster shouldReturn mock[Cluster[IO]]
 
-    healthChecker.checkClusterConsistency(*) shouldReturn IO.pure[Option[List[RecentSnapshot]]](None)
+    healthChecker.checkClusterConsistency(*) shouldReturn IO.pure[Unit](())
     snapshotBroadcastService = new SnapshotBroadcastService[IO](
       healthChecker,
       dao.cluster,
