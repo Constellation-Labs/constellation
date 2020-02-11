@@ -31,7 +31,7 @@ object MajorityStateChooser {
                      peers: Seq[Id]): (Seq[RecentSnapshot], Set[Id]) = {
     val majority = MajorityStateChooser.chooseMajorWinner(peers, allProposalsNormalized)
     val groupedProposals = allProposalsNormalized
-      .groupBy(_._1)
+      .groupBy { case (id, recentSnapSeq) => id }
       .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
       .toList
     val snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
