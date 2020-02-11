@@ -10,18 +10,17 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.TestHelpers
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.redownload.RedownloadService.Proposals
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.primitives.IPManager
+import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkSize}
+import org.constellation.storage.RecentSnapshot
 import org.json4s.native.Serialization
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
-import org.constellation.storage.{RecentSnapshot, SnapshotCreated, SnapshotError}
-import org.constellation.consensus.EdgeProcessor._
-import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkSize}
-import org.constellation.consensus.EdgeProcessor
-import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
-import scala.concurrent.duration._
 
 class PeerAPITest
     extends FreeSpec
@@ -88,19 +87,19 @@ class PeerAPITest
   }
 
   "GET snapshot/own" - {
-    "response should return empty map if there are no snapshots" in {
-      val emptyResponse = Map[Long, RecentSnapshot]()
-      val serializedResponse = emptyResponse.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
-      dao.redownloadService.getLocalSnapshots() shouldReturnF Map.empty
+    "response should return empty Seq if there are no snapshots" in {
+      val emptyResponse: Proposals = Map()
+      val serializedResponse = emptyResponse.grouped(chunkSize).map(t => chunkSerialize(t.toSeq,RedownloadService.fetchSnapshotProposals)).toArray
+      dao.redownloadService.getLocalSnapshots() shouldReturnF emptyResponse
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
         responseAs[Array[Array[Byte]]] shouldBe serializedResponse
       }
     }
 
-    "response should return map with all own snapshots" in {
+    "response should return response with all own snapshots" in {
       val ownSnapshots = Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty), 4L -> RecentSnapshot("bbbb", 4L, Map.empty), 6L -> RecentSnapshot("cccc", 6L, Map.empty))
-      val serializedResponse = ownSnapshots.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
+      val serializedResponse = ownSnapshots.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals)).toArray
       dao.redownloadService.getLocalSnapshots() shouldReturnF ownSnapshots
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
