@@ -55,6 +55,12 @@ class MajorityStateChooserFreeTest extends FreeSpec with Matchers {
       }
     }
 
+    //todo missing lower bound, what snap does the node have locally
+    "when some majority proposals are missing a lower bound" - {
+      "chooses only nodes that have lower bound for redownload" in {
+
+      }
+    }
     "when node creates an incorrect snapshot" - {
       "chooses all nodes who has the majority at given height if all of them have same amount of snapshots" in {
         val allPeers = Id("node1") :: Id("node2") :: Id("node3") :: Id("ownNode") :: Nil
