@@ -1,13 +1,15 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{ContextShift, Sync}
-import cats.effect.Concurrent
+import java.net.SocketTimeoutException
+
+import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.serializer.KryoSerializer
 import org.constellation.p2p.Cluster
 import org.constellation.consensus.EdgeProcessor
+import org.constellation.domain.observation.{Observation, RequestTimeoutOnConsensus}
 import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
@@ -35,19 +37,26 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
   def getOwnSnapshot(height: Long): F[Option[RecentSnapshot]] =
     ownSnapshots.get.map(_.get(height))
 
-  private[redownload] def getProposals() =
+  private[redownload] def fetchPeerProposals(): F[List[(Id, RecentSnapshot)]] =
     for {
       peers <- cluster.readyPeers
-      chunkedPeerProposalMaps <- peers.toList.traverse {
+      chunkedPeerProposals <- peers.toList.traverse {
         case (id, peerData) =>
           val resp = peerData.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
             "snapshot/own",
-            timeout = 45.seconds, //todo change these?
+            timeout = 3.seconds,
             tag = "snapshot/own"
           )(C)
-          resp.map((id, _))
+          resp.map((id, _)).handleErrorWith { ex =>
+            Sync[F].delay(logger.error(s"fetchPeerProposals error - ${ex}")) >> Sync[F].delay((id, Array()))
+          }
       }
-    } yield chunkedPeerProposalMaps
+      t = chunkedPeerProposals.map(RedownloadService.deserializeProposals)
+    deSerializedPeerProposals = chunkedPeerProposals.map(RedownloadService.deserializeProposals).flatMap {
+      case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
+    }
+    test = ""
+    } yield deSerializedPeerProposals
 
   def updatePeerProposals(fetchedProposals: Seq[(Id, RecentSnapshot)]) =
     peersProposals.modify { m =>
@@ -61,14 +70,9 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
       (updatedProposals, updatedProposals)
     }
 
-  def fetchAndSetPeersProposals() = {
-    val fetchedProposals = getProposals().map { proposals =>
-      proposals.map(RedownloadService.deserializeProposals).flatMap {
-        case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
-      }
-    }
-    fetchedProposals.flatMap(updatePeerProposals)
-  }
+  def fetchAndSetPeerProposals() =
+    fetchPeerProposals().flatMap(updatePeerProposals)
+
 
   def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] =
     for {
@@ -115,11 +119,13 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
 
 object RedownloadService {
 
+  val fetchSnapshotProposals = "fetchSnapshotProposals"
+
   def deserializeProposals(nodeSnap: (Id, Array[Array[Byte]])): (Id, Seq[RecentSnapshot]) = nodeSnap match {
     case (id, serializedProposalMap) =>
       val proposals: Seq[RecentSnapshot] = serializedProposalMap.flatMap { chunk =>
         KryoSerializer
-          .chunkDeSerialize[Seq[(Long, RecentSnapshot)]](chunk, "fetchSnapshotProposals")
+          .chunkDeSerialize[Seq[(Long, RecentSnapshot)]](chunk, fetchSnapshotProposals)
           .map(_._2)
       }.toSeq
       val nodeSnapshots = (id, proposals)
