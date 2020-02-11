@@ -256,8 +256,8 @@ class RedownloadServiceTest
 
       val correctSnaps = newMajorityProposals.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
       val correctPeer = newMajorityProposals.sortBy { case (id, snap)  => (-snap.height, snap.hash) }.map(_._1).head
-      res._1.minBy { case snap => -snap.height } shouldBe correctSnaps
-      res._2 shouldBe peersWithnNewSnap
+      res.sortedSnaps.minBy { case snap => -snap.height } shouldBe correctSnaps
+      res.nodeIdsWithSnaps shouldBe peersWithnNewSnap
     }
 
     "should return correct majority snapshot when encountering distinct proposals at a given height" in {
@@ -289,8 +289,8 @@ class RedownloadServiceTest
 
       val correctNewSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
       val correctNewPeer = newProps.sortBy { case (id, snap)  => (-snap.height, snap.hash) }.map(_._1).head
-      res._1.minBy { case snap => -snap.height } shouldBe correctNewSnaps
-      res._2 shouldBe Set(correctNewPeer)
+      res.sortedSnaps.minBy { case snap => -snap.height } shouldBe correctNewSnaps
+      res.nodeIdsWithSnaps shouldBe Set(correctNewPeer)
     }
 
     "should return empty diff if not enough snaps for a majority" in {
@@ -303,8 +303,8 @@ class RedownloadServiceTest
       val updateProps = redownloadService.fetchAndSetPeerProposals()
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res = (updateProps >> newMajority).unsafeRunSync()
-      res._1 shouldBe Seq()
-      res._2 shouldBe Set()
+      res.sortedSnaps shouldBe Seq()
+      res.nodeIdsWithSnaps shouldBe Set()
     }
   }
 
@@ -348,26 +348,33 @@ class RedownloadServiceTest
           List(Id("peer"))
         )
 
-      RedownloadService.shouldReDownload(ownSnapshots, diff) shouldBe true
+      RedownloadService.shouldReDownload(ownSnapshots, diff, facilitators.keySet) shouldBe true
     }
     "should return true when there are snaps to delete and nothing to download" - {
       val diff =
         SnapshotDiff(List(RecentSnapshot("someSnap", height, Map.empty)), List.empty, List(Id("peer")))
 
-      RedownloadService.shouldReDownload(ownSnapshots, diff) shouldBe false
+      RedownloadService.shouldReDownload(ownSnapshots, diff, facilitators.keySet) shouldBe false
     }
 
     "should return false when height is too small" - {
       val diff =
         SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height, Map.empty)), List(Id("peer")))
 
-      RedownloadService.shouldReDownload(ownSnapshots, diff) shouldBe false
+      RedownloadService.shouldReDownload(ownSnapshots, diff, facilitators.keySet) shouldBe false
+    }
+
+    "should return false when no peers contain snapshot to redownload" - {
+      val diff =
+        SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height, Map.empty)), List(Id("peer")))
+
+      RedownloadService.shouldReDownload(ownSnapshots, diff, Set()) shouldBe false
     }
 
     "should return true when height below interval" - {
       val diff =
         SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height + (interval * 2), Map.empty)), List(Id("peer")))
-      RedownloadService.shouldReDownload(ownSnapshots, diff) shouldBe true
+      RedownloadService.shouldReDownload(ownSnapshots, diff, facilitators.keySet) shouldBe true
     }
   }
 }
