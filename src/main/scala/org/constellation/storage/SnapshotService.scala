@@ -147,17 +147,26 @@ class SnapshotService[F[_]: Concurrent](
   def writeSnapshotInfoParts(info: SnapshotInfo, basePath: String): F[List[Unit]] =
     info.toSnapshotInfoSer().write[F[List[Unit]]](snapshotInfoWriterProc)(basePath = basePath)
 
+  def snapshotInfoFileHeightPrefix(height: Long): String = s"${height}_"
+
   def writeSnapshotInfoToDisk(
     overWritePath: String = dao.snapshotInfoPath.pathAsString
   ): EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
       getSnapshotInfoWithFullData.flatMap { info =>
+      val heightPrefix = snapshotInfoFileHeightPrefix(info.lastSnapshotHeight)
+      val hash = info.snapshot.snapshot.hash
+
+        val path = File(overWritePath.concat(s"/$heightPrefix$hash/"))
+          .createDirectoryIfNotExists()
+
         if (info.snapshot.snapshot == Snapshot.snapshotZero) Sync[F].unit
-        else writeSnapshotInfoParts(info, overWritePath).map(_ => ())
+        else writeSnapshotInfoParts(info, path.pathAsString).map(_ => ())
       }
     }.leftMap(SnapshotInfoIOError)
 
-  def getSnapshotInfo: F[SnapshotInfo] =
+
+  def getSnapshotInfo(): F[SnapshotInfo] =
     for {
       s <- storedSnapshot.get
       accepted <- acceptedCBSinceSnapshot.get
