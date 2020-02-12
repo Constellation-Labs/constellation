@@ -18,8 +18,7 @@ import org.constellation.util.{HealthChecker, MajorityStateChooser}
 
 import scala.concurrent.duration._
 
-class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit F: Concurrent[F],
-                                                                                    C: ContextShift[F]) {
+class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit F: Concurrent[F], C: ContextShift[F]) {
   val logger = Slf4jLogger.getLogger[F]
 
   // TODO: Consider Height/Hash type classes
@@ -52,9 +51,11 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
             Sync[F].delay(logger.error(s"fetchPeerProposals error - ${ex}")) >> Sync[F].delay((id, Array()))
           }
       }
-      deSerializedPeerProposals = chunkedPeerProposals.map(RedownloadService.deserializeProposals).flatMap {
-        case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
-      }
+      t = chunkedPeerProposals.map(RedownloadService.deserializeProposals)
+    deSerializedPeerProposals = chunkedPeerProposals.map(RedownloadService.deserializeProposals).flatMap {
+      case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
+    }
+    test = ""
     } yield deSerializedPeerProposals
 
   def updatePeerProposals(fetchedProposals: Seq[(Id, RecentSnapshot)]) =
@@ -72,6 +73,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
   def fetchAndSetPeerProposals() =
     fetchPeerProposals().flatMap(updatePeerProposals)
 
+
   def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] =
     for {
       peerProps <- peersProposals.get
@@ -87,8 +89,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
         .toList
       snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
       majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposalsNormalized))
-      (sortedSnaps, nodeIdsWithSnaps) = (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()),
-                                         majNodeIds.map(_.toSet).getOrElse(Set()))
+      (sortedSnaps, nodeIdsWithSnaps) = (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
     } yield (sortedSnaps, nodeIdsWithSnaps)
 
   def checkForAlignmentWithMajoritySnapshot(): F[Option[List[RecentSnapshot]]] =
@@ -107,8 +108,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
             s"Own snapshots : ${ownSnaps.values.map(a => (a.height, a.hash))} \n" +
             s"Major state : $majSnapsIds"
         ) >>
-          healthChecker
-            .startReDownload(diff, peers.filterKeys(diff.peers.contains))
+          healthChecker.startReDownload(diff, peers.filterKeys(diff.peers.contains))
             .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(majSnapsIds._1.toList)))
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
@@ -132,7 +132,6 @@ object RedownloadService {
       nodeSnapshots
   }
 
-  def apply[F[_]: Concurrent](cluster: Cluster[F],
-                              healthChecker: HealthChecker[F])(implicit C: ContextShift[F]): RedownloadService[F] =
+  def apply[F[_]: Concurrent](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit C: ContextShift[F]): RedownloadService[F] =
     new RedownloadService[F](cluster, healthChecker)
 }
