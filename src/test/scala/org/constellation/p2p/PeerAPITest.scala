@@ -11,10 +11,8 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.TestHelpers
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.redownload.RedownloadService
-import org.constellation.domain.redownload.RedownloadService.Proposals
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.primitives.IPManager
-import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkSize}
 import org.constellation.storage.RecentSnapshot
 import org.json4s.native.Serialization
@@ -88,9 +86,9 @@ class PeerAPITest
 
   "GET snapshot/own" - {
     "response should return empty Seq if there are no snapshots" in {
-      val emptyResponse: Proposals = Map()
+      val emptyResponse = Seq.empty[RecentSnapshot]
       val serializedResponse = emptyResponse.grouped(chunkSize).map(t => chunkSerialize(t.toSeq,RedownloadService.fetchSnapshotProposals)).toArray
-      dao.redownloadService.getLocalSnapshots() shouldReturnF emptyResponse
+      dao.redownloadService.getLocalSnapshots() shouldReturnF Seq.empty
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
         responseAs[Array[Array[Byte]]] shouldBe serializedResponse
@@ -99,8 +97,8 @@ class PeerAPITest
 
     "response should return response with all own snapshots" in {
       val ownSnapshots = Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty), 4L -> RecentSnapshot("bbbb", 4L, Map.empty), 6L -> RecentSnapshot("cccc", 6L, Map.empty))
-      val serializedResponse = ownSnapshots.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals)).toArray
-      dao.redownloadService.getLocalSnapshots() shouldReturnF ownSnapshots
+      val serializedResponse = ownSnapshots.values.toSeq.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals)).toArray
+      dao.redownloadService.getLocalSnapshots() shouldReturnF ownSnapshots.values.toSeq
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
         responseAs[Array[Array[Byte]]] shouldBe serializedResponse

@@ -62,8 +62,7 @@ object MajorityStateChooser {
     val (nodeWithMajority, allSnapshots): (Id, Seq[RecentSnapshot]) = nodeSnapshots.filter {
       case (id, snaps) => snapshotNodes._2.contains(id)
     }.maxBy(snaps => snaps._2.maxBy(snap => snap.height).height)
-    allSnapshots.filter(_.height <= snapshotNodes._1.height)//todo filter such that, download peers contain current node's
-    // snap/height or rather there is an intersection without missing heights
+    allSnapshots.filter(_.height <= snapshotNodes._1.height)
   }
 
   def chooseMajorWinner(allPeers: Seq[Id], nodeSnapshots: Seq[NodeSnapshots]) = {

@@ -38,6 +38,17 @@ class RedownloadPeriodicCheckTest
       dao.redownloadService.fetchAndSetPeerProposals().was(called)
     }
 
+    "calls recalculate majority snapshot" in {
+      val redownloadPeriodicCheck = new RedownloadPeriodicCheck()
+
+      val trigger = redownloadPeriodicCheck.trigger()
+      val cancel = redownloadPeriodicCheck.cancel()
+
+      (trigger >> cancel).unsafeRunSync
+
+      dao.redownloadService.recalculateMajoritySnapshot().was(called)
+    }
+
     "calls check for alignment with majority snapshot" in {
       val redownloadPeriodicCheck = new RedownloadPeriodicCheck()
 

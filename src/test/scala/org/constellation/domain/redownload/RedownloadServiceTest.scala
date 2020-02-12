@@ -7,7 +7,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.Fixtures.{toRecentSnapshot}
+import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
 import org.constellation.TestHelpers.prepareFacilitators
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.IPManager
@@ -63,7 +63,6 @@ class RedownloadServiceTest
   override def beforeAll(): Unit = {
     healthChecker.startReDownload(*, *) shouldReturn IO.pure[Unit](())
     cluster.id shouldReturn ownPeerInfo.keySet.head
-    cluster.getPeerInfo shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
   }
 
   "persistOwnSnapshot" - {
@@ -96,7 +95,7 @@ class RedownloadServiceTest
 
       val check = redownloadService.getLocalSnapshots()
 
-      check.unsafeRunSync shouldBe Map.empty
+      check.unsafeRunSync shouldBe Seq.empty
     }
 
     "should return all own snapshots if they exist" in {
@@ -107,8 +106,8 @@ class RedownloadServiceTest
       val persistSecond = redownloadService.persistLocalSnapshot(secondSnapshot)
       val check = redownloadService.getLocalSnapshots()
 
-      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty),
-                                                                          4L -> RecentSnapshot("bbbb", 4L, Map.empty))
+      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Seq(RecentSnapshot("aaaa", 2L, Map.empty),
+                                                                          RecentSnapshot("bbbb", 4L, Map.empty))
     }
   }
 
@@ -143,7 +142,7 @@ class RedownloadServiceTest
       }
       val fetch = redownloadService.fetchAndSetPeerProposals()
       val check = redownloadService.proposedSnapshots.get
-      (fetch >> check).unsafeRunSync().keySet shouldBe facilitators.keySet
+      (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
 
     "should not fail if at least one peer did not respond" in {
@@ -158,7 +157,7 @@ class RedownloadServiceTest
         .raiseError(new TimeoutException("Testing timeout, case just ignore this message."))
       val fetch = redownloadService.fetchAndSetPeerProposals()
       val check = redownloadService.proposedSnapshots.get
-      (fetch >> check).unsafeRunSync().keySet shouldBe facilitators.tail.keySet
+      (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators - 1) shouldBe true
     }
   }
 
@@ -173,8 +172,7 @@ class RedownloadServiceTest
       }
       val fetch = redownloadService.fetchAndSetPeerProposals()
       val check = redownloadService.proposedSnapshots.get
-      val allResponsesUpdated = (fetch >> check).unsafeRunSync().forall { case (id, proposals) => baseSnapshots.keySet.diff(proposals.keySet).isEmpty}
-      allResponsesUpdated shouldBe true
+      (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
 
     "should not update peersProposals if a new proposal at the same height as an old proposal is recieved" in {
@@ -204,10 +202,8 @@ class RedownloadServiceTest
       val fetchInvalid = redownloadService.fetchAndSetPeerProposals()
       val check = redownloadService.proposedSnapshots.get
       val res = (fetch >> update >> fetchInvalid >> check).unsafeRunSync()
-      val allResponsesUpdated = res.forall { case (id, proposals) => baseSnapshots.keySet.diff(proposals.keySet).isEmpty}
-
-      res(invalidPeerId).get(0) shouldBe Some(invalidProposal)
-      allResponsesUpdated shouldBe true
+      res(0).get(invalidPeerId) shouldBe Some(invalidProposal)
+      res.values.forall(_.size == numFacilitators + 1) shouldBe true
     }
 
     "should not update peersProposals with a duplicate proposal" in {
@@ -223,8 +219,7 @@ class RedownloadServiceTest
       val fetchAgain = redownloadService.fetchAndSetPeerProposals()
       val check = redownloadService.proposedSnapshots.get
       val res = (fetch >> update >> fetchAgain >> check).unsafeRunSync()
-      val allResponsesUpdated = res.forall { case (id, proposals) => baseSnapshots.keySet.diff(proposals.keySet).isEmpty}
-      allResponsesUpdated shouldBe true
+      res.values.forall(_.size == numFacilitators) shouldBe true
     }
   }
 
