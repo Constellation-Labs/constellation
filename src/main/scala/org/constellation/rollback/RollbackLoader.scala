@@ -21,6 +21,7 @@ class RollbackLoader(
 
   def loadSnapshotInfoFromFile(): Either[RollbackException, SnapshotInfo] =
     Try(loadSnapshotInfoSer(File(snapshotInfoPath).pathAsString))
+      .map(_.toSnapshotInfo())
       .map(Right(_))
       .getOrElse(Left(CannotLoadSnapshotInfoFile(snapshotInfoPath)))
 
@@ -29,7 +30,7 @@ class RollbackLoader(
       .map(Right(_))
       .getOrElse(Left(CannotLoadGenesisObservationFile(genesisObservationPath)))
 
-  def loadSnapshotInfoSer(snapshotInfoDir: String): SnapshotInfo = {
+  def loadSnapshotInfoSer(snapshotInfoDir: String): SnapshotInfoSer = {
     val snapInfoSerParts = File(snapshotInfoDir)
       .glob("**")
       .map { file =>
@@ -57,7 +58,7 @@ class RollbackLoader(
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.LAST_ACCEPTED_TX_REF.name, Array.empty[Array[Byte]]),
       snapInfoSerParts.getOrElse(SnapshotInfoChunk.PUBLIC_REPUTATION.name, Array.empty[Array[Byte]])
     )
-    serSnapInfo.toSnapshotInfo()
+    serSnapInfo
   }
 
   private def deserializeFromFile[T](path: String): T =
