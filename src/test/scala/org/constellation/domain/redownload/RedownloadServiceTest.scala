@@ -21,7 +21,6 @@ import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
-import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
 
 class RedownloadServiceTest
     extends FreeSpec
@@ -39,20 +38,13 @@ class RedownloadServiceTest
   implicit val dao = TestHelpers.prepareMockedDAO()
 
   val numFacilitators = 10 //needs to be even for some tests below
-  val facilitators = prepareFacilitators(numFacilitators)
+  val facilitators
+    : Map[Id, PeerData] = prepareFacilitators(numFacilitators) //todo need actual peer APIs to get responses
   val socketAddress = new InetSocketAddress("localhost", 9001)
   val ipManager: IPManager[IO] = IPManager[IO]()
   var peerAPI: PeerAPI = _
-  val ownSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
-    2L -> RecentSnapshot("2", 2L, Map.empty),
-    4L -> RecentSnapshot("4", 4L, Map.empty),
-    6L -> RecentSnapshot("6", 6L, Map.empty))
-  val serializedResponse = ownSnapshots
-    .grouped(EdgeProcessor.chunkSize)
-    .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name))
-    .toArray
-  val deSer = facilitators.map { case (id, _) => RedownloadService.deSerProps((id, serializedResponse)) }.toSeq
-  val proposals = deSer.flatMap { case (id, recentSnaps) => recentSnaps.map(snap => (id, snap)) }
+
+  def toRecentSnapshot(i: Int) = RecentSnapshot(i.toString, i, Map.empty)
 
   before {
     peerAPI = new PeerAPI(ipManager)
@@ -126,6 +118,17 @@ class RedownloadServiceTest
   }
 
   "fetchPeersProposals" - {
+    val ownSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
+                           2L -> RecentSnapshot("2", 2L, Map.empty),
+                           4L -> RecentSnapshot("4", 4L, Map.empty),
+                           6L -> RecentSnapshot("6", 6L, Map.empty))
+    val serializedResponse = ownSnapshots
+      .grouped(EdgeProcessor.chunkSize)
+      .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name))
+      .toArray
+    val deSer = facilitators.map { case (id, _) => RedownloadService.deSerProps((id, serializedResponse)) }.toSeq
+    val proposals = deSer.flatMap { case (id, recentSnaps) => recentSnaps.map(snap => (id, snap)) }
+
     "should update peersProposals" in {
       val redownloadService = RedownloadService[IO](dao)
       val updateNewProps = redownloadService.updatePeerProps(proposals)
@@ -151,6 +154,19 @@ class RedownloadServiceTest
   }
 
   "recalculateMajoritySnapshot" - {
+    val ownSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
+                           2L -> RecentSnapshot("2", 2L, Map.empty),
+                           4L -> RecentSnapshot("4", 4L, Map.empty),
+                           6L -> RecentSnapshot("6", 6L, Map.empty))
+    val serializedResponse = ownSnapshots
+      .grouped(EdgeProcessor.chunkSize)
+      .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name))
+      .toArray
+    val deSer = facilitators.map { case (id, _) => RedownloadService.deSerProps((id, serializedResponse)) }.toSeq
+    val proposals: Seq[(Id, RecentSnapshot)] = deSer.flatMap {
+      case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
+    }
+
     "should return a majority snapshot when 50% majority achieved" in {
       val redownloadService = RedownloadService[IO](dao)
       val facilitatorDistinctSnapshots = facilitators.keysIterator
@@ -209,6 +225,19 @@ class RedownloadServiceTest
   }
 
   "checkForAlignmentWithMajoritySnapshot" - {
+    val ownSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
+                           2L -> RecentSnapshot("2", 2L, Map.empty),
+                           4L -> RecentSnapshot("4", 4L, Map.empty),
+                           6L -> RecentSnapshot("6", 6L, Map.empty))
+    val serializedResponse = ownSnapshots
+      .grouped(EdgeProcessor.chunkSize)
+      .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name))
+      .toArray
+    val deSer = facilitators.map { case (id, _) => RedownloadService.deSerProps((id, serializedResponse)) }.toSeq
+    val proposals: Seq[(Id, RecentSnapshot)] = deSer.flatMap {
+      case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
+    }
+
     "should trigger download if should redownload" in {
       val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)

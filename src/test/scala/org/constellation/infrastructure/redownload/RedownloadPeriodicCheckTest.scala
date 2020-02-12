@@ -1,11 +1,13 @@
 package org.constellation.infrastructure.redownload
 
+import cats.effect.IO
 import cats.implicits._
+import org.constellation.{DAO, TestHelpers}
+import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
-import org.constellation.{DAO, TestHelpers}
-import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class RedownloadPeriodicCheckTest
