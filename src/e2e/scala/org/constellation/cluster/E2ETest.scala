@@ -7,11 +7,14 @@ import better.files.File
 import cats.effect.{ContextShift, IO}
 import org.constellation._
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.domain.redownload.ReDownloadPlan
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.{GenesisObservation, SendToAddress}
 import org.constellation.primitives._
+import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{APIClient, AccountBalance, Metrics, Simulation}
+import org.constellation.storage.RecentSnapshot
+import org.constellation.util._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -38,6 +41,7 @@ class E2ETest extends E2E {
     client.postBlocking[SendToAddress]("send", SendToAddress(dst, amount))
   }
 
+  private val snapshotHeightRedownloadDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
   private val blacklistedKeyPair = KeyUtils.makeKeyPair()
   private val blacklistedAddress = Simulation.getPublicAddressFromKeyPair(blacklistedKeyPair)
   private val sendToAddress = "DAG4P4djwm7WNd4w2CKAXr99aqag5zneHywVWtZ9"
@@ -138,18 +142,40 @@ class E2ETest extends E2E {
       delay = 10000
     )
 
-//    Simulation.awaitConditionMet(
-//      "Snapshot hashes differs across cluster",
-//      allAPIs.toList
-//        .traverse(
-//          a => a.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")(contextShift)
-//        )
-//        .unsafeRunSync()
-//        .distinct
-//        .size == 1,
-//      maxRetries = 30,
-//      delay = 5000
-//    )
+    def reDownloadResponses = allAPIs.map { a =>
+      val response = a.getNonBlockingIO[List[RecentSnapshot]]("snapshot/recent")(contextShift).unsafeRunSync()
+      (a.id, response)
+    }
+
+    def isAlignedWithinRange(allProposals: Map[Id, Map[Long, RecentSnapshot]],
+                             sortedSnaps: Seq[RecentSnapshot],
+                             relativeMajority: RecentSnapshot) =
+      allProposals.forall { case (id: Id, props: Map[Long, RecentSnapshot]) =>
+      val maximumHeight: Long = props.keys.max
+      val minimumHeight: Long = props.keys.min
+      val withinRangeAbove: Boolean = (maximumHeight - snapshotHeightRedownloadDelayInterval) <= relativeMajority.height
+      val withinRangeBelow: Boolean = (minimumHeight + snapshotHeightRedownloadDelayInterval) >= relativeMajority.height
+      val hashesAligned: Boolean = sortedSnaps.toSet.diff(props.values.toSet).isEmpty
+
+      hashesAligned && withinRangeAbove && withinRangeBelow
+    }
+
+    //all nodes contain min height snaps (aligned) and min height is no less than (>=) majSnapHeight - redownloadInterval
+    def alignedUpToMaj(curSnaps: Seq[(Id, Seq[RecentSnapshot])]): Boolean = {
+      val allProposals: Map[Id, Map[Long, RecentSnapshot]] = curSnaps.toMap.mapValues { recentSnaps => recentSnaps.map(snap => (snap.height, snap)).toMap }
+      val allPeers = initialAPIs.map(_.id)
+      val ReDownloadPlan(_, sortedSnaps, nodeIdsWithSnaps, diff, groupedProposals) =
+        MajorityStateChooser.planReDownload(allProposals, allPeers, apis.head.id)
+      val relativeMajority: RecentSnapshot = sortedSnaps.maxBy(_.height)
+      isAlignedWithinRange(allProposals, sortedSnaps, relativeMajority)
+    }
+
+      Simulation.awaitConditionMet(
+        "Snapshot hashes differs across cluster",
+        alignedUpToMaj(reDownloadResponses),
+        maxRetries = 30,
+        delay = 5000
+      )
 
     val storedSnapshots = allAPIs.map {
       _.simpleDownload()
