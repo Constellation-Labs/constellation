@@ -20,7 +20,19 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.RedownloadService
-import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
+import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.snapshot.SnapshotFileStorage
@@ -156,6 +168,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
+    redownloadService = RedownloadService[IO](this)
+
     consensusRemoteSender =
       new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
 
@@ -241,8 +255,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       cluster,
       majorityStateChooser
     )
-
-    redownloadService = RedownloadService[IO](cluster, healthChecker)
 
     val snapshotSelector =
       new HeightIdBasedSnapshotSelector[IO](

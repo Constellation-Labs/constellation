@@ -24,8 +24,6 @@ import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.HealthChecker
-import org.constellation.p2p.Cluster
 
 class RedownloadServiceTest
     extends FreeSpec
@@ -44,9 +42,9 @@ class RedownloadServiceTest
 
   val numFacilitators = 10 //needs to be even for some tests below
   val facilitators = prepareFacilitators(numFacilitators)
-  val ownPeerInfo = prepareFacilitators(1)
   val socketAddress = new InetSocketAddress("localhost", 9001)
   val ipManager: IPManager[IO] = IPManager[IO]()
+  var peerAPI: PeerAPI = _
   val ownSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
     2L -> RecentSnapshot("2", 2L, Map.empty),
     4L -> RecentSnapshot("4", 4L, Map.empty),
@@ -58,18 +56,14 @@ class RedownloadServiceTest
   val deSer = facilitators.map { case (id, _) => RedownloadService.deserializeProposals((id, serializedResponse)) }.toSeq
   val proposals = deSer.flatMap { case (id, recentSnaps) => recentSnaps.map(snap => (id, snap)) }
 
-  val cluster = mock[Cluster[IO]]
-  val healthChecker = mock[HealthChecker[IO]]
-
   override def beforeAll(): Unit = {
-    healthChecker.startReDownload(*, *) shouldReturn IO.pure[Unit](())
-    cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-    cluster.id shouldReturn ownPeerInfo.keySet.head
+    peerAPI = new PeerAPI(ipManager)
+    dao.healthChecker.startReDownload(*, *) shouldReturn IO.pure[Unit](())
   }
 
   "persistOwnSnapshot" - {
     "should persist own snapshot internally if snapshot at given height doesn't exist" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aabbcc", 2L, Map.empty)
 
       val persist = redownloadService.persistOwnSnapshot(newSnapshot)
@@ -79,7 +73,7 @@ class RedownloadServiceTest
     }
 
     "should not override previously persisted snapshot if snapshot at given height already exists" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val firstSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val secondSnapshot = RecentSnapshot("bbbb", 2L, Map.empty)
 
@@ -93,7 +87,7 @@ class RedownloadServiceTest
 
   "getOwnSnapshots" - {
     "should return empty map if there are no own snapshots" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
 
       val check = redownloadService.getOwnSnapshots()
 
@@ -101,7 +95,7 @@ class RedownloadServiceTest
     }
 
     "should return all own snapshots if they exist" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val firstSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val secondSnapshot = RecentSnapshot("bbbb", 4L, Map.empty)
       val persistFirst = redownloadService.persistOwnSnapshot(firstSnapshot)
@@ -115,7 +109,7 @@ class RedownloadServiceTest
 
   "getOwnSnapshot" - {
     "should return hash if snapshot at given height exists" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
 
       val persist = redownloadService.persistOwnSnapshot(newSnapshot)
@@ -125,7 +119,7 @@ class RedownloadServiceTest
     }
 
     "should return None if snapshot at given height does not exist" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
 
       val check = redownloadService.getOwnSnapshot(2L)
 
@@ -135,14 +129,14 @@ class RedownloadServiceTest
 
   "fetchPeersProposals" - {
     "should update peersProposals" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val updateNewProps = redownloadService.updatePeerProposals(proposals)
 
       updateNewProps.unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
 
     "should not update peersProposals if a new proposal at the same height as an old proposal is recieved" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val invalidProposdals = proposals :+ (proposals.head._1, RecentSnapshot("invalidProposdals", 0L, Map.empty))
       val res = redownloadService.updatePeerProposals(invalidProposdals).unsafeRunSync()
 
@@ -150,7 +144,7 @@ class RedownloadServiceTest
     }
 
     "should not update peersProposals with a duplicate proposal" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val invalidProposdals = proposals :+ proposals.head
       val res = redownloadService.updatePeerProposals(invalidProposdals).unsafeRunSync()
       val check = res.values.forall(_.size == numFacilitators)
@@ -160,7 +154,7 @@ class RedownloadServiceTest
 
   "recalculateMajoritySnapshot" - {
     "should return a majority snapshot when 50% majority achieved" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val facilitatorDistinctSnapshots = facilitators.keysIterator
         .drop(numFacilitators / 2)
         .map { id =>
@@ -179,7 +173,7 @@ class RedownloadServiceTest
     }
 
     "should return correct majority snapshot when encountering non-50% split" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val facilitatorDistinctSnapshots = facilitators.keysIterator.zipWithIndex.map {
         case (id, idx) => (id, RecentSnapshot(s"$idx", 8L, Map.empty))
       }.toSeq
@@ -195,7 +189,7 @@ class RedownloadServiceTest
     }
 
     "should not include an invalid snaphot when calculating new majority" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val invalidProposdals = proposals :+ (proposals.head._1, RecentSnapshot("invalidProposdals", 0L, Map.empty))
       val updateProps = redownloadService.updatePeerProposals(invalidProposdals)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
@@ -207,7 +201,7 @@ class RedownloadServiceTest
     }
 
     "should return empty diff if not enough snaps for a majority" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val updateProps = redownloadService.updatePeerProposals(Seq())
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res = (updateProps >> newMajority).unsafeRunSync()
@@ -218,7 +212,7 @@ class RedownloadServiceTest
 
   "checkForAlignmentWithMajoritySnapshot" - {
     "should trigger download if should redownload" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val updateProps = redownloadService.updatePeerProposals(proposals)
       val persist = redownloadService.persistOwnSnapshot(newSnapshot)
@@ -228,7 +222,7 @@ class RedownloadServiceTest
     }
 
     "should not trigger download if aligned with majority" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val redownloadService = RedownloadService[IO](dao)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.checkForAlignmentWithMajoritySnapshot()

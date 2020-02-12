@@ -63,19 +63,16 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
+
   private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
-  private def eqNodeState(nodeStates: Set[NodeState])(m: (Id, PeerData)) =
-    nodeStates.contains(m._2.peerMetadata.nodeState)
 
   implicit val logger = Slf4jLogger.getLogger[F]
-  implicit val shadedDao: DAO = dao
 
-  val id = dao.id
+  implicit val shadedDao: DAO = dao
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
 
   def getPeerInfo: F[Map[Id, PeerData]] = peers.get
-  def readyPeers = getPeerInfo.map(_.filter(eqNodeState(NodeState.readyStates)))
 
   // TODO: wkoszycki consider using complex structure of peers so the lookup has O(n) complexity
   def getPeerData(host: String): F[Option[PeerData]] =

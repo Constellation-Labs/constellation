@@ -1,14 +1,12 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{ContextShift, Sync}
+import cats.effect.{ContextShift, LiftIO, Sync}
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.DAO
 import org.constellation.serializer.KryoSerializer
-import org.constellation.p2p.Cluster
-import org.constellation.consensus.EdgeProcessor
-import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.MajorityStateChooser.NodeSnapshots
@@ -16,7 +14,7 @@ import org.constellation.util.{HealthChecker, MajorityStateChooser}
 
 import scala.concurrent.duration._
 
-class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit F: Concurrent[F], C: ContextShift[F]) {
+class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShift[F]) {
   val logger = Slf4jLogger.getLogger[F]
 
   // TODO: Consider Height/Hash type classes
@@ -37,7 +35,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
 
   private[redownload] def getProposals() =
     for {
-      peers <- cluster.readyPeers
+      peers <- LiftIO[F].liftIO(dao.readyPeers)
       chunkedPeerProposalMaps <- peers.toList.traverse {
         case (id, peerData) =>
           val resp = peerData.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
@@ -74,10 +72,10 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
     for {
       peerProps <- peersProposals.get
       ownProps <- ownSnapshots.get
-      ownPropsNormalized = ownProps.mapValues(snap => List((cluster.id, Seq(snap))))
+      ownPropsNormalized = ownProps.mapValues(snap => List((dao.id, Seq(snap))))
       allProposals = peerProps.mapValues(_.toList) |+| ownPropsNormalized
       allProposalsNormalized = allProposals.values.flatten.toList
-      peers <- cluster.readyPeers //todo need testing around join leave, this could cause divergence
+      peers <- LiftIO[F].liftIO(dao.readyPeers) //todo need testing around join leave, this could cause divergence
       majority = MajorityStateChooser.chooseMajorWinner(peers.keys.toSeq, allProposalsNormalized)
       groupedProposals = allProposalsNormalized
         .groupBy(_._1)
@@ -90,21 +88,22 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
 
   def checkForAlignmentWithMajoritySnapshot(): F[Option[List[RecentSnapshot]]] =
     for {
-      peers <- cluster.readyPeers
+      peers <- LiftIO[F].liftIO(dao.readyPeers)
       majSnapsIds <- recalculateMajoritySnapshot()
       ownSnaps <- ownSnapshots.get
       diff = HealthChecker.compareSnapshotState(majSnapsIds, ownSnaps.values.toList)
       shouldRedownload = HealthChecker.shouldReDownload(ownSnaps.values.toList, diff)
       result <- if (shouldRedownload) {
         logger.info(
-          s"[${cluster.id}] Re-download process with : \n" +
+          s"[${dao.id.short}] Re-download process with : \n" +
             s"Snapshot to download : ${diff.snapshotsToDownload.map(a => (a.height, a.hash))} \n" +
             s"Snapshot to delete : ${diff.snapshotsToDelete.map(a => (a.height, a.hash))} \n" +
             s"From peers : ${diff.peers} \n" +
             s"Own snapshots : ${ownSnaps.values.map(a => (a.height, a.hash))} \n" +
             s"Major state : $majSnapsIds"
         ) >>
-          healthChecker.startReDownload(diff, peers.filterKeys(diff.peers.contains))
+          LiftIO[F]
+            .liftIO(dao.healthChecker.startReDownload(diff, peers.filterKeys(diff.peers.contains)))
             .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(majSnapsIds._1.toList)))
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
@@ -126,6 +125,6 @@ object RedownloadService {
       nodeSnapshots
   }
 
-  def apply[F[_]: Concurrent](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit C: ContextShift[F]): RedownloadService[F] =
-    new RedownloadService[F](cluster, healthChecker)
+  def apply[F[_]: Concurrent](dao: DAO)(implicit C: ContextShift[F]): RedownloadService[F] =
+    new RedownloadService[F](dao)
 }
