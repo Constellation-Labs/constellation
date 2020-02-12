@@ -224,37 +224,45 @@ class RedownloadServiceTest
   "recalculateMajoritySnapshot" - {
     "should return a majority snapshot when 50% majority achieved" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      val (peersWithnNewSnap, _) = facilitators.keySet.splitAt(numFacilitators / 2)
-      val newMajorityProposals = proposals ++ peersWithnNewSnap.map(id => (id, RecentSnapshot("8", 8L, Map.empty)))
-      val idToSerializedResponse = facilitators.keys.map { id =>
-        val newSnap = peersWithnNewSnap.contains(id)
-        val newProposal = if (newSnap) baseSnapshots + (8L -> RecentSnapshot("8", 8L, Map.empty)) else baseSnapshots
-        val newSerializedResponse = newProposal
-          .grouped(KryoSerializer.chunkSize)
-          .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
-          .toArray
-        id -> newSerializedResponse
-      }.toMap
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (id, peerApi) =>
-          peerApi.client.getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF idToSerializedResponse(id)
-      }
-      val updateProps = redownloadService.fetchAndSetPeerProposals()
+      val facilitatorDistinctSnapshots = facilitators.keysIterator
+        .drop(numFacilitators / 2)
+        .map { id =>
+          (id, RecentSnapshot("8", 8L, Map.empty))
+        }
+        .toSeq
+      val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
+      val updateProps = redownloadService.updateProposedSnapshots(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
-      val res = (updateProps >> newMajority).unsafeRunSync()
+      val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
 
-      val correctSnaps = newMajorityProposals.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
-      val correctPeer = newMajorityProposals.sortBy { case (id, snap)  => (-snap.height, snap.hash) }.map(_._1).head
+      val correctSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
+      val correctPeer = facilitatorDistinctSnapshots.map(_._1).toSet
       res._1.minBy { case snap => -snap.height } shouldBe correctSnaps
-      res._2 shouldBe peersWithnNewSnap
+      res._2 shouldBe correctPeer
     }
 
-    "should return correct majority snapshot when encountering distinct proposals at a given height" in {
+    "should return correct majority snapshot when encountering non-50% split" in {
+      val redownloadService = RedownloadService[IO](cluster, healthChecker)
+      val facilitatorDistinctSnapshots = facilitators.keysIterator.zipWithIndex.map {
+        case (id, idx) => (id, RecentSnapshot(s"$idx", 8L, Map.empty))
+      }.toSeq
+      val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
+      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
+      val updateProps = redownloadService.updateProposedSnapshots(newProps)
+      val newMajority = redownloadService.recalculateMajoritySnapshot()
+      val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
+
+      val correctSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
+      val correctPeer = newProps.sortBy { case (id, snap)  => (-snap.height, snap.hash) }.map(_._1).head
+      res._1.minBy { case snap => -snap.height } shouldBe correctSnaps
+      res._2 shouldBe Set(correctPeer)
+    }
+
+    "should update and return new correct majority snapshot when peer responses update" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val newSetOfPeerSnaps = facilitators.zipWithIndex.map {
         case ((id, peerInfo), idx) => (id, RecentSnapshot(s"$idx", 8L, Map.empty))
-      }
+      }.toMap
       val idToSerializedResponse = facilitators.keys.map { id =>
         val newProposal = baseSnapshots + (8L -> newSetOfPeerSnaps(id))
         val newSerializedResponse = newProposal
@@ -264,11 +272,10 @@ class RedownloadServiceTest
         id -> newSerializedResponse
       }.toMap
       cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (id, peerApi) =>
-          (peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse)
-            .andThen(idToSerializedResponse(id))
+      facilitators.zipWithIndex.foreach {
+        case ((id, peerApi), idx) =>
+          peerApi.client
+            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse andThen idToSerializedResponse(id)
       }
       val newProps = proposals ++ newSetOfPeerSnaps.toSeq
       val updateProposals = redownloadService.fetchAndSetPeerProposals()
@@ -285,12 +292,7 @@ class RedownloadServiceTest
 
     "should return empty diff if not enough snaps for a majority" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (id, peerApi) =>
-          peerApi.client.getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF Array()
-      }
-      val updateProps = redownloadService.fetchAndSetPeerProposals()
+      val updateProps = redownloadService.updateProposedSnapshots(Seq())
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res = (updateProps >> newMajority).unsafeRunSync()
       res._1 shouldBe Seq()

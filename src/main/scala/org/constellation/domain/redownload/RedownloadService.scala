@@ -57,7 +57,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
       }
     } yield deSerializedPeerProposals
 
-  private[redownload] def updateProposedSnapshots(fetchedProposals: Seq[(Id, RecentSnapshot)]) = proposedSnapshots.modify { m =>
+  def updateProposedSnapshots(fetchedProposals: Seq[(Id, RecentSnapshot)]) = proposedSnapshots.modify { m =>
       val updatedProposals = fetchedProposals.foldLeft(m) {
         case (prevPeerProps, (id, recentSnap)) =>
           val proposalsAtHeight: Seq[(Id, Seq[RecentSnapshot])] = prevPeerProps.getOrElse(recentSnap.height, Seq())
