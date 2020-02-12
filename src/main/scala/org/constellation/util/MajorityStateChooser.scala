@@ -11,57 +11,10 @@ import org.constellation.storage.RecentSnapshot
 
 import scala.util.{Random, Try}
 
-object MajorityStateChooser {
+class MajorityStateChooser[F[_]: Concurrent] {
+
   type NodeSnapshots = (Id, Seq[RecentSnapshot])
   type SnapshotNodes = (RecentSnapshot, Seq[Id])
-
-  def chooseMajNodeIds(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]): Option[Seq[Id]] =
-    nodeSnapshots
-      .filter(ns =>
-        snapshotNodes._2.contains(ns._1))
-      .sortBy(-_._2.size)
-      .map(_._1) match {
-      case Nil => None
-      case majNodIds@(id :: _) => Some(majNodIds)
-    }
-
-  def selectMajSnap(totalPeers: Int, allSnapshotNodes: Seq[SnapshotNodes]) = {
-    val numNodesWithSnapAtThisHeight = allSnapshotNodes.flatMap(_._2).length
-    val snapVotes: Seq[(RecentSnapshot, Int)] = allSnapshotNodes.map{ case (recSnap, ids) => (recSnap, ids.length) }
-    val simpleMaj: Option[RecentSnapshot] = snapVotes.find { case (recSnap, count) => count - (totalPeers / 2) >= 0 }.map(_._1)
-    if (simpleMaj.isDefined) simpleMaj
-    else if (totalPeers == numNodesWithSnapAtThisHeight) {//todo need actual logic to get majority from a distribution. This could be improved
-      val votedMajority: Option[RecentSnapshot] = snapVotes.sortBy { case (recSnap, count) => (count, recSnap.hash)}.map(_._1).headOption
-      votedMajority
-    }
-    else None
-  }
-
-  def getAllSnapsUntilMaj(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
-    nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).headOption.map{ case (_, snaps) => snaps.filter(_.height <= snapshotNodes._1.height)}
-
-  def chooseMajorWinner(allPeers: Seq[Id], nodeSnapshots: Seq[NodeSnapshots]) = {//todo instantiate with total peers
-    val snapshotToProposers: Seq[(RecentSnapshot, Seq[(Id, RecentSnapshot)])] = nodeSnapshots
-      .flatMap {
-        case (id, snapshots) => snapshots.map((id, _))
-      }
-      .groupBy {
-        case (_, snapshot) => snapshot
-      }
-      .toList
-    val snapsGroupedByHeight: Map[Long, Seq[(RecentSnapshot, Seq[Id])]] = snapshotToProposers.map { case (recentSnap, idRecentSnapTups) => (recentSnap, idRecentSnapTups.map(_._1)) }.groupBy(_._1.height)
-    val res = Try {snapsGroupedByHeight
-      .flatMap { case (height, allSnapshotNodes) =>
-        val getMajOpt = selectMajSnap(allPeers.length, allSnapshotNodes)
-        allSnapshotNodes.find(sn => getMajOpt.contains(sn._1)).map(maj => (height, maj))
-      }.maxBy(_._1)
-    }.toOption
-    res
-  }
-}
-
-class MajorityStateChooser[F[_]: Concurrent] {
-  import MajorityStateChooser._
 
   val logger = Slf4jLogger.getLogger[F]
 
@@ -109,8 +62,54 @@ class MajorityStateChooser[F[_]: Concurrent] {
   private def chooseNodeId(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
     nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).sortBy(-_._2.size).headOption.map(_._1)
 
-  def shouldUseHighest(snapshotNodes: SnapshotNodes, ownHeight: Long) =
+  private def getAllSnapsUntilMaj(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
+    nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).headOption.map{ case (_, snaps) => snaps.filter(_.height <= snapshotNodes._1.height)}
+
+  private def chooseMajNodeIds(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]): Option[Seq[Id]] =
+    nodeSnapshots
+      .filter(ns =>
+      snapshotNodes._2.contains(ns._1))
+      .sortBy(-_._2.size)
+      .map(_._1) match {
+      case Nil => None
+      case majNodIds@(id :: _) => Some(majNodIds)
+    }
+
+  private def shouldUseHighest(snapshotNodes: SnapshotNodes, ownHeight: Long) =
     ((snapshotNodes._1.height - ownHeight) >= differenceInSnapshotHeightToReDownloadFromLeader).pure[F]
+
+
+
+  def selectMajSnap(totalPeers: Int, allSnapshotNodes: Seq[SnapshotNodes]) = {
+    val numNodesWithSnapAtThisHeight = allSnapshotNodes.flatMap(_._2).length
+    val snapVotes: Seq[(RecentSnapshot, Int)] = allSnapshotNodes.map{ case (recSnap, ids) => (recSnap, ids.length) }
+    val simpleMaj: Option[RecentSnapshot] = snapVotes.find { case (recSnap, count) => count - (totalPeers / 2) >= 0 }.map(_._1)
+    if (simpleMaj.isDefined) simpleMaj
+    else if (totalPeers == numNodesWithSnapAtThisHeight) {//todo need actual logic to get majority from a distribution. This could be improved
+      val votedMajority: Option[RecentSnapshot] = snapVotes.sortBy { case (recSnap, count) => (count, recSnap.hash)}.map(_._1).headOption
+      votedMajority
+    }
+    else None
+  }
+
+  def chooseMajorWinner(allPeers: Seq[Id], nodeSnapshots: Seq[NodeSnapshots]) = {//todo instantiate with total peers
+    val snapshotToProposers: Seq[(RecentSnapshot, Seq[(Id, RecentSnapshot)])] = nodeSnapshots
+      .flatMap {
+        case (id, snapshots) => snapshots.map((id, _))
+      }
+      .groupBy {
+        case (_, snapshot) => snapshot
+      }
+      .toList
+    val snapsGroupedByHeight: Map[Long, Seq[(RecentSnapshot, Seq[Id])]] = snapshotToProposers.map { case (recentSnap, idRecentSnapTups) => (recentSnap, idRecentSnapTups.map(_._1)) }.groupBy(_._1.height)
+    val res = Try {snapsGroupedByHeight
+      .flatMap { case (height, allSnapshotNodes) =>
+        val getMajOpt = selectMajSnap(allPeers.length, allSnapshotNodes)
+        allSnapshotNodes.find(sn => getMajOpt.contains(sn._1)).map(maj => (height, maj))
+      }.maxBy(_._1)
+    }.toOption
+    res
+  }
 
   private def chooseMajor(nodeSnapshots: Seq[NodeSnapshots]) =
     sortByHeightAndHash(nodeSnapshots).filter{ case (recentSnap, ids) =>

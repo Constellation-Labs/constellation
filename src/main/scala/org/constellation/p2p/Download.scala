@@ -318,7 +318,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     for {
       snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshot",
-        timeout = 45.seconds,//todo change these?
+        timeout = 45.seconds,
         tag = "snapshot/obj/snapshot"
       )(C)
       storedSnapshotCheckpointBlocks <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](

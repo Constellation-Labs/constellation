@@ -17,10 +17,7 @@ import org.json4s.native.Serialization
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
-import org.constellation.storage.{RecentSnapshot, SnapshotCreated, SnapshotError}
-import org.constellation.consensus.EdgeProcessor._
-import org.constellation.consensus.EdgeProcessor
-import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
+
 import scala.concurrent.duration._
 
 class PeerAPITest
@@ -89,22 +86,20 @@ class PeerAPITest
 
   "GET snapshot/own" - {
     "response should return empty map if there are no snapshots" in {
-      val emptyResponse = Map[Long, RecentSnapshot]()
-      val serializedResponse = emptyResponse.grouped(EdgeProcessor.chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
       dao.redownloadService.getOwnSnapshots() shouldReturnF Map.empty
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
-        responseAs[Array[Array[Byte]]] shouldBe serializedResponse
+        responseAs[Map[Long, String]] shouldBe Map.empty
       }
     }
 
     "response should return map with all own snapshots" in {
-      val ownSnapshots = Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty), 4L -> RecentSnapshot("bbbb", 4L, Map.empty), 6L -> RecentSnapshot("cccc", 6L, Map.empty))
-      val serializedResponse = ownSnapshots.grouped(EdgeProcessor.chunkSize).map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name)).toArray
+      val ownSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
+
       dao.redownloadService.getOwnSnapshots() shouldReturnF ownSnapshots
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
-        responseAs[Array[Array[Byte]]] shouldBe serializedResponse
+        responseAs[Map[Long, String]] shouldBe ownSnapshots
       }
     }
   }

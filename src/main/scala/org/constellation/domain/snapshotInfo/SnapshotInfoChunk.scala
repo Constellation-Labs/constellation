@@ -23,6 +23,4 @@ object SnapshotInfoChunk extends Enumeration {
   val SNAPSHOT_CACHE: SnapshotInfoChunk = Val("snapshotCache")
   val LAST_ACCEPTED_TX_REF: SnapshotInfoChunk = Val("lastAcceptedTransactionRef")
   val PUBLIC_REPUTATION: SnapshotInfoChunk = Val("publicReputation")
-  val SNAPSHOT_OWN: SnapshotInfoChunk = Val("snapshotOwn")
-  val SNAPSHOT_FETCH_PROPOSALS: SnapshotInfoChunk = Val("snapshotFetchProposals")
 }

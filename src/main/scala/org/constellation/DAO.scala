@@ -168,7 +168,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
-    redownloadService = RedownloadService[IO](this)
+    redownloadService = RedownloadService[IO]()
 
     consensusRemoteSender =
       new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)

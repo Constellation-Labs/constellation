@@ -9,7 +9,6 @@ import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{SignedData, _}
 import org.constellation.schema.Id
-import org.constellation.storage.RecentSnapshot
 import org.constellation.util.{HashSignature, SignatureBatch}
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
@@ -77,9 +76,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[scala.collection.mutable.ArrayBuffer[String]])
     kryo.register(classOf[Seq[String]])
     kryo.register(classOf[Set[String]])
-    kryo.register(classOf[RecentSnapshot])
-    kryo.register(classOf[Seq[(Long, RecentSnapshot)]])
-    kryo.register(classOf[(Long, RecentSnapshot)])
+    kryo.register(classOf[Seq[String]])
 
     kryo.register(classOf[SerializedUDPMessage])
     kryo.register(classOf[Id])
@@ -87,7 +84,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Array[Byte]])
     kryo.register(classOf[Array[Array[Byte]]])
     kryo.register(classOf[Option[Long]])
-    kryo.register(classOf[Long])
     kryo.register(classOf[String])
     kryo.register(classOf[Boolean])
 

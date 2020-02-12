@@ -41,8 +41,6 @@ case class FinishedCheckpointResponse(isSuccess: Boolean = false)
 
 object EdgeProcessor extends StrictLogging {
 
-  val chunkSize = 100
-
   private def requestBlockSignature(
     checkpointBlock: CheckpointBlock,
     finalFacilitators: Set[
@@ -246,7 +244,7 @@ case class SnapshotInfo(
 ) {
   import EdgeProcessor.chunkSerialize
 
-  def toSnapshotInfoSer(info: SnapshotInfo = this, chunkSize: Int = EdgeProcessor.chunkSize): SnapshotInfoSer =
+  def toSnapshotInfoSer(info: SnapshotInfo = this, chunkSize: Int = 100): SnapshotInfoSer = //todo make chunk size config
     SnapshotInfoSer(
       Array(KryoSerializer.serialize[String](info.snapshot.snapshot.lastSnapshot)),
       info.snapshot.checkpointCache
