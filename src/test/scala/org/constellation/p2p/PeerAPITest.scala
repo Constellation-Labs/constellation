@@ -4,6 +4,7 @@ import java.net.InetSocketAddress
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.util.Timeout
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import constellation._

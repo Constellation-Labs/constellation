@@ -37,15 +37,8 @@ object MajorityStateChooser {
     else None
   }
 
-  def getAllSnapsUntilMaj(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) = {
-    val nodeWithMajority = nodeSnapshots.filter { case (id, snaps) => snapshotNodes._2.contains(id) }
-      .maxBy(snaps => snaps._2.maxBy(snap => snap.height).height)
-//    nodeWithMajority.map{ case (_, snaps) =>
-//      snaps.filter(_.height <= snapshotNodes._1.height)}
-    nodeWithMajority._2.filter(_.height <= snapshotNodes._1.height)
-  }
-
-
+  def getAllSnapsUntilMaj(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]) =
+    nodeSnapshots.filter(ns => snapshotNodes._2.contains(ns._1)).headOption.map{ case (_, snaps) => snaps.filter(_.height <= snapshotNodes._1.height)}
 
   def chooseMajorWinner(allPeers: Seq[Id], nodeSnapshots: Seq[NodeSnapshots]) = {//todo instantiate with total peers
     val snapshotToProposers: Seq[(RecentSnapshot, Seq[(Id, RecentSnapshot)])] = nodeSnapshots
@@ -85,7 +78,7 @@ class MajorityStateChooser[F[_]: Concurrent] {
         ownHeight,
         allPeers
       )
-      snapsThoughMaj <- OptionT.fromOption[F](Some(getAllSnapsUntilMaj(majorState._2, nodeSnapshots)))
+      snapsThoughMaj <- OptionT.fromOption[F](getAllSnapsUntilMaj(majorState._2, nodeSnapshots))
 //      node <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
       nodeIds <- OptionT.fromOption[F](chooseMajNodeIds(majorState._2, nodeSnapshots))
 
