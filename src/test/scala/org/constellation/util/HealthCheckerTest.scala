@@ -45,6 +45,29 @@ class HealthCheckerTest
       IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
+  describe("compareSnapshotState util function") {
+    it("should return empty list to be deleted but not below given height") {
+      val ownSnapshots = List(6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i, Map.empty))
+      val majorState = (List(7, 6, 5, 4, 3).map(i => RecentSnapshot(s"$i", i, Map.empty)), Set(Id("node1")))
+
+      val diff = HealthChecker.compareSnapshotState(majorState, ownSnapshots) //.unsafeRunSync()
+
+      diff.snapshotsToDelete shouldBe List()
+      diff.snapshotsToDownload shouldBe List(RecentSnapshot("7", 7, Map.empty))
+      diff.peers.size shouldBe 1
+    }
+
+    it("should return no diff") {
+      val ownSnapshots = List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i, Map.empty))
+      val majorState = (List(4, 3, 2, 1).map(i => RecentSnapshot(s"$i", i, Map.empty)), Set[Id]())
+
+      val diff = HealthChecker.compareSnapshotState(majorState, ownSnapshots) //.unsafeRunSync()
+
+      diff.snapshotsToDelete shouldBe List()
+      diff.snapshotsToDownload shouldBe List()
+    }
+  }
+
   describe("clear stale tips") {
     it("should run tips removal with max height of minimum nodes required to make consensus") {
 
@@ -200,15 +223,48 @@ class HealthCheckerTest
 
   }
 
-  ignore("shouldDownload function") {
+  describe("shouldDownload function") {
 
+    val height = 2
+    val ownSnapshots = List(height).map(i => RecentSnapshot(s"$i", i, Map.empty))
+    val interval = healthChecker.snapshotHeightRedownloadDelayInterval
+
+    it("should return true when there are snaps to delete and to download") {
+      val diff =
+        SnapshotDiff(
+          List(RecentSnapshot("someSnap", height, Map.empty)),
+          List(RecentSnapshot("someSnap", height, Map.empty)),
+          List(Id("peer"))
+        )
+
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
+    }
+    it("should return true when there are snaps to delete and nothing to download") {
+      val diff =
+        SnapshotDiff(List(RecentSnapshot("someSnap", height, Map.empty)), List.empty, List(Id("peer")))
+
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
+    }
+
+    it("should return false when height is too small") {
+      val diff =
+        SnapshotDiff(List.empty, List(RecentSnapshot(height.toString, height, Map.empty)), List(Id("peer")))
+
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe false
+    }
+
+    it("should return true when height below interval") {
+      val diff =
+        SnapshotDiff(List.empty, List(RecentSnapshot("someSnap", height + (interval * 2), Map.empty)), List(Id("peer")))
+      HealthChecker.shouldReDownload(ownSnapshots, diff) shouldBe true
+    }
   }
 
   describe("checkClusterConsistency function") {
     it("should return none when unable to get peers") {
       dao.readyPeers(NodeType.Full) shouldFailWith new SocketException("timeout")
       val result = healthChecker.checkClusterConsistency(List.empty).unsafeRunSync()
-      result shouldBe ()
+      result shouldBe None
     }
   }
 

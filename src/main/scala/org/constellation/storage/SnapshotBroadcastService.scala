@@ -50,7 +50,11 @@ class SnapshotBroadcastService[F[_]: Concurrent](
       .map(NodeState.canRunClusterCheck)
       .ifM(
         getRecentSnapshots()
-          .flatMap(healthChecker.checkClusterConsistency),
+          .flatMap(healthChecker.checkClusterConsistency)
+          .flatMap(
+            maybeUpdate =>
+              maybeUpdate.fold(Sync[F].unit)(a => recentSnapshots.modify(_ => (a.map(b => (b.height -> b)).toMap, ())))
+          ),
         Sync[F].unit
       )
 

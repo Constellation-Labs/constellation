@@ -4,13 +4,12 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConfigUtil
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.MajorityStateChooser.NodeSnapshots
-import org.constellation.util.{HealthChecker, MajorityStateChooser, SnapshotDiff}
+import org.constellation.util.{HealthChecker, MajorityStateChooser}
 
 import scala.concurrent.duration._
 
@@ -93,8 +92,8 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
       majSnapsIds <- recalculateMajoritySnapshot()
       ownSnaps <- proposedSnapshots.get
       allOwnSnaps = ownSnaps.values.flatMap(snapsAtHeight => snapsAtHeight.filter(_._1 == cluster.id).map(_._2)).flatten
-      diff = MajorityStateChooser.compareSnapshotState(majSnapsIds, allOwnSnaps.toList)
-      shouldRedownload = RedownloadService.shouldReDownload(allOwnSnaps.toList, diff)
+      diff = HealthChecker.compareSnapshotState(majSnapsIds, allOwnSnaps.toList)
+      shouldRedownload = HealthChecker.shouldReDownload(allOwnSnaps.toList, diff)
       result <- if (shouldRedownload) {
         logger.info(
           s"[${cluster.id}] Re-download process with : \n" +
@@ -114,41 +113,8 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
 }
 
 object RedownloadService {
-  val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
+
   val fetchSnapshotProposals = "fetchSnapshotProposals"
-  val snapshotHeightRedownloadDelayInterval: Int =
-    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-
-  private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
-    ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
-
-  private def isAboveInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
-    (maxOrZero(ownSnapshots) - snapshotHeightDelayInterval) > maxOrZero(
-      snapshotsToDownload
-    )
-
-  private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
-    (maxOrZero(ownSnapshots) + snapshotHeightDelayInterval) < maxOrZero(
-      snapshotsToDownload
-    )
-
-  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
-    diff match {
-      case SnapshotDiff(_, _, Nil) => false
-      case SnapshotDiff(_, Nil, _) => false
-      case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
-        val above = isAboveInterval(ownSnapshots, snapshotsToDownload)
-        val below = isBelowInterval(ownSnapshots, snapshotsToDownload)
-        val misaligned =
-          isMisaligned(ownSnapshots, (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap)
-        above || below || misaligned
-    }
-
-  def maxOrZero(list: List[RecentSnapshot]): Long =
-    list match {
-      case Nil      => 0
-      case nonEmpty => nonEmpty.map(_.height).max
-    }
 
   def deserializeProposals(nodeSnap: (Id, Array[Array[Byte]])): (Id, Seq[RecentSnapshot]) = nodeSnap match {
     case (id, serializedProposalMap) =>

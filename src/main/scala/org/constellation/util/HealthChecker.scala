@@ -9,6 +9,7 @@ import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
+import org.constellation.util.HealthChecker.maxOrZero
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
@@ -28,6 +29,12 @@ case class SnapshotDiff(
 object HealthChecker {
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
+  private def maxOrZero(list: List[RecentSnapshot]): Long =
+    list match {
+      case Nil      => 0
+      case nonEmpty => nonEmpty.map(_.height).max
+    }
+
   def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
     var hashes: Set[String] = Set.empty
     val it = apis.iterator
@@ -44,6 +51,37 @@ object HealthChecker {
     }
     lastCheck
   }
+
+  def compareSnapshotState(major: (Seq[RecentSnapshot], Set[Id]), ownSnapshots: List[RecentSnapshot]) = SnapshotDiff(
+    ownSnapshots.diff(major._1).sortBy(-_.height),
+    major._1.diff(ownSnapshots).toList.sortBy(-_.height),
+    major._2.toList
+  )
+
+  private def isMisaligned(ownSnapshots: List[RecentSnapshot], recent: Map[Long, String]) =
+    ownSnapshots.exists(r => recent.get(r.height).exists(_ != r.hash))
+
+  private def isAboveInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
+    (maxOrZero(ownSnapshots) - snapshotHeightDelayInterval) > maxOrZero(
+      snapshotsToDownload
+    )
+
+  private def isBelowInterval(ownSnapshots: List[RecentSnapshot], snapshotsToDownload: List[RecentSnapshot]) =
+    (maxOrZero(ownSnapshots) + snapshotHeightDelayInterval) < maxOrZero(
+      snapshotsToDownload
+    )
+
+  def shouldReDownload(ownSnapshots: List[RecentSnapshot], diff: SnapshotDiff): Boolean =
+    diff match {
+      case SnapshotDiff(_, _, Nil) => false
+      case SnapshotDiff(_, Nil, _) => false
+      case SnapshotDiff(snapshotsToDelete, snapshotsToDownload, _) =>
+        val above = isAboveInterval(ownSnapshots, snapshotsToDownload)
+        val below = isBelowInterval(ownSnapshots, snapshotsToDownload)
+        val misaligned =
+          isMisaligned(ownSnapshots, (snapshotsToDelete ++ snapshotsToDownload).map(r => (r.height, r.hash)).toMap)
+        above || below || misaligned
+    }
 
   def checkLocalMetrics(metrics: Map[String, String], nodeId: String): Either[MetricFailure, Unit] =
     hasEmptyHeight(metrics, nodeId)
@@ -74,19 +112,44 @@ class HealthChecker[F[_]: Concurrent](
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Unit] = {
+  val snapshotHeightRedownloadDelayInterval: Int =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+
+  def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Option[List[RecentSnapshot]]] = {
     val check = for {
       _ <- logger.debug(s"[${dao.id.short}] Re-download checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
-    } yield ()
+
+      major <- majorityStateChooser
+        .chooseMajorityState(peersSnapshots :+ (dao.id, ownSnapshots), maxOrZero(ownSnapshots), peers.keys.toSeq)
+        .getOrElse((Seq[RecentSnapshot](), Set[Id]()))
+
+      diff = HealthChecker.compareSnapshotState(major, ownSnapshots)
+
+//      result <- Sync[F].pure[Option[List[RecentSnapshot]]](None)
+      result <- if (HealthChecker.shouldReDownload(ownSnapshots, diff)) {
+        logger.info(
+          s"[${dao.id.short}] Re-download process with : \n" +
+            s"Snapshot to download : ${diff.snapshotsToDownload.map(a => (a.height, a.hash))} \n" +
+            s"Snapshot to delete : ${diff.snapshotsToDelete.map(a => (a.height, a.hash))} \n" +
+            s"From peers : ${diff.peers} \n" +
+            s"Own snapshots : ${ownSnapshots.map(a => (a.height, a.hash))} \n" +
+            s"Major state : $major"
+        ) >>
+          startReDownload(diff, peers.filterKeys(diff.peers.contains))
+            .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(major._1.toList)))
+      } else {
+        Sync[F].pure[Option[List[RecentSnapshot]]](None)
+      }
+    } yield result
 
     check.recoverWith {
       case err =>
         logger
           .error(err)(s"[${dao.id.short}] Unexpected error during re-download process: ${err.getMessage}")
-          .flatMap(_ => Sync[F].pure[Unit](()))
+          .flatMap(_ => Sync[F].pure[Option[List[RecentSnapshot]]](None))
     }
   }
 

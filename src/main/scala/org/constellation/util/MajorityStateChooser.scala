@@ -13,12 +13,6 @@ object MajorityStateChooser {
   type NodeSnapshots = (Id, Seq[RecentSnapshot])
   type SnapshotNodes = (RecentSnapshot, Seq[Id])
 
-  def compareSnapshotState(major: (Seq[RecentSnapshot], Set[Id]), ownSnapshots: List[RecentSnapshot]) = SnapshotDiff(
-    ownSnapshots.diff(major._1).sortBy(-_.height),
-    major._1.diff(ownSnapshots).toList.sortBy(-_.height),
-    major._2.toList
-  )
-
   def chooseMajNodeIds(snapshotNodes: SnapshotNodes, nodeSnapshots: List[NodeSnapshots]): Option[Seq[Id]] = {
     nodeSnapshots
       .filter{ case (id, recentSnapshotSeq) => snapshotNodes._2.contains(id) }
