@@ -95,7 +95,7 @@ class RedownloadServiceTest
 
       val check = redownloadService.getLocalSnapshots()
 
-      check.unsafeRunSync shouldBe Seq.empty
+      check.unsafeRunSync shouldBe Map.empty
     }
 
     "should return all own snapshots if they exist" in {
@@ -106,8 +106,8 @@ class RedownloadServiceTest
       val persistSecond = redownloadService.persistLocalSnapshot(secondSnapshot)
       val check = redownloadService.getLocalSnapshots()
 
-      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Seq(RecentSnapshot("aaaa", 2L, Map.empty),
-                                                                          RecentSnapshot("bbbb", 4L, Map.empty))
+      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty),
+                                                                          4L -> RecentSnapshot("bbbb", 4L, Map.empty))
     }
   }
 
@@ -179,9 +179,7 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val invalidProposalHash = "invalidProposal"
       val invalidPeer = ownPeerInfo
-      val invalidPeerId = invalidPeer.head._1
-      val invalidProposal = RecentSnapshot(invalidProposalHash, 0L, Map.empty)
-      val invalidProposals = Map(invalidPeerId -> invalidProposal)
+      val invalidProposals = Map(invalidPeer.head._1 -> RecentSnapshot(invalidProposalHash, 0L, Map.empty))
       val serializedInvalidResponse = invalidProposals
         .grouped(KryoSerializer.chunkSize)
         .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
@@ -202,7 +200,7 @@ class RedownloadServiceTest
       val fetchInvalid = redownloadService.fetchAndSetPeerProposals()
       val check = redownloadService.proposedSnapshots.get
       val res = (fetch >> update >> fetchInvalid >> check).unsafeRunSync()
-      res(0).get(invalidPeerId) shouldBe Some(invalidProposal)
+      res(0).exists { case (id, Seq(snap)) => snap.hash == invalidProposalHash } shouldBe true
       res.values.forall(_.size == numFacilitators + 1) shouldBe true
     }
 
