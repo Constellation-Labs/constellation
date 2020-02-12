@@ -16,12 +16,12 @@ import scala.concurrent.duration._
 class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[F])(implicit F: Concurrent[F],
                                                                                     C: ContextShift[F]) {
   import RedownloadService._
-  private val logger = Slf4jLogger.getLogger[F]
+  val logger = Slf4jLogger.getLogger[F]
 
   // TODO: Consider Height/Hash type classes
   private[redownload] val proposedSnapshots: Ref[F, Map[Id, Proposals]] = Ref.unsafe(Map.empty)
 
-  def persistLocalSnapshot(recentSnapshot: RecentSnapshot) = updateProposedSnapshots(Map((cluster.id, Map(recentSnapshot.height -> recentSnapshot))))
+  def persistLocalSnapshot(recentSnapshot: RecentSnapshot) = updateProposedSnapshots(List((cluster.id, Map(recentSnapshot.height -> recentSnapshot))))
 
   def getLocalSnapshots() = proposedSnapshots.get.map { snapshots =>
     snapshots.getOrElse(cluster.id, Map())
@@ -32,7 +32,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
     localSnapshots.get(height)
   }
 
-  private[redownload] def fetchPeerProposals() =
+  private[redownload] def fetchPeerProposals(): F[List[(Id, Proposals)]] =
     for {
       peers <- cluster.readyPeers
       chunkedPeerProposals <- peers.toList.traverse {
@@ -43,17 +43,17 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
             tag = "snapshot/own"
           )(C)
           resp.map((id, _)).handleErrorWith { ex =>
-            F.delay {logger.error(s"fetchPeerProposals error - ${ex}") } >> F.pure((id, Array()))
+            Sync[F].delay(logger.error(s"fetchPeerProposals error - ${ex}")) >> Sync[F].delay((id, Array()))
           }
       }
       deSerializedPeerProposals = chunkedPeerProposals.map(deserializeProposals).flatMap {
         case (id, recentSnaps) =>
           val heightRecentSnapMap = recentSnaps.map { recentSnap => (recentSnap.height, recentSnap)}.toMap
           recentSnaps.map(snap => (id, heightRecentSnapMap))
-      }.toMap
+      }
     } yield deSerializedPeerProposals
 
-  private[redownload] def updateProposedSnapshots(fetchedProposals: Map[Id, Proposals]) =
+  private[redownload] def updateProposedSnapshots(fetchedProposals: List[(Id, Proposals)]) =
     proposedSnapshots.modify { m =>
       val updatedProposals = fetchedProposals.foldLeft(m) {
         case (prevProposals, (id, proposals)) =>
@@ -76,7 +76,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
     } yield reDownloadPlan
 
   def checkForAlignmentWithMajoritySnapshot(): F[Option[List[RecentSnapshot]]] =
-    for {
+    for {//@ReDownloadPlan(id, sortedSnaps, nodeIdsWithSnaps, diff, groupedProposals)
       peers <- cluster.readyPeers
       plan <- recalculateMajoritySnapshot()
       ownSnaps <- getLocalSnapshots()
@@ -92,7 +92,7 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
         ) >>
           healthChecker
             .startReDownload(plan.diff, peers.filterKeys(plan.diff.peers.contains))
-            .map(_ => Some(plan.sortedSnaps.toList))
+            .flatMap(_ => Sync[F].delay[Option[List[RecentSnapshot]]](Some(plan.sortedSnaps.toList)))
       } else {
         Sync[F].pure[Option[List[RecentSnapshot]]](None)
       }

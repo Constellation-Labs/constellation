@@ -200,6 +200,10 @@ class HealthCheckerTest
 
   }
 
+  ignore("shouldDownload function") {
+
+  }
+
   describe("checkClusterConsistency function") {
     it("should return none when unable to get peers") {
       dao.readyPeers(NodeType.Full) shouldFailWith new SocketException("timeout")
