@@ -4,12 +4,7 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.checkpoint.{
-  CheckpointAcceptanceService,
-  CheckpointBlockValidator,
-  CheckpointParentService,
-  CheckpointService
-}
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointParentService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
@@ -19,16 +14,11 @@ import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.rollback.RollbackService
+import org.constellation.rollback.{RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
@@ -213,6 +203,8 @@ trait EdgeDAO {
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
+
+  var rollbackLoader: RollbackLoader = _
 
   def maxWidth: Int = processingConfig.maxWidth
 
