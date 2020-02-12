@@ -6,23 +6,26 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.Fixtures.toRecentSnapshot
 import org.constellation.TestHelpers.prepareFacilitators
-import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.consensus.EdgeProcessor
+import org.constellation.serializer.KryoSerializer.chunkSerialize
+import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
+import org.constellation.p2p.{PeerAPI, PeerData}
 import org.constellation.primitives.IPManager
 import org.constellation.schema.Id
-import org.constellation.serializer.KryoSerializer
-import org.constellation.serializer.KryoSerializer.chunkSerialize
 import org.constellation.storage.RecentSnapshot
-import org.constellation.util.HealthChecker
 import org.constellation.{ConstellationExecutionContext, TestHelpers}
 import org.json4s.native.Serialization
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers}
-
-import scala.concurrent.TimeoutException
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.constellation.Fixtures.{toRecentSnapshot, toRecentSnapshotWithPrefix}
+import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import org.constellation.serializer.KryoSerializer
+import org.constellation.util.HealthChecker
+import org.constellation.p2p.Cluster
 
 class RedownloadServiceTest
     extends FreeSpec
@@ -44,15 +47,13 @@ class RedownloadServiceTest
   val ownPeerInfo = prepareFacilitators(1)
   val socketAddress = new InetSocketAddress("localhost", 9001)
   val ipManager: IPManager[IO] = IPManager[IO]()
-
-  val baseSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
-                          2L -> RecentSnapshot("2", 2L, Map.empty),
-                          4L -> RecentSnapshot("4", 4L, Map.empty),
-                          6L -> RecentSnapshot("6", 6L, Map.empty))
-
-  val serializedResponse: Array[Array[Byte]] = baseSnapshots
+  val ownSnapshots = Map(0L -> RecentSnapshot("0", 0L, Map.empty),
+    2L -> RecentSnapshot("2", 2L, Map.empty),
+    4L -> RecentSnapshot("4", 4L, Map.empty),
+    6L -> RecentSnapshot("6", 6L, Map.empty))
+  val serializedResponse = ownSnapshots
     .grouped(KryoSerializer.chunkSize)
-    .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
+    .map(t => chunkSerialize(t.toSeq, SnapshotInfoChunk.SNAPSHOT_OWN.name))
     .toArray
   val deSer = facilitators.map { case (id, _) => RedownloadService.deserializeProposals((id, serializedResponse)) }.toSeq
   val proposals = deSer.flatMap { case (id, recentSnaps) => recentSnaps.map(snap => (id, snap)) }
@@ -62,6 +63,7 @@ class RedownloadServiceTest
 
   override def beforeAll(): Unit = {
     healthChecker.startReDownload(*, *) shouldReturn IO.pure[Unit](())
+    cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
     cluster.id shouldReturn ownPeerInfo.keySet.head
   }
 
@@ -131,93 +133,28 @@ class RedownloadServiceTest
     }
   }
 
-  "fetchAndSetPeersProposals" - {
-    "should fetch peer proposals and modify proposal map" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (_, peerApi) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
-      }
-      val fetch = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.peersProposals.get
-      (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
-    }
-
-    "should not fail if at least one peer did not respond" in {
-      val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.tail.foreach {
-        case (_, peerApi) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
-      }
-      facilitators.head._2.client.getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturn IO
-        .raiseError(new TimeoutException("Testing timeout, case just ignore this message."))
-      val fetch = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.peersProposals.get
-      (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators - 1) shouldBe true
-    }
-  }
-
-  "updatePeerProposals" - {
+  "fetchPeersProposals" - {
     "should update peersProposals" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (_, peerApi) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
-      }
-      val fetch = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.peersProposals.get
-      (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
+      val updateNewProps = redownloadService.updatePeerProposals(proposals)
+
+      updateNewProps.unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
 
     "should not update peersProposals if a new proposal at the same height as an old proposal is recieved" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      val invalidProposalHash = "invalidProposal"
-      val invalidPeer = ownPeerInfo
-      val invalidProposals = Map(invalidPeer.head._1 -> RecentSnapshot(invalidProposalHash, 0L, Map.empty))
-      val serializedInvalidResponse = invalidProposals
-        .grouped(KryoSerializer.chunkSize)
-        .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
-        .toArray
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators ++ invalidPeer)
-      facilitators.foreach {
-        case (_, peerApi) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
-      }
-      invalidPeer.foreach {
-        case (_, peerApi) =>
-          (peerApi.client.getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedInvalidResponse)
-            .andThen(serializedResponse)
-      }
-      val fetch = redownloadService.fetchAndSetPeerProposals()
-      val update = redownloadService.peersProposals.get
-      val fetchInvalid = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.peersProposals.get
-      val res = (fetch >> update >> fetchInvalid >> check).unsafeRunSync()
-      res(0).exists { case (id, Seq(snap)) => snap.hash == invalidProposalHash } shouldBe true
-      res.values.forall(_.size == numFacilitators + 1) shouldBe true
+      val invalidProposdals = proposals :+ (proposals.head._1, RecentSnapshot("invalidProposdals", 0L, Map.empty))
+      val res = redownloadService.updatePeerProposals(invalidProposdals).unsafeRunSync()
+
+      res.values.forall(_.size == numFacilitators) shouldBe true
     }
 
     "should not update peersProposals with a duplicate proposal" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (_, peerApi) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
-      }
-      val fetch = redownloadService.fetchAndSetPeerProposals()
-      val update = redownloadService.peersProposals.get
-      val fetchAgain = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.peersProposals.get
-      val res = (fetch >> update >> fetchAgain >> check).unsafeRunSync()
-      res.values.forall(_.size == numFacilitators) shouldBe true
+      val invalidProposdals = proposals :+ proposals.head
+      val res = redownloadService.updatePeerProposals(invalidProposdals).unsafeRunSync()
+      val check = res.values.forall(_.size == numFacilitators)
+      check shouldBe true
     }
   }
 
@@ -234,9 +171,9 @@ class RedownloadServiceTest
       val updateProps = redownloadService.updatePeerProposals(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
-
       val correctSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
       val correctPeer = facilitatorDistinctSnapshots.map(_._1).toSet
+
       res._1.minBy { case snap => -snap.height } shouldBe correctSnaps
       res._2 shouldBe correctPeer
     }
@@ -247,47 +184,26 @@ class RedownloadServiceTest
         case (id, idx) => (id, RecentSnapshot(s"$idx", 8L, Map.empty))
       }.toSeq
       val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
       val updateProps = redownloadService.updatePeerProposals(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
-
       val correctSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
       val correctPeer = newProps.sortBy { case (id, snap)  => (-snap.height, snap.hash) }.map(_._1).head
+
       res._1.minBy { case snap => -snap.height } shouldBe correctSnaps
       res._2 shouldBe Set(correctPeer)
     }
 
-    "should update and return new correct majority snapshot when peer responses update" in {
+    "should not include an invalid snaphot when calculating new majority" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      val newSetOfPeerSnaps = facilitators.zipWithIndex.map {
-        case ((id, peerInfo), idx) => (id, RecentSnapshot(s"$idx", 8L, Map.empty))
-      }.toMap
-      val idToSerializedResponse = facilitators.keys.map { id =>
-        val newProposal = baseSnapshots + (8L -> newSetOfPeerSnaps(id))
-        val newSerializedResponse = newProposal
-          .grouped(KryoSerializer.chunkSize)
-          .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
-          .toArray
-        id -> newSerializedResponse
-      }.toMap
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.zipWithIndex.foreach {
-        case ((id, peerApi), idx) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse andThen idToSerializedResponse(id)
-      }
-      val newProps = proposals ++ newSetOfPeerSnaps.toSeq
-      val updateProposals = redownloadService.fetchAndSetPeerProposals()
-      val oldMajority = redownloadService.recalculateMajoritySnapshot()
-      val updateProposalsAgain = redownloadService.fetchAndSetPeerProposals()
+      val invalidProposdals = proposals :+ (proposals.head._1, RecentSnapshot("invalidProposdals", 0L, Map.empty))
+      val updateProps = redownloadService.updatePeerProposals(invalidProposdals)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
-      val res = (updateProposals >> oldMajority >> updateProposalsAgain >> newMajority).unsafeRunSync()
-
-      val correctNewSnaps = newProps.sortBy { case (id, snap) => (-snap.height, snap.hash) }.map(_._2).head
-      val correctNewPeer = newProps.sortBy { case (id, snap)  => (-snap.height, snap.hash) }.map(_._1).head
-      res._1.minBy { case snap => -snap.height } shouldBe correctNewSnaps
-      res._2 shouldBe Set(correctNewPeer)
+      val res = (updateProps >> newMajority).unsafeRunSync()
+      val correctSnaps = List(6, 4, 2, 0).map(toRecentSnapshot)
+      val correctIds = facilitators.keySet
+      res._1 shouldBe correctSnaps
+      res._2 shouldBe correctIds
     }
 
     "should return empty diff if not enough snaps for a majority" in {
