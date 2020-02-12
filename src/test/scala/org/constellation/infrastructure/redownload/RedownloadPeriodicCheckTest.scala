@@ -1,7 +1,6 @@
 package org.constellation.infrastructure.redownload
 
 import cats.implicits._
-import org.constellation.domain.redownload.ReDownloadPlan
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.constellation.{DAO, TestHelpers}
@@ -23,7 +22,7 @@ class RedownloadPeriodicCheckTest
     dao = TestHelpers.prepareMockedDAO()
 
     dao.redownloadService.fetchAndSetPeerProposals() shouldReturnF Unit
-    dao.redownloadService.recalculateMajoritySnapshot() shouldReturnF mock[ReDownloadPlan]
+    dao.redownloadService.recalculateMajoritySnapshot() shouldReturnF (Seq[RecentSnapshot](), Set[Id]())
     dao.redownloadService.checkForAlignmentWithMajoritySnapshot() shouldReturnF Some(List())
   }
 
