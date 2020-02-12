@@ -185,7 +185,7 @@ class E2ETest extends E2E {
 
   private def saveState(allAPIs: Seq[APIClient]): Unit = {
     File("rollback_data/snapshots").createDirectoryIfNotExists().clear()
-    File("rollback_data/snapshot_info").createDirectoryIfNotExists().clear()
+    File("rollback_data/snapshot_infos").createDirectoryIfNotExists().clear()
     storeSnapshotInfo(allAPIs)
     storeSnapshots(allAPIs)
     storeGenesis(allAPIs)
