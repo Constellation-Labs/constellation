@@ -76,7 +76,15 @@ class RedownloadService[F[_]](cluster: Cluster[F], healthChecker: HealthChecker[
       allProposals <- proposedSnapshots.get
       allProposalsNormalized = allProposals.values.flatten.toList
       peers <- cluster.readyPeers //todo need testing around join leave, this will cause cluster to stall if cluster.readyPeers not updated when peer leaves
-      (sortedSnaps, nodeIdsWithSnaps) = MajorityStateChooser.reDownloadPlan(allProposalsNormalized, peers.keySet.toList)
+      majority = MajorityStateChooser.chooseMajorWinner(peers.keys.toSeq, allProposalsNormalized)
+      groupedProposals = allProposalsNormalized
+        .groupBy(_._1)
+        .map { case (id, tupList) => (id, tupList.flatMap(_._2)) }
+        .toList
+      snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
+      majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposalsNormalized))
+      (sortedSnaps, nodeIdsWithSnaps) = (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()),
+                                         majNodeIds.map(_.toSet).getOrElse(Set()))
     } yield (sortedSnaps, nodeIdsWithSnaps)
 
   def checkForAlignmentWithMajoritySnapshot(): F[Option[List[RecentSnapshot]]] =
