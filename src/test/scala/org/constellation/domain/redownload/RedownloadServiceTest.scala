@@ -70,8 +70,8 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val newSnapshot = RecentSnapshot("aabbcc", 2L, Map.empty)
 
-      val persist = redownloadService.persistLocalSnapshot(newSnapshot)
-      val check = redownloadService.getLocalSnapshotAtHeight(2L)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
+      val check = redownloadService.ownSnapshots.get.map(_.get(2L))
 
       (persist >> check).unsafeRunSync shouldBe RecentSnapshot("aabbcc", 2L, Map.empty).some
     }
@@ -81,9 +81,9 @@ class RedownloadServiceTest
       val firstSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val secondSnapshot = RecentSnapshot("bbbb", 2L, Map.empty)
 
-      val persistFirst = redownloadService.persistLocalSnapshot(firstSnapshot)
-      val persistSecond = redownloadService.persistLocalSnapshot(secondSnapshot)
-      val check = redownloadService.getLocalSnapshotAtHeight(2L)
+      val persistFirst = redownloadService.persistOwnSnapshot(firstSnapshot)
+      val persistSecond = redownloadService.persistOwnSnapshot(secondSnapshot)
+      val check = redownloadService.ownSnapshots.get.map(_.get(2L))
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe RecentSnapshot("aaaa", 2L, Map.empty).some
     }
@@ -93,7 +93,7 @@ class RedownloadServiceTest
     "should return empty map if there are no own snapshots" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
 
-      val check = redownloadService.getLocalSnapshots()
+      val check = redownloadService.getOwnSnapshots()
 
       check.unsafeRunSync shouldBe Map.empty
     }
@@ -102,9 +102,9 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val firstSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
       val secondSnapshot = RecentSnapshot("bbbb", 4L, Map.empty)
-      val persistFirst = redownloadService.persistLocalSnapshot(firstSnapshot)
-      val persistSecond = redownloadService.persistLocalSnapshot(secondSnapshot)
-      val check = redownloadService.getLocalSnapshots()
+      val persistFirst = redownloadService.persistOwnSnapshot(firstSnapshot)
+      val persistSecond = redownloadService.persistOwnSnapshot(secondSnapshot)
+      val check = redownloadService.getOwnSnapshots()
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty),
                                                                           4L -> RecentSnapshot("bbbb", 4L, Map.empty))
@@ -116,8 +116,8 @@ class RedownloadServiceTest
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
 
-      val persist = redownloadService.persistLocalSnapshot(newSnapshot)
-      val check = redownloadService.getLocalSnapshotAtHeight(2L)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
+      val check = redownloadService.getOwnSnapshot(2L)
 
       (persist >> check).unsafeRunSync shouldBe RecentSnapshot("aaaa", 2L, Map.empty).some
     }
@@ -125,7 +125,7 @@ class RedownloadServiceTest
     "should return None if snapshot at given height does not exist" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
 
-      val check = redownloadService.getLocalSnapshotAtHeight(2L)
+      val check = redownloadService.getOwnSnapshot(2L)
 
       check.unsafeRunSync shouldBe none[String]
     }
@@ -141,7 +141,7 @@ class RedownloadServiceTest
             .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
       }
       val fetch = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.proposedSnapshots.get
+      val check = redownloadService.peersProposals.get
       (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
 
@@ -156,7 +156,7 @@ class RedownloadServiceTest
       facilitators.head._2.client.getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturn IO
         .raiseError(new TimeoutException("Testing timeout, case just ignore this message."))
       val fetch = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.proposedSnapshots.get
+      val check = redownloadService.peersProposals.get
       (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators - 1) shouldBe true
     }
   }
@@ -171,7 +171,7 @@ class RedownloadServiceTest
             .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
       }
       val fetch = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.proposedSnapshots.get
+      val check = redownloadService.peersProposals.get
       (fetch >> check).unsafeRunSync().values.forall(_.size == numFacilitators) shouldBe true
     }
 
@@ -196,9 +196,9 @@ class RedownloadServiceTest
             .andThen(serializedResponse)
       }
       val fetch = redownloadService.fetchAndSetPeerProposals()
-      val update = redownloadService.proposedSnapshots.get
+      val update = redownloadService.peersProposals.get
       val fetchInvalid = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.proposedSnapshots.get
+      val check = redownloadService.peersProposals.get
       val res = (fetch >> update >> fetchInvalid >> check).unsafeRunSync()
       res(0).exists { case (id, Seq(snap)) => snap.hash == invalidProposalHash } shouldBe true
       res.values.forall(_.size == numFacilitators + 1) shouldBe true
@@ -213,9 +213,9 @@ class RedownloadServiceTest
             .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
       }
       val fetch = redownloadService.fetchAndSetPeerProposals()
-      val update = redownloadService.proposedSnapshots.get
+      val update = redownloadService.peersProposals.get
       val fetchAgain = redownloadService.fetchAndSetPeerProposals()
-      val check = redownloadService.proposedSnapshots.get
+      val check = redownloadService.peersProposals.get
       val res = (fetch >> update >> fetchAgain >> check).unsafeRunSync()
       res.values.forall(_.size == numFacilitators) shouldBe true
     }
@@ -231,7 +231,7 @@ class RedownloadServiceTest
         }
         .toSeq
       val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
-      val updateProps = redownloadService.updateProposedSnapshots(newProps)
+      val updateProps = redownloadService.updatePeerProposals(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
 
@@ -248,7 +248,7 @@ class RedownloadServiceTest
       }.toSeq
       val newProps: Seq[(Id, RecentSnapshot)] = proposals ++ facilitatorDistinctSnapshots
       cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      val updateProps = redownloadService.updateProposedSnapshots(newProps)
+      val updateProps = redownloadService.updatePeerProposals(newProps)
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res: (Seq[RecentSnapshot], Set[Id]) = (updateProps >> newMajority).unsafeRunSync()
 
@@ -292,7 +292,7 @@ class RedownloadServiceTest
 
     "should return empty diff if not enough snaps for a majority" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
-      val updateProps = redownloadService.updateProposedSnapshots(Seq())
+      val updateProps = redownloadService.updatePeerProposals(Seq())
       val newMajority = redownloadService.recalculateMajoritySnapshot()
       val res = (updateProps >> newMajority).unsafeRunSync()
       res._1 shouldBe Seq()
@@ -304,14 +304,8 @@ class RedownloadServiceTest
     "should trigger download if should redownload" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
-      cluster.readyPeers shouldReturn IO.pure[Map[Id, PeerData]](facilitators)
-      facilitators.foreach {
-        case (_, peerApi) =>
-          peerApi.client
-            .getNonBlockingFLogged[IO, Array[Array[Byte]]](*, *, *, *)(*)(*, *, *) shouldReturnF serializedResponse
-      }
-      val updateProps = redownloadService.fetchAndSetPeerProposals()
-      val persist = redownloadService.persistLocalSnapshot(newSnapshot)
+      val updateProps = redownloadService.updatePeerProposals(proposals)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.checkForAlignmentWithMajoritySnapshot()
       val res = (updateProps >> persist >> check).unsafeRunSync()
       res shouldBe List(6, 4, 2, 0).map(toRecentSnapshot).some
@@ -320,7 +314,7 @@ class RedownloadServiceTest
     "should not trigger download if aligned with majority" in {
       val redownloadService = RedownloadService[IO](cluster, healthChecker)
       val newSnapshot = RecentSnapshot("aaaa", 2L, Map.empty)
-      val persist = redownloadService.persistLocalSnapshot(newSnapshot)
+      val persist = redownloadService.persistOwnSnapshot(newSnapshot)
       val check = redownloadService.checkForAlignmentWithMajoritySnapshot()
       val res = (persist >> check).unsafeRunSync()
       res shouldBe None

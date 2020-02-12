@@ -32,7 +32,7 @@ class SnapshotTriggerTest
       "calls redownload service to persist own snapshot" in {
         val snapshotTrigger = new SnapshotTrigger()
         val newSnapshot =  RecentSnapshot("aaa", 2L, Map.empty)
-        dao.redownloadService.persistLocalSnapshot(*) shouldReturnF Unit
+        dao.redownloadService.persistOwnSnapshot(*) shouldReturnF Unit
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
 
@@ -44,7 +44,7 @@ class SnapshotTriggerTest
         val cancel = snapshotTrigger.cancel()
 
         (trigger >> cancel).unsafeRunSync
-        dao.redownloadService.persistLocalSnapshot(newSnapshot).was(called)
+        dao.redownloadService.persistOwnSnapshot(newSnapshot).was(called)
       }
     }
   }

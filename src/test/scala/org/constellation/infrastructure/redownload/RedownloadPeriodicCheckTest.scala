@@ -21,7 +21,7 @@ class RedownloadPeriodicCheckTest
   before {
     dao = TestHelpers.prepareMockedDAO()
 
-    dao.redownloadService.fetchAndSetPeerProposals() shouldReturnF Unit
+    dao.redownloadService.fetchAndSetPeerProposals() shouldReturnF Map()
     dao.redownloadService.recalculateMajoritySnapshot() shouldReturnF (Seq[RecentSnapshot](), Set[Id]())
     dao.redownloadService.checkForAlignmentWithMajoritySnapshot() shouldReturnF Some(List())
   }
