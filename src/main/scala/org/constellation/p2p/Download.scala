@@ -20,7 +20,7 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging.logThread
 import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
-import org.constellation.serializer.KryoSerializer.{chunkDeSerialize, chunkSerialize}
+import org.constellation.consensus.EdgeProcessor.{chunkDeSerialize, chunkSerialize}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}

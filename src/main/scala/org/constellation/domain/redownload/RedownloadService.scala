@@ -6,7 +6,8 @@ import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.serializer.KryoSerializer
+import org.constellation.consensus.EdgeProcessor
+import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.schema.Id
 import org.constellation.storage.RecentSnapshot
 import org.constellation.util.MajorityStateChooser.NodeSnapshots
@@ -22,9 +23,9 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
   private[redownload] val peersProposals
     : Ref[F, Map[Long, Seq[NodeSnapshots]]] = Ref.unsafe(Map.empty) //todo join/leave?
 
-  def persistOwnSnapshot(recentSnapshot: RecentSnapshot): F[Unit] =
+  def persistOwnSnapshot(height: Long, recentSnapshot: RecentSnapshot): F[Unit] =
     ownSnapshots.modify { m =>
-      val updated = if (m.get(recentSnapshot.height).nonEmpty) m else m.updated(recentSnapshot.height, recentSnapshot)
+      val updated = if (m.get(height).nonEmpty) m else m.updated(height, recentSnapshot)
       (updated, ())
     }
 
@@ -33,7 +34,7 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
   def getOwnSnapshot(height: Long): F[Option[RecentSnapshot]] =
     ownSnapshots.get.map(_.get(height))
 
-  private[redownload] def getProposals() =
+  def getProposals() =
     for {
       peers <- LiftIO[F].liftIO(dao.readyPeers)
       chunkedPeerProposalMaps <- peers.toList.traverse {
@@ -41,13 +42,13 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
           val resp = peerData.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
             "snapshot/own",
             timeout = 45.seconds, //todo change these?
-            tag = "snapshot/own"
+            tag = "snapshot/obj/snapshot"
           )(C)
           resp.map((id, _))
       }
     } yield chunkedPeerProposalMaps
 
-  def updatePeerProposals(fetchedProposals: Seq[(Id, RecentSnapshot)]) =
+  def updatePeerProps(fetchedProposals: Seq[(Id, RecentSnapshot)]) =
     peersProposals.modify { m =>
       val updatedProposals = fetchedProposals.foldLeft(m) {
         case (prevPeerProps, (id, recentSnap)) =>
@@ -61,11 +62,11 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
 
   def fetchAndSetPeersProposals() = {
     val fetchedProposals = getProposals().map { proposals =>
-      proposals.map(RedownloadService.deserializeProposals).flatMap {
+      proposals.map(RedownloadService.deSerProps).flatMap {
         case (id, recentSnaps) => recentSnaps.map(snap => (id, snap))
       }
     }
-    fetchedProposals.flatMap(updatePeerProposals)
+    fetchedProposals.flatMap(updatePeerProps)
   }
 
   def recalculateMajoritySnapshot(): F[(Seq[RecentSnapshot], Set[Id])] =
@@ -83,8 +84,7 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
         .toList
       snapsThroughMaj = majority.map(maj => MajorityStateChooser.getAllSnapsUntilMaj(maj._2, groupedProposals))
       majNodeIds = majority.flatMap(maj => MajorityStateChooser.chooseMajNodeIds(maj._2, allProposalsNormalized))
-      (sortedSnaps, nodeIdsWithSnaps) = (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
-    } yield (sortedSnaps, nodeIdsWithSnaps)
+    } yield (snapsThroughMaj.map(_.sortBy(-_.height)).getOrElse(Seq()), majNodeIds.map(_.toSet).getOrElse(Set()))
 
   def checkForAlignmentWithMajoritySnapshot(): F[Option[List[RecentSnapshot]]] =
     for {
@@ -114,11 +114,11 @@ class RedownloadService[F[_]](dao: DAO)(implicit F: Concurrent[F], C: ContextShi
 
 object RedownloadService {
 
-  def deserializeProposals(nodeSnap: (Id, Array[Array[Byte]])): (Id, Seq[RecentSnapshot]) = nodeSnap match {
+  def deSerProps(nodeSnap: (Id, Array[Array[Byte]])): (Id, Seq[RecentSnapshot]) = nodeSnap match {
     case (id, serializedProposalMap) =>
       val proposals: Seq[RecentSnapshot] = serializedProposalMap.flatMap { chunk =>
-        KryoSerializer
-          .chunkDeSerialize[Seq[(Long, RecentSnapshot)]](chunk, "fetchSnapshotProposals")
+        EdgeProcessor
+          .chunkDeSerialize[Seq[(Long, RecentSnapshot)]](chunk, SnapshotInfoChunk.SNAPSHOT_FETCH_PROPOSALS.name)
           .map(_._2)
       }.toSeq
       val nodeSnapshots = (id, proposals)
