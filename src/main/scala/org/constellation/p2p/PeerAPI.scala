@@ -9,6 +9,7 @@ import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
+import better.files.File
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -495,25 +496,46 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             APIDirective.handle(lastAcceptedTransactionRef)(complete(_))
           }
         } ~
-        path("snapshot" / "info") {
-          APIDirective.extractIP(socketAddress) { ip =>
-            val getInfo = idLookup(ip)
-              .flatMap(
-                _ =>
-                  dao.snapshotService.getSnapshotInfo.flatMap { info =>
-                    info.acceptedCBSinceSnapshot.toList.traverse {
-                      dao.checkpointService.fullData(_)
-                    }.map(
-                      cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
-                    )
-                  }
-              )
+        pathPrefix("snapshot" / "info") {
+          pathEnd {
+            APIDirective.extractIP(socketAddress) { ip =>
+              val getInfo = idLookup(ip)
+                .flatMap(
+                  _ =>
+                    dao.snapshotService.getSnapshotInfo.flatMap { info =>
+                      info.acceptedCBSinceSnapshot.toList.traverse {
+                        dao.checkpointService.fullData(_)
+                      }.map(
+                        cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
+                      )
+                    }
+                )
 
-            APIDirective.handle(
+              APIDirective.handle(
+                dao.cluster.getNodeState
+                  .map(NodeState.canActAsRedownloadSource)
+                  .ifM(getInfo, IO.pure(none[Array[Byte]]))
+              )(complete(_))
+            }
+          } ~
+          path(LongNumber) { height =>
+            val heightPrefix = dao.snapshotService.snapshotInfoFileHeightPrefix(height)
+            val getInfo = IO {
+              dao.snapshotInfoPath
+                .collectChildren(_.isDirectory)
+                .find(d => d.pathAsString.split("/").reverse.head.startsWith(heightPrefix))
+                .map(f => dao.rollbackLoader.loadSnapshotInfoSer(f.pathAsString))
+            }
+
+            APIDirective.handle {
               dao.cluster.getNodeState
                 .map(NodeState.canActAsRedownloadSource)
-                .ifM(getInfo, IO.pure(none[Array[Byte]]))
-            )(complete(_))
+                .ifM(getInfo, IO.pure(None))
+            } {
+              case None => complete(StatusCodes.NotFound)
+              case Some(info)    => complete(StatusCodes.OK, info)
+            }
+
           }
         } ~
         path("trust") {

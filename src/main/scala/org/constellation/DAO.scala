@@ -297,15 +297,17 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
+    rollbackLoader =  new RollbackLoader(
+      snapshotPath,
+      snapshotInfoPath.pathAsString,
+      genesisObservationPath.pathAsString
+    )
+
     rollbackService = new RollbackService[IO](
       this,
       new RollbackAccountBalances,
       snapshotService,
-      new RollbackLoader(
-        snapshotPath,
-        snapshotInfoPath.pathAsString,
-        genesisObservationPath.pathAsString
-      ),
+      rollbackLoader,
       rewardsManager
     )
 
