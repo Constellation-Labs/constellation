@@ -141,7 +141,7 @@ class PeerAPITest
       dao.snapshotService.recentSnapshotInfo shouldReturn mock[StorageService[IO, SnapshotInfoSer]]
       dao.snapshotService.recentSnapshotInfo.put(*, *) shouldReturnF storedSnapshot.toSnapshotInfoSer()
 
-      Post("/snapshot/info", Array.empty[Array[Byte]]) ~> peerAPI.postEndpoints(socketAddress) ~> check {
+      Post("/snapshot/info", ("address", Array.empty[Array[Byte]])) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         dao.snapshotService.recentSnapshotInfo.put(*, *).was(called)
         status shouldEqual StatusCodes.OK
         responseAs[Array[Byte]] shouldBe Array.empty[Byte]
@@ -166,7 +166,7 @@ class PeerAPITest
       dao.snapshotService.recentSnapshotInfo shouldReturn mock[StorageService[IO, SnapshotInfoSer]]
       dao.snapshotService.recentSnapshotInfo.put(*, *) shouldReturnF storedSnapshot.toSnapshotInfoSer()
 
-      Post(s"/snapshot/info/${heightToReturn}", Array.empty[Array[Byte]]) ~> peerAPI.postEndpoints(socketAddress) ~> check {
+      Post(s"/snapshot/info/${heightToReturn}", ("address", Array.empty[Array[Byte]])) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         dao.snapshotService.recentSnapshotInfo.put(*, *).was(called)
         status shouldEqual StatusCodes.OK
         responseAs[Array[Byte]] shouldBe Array.empty[Array[Byte]]
@@ -185,11 +185,13 @@ class PeerAPITest
       dao.snapshotInfoPath shouldReturn snapshotWritePath
       dao.snapshotService shouldReturn mock[SnapshotService[IO]]
       dao.rollbackLoader shouldReturn mock[RollbackLoader]
+      dao.snapshotService.storedSnapshot.get shouldReturnF mock[StoredSnapshot]
+      dao.snapshotService.storedSnapshot.get.unsafeRunSync().height shouldReturn 0L
       dao.snapshotInfoPath shouldReturn snapshotWritePath
       dao.snapshotService.recentSnapshotInfo shouldReturn mock[StorageService[IO, SnapshotInfoSer]]
       dao.snapshotService.recentSnapshotInfo.put(*, *) shouldReturnF storedSnapshot.toSnapshotInfoSer()
 
-      Post(s"/snapshot/info/${heightToReturn}", Array.empty[Array[Byte]]) ~> peerAPI.postEndpoints(socketAddress) ~> check {
+      Post(s"/snapshot/info/${heightToReturn}", ("address", Array.empty[Array[Byte]])) ~> peerAPI.postEndpoints(socketAddress) ~> check {
         dao.snapshotService.recentSnapshotInfo.put(*, *).wasNever(called)
         status shouldEqual StatusCodes.NotFound
       }

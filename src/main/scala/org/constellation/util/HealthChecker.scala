@@ -76,7 +76,7 @@ class HealthChecker[F[_]: Concurrent](
 
   def checkClusterConsistency(ownSnapshots: List[RecentSnapshot]): F[Unit] = {
     val check = for {
-      _ <- logger.debug(s"[${dao.id.short}] Re-download checking cluster consistency")
+      _ <- logger.debug(s"[${dao.id.short}] [HealthChecker] checking cluster consistency")
       peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
       peersSnapshots <- collectSnapshot(peers)
       _ <- clearStaleTips(peersSnapshots)
@@ -85,7 +85,7 @@ class HealthChecker[F[_]: Concurrent](
     check.recoverWith {
       case err =>
         logger
-          .error(err)(s"[${dao.id.short}] Unexpected error during re-download process: ${err.getMessage}")
+          .error(err)(s"[${dao.id.short}] Unexpected error during check cluster consistency: ${err.getMessage}")
           .flatMap(_ => Sync[F].pure[Unit](()))
     }
   }
@@ -114,15 +114,15 @@ class HealthChecker[F[_]: Concurrent](
     peers: Map[Id, PeerData]
   ): F[Unit] = {
     val reDownload = for {
-      _ <- logger.info(s"[${dao.id.short}] Starting re-download process ${diff.snapshotsToDownload.size}")
+      _ <- logger.info(s"[${dao.id.address}] Starting re-download process for snapshots ${diff.snapshotsToDownload} from peers ${diff.peers}")
 
       _ <- logger.debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
 
       _ <- LiftIO[F].liftIO(dao.terminateConsensuses())
       _ <- logger.debug(s"[${dao.id.short}] Consensuses terminated")
-
+      majoritySnapshot = diff.snapshotsToDownload.maxBy(_.height)
       _ <- downloader.reDownload(
-        diff.snapshotsToDownload.maxBy(_.height).height,
+        majoritySnapshot.height,
         diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
         peers.filterKeys(diff.peers.contains)
       )

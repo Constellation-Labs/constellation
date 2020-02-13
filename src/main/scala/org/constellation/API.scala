@@ -69,7 +69,10 @@ object ProcessingConfig {
     maxMemPoolSize = 1000,
     minPeerTimeAddedSeconds = 5,
     roundsPerMessage = 1,
-    leavingStandbyTimeout = 3
+    leavingStandbyTimeout = 3,
+    recentSnapshotNumber =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
+    // ^ must be equal to snapshotHeightRedownloadDelayInterval from application.conf
   )
 }
 

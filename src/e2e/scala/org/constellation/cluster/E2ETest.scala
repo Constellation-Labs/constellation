@@ -106,7 +106,7 @@ class E2ETest extends E2E {
     // messageSim.postDownload(apis.head)
 
     // TODO: Change to wait for the download node to participate in several blocks.
-    Thread.sleep(300 * 1000)
+//    Thread.sleep(120 * 1000)
 //    val allNodes = nodes :+ downloadNode
     val allNodes = nodes
 

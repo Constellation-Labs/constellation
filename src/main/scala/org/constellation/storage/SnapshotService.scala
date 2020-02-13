@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import java.io.FileOutputStream
-import java.nio.file.Path
+import java.nio.file.{NoSuchFileException, Path}
 
 import better.files.File
 import cats.Parallel
@@ -9,9 +9,11 @@ import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, LiftIO, Resource, Sync, _}
 import cats.implicits._
+import constellation.withMetric
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
+import org.constellation.consensus.Snapshot.logger
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorage
@@ -102,7 +104,13 @@ class SnapshotService[F[_]: Concurrent](
           s"conclude snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} with height ${nextHeightInterval}"
         )
       )
-      _ <- applySnapshot()
+      created = RecentSnapshot(
+        nextSnapshot.hash,
+        nextHeightInterval,
+        publicReputation
+      )
+      height <- EitherT.liftF(lastSnapshotHeight.get)
+      _ <- applySnapshot(height)
       _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
       _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
       _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
@@ -114,11 +122,6 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
 
-      created = RecentSnapshot(
-        nextSnapshot.hash,
-        nextHeightInterval,
-        publicReputation
-      )
     } yield created
 
   def writeSnapshotFile(path: String, part: Array[Byte]): F[Unit] =
@@ -160,7 +163,6 @@ class SnapshotService[F[_]: Concurrent](
         else writeSnapshotInfoParts(info, path.pathAsString).map(_ => ())
       }
     }.leftMap(SnapshotInfoIOError)
-
 
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
@@ -373,8 +375,8 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.snapshot.hash)
       .map(hash => Snapshot(hash, hashesForNextSnapshot, publicReputation))
 
-  private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
-    val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
+  private[storage] def applySnapshot(height: Long = 0L)(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
+    val write = (currentSnapshot: Snapshot) =>
       for {
         _ <- writeSnapshotToDisk(currentSnapshot)
         _ <- writeSnapshotInfoToDisk()
@@ -386,7 +388,7 @@ class SnapshotService[F[_]: Concurrent](
       .map(_.snapshot)
       .flatMap { currentSnapshot =>
         if (currentSnapshot == Snapshot.snapshotZero) EitherT.rightT[F, SnapshotError](())
-        else write(currentSnapshot)
+        else write(currentSnapshot) >> EitherT.liftF(LiftIO[F].liftIO(dao.redownloadService.a(RecentSnapshot(currentSnapshot.hash, height, Map()))))
       }
   }
 
@@ -403,11 +405,11 @@ class SnapshotService[F[_]: Concurrent](
       .flatMap {
         case maybeBlocks
             if maybeBlocks.exists(
-              maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty
+              maybeCache => maybeCache._2.isEmpty
             ) =>
           EitherT {
             Sync[F].delay {
-              maybeBlocks.find(maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty)
+              maybeBlocks.find(maybeCache => maybeCache._2.isEmpty)
             }.flatTap { maybeEmpty =>
               logger.error(s"Snapshot data is missing for block: ${maybeEmpty}")
             }.flatTap(_ => dao.metrics.incrementMetricAsync("snapshotInvalidData"))

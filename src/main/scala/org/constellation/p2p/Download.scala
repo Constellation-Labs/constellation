@@ -21,6 +21,7 @@ import org.constellation.util.Logging.logThread
 import org.constellation.util.{APIClient, Distance, Metrics}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.serializer.KryoSerializer.{chunkDeSerialize, chunkSerialize}
+import org.constellation.storage.SnapshotService
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -153,7 +154,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
         else
           Sync[F].raiseError[Unit](
             new RuntimeException(
-              s"[${dao.id.short}] Inconsistent state majority snapshot doesn't contain: ${reversedHashes
+              s"[${dao.id.address}] Inconsistent state majority snapshot doesn't contain: ${reversedHashes
                 .filterNot(updatedMajoritySnapshot.snapshotHashes.contains)}"
             )
           )
@@ -300,14 +301,14 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           )
         case head :: tail =>
           head.client
-            .postNonBlockingF[F, Array[Byte]](endpoint, serHashes, timeout = 8.seconds)(C)
+            .postNonBlockingF[F, Array[Byte]](endpoint, (dao.id.address, serHashes), timeout = 8.seconds)(C)
             .flatMap { res =>
               logger.error(s"[${dao.id.short}] [Re-Download] res: ${res.toList}")
               chainSnapshotInfo(head)
             }
             .handleErrorWith(e => {
               Sync[F]
-                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage} - from endpoint $endpoint")) >>
                 makeAttempt(tail)
             })
       }
@@ -317,53 +318,48 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   def chainSnapshotInfo(peer: PeerData): F[SnapshotInfo] =
     for {
-      snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      snapshotHash <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/snapshot",
-        tag = "snapshot/obj/snapshot"
+        dao.id.address
       )(C)
-      storedSnapshotCheckpointBlocks <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      storedSnapshotCheckpointBlocks <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/storedSnapshotCheckpointBlocks",
-        tag = "snapshot/obj/storedSnapshotCheckpointBlocks"
+        dao.id.address
       )(C)
-      snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      snapshotCBs <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotCBs",
-        tag = "snapshot/obj/snapshotCBs"
+        dao.id.address
       )(C)
-      snapshotPublicReputation <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      snapshotPublicReputation <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotPublicReputation",
-        tag = "snapshot/obj/snapshotPublicReputation"
+        dao.id.address
       )(C)
-      acceptedCBSinceSnapshot <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      acceptedCBSinceSnapshot <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/acceptedCBSinceSnapshot",
-        tag = "snapshot/obj/acceptedCBSinceSnapshot"
+        dao.id.address
       )(C)
-      acceptedCBSinceSnapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      acceptedCBSinceSnapshotCache <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/acceptedCBSinceSnapshotCache",
-        tag = "snapshot/obj/acceptedCBSinceSnapshotCache - re-download"
+        dao.id.address
       )(C)
-      awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      awaiting <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/awaiting",
-        tag = "snapshot/obj/awaiting"
+        dao.id.address
       )(C)
-      lastSnapshotHeight <- peer.client
-        .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
-      snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/snapshotHashes",
-        tag = "snapshot/obj/snapshotHashes"
-      )(C)
-      addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      lastSnapshotHeight <- peer.client.postNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/lastSnapshotHeight",  dao.id.address)(C)
+      snapshotHashes <- peer.client.postNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/snapshotHashes", dao.id.address)(C)
+      addressCacheData <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/addressCacheData",
-        tag = "snapshot/obj/addressCacheData"
+        dao.id.address
       )(C)
-      tips <- peer.client
-        .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag = "tips")(C)
-      snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      tips <- peer.client.postNonBlockingF[F, Array[Array[Byte]]]("snapshot/obj/tips",  dao.id.address)(C)
+      snapshotCache <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotCache",
-        tag = "snapshot/obj/snapshotCache"
+        dao.id.address
       )(C)
-      lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
+      lastAcceptedTransactionRef <- peer.client.postNonBlockingF[F, Array[Array[Byte]]](
         "snapshot/obj/lastAcceptedTransactionRef",
-        tag = "snapshot/obj/lastAcceptedTransactionRef"
+        dao.id.address
       )(C)
       _ <- Sync[F]
         .delay(logger.error(s"[${dao.id.short}] lastAcceptedTransactionRef: ${lastAcceptedTransactionRef}"))
@@ -416,12 +412,23 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
       .flatMap(_ => snapshotsProcessor.processSnapshots(hashes))
       .flatTap(_ => dao.metrics.updateMetricAsync("downloadSecondPassComplete", "true"))
 
-  private def finishDownload(snapshot: SnapshotInfo): F[Unit] =
+  private def removeSnapshotInfoFromDisk(snapshotHeight: Long,
+                                         overWritePath: String = dao.snapshotInfoPath.pathAsString) = {
+    val snapshotInfoAtHeight = dao.snapshotInfoPath.collectChildren(_.isDirectory)
+      .filter { file =>
+        val Array(height, hash) = file.name.split('_')
+        height == snapshotHeight.toString
+      }.toList//need to call toList here
+    Sync[F].delay { snapshotInfoAtHeight.foreach(_.delete()) }
+  }
+
+  private def finishDownload(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
-      _ <- setSnapshot(snapshot)
-      _ <- acceptSnapshotCacheData(snapshot)
-      _ <- LiftIO[F].liftIO(dao.snapshotBroadcastService.applyAfterRedownload(snapshot))
-      _ <- storeSnapshotInfo
+      _ <- setSnapshot(snapshotInfo)
+      _ <- acceptSnapshotCacheData(snapshotInfo)
+      _ <- LiftIO[F].liftIO(dao.snapshotBroadcastService.applyAfterRedownload(snapshotInfo))
+      _ <- removeSnapshotInfoFromDisk(snapshotInfo.snapshot.height).map(_ => storeSnapshotInfo)
+      _ <- removeSnapshotInfoFromDisk(snapshotInfo.snapshot.height)
       _ <- setDownloadFinishedTime()
     } yield ()
 

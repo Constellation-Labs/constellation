@@ -27,7 +27,7 @@ class SnapshotTriggerTest
     cluster = dao.cluster
   }
 
-  "triggerSnapshot" - {
+   "triggerSnapshot" - {
     "if snapshot has been created" - {
       "calls redownload service to persist own snapshot" in {
         val snapshotTrigger = new SnapshotTrigger()

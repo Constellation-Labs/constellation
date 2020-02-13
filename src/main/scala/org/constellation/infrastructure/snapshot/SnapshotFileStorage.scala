@@ -1,11 +1,9 @@
 package org.constellation.infrastructure.snapshot
 
-import java.nio.file.{DirectoryStream, Files, Path, Paths}
-
 import cats.data.EitherT
 import cats.implicits._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.domain.snapshot.{SnapshotStorage, SnapshotStorageError}
+import org.constellation.domain.snapshot.SnapshotStorage
 import better.files._
 import java.io.{File => JFile}
 

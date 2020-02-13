@@ -1,5 +1,4 @@
 package org.constellation
-import java.util.concurrent.ForkJoinPool
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
@@ -8,7 +7,6 @@ import com.typesafe.scalalogging.StrictLogging
 import org.constellation.util.{HostPort, TestNode}
 import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.Try
 
 trait E2E extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach with StrictLogging {
@@ -17,12 +15,12 @@ trait E2E extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with Be
   implicit val materializer: ActorMaterializer = ActorMaterializer()
 //  implicit val timeout: Timeout = Timeout(90, TimeUnit.SECONDS)
 
-  val tmpDir = "tmp"
+  val tmpDir = "/tmp"
 
-  override def beforeAll(): Unit =
-    // Cleanup DBs
-    //Try{File(tmpDir).delete()}
+  override def beforeAll(): Unit = {
     Try { File(tmpDir).createDirectories() }
+    Try { File(tmpDir).delete() }
+  }
 
   override def afterAll() {
     // Cleanup DBs

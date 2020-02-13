@@ -17,8 +17,6 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.serializer.KryoSerializer.chunkDeSerialize
-import org.constellation.storage.SnapshotService
 import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -227,7 +225,7 @@ case class SnapshotInfo(
   acceptedCBSinceSnapshotHashes: Seq[String] = Seq(),
   acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
   awaitingCbs: Set[CheckpointCache] = Set(),
-  lastSnapshotHeight: Int = 0,
+  lastSnapshotHeight: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval"),
   snapshotHashes: Seq[String] = Seq(),
   addressCacheData: Map[String, AddressCacheData] = Map(),
   tips: Map[String, TipData] = Map(),
@@ -435,6 +433,7 @@ object Snapshot extends StrictLogging {
                   .writeSnapshot(storedSnapshot.snapshot.hash, serialized)
                   .value
                   .flatMap(IO.fromEither)
+                  .flatTap(_ => IO.delay{logger.warn(s"writeSnapshot - for snapshot hash ${storedSnapshot.snapshot.hash} - for node ${dao.id.address}")})
               },
               "writeSnapshot"
             ).attemptT
