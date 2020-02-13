@@ -161,7 +161,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     majorityStateChooser = new MajorityStateChooser[IO]()
 
-    snapshotStorage = SnapshotFileStorage(snapshotPath)
+    snapshotStorage = SnapshotFileStorage(snapshotPath.pathAsString)
 
     snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
@@ -286,7 +286,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
     rollbackLoader =  new RollbackLoader(
-      snapshotPath,
+      snapshotPath.pathAsString,
       snapshotInfoPath.pathAsString,
       genesisObservationPath.pathAsString
     )

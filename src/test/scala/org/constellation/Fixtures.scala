@@ -89,7 +89,7 @@ object Fixtures {
   val publicKey3: PublicKey = tempKey3.getPublic
   val publicKey4: PublicKey = tempKey4.getPublic
   val publicKey5: PublicKey = tempKey5.getPublic
-  val address = new InetSocketAddress("127.0.0.1", 16180)
+  val inetSocketAddress = new InetSocketAddress("127.0.0.1", 16180)
   val id = publicKey.toId
   val id1 = publicKey1.toId
   val id2 = publicKey2.toId

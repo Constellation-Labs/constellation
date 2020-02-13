@@ -35,12 +35,12 @@ class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with Idiom
       nodeConfig =
         NodeConfig(primaryKeyPair = Fixtures.tempKey5, processingConfig = ProcessingConfig(metricCheckInterval = 200))
     )
-    File(dao.snapshotPath).clear()
+    File(dao.snapshotPath.pathAsString).clear()
     genesis = RandomData.go()
   }
 
   after {
-    File(dao.snapshotPath).delete()
+    File(dao.snapshotPath.pathAsString).delete()
     dao.unsafeShutdown()
   }
 

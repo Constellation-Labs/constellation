@@ -122,6 +122,7 @@ class HealthChecker[F[_]: Concurrent](
       _ <- logger.debug(s"[${dao.id.short}] Consensuses terminated")
 
       _ <- downloader.reDownload(
+        diff.snapshotsToDownload.maxBy(_.height).height,
         diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
         peers.filterKeys(diff.peers.contains)
       )

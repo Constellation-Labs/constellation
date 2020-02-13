@@ -14,7 +14,7 @@ object SnapshotInfoChunk extends Enumeration {
   val STORED_SNAPSHOT_CHECKPOINT_BLOCKS: SnapshotInfoChunk = Val("storedSnapshotCheckpointBlocks")
   val LAST_SNAPSHOT_HEIGHT: SnapshotInfoChunk = Val("lastSnapshotHeight")
   val CHECKPOINT_BLOCKS: SnapshotInfoChunk = Val("checkpointBlocks")
-  val ACCEPTED_CBS_SINCE_SNAPSHOT: SnapshotInfoChunk = Val("acceptedCBSinceSnapshot")
+  val ACCEPTED_CBS_SINCE_SNAPSHOT_HASHES: SnapshotInfoChunk = Val("acceptedCBSinceSnapshotHashes")
   val ACCEPTED_CBS_SINCE_SNAPSHOT_CACHE: SnapshotInfoChunk = Val("acceptedCBSinceSnapshotCache")
   val AWAITING_CBS: SnapshotInfoChunk = Val("awaitingCbs")
   val SNAPSHOT_HASHES: SnapshotInfoChunk = Val("snapshotHashes")

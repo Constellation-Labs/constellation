@@ -9,7 +9,7 @@ import akka.http.scaladsl.server.Directives.{path, _}
 import akka.http.scaladsl.server.{ExceptionHandler, Route}
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, PredefinedFromEntityUnmarshallers}
 import akka.util.Timeout
-import better.files.File
+import org.constellation.rollback.RollbackLoader
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -18,8 +18,7 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
-import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkDeSerialize}
-import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
+import org.constellation.serializer.KryoSerializer.{chunkDeSerialize, chunkSerialize}
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.trust.TrustData
@@ -27,6 +26,7 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
+import org.constellation.storage.SnapshotService
 import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO, ResourceInfo}
 import org.json4s.native
@@ -145,18 +145,16 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
   private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
-      pathPrefix("snapshot") {
-        path("info") {
+      pathPrefix("snapshot" / "info") {
+        pathEnd {
           APIDirective.extractIP(socketAddress) { ip =>
             entity(as[Array[Array[Byte]]]) { curCheckpointHashes =>
               val deSerCheckpointHashes =
                 curCheckpointHashes.flatMap(chunkDeSerialize[Seq[String]](_, "snapshot/info/curCheckpointHashes"))
               val getInfo = dao.snapshotService.getSnapshotInfo.flatMap { info =>
-                logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshot}")
+                logger.warn(s"snapshot/info info.acceptedCBSinceSnapshot.size - ${info.acceptedCBSinceSnapshotHashes}")
                 logger.warn(s"snapshot/info curCheckpointHashes.size - ${deSerCheckpointHashes.size}")
-
-                val checkpointsToGet = info.acceptedCBSinceSnapshot.toList.diff(deSerCheckpointHashes.toList)
-
+                val checkpointsToGet = info.acceptedCBSinceSnapshotHashes.toList.diff(deSerCheckpointHashes.toList)
                 logger.warn(s"snapshot/info checkpointsToGet.size - ${checkpointsToGet.size}")
                 logger.warn(s"snapshot/info checkpointsToGet - ${checkpointsToGet}")
 
@@ -164,24 +162,50 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                   dao.checkpointService.fullData(_)
                 }.flatMap { cbs =>
                   val infoSer = info.copy(acceptedCBSinceSnapshotCache = cbs.flatten).toSnapshotInfoSer()
-                  dao.snapshotService.recentSnapshotInfo
+                  val res = dao.snapshotService.recentSnapshotInfo
                     .put(ip, infoSer)
                     .flatTap(_ => IO { logger.warn(s"snapshot/info recentSnapshotInfo updating") })
                     .map(_ => Array.empty[Byte].some)
+                  res
                 }
               }
-
               APIDirective.handle {
                 dao.cluster.getNodeState
                   .map(NodeState.canActAsRedownloadSource)
                   .ifM(getInfo, IO.pure(None))
               } {
                 case None => complete(StatusCodes.NotFound)
-                case _    => complete(StatusCodes.OK, Array.empty[Byte])
+                case _    => complete(StatusCodes.OK, Array())//need array here, .empty marshalls as List
               }
             }
           }
-        }
+        } ~
+          path(LongNumber) { height =>
+            APIDirective.extractIP(socketAddress) { ip =>
+              val heightPrefix = SnapshotService.snapshotInfoFileHeightPrefix(height)
+              val snapshotInfoDirectories = dao.snapshotInfoPath.collectChildren(_.isDirectory).toList
+              val infoSerOpt = snapshotInfoDirectories
+                .find(d => d.pathAsString.split("/").reverse.head.startsWith(heightPrefix))
+                .map(f => RollbackLoader.loadSnapshotInfoSer(f.pathAsString))
+              val getInfo = IO {
+                infoSerOpt.map { infoSer =>
+                  dao.snapshotService.recentSnapshotInfo
+                    .put(ip, infoSer)
+                    .flatTap(_ => IO { logger.warn(s"snapshot/info recentSnapshotInfo updating") })
+                    .map(_ => Array.empty[Byte])
+                  infoSer
+                }
+              }
+              APIDirective.handle {
+                dao.cluster.getNodeState
+                  .map(NodeState.canActAsRedownloadSource)
+                  .ifM(getInfo, IO.pure(None))
+              } {
+                case None => complete(StatusCodes.NotFound)
+                case _    => complete(StatusCodes.OK, Array())
+              }
+            }
+          }
       } ~
         pathPrefix("channel") {
           path("neighborhood") {
@@ -403,7 +427,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
         path("snapshot" / "obj" / "acceptedCBSinceSnapshot") {
           APIDirective.extractIP(socketAddress) { ip =>
             val acceptedCBSinceSnapshot = dao.snapshotService.recentSnapshotInfo.lookup(ip).map { sni =>
-              val res = sni.get.acceptedCBSinceSnapshot
+              val res = sni.get.acceptedCBSinceSnapshotHashes
               logger.debug(s"snapshot/obj/acceptedCBSinceSnapshot num acceptedCBSinceSnapshot: ${res.length}")
               res
             }
@@ -498,48 +522,6 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               res
             }
             APIDirective.handle(lastAcceptedTransactionRef)(complete(_))
-          }
-        } ~
-        pathPrefix("snapshot" / "info") {
-          pathEnd {
-            APIDirective.extractIP(socketAddress) { ip =>
-              val getInfo = idLookup(ip)
-                .flatMap(
-                  _ =>
-                    dao.snapshotService.getSnapshotInfo.flatMap { info =>
-                      info.acceptedCBSinceSnapshot.toList.traverse {
-                        dao.checkpointService.fullData(_)
-                      }.map(
-                        cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
-                      )
-                    }
-                )
-
-              APIDirective.handle(
-                dao.cluster.getNodeState
-                  .map(NodeState.canActAsRedownloadSource)
-                  .ifM(getInfo, IO.pure(none[Array[Byte]]))
-              )(complete(_))
-            }
-          } ~
-          path(LongNumber) { height =>
-            val heightPrefix = dao.snapshotService.snapshotInfoFileHeightPrefix(height)
-            val getInfo = IO {
-              dao.snapshotInfoPath
-                .collectChildren(_.isDirectory)
-                .find(d => d.pathAsString.split("/").reverse.head.startsWith(heightPrefix))
-                .map(f => dao.rollbackLoader.loadSnapshotInfoSer(f.pathAsString))
-            }
-
-            APIDirective.handle {
-              dao.cluster.getNodeState
-                .map(NodeState.canActAsRedownloadSource)
-                .ifM(getInfo, IO.pure(None))
-            } {
-              case None => complete(StatusCodes.NotFound)
-              case Some(info)    => complete(StatusCodes.OK, info)
-            }
-
           }
         } ~
         path("trust") {

@@ -208,34 +208,6 @@ class HealthCheckerTest
     }
   }
 
-  describe("startReDownload function") {
-    it("should set node state in case of error") {
-      cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready) shouldReturnF SetStateResult(
-        NodeState.Ready,
-        isNewSet = true
-      )
-      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress) shouldReturnF SetStateResult(
-        NodeState.Ready,
-        isNewSet = true
-      )
-      dao.keyPair shouldReturn Fixtures.kp
-      consensusManager.terminateConsensuses() shouldReturnF Unit
-      val metrics = new Metrics(2)(dao)
-      dao.metrics shouldReturn metrics
-
-      dao.terminateConsensuses shouldReturnF Unit
-
-      downloadProcess.reDownload(List.empty, Map.empty) shouldReturn IO.raiseError(new SocketException("timeout"))
-
-      assertThrows[SocketException] {
-        healthChecker.startReDownload(SnapshotDiff(List.empty, List.empty, List.empty), Map.empty).unsafeRunSync()
-      }
-
-      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).wasCalled(once)
-      cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready).wasCalled(once)
-    }
-  }
-
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     reset(concurrentTipService)

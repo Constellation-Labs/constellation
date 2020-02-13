@@ -79,7 +79,7 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("info") {
         val getInfo = dao.snapshotService.getSnapshotInfo.flatMap { info =>
-          info.acceptedCBSinceSnapshot.toList.traverse {
+          info.acceptedCBSinceSnapshotHashes.toList.traverse {
             dao.checkpointService.fullData(_)
           }.map(cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some)
         }

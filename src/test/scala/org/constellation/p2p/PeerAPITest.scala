@@ -3,24 +3,30 @@ package org.constellation.p2p
 import java.net.InetSocketAddress
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import better.files.File
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import org.constellation.TestHelpers
-import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.checkpoint.CheckpointService
+import org.constellation.consensus._
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.redownload.RedownloadService.Proposals
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.primitives.IPManager
+import org.constellation.rollback.RollbackLoader
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer.{chunkSerialize, chunkSize}
-import org.constellation.storage.RecentSnapshot
+import org.constellation.storage.{RecentSnapshot, SnapshotService, StorageService}
+import org.constellation.{PeerMetadata, TestHelpers}
+import org.joda.time.DateTimeUtils
 import org.json4s.native.Serialization
-import org.mockito.IdiomaticMockito
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+
 
 class PeerAPITest
     extends FreeSpec
@@ -28,8 +34,9 @@ class PeerAPITest
     with BeforeAndAfter
     with ScalatestRouteTest
     with Json4sSupport
-    with IdiomaticMockito
-    with IdiomaticMockitoCats {
+      with IdiomaticMockito
+      with IdiomaticMockitoCats
+      with ArgumentMatchersSugar {
 
   implicit val serialization = Serialization
   implicit val s: ActorSystem = system
@@ -39,6 +46,9 @@ class PeerAPITest
   val socketAddress = new InetSocketAddress("localhost", 9001)
   val ipManager: IPManager[IO] = IPManager[IO]()
   var peerAPI: PeerAPI = _
+  val parentDir = s"tmp/idMedium/"
+  val snapshotStorageDir = parentDir + "snapshot_infos/"
+  val snapshotWritePath = File(snapshotStorageDir).createDirectoryIfNotExists()
 
   before {
     peerAPI = new PeerAPI(ipManager)
@@ -89,7 +99,10 @@ class PeerAPITest
   "GET snapshot/own" - {
     "response should return empty Seq if there are no snapshots" in {
       val emptyResponse: Proposals = Map()
-      val serializedResponse = emptyResponse.grouped(chunkSize).map(t => chunkSerialize(t.toSeq,RedownloadService.fetchSnapshotProposals)).toArray
+      val serializedResponse = emptyResponse
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
+        .toArray
       dao.redownloadService.getLocalSnapshots() shouldReturnF emptyResponse
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
@@ -98,14 +111,92 @@ class PeerAPITest
     }
 
     "response should return response with all own snapshots" in {
-      val ownSnapshots = Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty), 4L -> RecentSnapshot("bbbb", 4L, Map.empty), 6L -> RecentSnapshot("cccc", 6L, Map.empty))
-      val serializedResponse = ownSnapshots.grouped(chunkSize).map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals)).toArray
+      val ownSnapshots = Map(2L -> RecentSnapshot("aaaa", 2L, Map.empty),
+                             4L -> RecentSnapshot("bbbb", 4L, Map.empty),
+                             6L -> RecentSnapshot("cccc", 6L, Map.empty))
+      val serializedResponse = ownSnapshots
+        .grouped(chunkSize)
+        .map(t => chunkSerialize(t.toSeq, RedownloadService.fetchSnapshotProposals))
+        .toArray
       dao.redownloadService.getLocalSnapshots() shouldReturnF ownSnapshots
 
       Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
         responseAs[Array[Array[Byte]]] shouldBe serializedResponse
       }
     }
+  }
+
+  "POST snapshot/info" - {
+    "response should return response with all own snapshots" in {
+      val pd = mock[PeerData]
+      val storedSnapshot = SnapshotInfo(StoredSnapshot(Snapshot("hash", Seq.empty, Map.empty), Seq()))
+      pd.peerMetadata shouldReturn mock[PeerMetadata]
+      pd.peerMetadata.id shouldReturn Id("foo")
+      dao.cluster.getPeerData("localhost") shouldReturnF Some(pd)
+      DateTimeUtils.setCurrentMillisFixed(1234567)
+      dao.checkpointService shouldReturn mock[CheckpointService[IO]]
+      dao.snapshotService shouldReturn mock[SnapshotService[IO]]
+      dao.snapshotService.getSnapshotInfo shouldReturnF storedSnapshot
+      dao.checkpointService.fullData(*) shouldReturnF None
+      dao.snapshotService.recentSnapshotInfo shouldReturn mock[StorageService[IO, SnapshotInfoSer]]
+      dao.snapshotService.recentSnapshotInfo.put(*, *) shouldReturnF storedSnapshot.toSnapshotInfoSer()
+
+      Post("/snapshot/info", Array.empty[Array[Byte]]) ~> peerAPI.postEndpoints(socketAddress) ~> check {
+        dao.snapshotService.recentSnapshotInfo.put(*, *).was(called)
+        status shouldEqual StatusCodes.OK
+        responseAs[Array[Byte]] shouldBe Array.empty[Byte]
+      }
+    }
+  }
+
+  "POST snapshot/info/height" - {
+    "response should return response with all own snapshots at given height" in {
+      val storedSnapshot = SnapshotInfo(StoredSnapshot(Snapshot("hash", Seq.empty, Map.empty), Seq()))
+      storedSnapshot.writeLocal(snapshotWritePath.pathAsString)
+      val heightToReturn = 0L
+      val pd = mock[PeerData]
+      pd.peerMetadata shouldReturn mock[PeerMetadata]
+      pd.peerMetadata.id shouldReturn Id("foo")
+      dao.cluster.getPeerData("localhost") shouldReturnF Some(pd)
+      DateTimeUtils.setCurrentMillisFixed(1234567)
+      dao.snapshotInfoPath shouldReturn snapshotWritePath
+      dao.snapshotService shouldReturn mock[SnapshotService[IO]]
+      dao.rollbackLoader shouldReturn mock[RollbackLoader]
+      dao.snapshotInfoPath shouldReturn snapshotWritePath
+      dao.snapshotService.recentSnapshotInfo shouldReturn mock[StorageService[IO, SnapshotInfoSer]]
+      dao.snapshotService.recentSnapshotInfo.put(*, *) shouldReturnF storedSnapshot.toSnapshotInfoSer()
+
+      Post(s"/snapshot/info/${heightToReturn}", Array.empty[Array[Byte]]) ~> peerAPI.postEndpoints(socketAddress) ~> check {
+        dao.snapshotService.recentSnapshotInfo.put(*, *).was(called)
+        status shouldEqual StatusCodes.OK
+        responseAs[Array[Byte]] shouldBe Array.empty[Array[Byte]]
+      }
+    }
+
+    "response should not return if below max height" in {
+      val storedSnapshot = SnapshotInfo(StoredSnapshot(Snapshot("hash", Seq.empty, Map.empty), Seq()))
+      storedSnapshot.writeLocal(snapshotWritePath.pathAsString)
+      val heightToReturn = 2L
+      val pd = mock[PeerData]
+      pd.peerMetadata shouldReturn mock[PeerMetadata]
+      pd.peerMetadata.id shouldReturn Id("foo")
+      dao.cluster.getPeerData("localhost") shouldReturnF Some(pd)
+      DateTimeUtils.setCurrentMillisFixed(1234567)
+      dao.snapshotInfoPath shouldReturn snapshotWritePath
+      dao.snapshotService shouldReturn mock[SnapshotService[IO]]
+      dao.rollbackLoader shouldReturn mock[RollbackLoader]
+      dao.snapshotInfoPath shouldReturn snapshotWritePath
+      dao.snapshotService.recentSnapshotInfo shouldReturn mock[StorageService[IO, SnapshotInfoSer]]
+      dao.snapshotService.recentSnapshotInfo.put(*, *) shouldReturnF storedSnapshot.toSnapshotInfoSer()
+
+      Post(s"/snapshot/info/${heightToReturn}", Array.empty[Array[Byte]]) ~> peerAPI.postEndpoints(socketAddress) ~> check {
+        dao.snapshotService.recentSnapshotInfo.put(*, *).wasNever(called)
+        status shouldEqual StatusCodes.NotFound
+      }
+    }
+  }
+  override def afterAll {
+    File(parentDir).createDirectoryIfNotExists().delete()
   }
 }
 

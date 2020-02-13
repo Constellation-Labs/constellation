@@ -96,40 +96,7 @@ class MajorityStateChooser[F[_]: Concurrent] {
   import MajorityStateChooser._
 
   val logger = Slf4jLogger.getLogger[F]
-
   private final val differenceInSnapshotHeightToReDownloadFromLeader = 10
-
-  def chooseMajorityState(
-    nodeSnapshots: List[NodeSnapshots],
-    ownHeight: Long,
-    allPeers: Seq[Id]
-  ): OptionT[F, (Seq[RecentSnapshot], Set[Id])] =
-    for {
-      majorState <- chooseMajoritySnapshot(
-        nodeSnapshots.filter(checkIfNodeContainsSnapshotsInConsistentState),
-        ownHeight,
-        allPeers
-      )
-      snapsThoughMaj <- OptionT.fromOption[F](Some(getAllSnapsUntilMaj(majorState._2, nodeSnapshots)))
-//      node <- OptionT.fromOption[F](findNode(nodeSnapshots, nodeId))
-      nodeIds <- OptionT.fromOption[F](chooseMajNodeIds(majorState._2, nodeSnapshots))
-
-      _ <- OptionT.liftF(logger.debug(s"Re-download from nodes : ${nodeIds}"))
-    } yield (snapsThoughMaj.sortBy(-_.height), nodeIds.toSet)
-
-  private def chooseMajoritySnapshot(nodeSnapshots: Seq[NodeSnapshots], height: Long, allPeers: Seq[Id]) =
-    for {
-      // highestSnapshot <- OptionT.fromOption[F](getHighest(nodeSnapshots))
-      // useHighest <- OptionT.liftF(shouldUseHighest(highestSnapshot, ownHeight))
-      majorSnapshot <- OptionT.fromOption[F](chooseMajorWinner(allPeers, nodeSnapshots)) //def chooseMajorWinner(allPeers: Seq[Id])(nodeSnapshots: Seq[NodeSnapshots])
-
-      _ <- OptionT.liftF(
-        logger.debug(
-//          s"The highest snapshot : $highestSnapshot"
-          s"The major snapshot: $majorSnapshot"
-        )
-      )
-    } yield majorSnapshot
 
   private def dropToCurrentState(nodeSnapshot: NodeSnapshots, major: SnapshotNodes): (Seq[RecentSnapshot], Set[Id]) =
     (nodeSnapshot._2.sortBy(-_.height).dropWhile(_ != major._1), Set(nodeSnapshot._1))

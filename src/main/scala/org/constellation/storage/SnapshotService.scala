@@ -147,19 +147,15 @@ class SnapshotService[F[_]: Concurrent](
   def writeSnapshotInfoParts(info: SnapshotInfo, basePath: String): F[List[Unit]] =
     info.toSnapshotInfoSer().write[F[List[Unit]]](snapshotInfoWriterProc)(basePath = basePath)
 
-  def snapshotInfoFileHeightPrefix(height: Long): String = s"${height}_"
 
   def writeSnapshotInfoToDisk(
     overWritePath: String = dao.snapshotInfoPath.pathAsString
   ): EitherT[F, SnapshotInfoIOError, Unit] =
     EitherT.liftF {
       getSnapshotInfoWithFullData.flatMap { info =>
-      val heightPrefix = snapshotInfoFileHeightPrefix(info.lastSnapshotHeight)
-      val hash = info.snapshot.snapshot.hash
-
-        val path = File(overWritePath.concat(s"/$heightPrefix$hash/"))
-          .createDirectoryIfNotExists()
-
+        val heightPrefix = SnapshotService.snapshotInfoFileHeightPrefix(info.lastSnapshotHeight)
+        val hash = info.snapshot.snapshot.hash
+        val path = File(overWritePath.concat(s"/${heightPrefix}$hash/")).createDirectoryIfNotExists()
         if (info.snapshot.snapshot == Snapshot.snapshotZero) Sync[F].unit
         else writeSnapshotInfoParts(info, path.pathAsString).map(_ => ())
       }
@@ -180,7 +176,7 @@ class SnapshotService[F[_]: Concurrent](
         s,
         accepted,
         lastSnapshotHeight = lastHeight,
-        snapshotHashes = hashes.toList,
+        snapshotHashes = hashes,
         addressCacheData = addressCacheData,
         tips = tips,
         snapshotCache = s.checkpointCache.toList,
@@ -213,7 +209,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
-      _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
+      _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshotHashes, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
@@ -229,13 +225,13 @@ class SnapshotService[F[_]: Concurrent](
       }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
-        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+        (snapshotInfo.acceptedCBSinceSnapshotHashes.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
       )
       _ <- logger.info(
-        s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}"
+        s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshotHashes.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}"
       )
       _ <- logger.info(
-        s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}"
+        s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshotHashes.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}"
       )
       _ <- updateMetricsAfterSnapshot()
     } yield ()
@@ -258,7 +254,7 @@ class SnapshotService[F[_]: Concurrent](
   def getSnapshotInfoWithFullData: F[SnapshotInfo] =
     getSnapshotInfo.flatMap { info =>
       LiftIO[F].liftIO(
-        info.acceptedCBSinceSnapshot.toList.traverse {
+        info.acceptedCBSinceSnapshotHashes.toList.traverse {
           dao.checkpointService.fullData(_)
 
         }.map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
@@ -547,6 +543,8 @@ class SnapshotService[F[_]: Concurrent](
 }
 
 object SnapshotService {
+
+  def snapshotInfoFileHeightPrefix(height: Long): String = s"${height}_"
 
   def apply[F[_]: Concurrent](
     concurrentTipService: ConcurrentTipService[F],

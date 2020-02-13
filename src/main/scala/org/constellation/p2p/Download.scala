@@ -139,14 +139,14 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   val config: Config = ConfigFactory.load()
   private val waitForPeersDelay = config.getInt("download.waitForPeers").seconds
 
-  def reDownload(snapshotHashes: List[String], peers: Map[Id, PeerData]): F[Unit] =
+  def reDownload(heightToDownloadFrom: Long, snapshotHashes: List[String], peers: Map[Id, PeerData]): F[Unit] =
     logThread(
       for {
         snapshotCache <- LiftIO[F].liftIO(dao.snapshotService.getAcceptedCBSinceSnapshot)
         localSnapshotCacheData <- LiftIO[F].liftIO(
           dao.snapshotService.getLocalAcceptedCBSinceSnapshotCache(snapshotCache)
         )
-        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash))
+        majoritySnapshot <- getMajoritySnapshot(peers, localSnapshotCacheData.map(_.checkpointBlock.baseHash), Some(heightToDownloadFrom))
         updatedMajoritySnapshot = updateSnapInfo(majoritySnapshot, localSnapshotCacheData)
         reversedHashes = snapshotHashes.reverse
         _ <- if (reversedHashes.forall(updatedMajoritySnapshot.snapshotHashes.contains)) Sync[F].unit
@@ -187,7 +187,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     )
 
   def updateSnapInfo(majoritySnapshot: SnapshotInfo, localSnapshotCacheData: List[CheckpointCache]) = {
-    val majoritySnapCpHashesToGet = majoritySnapshot.acceptedCBSinceSnapshot
+    val majoritySnapCpHashesToGet = majoritySnapshot.acceptedCBSinceSnapshotHashes
       .diff(majoritySnapshot.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))
       .toSet
     val localCps =
@@ -203,12 +203,12 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     //    println(s"acceptedCBSinceSnapshotCache: ${res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash)}")
     //    println(s"acceptedCBSinceSnapshot: ${res.acceptedCBSinceSnapshot}")
     logger.debug(s"acceptedCBSinceSnapshotCache.size: ${res.acceptedCBSinceSnapshotCache.size}")
-    logger.debug(s"acceptedCBSinceSnapshot.size: ${res.acceptedCBSinceSnapshot.size}")
-    logger.debug(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache.size}")
+    logger.debug(s"acceptedCBSinceSnapshot.size: ${res.acceptedCBSinceSnapshotHashes.size}")
+    logger.debug(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshotHashes.size == res.acceptedCBSinceSnapshotCache.size}")
     logger.debug(
-      s"updateSnapInfo hashes == ? ${res.acceptedCBSinceSnapshot.toSet == res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash).toSet}"
+      s"updateSnapInfo hashes == ? ${res.acceptedCBSinceSnapshotHashes.toSet == res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash).toSet}"
     )
-    val updateSnapInfoDiff = res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))
+    val updateSnapInfoDiff = res.acceptedCBSinceSnapshotHashes.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))
     //    println(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache}")
     logger.debug(
       s"updateSnapInfo diff: ${updateSnapInfoDiff}"
@@ -284,11 +284,12 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
-  private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String]): F[SnapshotInfo] = {
+  private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String], heightToDownloadFrom: Option[Long] = None): F[SnapshotInfo] = {
     val serHashes = hashes
       .grouped(100)
       .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
       .toArray
+    val endpoint = if(heightToDownloadFrom.isDefined) s"snapshot/info/${heightToDownloadFrom.get}" else "snapshot/info"
     def makeAttempt(clients: List[PeerData]): F[SnapshotInfo] =
       clients match {
         case Nil =>
@@ -299,7 +300,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           )
         case head :: tail =>
           head.client
-            .postNonBlockingF[F, Array[Byte]]("snapshot/info", serHashes, timeout = 8.seconds)(C)
+            .postNonBlockingF[F, Array[Byte]](endpoint, serHashes, timeout = 8.seconds)(C)
             .flatMap { res =>
               logger.error(s"[${dao.id.short}] [Re-Download] res: ${res.toList}")
               chainSnapshotInfo(head)
@@ -318,61 +319,50 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     for {
       snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshot",
-        timeout = 45.seconds,//todo change these?
         tag = "snapshot/obj/snapshot"
       )(C)
       storedSnapshotCheckpointBlocks <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/storedSnapshotCheckpointBlocks",
-        timeout = 45.seconds,
         tag = "snapshot/obj/storedSnapshotCheckpointBlocks"
       )(C)
       snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotCBs",
-        timeout = 45.seconds,
         tag = "snapshot/obj/snapshotCBs"
       )(C)
       snapshotPublicReputation <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotPublicReputation",
-        timeout = 45.seconds,
         tag = "snapshot/obj/snapshotPublicReputation"
       )(C)
       acceptedCBSinceSnapshot <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/acceptedCBSinceSnapshot",
-        timeout = 45.seconds,
         tag = "snapshot/obj/acceptedCBSinceSnapshot"
       )(C)
       acceptedCBSinceSnapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/acceptedCBSinceSnapshotCache",
-        timeout = 45.seconds,
         tag = "snapshot/obj/acceptedCBSinceSnapshotCache - re-download"
       )(C)
       awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/awaiting",
-        timeout = 45.seconds,
         tag = "snapshot/obj/awaiting"
       )(C)
       lastSnapshotHeight <- peer.client
         .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
       snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotHashes",
-        timeout = 45.seconds,
         tag = "snapshot/obj/snapshotHashes"
       )(C)
       addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/addressCacheData",
-        timeout = 45.seconds,
         tag = "snapshot/obj/addressCacheData"
       )(C)
       tips <- peer.client
         .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag = "tips")(C)
       snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/snapshotCache",
-        timeout = 45.seconds,
         tag = "snapshot/obj/snapshotCache"
       )(C)
       lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
         "snapshot/obj/lastAcceptedTransactionRef",
-        timeout = 45.seconds,
         tag = "snapshot/obj/lastAcceptedTransactionRef"
       )(C)
       _ <- Sync[F]
@@ -492,7 +482,7 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
   private def filter(buffer: List[FinishedCheckpoint], info: SnapshotInfo) = {
     val alreadyAccepted =
-      (info.acceptedCBSinceSnapshot ++ info.snapshotCache.map(_.checkpointBlock.baseHash)).distinct
+      (info.acceptedCBSinceSnapshotHashes ++ info.snapshotCache.map(_.checkpointBlock.baseHash)).distinct
     buffer.filterNot(
       f => alreadyAccepted.contains(f.checkpointCacheData.checkpointBlock.baseHash)
     )

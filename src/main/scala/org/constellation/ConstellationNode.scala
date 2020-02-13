@@ -263,7 +263,7 @@ class ConstellationNode(
       auxAddresses = dao.addresses,
       nodeType = dao.nodeType,
       resourceInfo = ResourceInfo(
-        diskUsableBytes = new java.io.File(dao.snapshotPath).getUsableSpace
+        diskUsableBytes = new java.io.File(dao.snapshotPath.pathAsString).getUsableSpace
       )
     )
 

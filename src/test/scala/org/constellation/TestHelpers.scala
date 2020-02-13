@@ -86,10 +86,6 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
     dao.nodeConfig shouldReturn NodeConfig()
 
-    val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
-    f.createDirectoryIfNotExists()
-    dao.dbPath shouldReturn f
-
     dao.id shouldReturn Fixtures.id
 
     val rds = mock[RedownloadService[IO]]
