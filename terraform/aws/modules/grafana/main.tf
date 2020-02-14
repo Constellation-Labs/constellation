@@ -1,14 +1,13 @@
 resource "aws_instance" "node" {
   count = 1
 
-  ami = data.aws_ami.node.id
+  ami = data.aws_ami.grafana.id
   instance_type = var.instance_type
   associate_public_ip_address = true
 
-  ebs_block_device {
-    device_name = "/dev/xvdb"
+  root_block_device {
     volume_type = "gp2"
-    volume_size = 100
+    volume_size = var.disk_size
   }
 
   user_data = file("ssh_keys.sh")

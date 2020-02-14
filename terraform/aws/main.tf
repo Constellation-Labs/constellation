@@ -12,7 +12,8 @@ module "grafana" {
   cluster_id = local.cluster_id
   env = var.env
   workspace = terraform.workspace
-  instance_type = "t2.micro"
+  instance_type = var.instance_type
+  disk_size = var.grafana_disk_size
 }
 
 module "nodes" {
@@ -22,8 +23,9 @@ module "nodes" {
   env = var.env
   workspace = terraform.workspace
   app_port = var.node_app_port
-  instance_type = "t2.micro"
+  instance_type = var.instance_type
   grafana_ip = module.grafana.grafana_ip
+  disk_size = var.node_disk_size
 }
 
 module "provisioner" {

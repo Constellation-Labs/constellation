@@ -20,9 +20,12 @@ variable "app_port" {
 
 variable "instance_type" {
   type = string
-  default = "t2.micro"
 }
 
 variable "grafana_ip" {
   type = string
+}
+
+variable "disk_size" {
+  type = number
 }
