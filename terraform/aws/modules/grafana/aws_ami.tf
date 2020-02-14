@@ -1,4 +1,4 @@
-data "aws_ami" "node" {
+data "aws_ami" "grafana" {
   most_recent = true
 
   filter {
