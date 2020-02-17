@@ -42,7 +42,7 @@ class SnapshotTriggerTest
         val trigger = snapshotTrigger.trigger()
         val cancel = snapshotTrigger.cancel()
 
-        (trigger >> cancel).unsafeRunSync
+        trigger.guarantee(cancel).unsafeRunSync
         dao.redownloadService.persistCreatedSnapshot(2L, "aaa").was(called)
       }
     }

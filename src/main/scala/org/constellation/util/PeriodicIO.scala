@@ -47,5 +47,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
       }(timerPool)
   }
 
-  def cancel(): IO[Unit] = IO { cancellationToken.set(true) }
+  def cancel(): IO[Unit] = IO {
+    cancellationToken.set(true)
+  }
 }
