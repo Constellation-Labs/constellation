@@ -173,6 +173,17 @@ class RedownloadServiceTest
           .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
       }
     }
+
+    "empty" - {
+      "returns false" in {
+        val acceptedSnapshots: SnapshotsAtHeight = Map.empty
+
+        val majorityState: SnapshotsAtHeight = Map.empty
+
+        redownloadService
+          .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
+      }
+    }
   }
 
   "persistOwnSnapshot" - {
@@ -209,7 +220,7 @@ class RedownloadServiceTest
     }
   }
 
-  "getOwnSnapshots" - {
+  "getCreatedSnapshots" - {
     "should return empty Map if there are no own snapshots" in {
       val check = redownloadService.getCreatedSnapshots()
 
@@ -241,7 +252,7 @@ class RedownloadServiceTest
     }
   }
 
-  "getOwnSnapshot" - {
+  "getCreatedSnapshot" - {
     "should return hash if snapshot at given height exists" in {
       val persist = redownloadService.persistCreatedSnapshot(2L, "aaaa")
       val check = redownloadService.getCreatedSnapshot(2L)
@@ -256,7 +267,7 @@ class RedownloadServiceTest
     }
   }
 
-  "fetchPeersProposals" - {
+  "fetchAndUpdatePeersProposals" - {
     "should fetch own proposals of all the peers" in {
       val peerInfo = Map(Id("node1") -> mock[PeerData], Id("node2") -> mock[PeerData])
       peerInfo.values.foreach { peer =>
@@ -335,4 +346,104 @@ class RedownloadServiceTest
     }
   }
 
+  "calculateDiff" - {
+    "above" - {
+      val majorityState: SnapshotsAtHeight = Map(
+        2L -> "a",
+        4L -> "x",
+      )
+
+      val acceptedSnapshots: SnapshotsAtHeight = Map(
+        2L -> "a",
+        4L -> "b",
+        6L -> "c",
+        8L -> "d",
+        10L -> "e"
+      )
+
+      "returns snapshots to leave untouched" in {
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toLeave shouldEqual Map(
+          2L -> "a",
+        )
+      }
+
+      "returns both snapshots to download and remove" in {
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toRemove shouldEqual Map(
+          4L -> "b",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e"
+        )
+        diff.toDownload shouldEqual Map(
+          4L -> "x"
+        )
+      }
+    }
+
+    "below" - {
+      val acceptedSnapshots: SnapshotsAtHeight = Map(
+        2L -> "a",
+        4L -> "b",
+      )
+
+      val majorityState: SnapshotsAtHeight = Map(
+        2L -> "a",
+        4L -> "x",
+        6L -> "c",
+        8L -> "d",
+        10L -> "e"
+      )
+
+      "returns snapshots to leave untouched" in {
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toLeave shouldEqual Map(
+          2L -> "a",
+        )
+      }
+
+      "returns both snapshots to download and remove" in {
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toRemove shouldEqual Map(
+          4L -> "b",
+        )
+        diff.toDownload shouldEqual Map(
+          4L -> "x",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e"
+        )
+      }
+    }
+
+    "same height" - {
+      val acceptedSnapshots: SnapshotsAtHeight = Map(
+        2L -> "a",
+        4L -> "b",
+      )
+
+      val majorityState: SnapshotsAtHeight = Map(
+        2L -> "a",
+        4L -> "x",
+      )
+
+      "returns snapshots to leave untouched" in {
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toLeave shouldEqual Map(
+          2L -> "a",
+        )
+      }
+
+      "returns both snapshots to download and remove" in {
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toRemove shouldEqual Map(
+          4L -> "b",
+        )
+        diff.toDownload shouldEqual Map(
+          4L -> "x",
+        )
+      }
+    }
+  }
 }
