@@ -70,18 +70,32 @@ class RedownloadService[F[_]](
       }
     } yield proposals
 
+  def fetchMissingSnapshots: F[SnapshotsAtHeight] = ??? // TODO: Implement
+
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] =
     for {
       peersProposals <- getPeerProposals()
       createdSnapshots <- getCreatedSnapshots()
+      acceptedSnapshots <- getAcceptedSnapshots()
+
       majorityState = majorityStateChooser.chooseMajorityState(
         createdSnapshots,
         peersProposals
       )
-      // TODO: Calculate diff and call redownload if true
-      _ <- if (shouldRedownload(createdSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) F.unit
-      else F.unit
+
+      _ <- if (shouldRedownload(acceptedSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) {
+        val plan = calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        applyRedownloadPlan(plan) // TODO: Actual redownload, rethink splitting the logic
+      } else F.unit
     } yield ()
+
+  private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): F[Unit] = for {
+    missingSnapshots <- fetchMissingSnapshots // TODO: Store these snapshots on disk now?
+    _ <- acceptedSnapshots.modify { m =>
+      val updated = plan.expectedResult // TODO: Is it the correct way?
+      (updated, ())
+    }
+  } yield ()
 
   private[redownload] def shouldRedownload(
     acceptedSnapshots: SnapshotsAtHeight,
@@ -93,17 +107,23 @@ class RedownloadService[F[_]](
       case _                   => true
     }
 
+  private[redownload] def calculateRedownloadPlan(
+    acceptedSnapshots: SnapshotsAtHeight,
+    majorityState: SnapshotsAtHeight
+  ): RedownloadPlan = {
+    val toDownload = (majorityState.toSet diff acceptedSnapshots.toSet).toMap
+    val toRemove = (acceptedSnapshots.toSet diff majorityState.toSet).toMap
+    val toLeave = (acceptedSnapshots.toSet diff toRemove.toSet).toMap
+    RedownloadPlan(toDownload, toRemove, toLeave)
+  }
+
   private[redownload] def getAlignmentResult(
     acceptedSnapshots: SnapshotsAtHeight,
     majorityState: SnapshotsAtHeight,
     redownloadInterval: Int
   ): MajorityAlignmentResult = {
-    val highestCreatedHeight = acceptedSnapshots.maxBy { case (height, _) => height } match {
-      case (height, _) => height
-    }
-    val highestCreatedHeightFromMajority = majorityState.maxBy { case (height, _) => height } match {
-      case (height, _) => height
-    }
+    val highestCreatedHeight = maxHeight(acceptedSnapshots)
+    val highestCreatedHeightFromMajority = maxHeight(majorityState)
 
     val isAbove = highestCreatedHeight > highestCreatedHeightFromMajority
     val isBelow = highestCreatedHeight < highestCreatedHeightFromMajority
@@ -124,6 +144,10 @@ class RedownloadService[F[_]](
       AlignedWithMajority
     }
   }
+
+  private[redownload] def maxHeight(snapshots: SnapshotsAtHeight): Long =
+    if (snapshots.isEmpty) 0
+    else snapshots.maxBy { case (height, _) => height } match { case (height, _) => height }
 }
 
 object RedownloadService {
