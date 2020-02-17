@@ -365,6 +365,11 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
           APIDirective.handle(snapshots)(complete(_))
         } ~
+        path("snapshot" / "accepted") {
+          val snapshots = dao.redownloadService.getAcceptedSnapshots()
+
+          APIDirective.handle(snapshots)(complete(_))
+        } ~
         path("snapshot" / "obj" / "snapshot") {
           APIDirective.extractIP(socketAddress) { ip =>
             val snapshotHash: IO[Array[Array[Byte]]] =
@@ -506,7 +511,8 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                       info.acceptedCBSinceSnapshot.toList.traverse {
                         dao.checkpointService.fullData(_)
                       }.map(
-                        cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
+                        cbs =>
+                          KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some
                       )
                     }
                 )
@@ -518,25 +524,25 @@ class PeerAPI(override val ipManager: IPManager[IO])(
               )(complete(_))
             }
           } ~
-          path(LongNumber) { height =>
-            val heightPrefix = dao.snapshotService.snapshotInfoFileHeightPrefix(height)
-            val getInfo = IO {
-              dao.snapshotInfoPath
-                .collectChildren(_.isDirectory)
-                .find(d => d.pathAsString.split("/").reverse.head.startsWith(heightPrefix))
-                .map(f => dao.rollbackLoader.loadSnapshotInfoSer(f.pathAsString))
-            }
+            path(LongNumber) { height =>
+              val heightPrefix = dao.snapshotService.snapshotInfoFileHeightPrefix(height)
+              val getInfo = IO {
+                dao.snapshotInfoPath
+                  .collectChildren(_.isDirectory)
+                  .find(d => d.pathAsString.split("/").reverse.head.startsWith(heightPrefix))
+                  .map(f => dao.rollbackLoader.loadSnapshotInfoSer(f.pathAsString))
+              }
 
-            APIDirective.handle {
-              dao.cluster.getNodeState
-                .map(NodeState.canActAsRedownloadSource)
-                .ifM(getInfo, IO.pure(None))
-            } {
-              case None => complete(StatusCodes.NotFound)
-              case Some(info)    => complete(StatusCodes.OK, info)
-            }
+              APIDirective.handle {
+                dao.cluster.getNodeState
+                  .map(NodeState.canActAsRedownloadSource)
+                  .ifM(getInfo, IO.pure(None))
+              } {
+                case None       => complete(StatusCodes.NotFound)
+                case Some(info) => complete(StatusCodes.OK, info)
+              }
 
-          }
+            }
         } ~
         path("trust") {
           APIDirective.handle(

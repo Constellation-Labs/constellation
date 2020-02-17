@@ -35,7 +35,15 @@ class RedownloadService[F[_]](
       (updated, ())
     }
 
+  def persistAcceptedSnapshot(height: Long, hash: String): F[Unit] =
+    acceptedSnapshots.modify { m =>
+      val updated = m.updated(height, hash)
+      (updated, ())
+    }
+
   def getCreatedSnapshots(): F[SnapshotsAtHeight] = createdSnapshots.get
+
+  def getAcceptedSnapshots(): F[SnapshotsAtHeight] = acceptedSnapshots.get
 
   def getPeerProposals(): F[PeersProposals] = peersProposals.get
 
@@ -73,7 +81,7 @@ class RedownloadService[F[_]](
   def shouldRedownload(acceptedSnapshots: SnapshotsAtHeight, majorityState: SnapshotsAtHeight): Boolean =
     getAlignmentResult(acceptedSnapshots, majorityState) match {
       case AlignedWithMajority => false
-      case _                     => true
+      case _                   => true
     }
 
   private[redownload] def getAlignmentResult(
@@ -105,7 +113,7 @@ object RedownloadService {
 
   def apply[F[_]: Concurrent: ContextShift](
     cluster: Cluster[F],
-    majorityStateChooser: MajorityStateChooser,
+    majorityStateChooser: MajorityStateChooser
   ): RedownloadService[F] =
     new RedownloadService[F](cluster, majorityStateChooser)
 

@@ -33,39 +33,23 @@ class RedownloadServiceTest
   "shouldRedownload" - {
 
     "returns true" - {
-      "if above and reached redownload interval" in {
+      "if above and reached redownload interval" in {}
 
-      }
+      "if above and not reached redownload interval but already has incorrect hashes at heights anyway" in {}
 
-      "if above and not reached redownload interval but already has incorrect hashes at heights anyway" in {
+      "if below and reached redownload interval" in {}
 
-      }
+      "if below and not reached redownload interval but already has incorrect hashes at heights anyway" in {}
 
-      "if below and reached redownload interval" in {
-
-      }
-
-      "if below and not reached redownload interval but already has incorrect hashes at heights anyway" in {
-
-      }
-
-      "if at same height but has incorrect hashes at heights" in {
-
-      }
+      "if at same height but has incorrect hashes at heights" in {}
     }
 
     "returns false" - {
-      "if above but not reached redownload interval yet and hashes at existing heights are aligned" in {
+      "if above but not reached redownload interval yet and hashes at existing heights are aligned" in {}
 
-      }
+      "if below but not reached redownload interval yet and hashes at existing heights are aligned" in {}
 
-      "if below but not reached redownload interval yet and hashes at existing heights are aligned" in {
-
-      }
-
-      "if at same height and all the hashes are aligned" in {
-
-      }
+      "if at same height and all the hashes are aligned" in {}
     }
 
   }
@@ -87,8 +71,25 @@ class RedownloadServiceTest
     }
   }
 
+  "persistAcceptedSnapshot" - {
+    "should persist accepted snapshot internally if snapshot at given height doesn't exist" in {
+      val persist = redownloadService.persistAcceptedSnapshot(2L, "aabbcc")
+      val check = redownloadService.acceptedSnapshots.get.map(_.get(2L))
+
+      (persist >> check).unsafeRunSync shouldBe "aabbcc".some
+    }
+
+    "should override previously persisted snapshot if snapshot at given height already exists" in {
+      val persistFirst = redownloadService.persistAcceptedSnapshot(2L, "aaaa")
+      val persistSecond = redownloadService.persistAcceptedSnapshot(2L, "bbbb")
+      val check = redownloadService.acceptedSnapshots.get.map(_.get(2L))
+
+      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "bbbb".some
+    }
+  }
+
   "getOwnSnapshots" - {
-    "should return empty map if there are no own snapshots" in {
+    "should return empty Map if there are no own snapshots" in {
       val check = redownloadService.getCreatedSnapshots()
 
       check.unsafeRunSync shouldBe Map.empty
@@ -100,6 +101,22 @@ class RedownloadServiceTest
       val check = redownloadService.getCreatedSnapshots()
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> "aaaa", 4L -> "bbbb")
+    }
+  }
+
+  "getAcceptedSnapshots" - {
+    "should return empty Map if there are no accepted snapshots" in {
+      val check = redownloadService.getAcceptedSnapshots()
+
+      check.unsafeRunSync shouldBe Map.empty
+    }
+
+    "should return all accepted snapshots if they exist" in {
+      val persistFirst = redownloadService.persistAcceptedSnapshot(2L, "aa")
+      val persistSecond = redownloadService.persistAcceptedSnapshot(4L, "bb")
+      val check = redownloadService.getAcceptedSnapshots()
+
+      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> "aa", 4L -> "bb")
     }
   }
 
