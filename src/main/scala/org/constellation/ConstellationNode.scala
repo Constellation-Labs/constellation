@@ -163,18 +163,6 @@ class ConstellationNode(
     s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"
   )
 
-  val snapshotTrigger = new SnapshotTrigger(
-    dao.processingConfig.snapshotTriggeringTimeSeconds
-  )(dao, dao.cluster)
-
-  val redownloadPeriodicCheck = new RedownloadPeriodicCheck(
-    dao.processingConfig.redownloadPeriodicCheckTimeSeconds
-  )(dao)
-
-  val transactionGeneratorTrigger = new TransactionGeneratorTrigger(
-    ConfigUtil.constellation.getInt("transaction.generator.randomTransactionLoopTimeSeconds")
-  )
-
   val ipManager: IPManager[IO] =
     IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
 
