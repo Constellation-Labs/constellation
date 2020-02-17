@@ -1,0 +1,8 @@
+package org.constellation.domain.redownload
+
+sealed trait MajorityAlignmentResult
+
+object AlignedWithMajority extends MajorityAlignmentResult
+object BelowMaxMajorityHeight extends MajorityAlignmentResult
+object AboveMaxMajorityHeight extends MajorityAlignmentResult
+object MisalignedWithMajority extends MajorityAlignmentResult

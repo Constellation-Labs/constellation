@@ -168,7 +168,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
-    redownloadService = RedownloadService[IO](cluster)
+    // TODO: Use new implementation of MajorityStateChooser globally
+    redownloadService = RedownloadService[IO](cluster, new org.constellation.domain.redownload.MajorityStateChooser())
 
     consensusRemoteSender =
       new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
