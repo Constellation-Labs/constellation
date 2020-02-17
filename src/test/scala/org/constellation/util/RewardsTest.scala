@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures.{id1, id2, id3}
 import org.constellation.consensus.RandomData
 import org.constellation.trust._
-import org.scalatest.FlatSpec
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FlatSpec}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import org.constellation.rewards.EigenTrust
 import org.constellation.{DAO, TestHelpers}
@@ -19,12 +19,16 @@ import scala.util.Random
 Note: when Experience outcomes are the same, eigentrust scores stay the same.
 When Opinions stay the same, eigentrust scores change
  */
-class RewardsTest extends FlatSpec {
+class RewardsTest extends FlatSpec with BeforeAndAfterAll {
   import org.constellation.rewards.RewardsManager._
 
   import RandomData._
 
   implicit val dao: DAO = TestHelpers.prepareRealDao()
+
+  override def afterAll {
+    dao.unsafeShutdown()
+  }
 
   val dummyCb = randomBlock(startingTips(go()), keyPairs.head)
   val acceptedCbRound1 = Seq(randomTransaction, randomTransaction)

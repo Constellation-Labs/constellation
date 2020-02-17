@@ -24,10 +24,10 @@ import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager
 import org.constellation.util.{APIClient, HostPort, Metrics}
-import org.mockito.IdiomaticMockito
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 
-object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
+object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with ArgumentMatchersSugar {
 
   def prepareRealDao(
     facilitators: Map[Id, PeerData] = prepareFacilitators(1),
@@ -94,6 +94,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats {
 
     val rds = mock[RedownloadService[IO]]
     dao.redownloadService shouldReturn rds
+    dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
+    dao.redownloadService.persistCreatedSnapshot(*, *) shouldReturnF Unit
 
     val ss = mock[SOEService[IO]]
     dao.soeService shouldReturn ss
