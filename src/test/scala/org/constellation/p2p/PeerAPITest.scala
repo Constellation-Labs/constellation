@@ -103,6 +103,26 @@ class PeerAPITest
       }
     }
   }
+
+  "GET snapshot/accepted" - {
+    "response should return empty map if there are no snapshots" in {
+      dao.redownloadService.getAcceptedSnapshots() shouldReturnF Map.empty
+
+      Get("/snapshot/accepted") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[Map[Long, String]] shouldBe Map.empty
+      }
+    }
+
+    "response should return map with all accepted snapshots" in {
+      val acceptedSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
+
+      dao.redownloadService.getAcceptedSnapshots() shouldReturnF acceptedSnapshots
+
+      Get("/snapshot/accepted") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+        responseAs[Map[Long, String]] shouldBe acceptedSnapshots
+      }
+    }
+  }
 }
 
 //import java.net.InetSocketAddress
