@@ -107,13 +107,18 @@ class SnapshotsProcessor[F[_]: Concurrent: Clock](
 
         snapshot <- snapshotStorage.readSnapshot(hash)
 
-        _ <- EitherT.liftF(unsafeLogger.debug(s"Accept downloaded snapshot hash=$hash lastSnapshot=${snapshot.snapshot.lastSnapshot} at height=${snapshot.height}\nwith blocks: ${snapshot.snapshot.checkpointBlocks}"))
+        _ <- EitherT.liftF(
+          unsafeLogger.debug(
+            s"Accept downloaded snapshot hash=$hash lastSnapshot=${snapshot.snapshot.lastSnapshot} at height=${snapshot.height}\nwith blocks: ${snapshot.snapshot.checkpointBlocks}"
+          )
+        )
 
         height = snapshot.height
 
         _ <- EitherT.liftF[F, Throwable, Unit](
           LiftIO[F].liftIO(
-            dao.snapshotBroadcastService.updateRecentSnapshots(hash, height, snapshot.snapshot.publicReputation).void
+            dao.redownloadService
+              .persistAcceptedSnapshot(height, hash) // TODO: store public reputation (snapshot.snapshot.publicReputation)
           )
         )
       } yield ()).value.flatMap(a => Concurrent[F].fromEither(a))
@@ -208,7 +213,8 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     logger.debug(
       s"updateSnapInfo hashes == ? ${res.acceptedCBSinceSnapshot.toSet == res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash).toSet}"
     )
-    val updateSnapInfoDiff = res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))
+    val updateSnapInfoDiff =
+      res.acceptedCBSinceSnapshot.diff(res.acceptedCBSinceSnapshotCache.map(_.checkpointBlock.baseHash))
     //    println(s"updateSnapInfo == ? ${res.acceptedCBSinceSnapshot.size == res.acceptedCBSinceSnapshotCache}")
     logger.debug(
       s"updateSnapInfo diff: ${updateSnapInfoDiff}"
@@ -430,7 +436,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
     for {
       _ <- setSnapshot(snapshot)
       _ <- acceptSnapshotCacheData(snapshot)
-      _ <- LiftIO[F].liftIO(dao.snapshotBroadcastService.applyAfterRedownload(snapshot))
       _ <- storeSnapshotInfo
       _ <- setDownloadFinishedTime()
     } yield ()

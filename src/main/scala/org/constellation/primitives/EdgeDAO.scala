@@ -4,7 +4,12 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator, CheckpointParentService, CheckpointService}
+import org.constellation.checkpoint.{
+  CheckpointAcceptanceService,
+  CheckpointBlockValidator,
+  CheckpointParentService,
+  CheckpointService
+}
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
@@ -14,7 +19,12 @@ import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
-import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
+import org.constellation.domain.transaction.{
+  TransactionChainService,
+  TransactionGossiping,
+  TransactionService,
+  TransactionValidator
+}
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.rewards.{EigenTrust, RewardsManager}
@@ -23,7 +33,7 @@ import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{MajorityStateChooser, Metrics, SnapshotWatcher}
+import org.constellation.util.{Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
 
 import scala.collection.concurrent.TrieMap
@@ -177,11 +187,9 @@ trait EdgeDAO {
   var transactionValidator: TransactionValidator[IO] = _
   var rateLimiting: RateLimiting[IO] = _
   var addressService: AddressService[IO] = _
-  var snapshotBroadcastService: SnapshotBroadcastService[IO] = _
   var snapshotWatcher: SnapshotWatcher = _
   var rollbackService: RollbackService[IO] = _
   var cloudStorage: CloudStorage[IO] = _
-  var majorityStateChooser: MajorityStateChooser[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
