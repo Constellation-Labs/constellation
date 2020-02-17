@@ -15,8 +15,7 @@ import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}
 
-class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with IdiomaticMockito
-  with IdiomaticMockitoCats {
+class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with IdiomaticMockito with IdiomaticMockitoCats {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   implicit var dao: DAO = _
@@ -51,22 +50,5 @@ class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with Idiom
     Snapshot
       .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash))
       .unsafeRunSync()
-  }
-
-  test("should remove old snapshots but not recent when needed") {
-    val snaps = List.fill(3)(
-      StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash), Map.empty), Seq.fill(50)(CheckpointCache(randomCB)))
-    )
-
-    dao.snapshotBroadcastService
-      .updateRecentSnapshots(snaps.head.snapshot.hash, 2, Map.empty)
-      .unsafeRunSync()
-
-    Snapshot.isOverDiskCapacity(ConfigUtil.snapshotSizeDiskLimit - 4096).unsafeRunSync shouldBe false
-
-    snaps.traverse(Snapshot.writeSnapshot[IO]).value.unsafeRunSync
-
-    File(dao.snapshotPath, snaps.head.snapshot.hash).exists shouldBe true
-    File(dao.snapshotPath, snaps.last.snapshot.hash).exists shouldBe true
   }
 }
