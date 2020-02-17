@@ -22,24 +22,66 @@ class RedownloadServiceTest
 
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
+  var majorityStateChooser: MajorityStateChooser = _
 
   override def beforeEach() = {
     cluster = mock[Cluster[IO]]
-    redownloadService = RedownloadService[IO](cluster)
+    majorityStateChooser = mock[MajorityStateChooser]
+    redownloadService = RedownloadService[IO](cluster, majorityStateChooser)
+  }
+
+  "shouldRedownload" - {
+
+    "returns true" - {
+      "if above and reached redownload interval" in {
+
+      }
+
+      "if above and not reached redownload interval but already has incorrect hashes at heights anyway" in {
+
+      }
+
+      "if below and reached redownload interval" in {
+
+      }
+
+      "if below and not reached redownload interval but already has incorrect hashes at heights anyway" in {
+
+      }
+
+      "if at same height but has incorrect hashes at heights" in {
+
+      }
+    }
+
+    "returns false" - {
+      "if above but not reached redownload interval yet and hashes at existing heights are aligned" in {
+
+      }
+
+      "if below but not reached redownload interval yet and hashes at existing heights are aligned" in {
+
+      }
+
+      "if at same height and all the hashes are aligned" in {
+
+      }
+    }
+
   }
 
   "persistOwnSnapshot" - {
     "should persist own snapshot internally if snapshot at given height doesn't exist" in {
-      val persist = redownloadService.persistOwnSnapshot(2L, "aabbcc")
-      val check = redownloadService.ownSnapshots.get.map(_.get(2L))
+      val persist = redownloadService.persistCreatedSnapshot(2L, "aabbcc")
+      val check = redownloadService.createdSnapshots.get.map(_.get(2L))
 
       (persist >> check).unsafeRunSync shouldBe "aabbcc".some
     }
 
     "should not override previously persisted snapshot if snapshot at given height already exists" in {
-      val persistFirst = redownloadService.persistOwnSnapshot(2L, "aaaa")
-      val persistSecond = redownloadService.persistOwnSnapshot(2L, "bbbb")
-      val check = redownloadService.ownSnapshots.get.map(_.get(2L))
+      val persistFirst = redownloadService.persistCreatedSnapshot(2L, "aaaa")
+      val persistSecond = redownloadService.persistCreatedSnapshot(2L, "bbbb")
+      val check = redownloadService.createdSnapshots.get.map(_.get(2L))
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "aaaa".some
     }
@@ -47,15 +89,15 @@ class RedownloadServiceTest
 
   "getOwnSnapshots" - {
     "should return empty map if there are no own snapshots" in {
-      val check = redownloadService.getOwnSnapshots()
+      val check = redownloadService.getCreatedSnapshots()
 
       check.unsafeRunSync shouldBe Map.empty
     }
 
     "should return all own snapshots if they exist" in {
-      val persistFirst = redownloadService.persistOwnSnapshot(2L, "aaaa")
-      val persistSecond = redownloadService.persistOwnSnapshot(4L, "bbbb")
-      val check = redownloadService.getOwnSnapshots()
+      val persistFirst = redownloadService.persistCreatedSnapshot(2L, "aaaa")
+      val persistSecond = redownloadService.persistCreatedSnapshot(4L, "bbbb")
+      val check = redownloadService.getCreatedSnapshots()
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(2L -> "aaaa", 4L -> "bbbb")
     }
@@ -63,14 +105,14 @@ class RedownloadServiceTest
 
   "getOwnSnapshot" - {
     "should return hash if snapshot at given height exists" in {
-      val persist = redownloadService.persistOwnSnapshot(2L, "aaaa")
-      val check = redownloadService.getOwnSnapshot(2L)
+      val persist = redownloadService.persistCreatedSnapshot(2L, "aaaa")
+      val check = redownloadService.getCreatedSnapshot(2L)
 
       (persist >> check).unsafeRunSync shouldBe "aaaa".some
     }
 
     "should return None if snapshot at given height does not exist" in {
-      val check = redownloadService.getOwnSnapshot(2L)
+      val check = redownloadService.getCreatedSnapshot(2L)
 
       check.unsafeRunSync shouldBe none[String]
     }
@@ -86,7 +128,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      redownloadService.fetchPeersProposals().unsafeRunSync
+      redownloadService.fetchAndUpdatePeersProposals.unsafeRunSync
 
       peerInfo.values.foreach { peer =>
         peer.client.getNonBlockingF[IO, Map[Long, String]]("/snapshot/own", *, *)(*)(*, *, *).was(called)
@@ -111,7 +153,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      val fetch = redownloadService.fetchPeersProposals()
+      val fetch = redownloadService.fetchAndUpdatePeersProposals
       val check = redownloadService.peersProposals.get
 
       (fetch >> check).unsafeRunSync shouldBe Map(
@@ -145,7 +187,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      val fetch = redownloadService.fetchPeersProposals()
+      val fetch = redownloadService.fetchAndUpdatePeersProposals
       val check = redownloadService.peersProposals.get
 
       (fetch >> check).unsafeRunSync shouldBe Map(
