@@ -3,6 +3,7 @@ package org.constellation.domain.redownload
 import cats.effect.{Concurrent, ContextShift}
 import cats.effect.concurrent.Ref
 import cats.implicits._
+import org.constellation.ConfigUtil
 import org.constellation.domain.redownload.RedownloadService.{PeersProposals, SnapshotsAtHeight}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
@@ -28,6 +29,9 @@ class RedownloadService[F[_]](
     * Majority proposals from other peers. It is used to calculate majority state.
     */
   private[redownload] val peersProposals: Ref[F, PeersProposals] = Ref.unsafe(Map.empty)
+
+  private[redownload] val snapshotHeightRedownloadDelayInterval: Int =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
 
   def persistCreatedSnapshot(height: Long, hash: String): F[Unit] =
     createdSnapshots.modify { m =>
@@ -75,36 +79,49 @@ class RedownloadService[F[_]](
         peersProposals
       )
       // TODO: Calculate diff and call redownload if true
-      _ <- if (shouldRedownload(createdSnapshots, majorityState)) F.unit else F.unit
+      _ <- if (shouldRedownload(createdSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) F.unit
+      else F.unit
     } yield ()
 
-  def shouldRedownload(acceptedSnapshots: SnapshotsAtHeight, majorityState: SnapshotsAtHeight): Boolean =
-    getAlignmentResult(acceptedSnapshots, majorityState) match {
+  private[redownload] def shouldRedownload(
+    acceptedSnapshots: SnapshotsAtHeight,
+    majorityState: SnapshotsAtHeight,
+    redownloadInterval: Int
+  ): Boolean =
+    getAlignmentResult(acceptedSnapshots, majorityState, redownloadInterval) match {
       case AlignedWithMajority => false
       case _                   => true
     }
 
   private[redownload] def getAlignmentResult(
     acceptedSnapshots: SnapshotsAtHeight,
-    majorityState: SnapshotsAtHeight
+    majorityState: SnapshotsAtHeight,
+    redownloadInterval: Int
   ): MajorityAlignmentResult = {
     val highestCreatedHeight = acceptedSnapshots.maxBy { case (height, _) => height } match {
-      case (_, height) => height
+      case (height, _) => height
     }
     val highestCreatedHeightFromMajority = majorityState.maxBy { case (height, _) => height } match {
-      case (_, height) => height
+      case (height, _) => height
     }
 
-    // TODO: WIP
-    if (highestCreatedHeight > highestCreatedHeightFromMajority) {
-      AboveMaxMajorityHeight
-    } else if (highestCreatedHeight < highestCreatedHeightFromMajority) {
-      BelowMaxMajorityHeight
+    val isAbove = highestCreatedHeight > highestCreatedHeightFromMajority
+    val isBelow = highestCreatedHeight < highestCreatedHeightFromMajority
+    val heightDiff = Math.abs(highestCreatedHeight - highestCreatedHeightFromMajority)
+    val reachedRedownloadInterval = heightDiff >= redownloadInterval
+
+    if (heightDiff == 0 && !majorityState.equals(acceptedSnapshots)) {
+      MisalignedAtSameHeight
+    } else if (isAbove && reachedRedownloadInterval) {
+      AbovePastRedownloadInterval
+    } else if (isAbove && !majorityState.toSet.subsetOf(acceptedSnapshots.toSet)) {
+      AboveButMisalignedBeforeRedownloadIntervalAnyway
+    } else if (isBelow && reachedRedownloadInterval) {
+      BelowPastRedownloadInterval
+    } else if (isBelow && !acceptedSnapshots.toSet.subsetOf(majorityState.toSet)) {
+      BelowButMisalignedBeforeRedownloadIntervalAnyway
     } else {
-      if (acceptedSnapshots.toSet.subsetOf(majorityState.toSet))
-        AlignedWithMajority
-      else
-        MisalignedWithMajority
+      AlignedWithMajority
     }
   }
 }

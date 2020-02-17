@@ -3,6 +3,7 @@ package org.constellation.domain.redownload
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
+import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
 import org.constellation.util.APIClient
@@ -31,27 +32,147 @@ class RedownloadServiceTest
   }
 
   "shouldRedownload" - {
+    val snapshotRedownloadHeightDelayInterval = 4
 
-    "returns true" - {
-      "if above and reached redownload interval" in {}
+    "above" - {
+      "returns true" - {
+        "if reached redownload interval" in {
+          val acceptedSnapshots: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b",
+            6L -> "c",
+            8L -> "d"
+          )
 
-      "if above and not reached redownload interval but already has incorrect hashes at heights anyway" in {}
+          val majorityState: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b"
+          )
 
-      "if below and reached redownload interval" in {}
+          redownloadService
+            .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
+        }
 
-      "if below and not reached redownload interval but already has incorrect hashes at heights anyway" in {}
+        "if not reached redownload interval yet but already misaligned" in {
+          val acceptedSnapshots: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "x",
+            6L -> "c"
+          )
 
-      "if at same height but has incorrect hashes at heights" in {}
+          val majorityState: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b"
+          )
+
+          redownloadService
+            .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
+        }
+      }
+      "returns false" - {
+        "if aligned but not reached redownload interval yet" in {
+          val acceptedSnapshots: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b",
+            6L -> "c"
+          )
+
+          val majorityState: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b"
+          )
+
+          redownloadService
+            .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
+        }
+      }
     }
 
-    "returns false" - {
-      "if above but not reached redownload interval yet and hashes at existing heights are aligned" in {}
+    "below" - {
+      "returns true" - {
+        "if reached redownload interval" in {
+          val acceptedSnapshots: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b"
+          )
 
-      "if below but not reached redownload interval yet and hashes at existing heights are aligned" in {}
+          val majorityState: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b",
+            6L -> "c",
+            8L -> "d"
+          )
 
-      "if at same height and all the hashes are aligned" in {}
+          redownloadService
+            .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
+        }
+
+        "if not reached redownload interval yet but already misaligned" in {
+          val acceptedSnapshots: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "x"
+          )
+
+          val majorityState: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b",
+            6L -> "c"
+          )
+
+          redownloadService
+            .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
+        }
+      }
+      "returns false" - {
+        "if aligned but not reached redownload interval yet" in {
+          val acceptedSnapshots: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b"
+          )
+
+          val majorityState: SnapshotsAtHeight = Map(
+            2L -> "a",
+            4L -> "b",
+            6L -> "c"
+          )
+
+          redownloadService
+            .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
+        }
+      }
     }
 
+    "same height" - {
+      "returns true if misaligned" in {
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "c"
+        )
+
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b"
+        )
+
+        redownloadService
+          .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
+      }
+
+      "returns false if aligned" in {
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b"
+        )
+
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b"
+        )
+
+        redownloadService
+          .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
+      }
+    }
   }
 
   "persistOwnSnapshot" - {
