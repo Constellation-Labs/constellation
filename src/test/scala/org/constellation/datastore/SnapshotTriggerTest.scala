@@ -29,7 +29,7 @@ class SnapshotTriggerTest
 
   "triggerSnapshot" - {
     "if snapshot has been created" - {
-      "calls redownload service to persist own snapshot" in {
+      "calls redownload service to persist it as created snapshot" in {
         val snapshotTrigger = new SnapshotTrigger()
         dao.redownloadService.persistCreatedSnapshot(*, *) shouldReturnF Unit
 
@@ -44,6 +44,23 @@ class SnapshotTriggerTest
 
         trigger.guarantee(cancel).unsafeRunSync
         dao.redownloadService.persistCreatedSnapshot(2L, "aaa").was(called)
+      }
+
+      "calls redownload service to persist it as accepted snapshot" in {
+        val snapshotTrigger = new SnapshotTrigger()
+        dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
+
+        dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
+
+        dao.snapshotService.attemptSnapshot() shouldReturn EitherT.pure[IO, SnapshotError](
+          SnapshotCreated("aaa", 2L, Map.empty)
+        )
+
+        val trigger = snapshotTrigger.trigger()
+        val cancel = snapshotTrigger.cancel()
+
+        trigger.guarantee(cancel).unsafeRunSync
+        dao.redownloadService.persistAcceptedSnapshot(2L, "aaa").was(called)
       }
     }
   }
