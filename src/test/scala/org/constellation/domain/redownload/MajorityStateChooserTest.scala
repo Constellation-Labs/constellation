@@ -4,7 +4,6 @@ import cats.effect.{ContextShift, IO}
 import org.constellation.ConstellationExecutionContext
 import org.constellation.domain.redownload.MajorityStateChooser.MajorityState
 import org.constellation.schema.Id
-import org.constellation.storage.RecentSnapshot
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfterEach, FreeSpec, Matchers}
@@ -16,9 +15,6 @@ class MajorityStateChooserTest
     with IdiomaticMockitoCats
     with ArgumentMatchersSugar
     with BeforeAndAfterEach {
-
-  def toRecentSnapshot(i: Int) = RecentSnapshot(i.toString, i, Map.empty)
-  def toRecentSnapshotWithPrefix(prefix: String)(i: Int) = RecentSnapshot(s"$prefix$i", i, Map.empty)
 
   "choose majority state" - {
     "returns Map.empty" - {

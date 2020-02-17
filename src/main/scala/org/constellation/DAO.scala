@@ -19,7 +19,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.redownload.{MajorityStateChooser, RedownloadService}
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -44,11 +44,10 @@ import org.constellation.primitives._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
-import org.constellation.snapshot.HeightIdBasedSnapshotSelector
 import org.constellation.storage._
 import org.constellation.storage.external.{AWSStorage, GCPStorage}
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{HealthChecker, HostPort, MajorityStateChooser, SnapshotWatcher}
+import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -168,13 +167,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
-    // TODO: Use new implementation of MajorityStateChooser globally
-    redownloadService = RedownloadService[IO](cluster, new org.constellation.domain.redownload.MajorityStateChooser())
+    redownloadService = RedownloadService[IO](cluster, MajorityStateChooser())
 
     consensusRemoteSender =
       new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
-
-    majorityStateChooser = new MajorityStateChooser[IO]()
 
     snapshotStorage = SnapshotFileStorage(snapshotPath)
 
@@ -250,30 +246,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     val healthChecker = new HealthChecker[IO](
       this,
       concurrentTipService,
-      consensusManager,
-      IO.contextShift(ConstellationExecutionContext.bounded),
-      downloadProcess,
-      cluster,
-      majorityStateChooser
+      IO.contextShift(ConstellationExecutionContext.bounded)
     )
 
-    val snapshotSelector =
-      new HeightIdBasedSnapshotSelector[IO](
-        this.id,
-        ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
-      )
-    snapshotBroadcastService = {
-
-      new SnapshotBroadcastService[IO](
-        healthChecker,
-        cluster,
-        snapshotSelector,
-        IO.contextShift(ConstellationExecutionContext.bounded),
-        this
-      )
-    }
-
-    snapshotWatcher = new SnapshotWatcher(snapshotBroadcastService)
+    snapshotWatcher = new SnapshotWatcher(healthChecker)
 
     consensusManager = new ConsensusManager[IO](
       transactionService,
@@ -298,7 +274,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
-    rollbackLoader =  new RollbackLoader(
+    rollbackLoader = new RollbackLoader(
       snapshotPath,
       snapshotInfoPath.pathAsString,
       genesisObservationPath.pathAsString

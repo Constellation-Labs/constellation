@@ -318,12 +318,15 @@ case class SnapshotInfoSer(
       info.snapshotPublicReputation.toSeq
         .flatMap(chunkDeSerialize[Seq[(Id, Double)]](_, SnapshotInfoChunk.PUBLIC_REPUTATION.name))
         .toMap
-    val storedSnapshotCheckpointBlocks = 
+    val storedSnapshotCheckpointBlocks =
       info.storedSnapshotCheckpointBlocks.toSeq
         .flatMap(chunkDeSerialize[Seq[CheckpointCache]](_, SnapshotInfoChunk.STORED_SNAPSHOT_CHECKPOINT_BLOCKS.name))
 
     SnapshotInfo(
-      StoredSnapshot(Snapshot(lastSnapshot, snapshotCheckpointBlocks, snapshotPublicReputation), storedSnapshotCheckpointBlocks),
+      StoredSnapshot(
+        Snapshot(lastSnapshot, snapshotCheckpointBlocks, snapshotPublicReputation),
+        storedSnapshotCheckpointBlocks
+      ),
       info.acceptedCBSinceSnapshot.toSeq
         .flatMap(chunkDeSerialize[Seq[String]](_, SnapshotInfoChunk.ACCEPTED_CBS_SINCE_SNAPSHOT.name)),
       info.acceptedCBSinceSnapshotCache.toSeq
@@ -428,9 +431,10 @@ object Snapshot extends StrictLogging {
 
   def removeOldSnapshots[F[_]: Concurrent]()(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
-      hashes <- LiftIO[F].liftIO(dao.snapshotBroadcastService.getRecentSnapshots().map(_.map(_.hash)))
-      diff <- LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotHashes).map(_.toList.diff(hashes))
-      _ <- removeSnapshots(diff)
+      createdHashes <- LiftIO[F].liftIO(dao.redownloadService.getCreatedSnapshots().map(_.values.toList))
+      acceptedHashes <- LiftIO[F].liftIO(dao.redownloadService.getAcceptedSnapshots().map(_.values.toList))
+      diff <- LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotHashes).map(_.diff(createdHashes ++ acceptedHashes))
+      _ <- removeSnapshots(diff) // TODO: To be confirmed
     } yield ()
 
   def removeSnapshots[F[_]: Concurrent](
