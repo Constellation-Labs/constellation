@@ -11,6 +11,7 @@ import org.constellation.checkpoint.{
   CheckpointService
 }
 import org.constellation.consensus._
+import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
@@ -27,6 +28,7 @@ import org.constellation.domain.transaction.{
 }
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
+import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackLoader, RollbackService}
 import org.constellation.schema.Id
@@ -202,6 +204,9 @@ trait EdgeDAO {
   var eigenTrust: EigenTrust[IO] = _
   var rewardsManager: RewardsManager[IO] = _
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
+  var snapshotTrigger: SnapshotTrigger = _
+  var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
+  var transactionGeneratorTrigger: TransactionGeneratorTrigger = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()

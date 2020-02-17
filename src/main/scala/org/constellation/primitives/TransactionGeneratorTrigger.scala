@@ -11,8 +11,7 @@ import org.constellation.util.Logging._
 
 import scala.concurrent.duration._
 
-class TransactionGeneratorTrigger(periodSeconds: Int = 10)(implicit dao: DAO)
-    extends PeriodicIO("TransactionGeneratorTrigger") {
+class TransactionGeneratorTrigger(periodSeconds: Int = 10, dao: DAO) extends PeriodicIO("TransactionGeneratorTrigger") {
 
   implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
