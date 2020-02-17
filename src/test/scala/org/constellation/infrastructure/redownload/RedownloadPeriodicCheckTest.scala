@@ -32,7 +32,7 @@ class RedownloadPeriodicCheckTest
       val trigger = redownloadPeriodicCheck.trigger()
       val cancel = redownloadPeriodicCheck.cancel()
 
-      (trigger >> cancel).unsafeRunSync
+      trigger.guarantee(cancel).unsafeRunSync
 
       dao.redownloadService.fetchAndUpdatePeersProposals.was(called)
     }
@@ -43,7 +43,7 @@ class RedownloadPeriodicCheckTest
       val trigger = redownloadPeriodicCheck.trigger()
       val cancel = redownloadPeriodicCheck.cancel()
 
-      (trigger >> cancel).unsafeRunSync
+      trigger.guarantee(cancel).unsafeRunSync
 
       dao.redownloadService.checkForAlignmentWithMajoritySnapshot().was(called)
     }

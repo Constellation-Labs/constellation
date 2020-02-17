@@ -15,6 +15,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint._
 import org.constellation.consensus._
 import org.constellation.crypto.SimpleWalletLike
+import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
@@ -35,6 +36,7 @@ import org.constellation.domain.transaction.{
 }
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
+import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.infrastructure.snapshot.SnapshotFileStorage
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -166,6 +168,19 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     peerHealthCheck = PeerHealthCheck[IO](cluster)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
+
+    snapshotTrigger = new SnapshotTrigger(
+      processingConfig.snapshotTriggeringTimeSeconds
+    )(this, cluster)
+
+    redownloadPeriodicCheck = new RedownloadPeriodicCheck(
+      processingConfig.redownloadPeriodicCheckTimeSeconds
+    )(this)
+
+    transactionGeneratorTrigger = new TransactionGeneratorTrigger(
+      ConfigUtil.constellation.getInt("transaction.generator.randomTransactionLoopTimeSeconds"),
+      this
+    )
 
     redownloadService = RedownloadService[IO](cluster, MajorityStateChooser())
 
@@ -300,16 +315,23 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     if (node != null) {
       implicit val ec = ConstellationExecutionContext.unbounded
 
-      node.snapshotTrigger.cancel()
-      node.transactionGeneratorTrigger.cancel()
       node.peerApiBinding.flatMap(_.terminate(1.second))
       node.apiBinding.flatMap(_.terminate(1.second))
       node.system.terminate()
     }
     if (actorMaterializer != null) actorMaterializer.shutdown()
-    List(peerHealthCheckWatcher, snapshotWatcher, trustDataPollingScheduler, consensusScheduler)
-      .filter(_ != null)
-      .map(_.cancel())
+    List(
+      peerHealthCheckWatcher,
+      snapshotWatcher,
+      trustDataPollingScheduler,
+      consensusScheduler,
+      consensusWatcher,
+      peerHealthCheckWatcher,
+      snapshotTrigger,
+      redownloadPeriodicCheck,
+      transactionGeneratorTrigger
+    ).filter(_ != null)
+      .foreach(_.cancel().unsafeRunSync())
   }
 
   implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
