@@ -1,7 +1,7 @@
 package org.constellation.p2p
 import cats.effect.IO
-import org.constellation.consensus.{Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotStorage}
 import org.constellation.infrastructure.snapshot.SnapshotFileStorage
 import org.constellation.primitives.Schema
 import org.constellation.schema.Id
@@ -9,8 +9,8 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{FunSuite, Matchers}
-
 import org.constellation.consensus.StoredSnapshot
+
 import scala.concurrent.ExecutionContextExecutor
 
 class DownloadProcessTest extends FunSuite with IdiomaticMockito with ArgumentMatchersSugar with Matchers {
