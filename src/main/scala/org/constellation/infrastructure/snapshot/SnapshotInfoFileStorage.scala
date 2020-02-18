@@ -47,7 +47,7 @@ class SnapshotInfoFileStorage[F[_]](dirPath: String)(implicit F: Sync[F]) extend
       .void
       .attemptT
 
-  def removeSnapshot(hash: String): EitherT[F, Throwable, Unit] =
+  def removeSnapshotInfo(hash: String): EitherT[F, Throwable, Unit] =
     dir
       .map(_ / hash)
       .flatMap { a =>

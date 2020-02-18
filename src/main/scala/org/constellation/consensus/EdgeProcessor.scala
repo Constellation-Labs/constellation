@@ -216,21 +216,9 @@ object EdgeProcessor extends StrictLogging {
       },
       "handleSignatureRequest"
     )(ConstellationExecutionContext.bounded, dao)
-
-  def chunkSerialize[T](chunk: Seq[T], tag: String): Array[Byte] = {
-    logger.debug(s"ChunkSerialize : $tag")
-    KryoSerializer.serializeAnyRef(chunk)
-  }
-
-  def chunkDeSerialize[T](chunk: Array[Byte], tag: String): T = {
-    logger.debug(s"ChunkDeSerialize : $tag")
-    KryoSerializer.deserializeCast[T](chunk)
-  }
 }
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
-
-case object GetMemPool
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: Map[Id, Double])
     extends Signable
@@ -244,8 +232,6 @@ case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCac
       .map(_.min)
       .getOrElse(0L)
 }
-
-case class DownloadComplete(latestSnapshot: Snapshot)
 
 object Snapshot extends StrictLogging {
 
@@ -310,6 +296,17 @@ object Snapshot extends StrictLogging {
               Sync[F].delay(logger.warn(s"Snapshot to delete doesn't exist: ${e.getMessage}"))
           },
           "deleteSnapshot"
+        )
+      }
+      _ <- snapshots.distinct.traverse { snapId =>
+        withMetric(
+          LiftIO[F]
+            .liftIO(dao.snapshotInfoStorage.removeSnapshotInfo(snapId).value.flatMap(IO.fromEither))
+            .handleErrorWith {
+              case e: NoSuchFileException =>
+                Sync[F].delay(logger.warn(s"Snapshot info to delete doesn't exist: ${e.getMessage}"))
+            },
+          "deleteSnapshotInfo"
         )
       }
     } yield ()

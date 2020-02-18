@@ -118,7 +118,7 @@ class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndA
         File.usingTemporaryFile("", "", snapshotInfosDir.some) { file =>
           val name = file.name
           file.write("hello world")
-          snapshotInfoStorage.removeSnapshot(name).value.flatMap(IO.fromEither).unsafeRunSync
+          snapshotInfoStorage.removeSnapshotInfo(name).value.flatMap(IO.fromEither).unsafeRunSync
           (snapshotInfosDir / name).exists shouldBe false
         }
       }
@@ -129,7 +129,7 @@ class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndA
         val snapshotInfoStorage = SnapshotInfoFileStorage[IO](snapshotInfosDir.pathAsString)
         snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        snapshotInfoStorage.removeSnapshot("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
+        snapshotInfoStorage.removeSnapshotInfo("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
       }
     }
   }
