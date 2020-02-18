@@ -4,6 +4,7 @@ import cats.data.EitherT
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
+import com.twitter.chill.KryoPool
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
@@ -11,7 +12,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus._
-import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotStorage}
 import org.constellation.p2p.Cluster.Peers
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -305,10 +306,9 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
           )
         case head :: tail =>
           head.client
-            .postNonBlockingF[F, Array[Byte]]("snapshot/info", serHashes, timeout = 8.seconds)(C)
-            .flatMap { res =>
-              logger.error(s"[${dao.id.short}] [Re-Download] res: ${res.toList}")
-              chainSnapshotInfo(head)
+            .postNonBlockingArrayByteF[F]("snapshot/info", hashes, Map(), timeout = 45.seconds)(C)
+            .flatMap { a =>
+              Sync[F].delay { KryoSerializer.deserializeCast[SnapshotInfo](a) }
             }
             .handleErrorWith(e => {
               Sync[F]
@@ -319,99 +319,6 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
 
     makeAttempt(peers.values.toList)
   }
-
-  def chainSnapshotInfo(peer: PeerData): F[SnapshotInfo] =
-    for {
-      snapshotHash <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/snapshot",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/snapshot"
-      )(C)
-      storedSnapshotCheckpointBlocks <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/storedSnapshotCheckpointBlocks",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/storedSnapshotCheckpointBlocks"
-      )(C)
-      snapshotCBs <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/snapshotCBs",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/snapshotCBs"
-      )(C)
-      snapshotPublicReputation <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/snapshotPublicReputation",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/snapshotPublicReputation"
-      )(C)
-      acceptedCBSinceSnapshot <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/acceptedCBSinceSnapshot",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/acceptedCBSinceSnapshot"
-      )(C)
-      acceptedCBSinceSnapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/acceptedCBSinceSnapshotCache",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/acceptedCBSinceSnapshotCache - re-download"
-      )(C)
-      awaiting <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/awaiting",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/awaiting"
-      )(C)
-      lastSnapshotHeight <- peer.client
-        .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/lastSnapshotHeight", timeout = 45.seconds)(C)
-      snapshotHashes <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/snapshotHashes",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/snapshotHashes"
-      )(C)
-      addressCacheData <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/addressCacheData",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/addressCacheData"
-      )(C)
-      tips <- peer.client
-        .getNonBlockingFLogged[F, Array[Array[Byte]]]("snapshot/obj/tips", timeout = 45.seconds, tag = "tips")(C)
-      snapshotCache <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/snapshotCache",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/snapshotCache"
-      )(C)
-      lastAcceptedTransactionRef <- peer.client.getNonBlockingFLogged[F, Array[Array[Byte]]](
-        "snapshot/obj/lastAcceptedTransactionRef",
-        timeout = 45.seconds,
-        tag = "snapshot/obj/lastAcceptedTransactionRef"
-      )(C)
-      _ <- Sync[F]
-        .delay(logger.error(s"[${dao.id.short}] lastAcceptedTransactionRef: ${lastAcceptedTransactionRef}"))
-    } yield
-      SnapshotInfoSer(
-        snapshotHash,
-        storedSnapshotCheckpointBlocks,
-        snapshotCBs,
-        snapshotPublicReputation,
-        acceptedCBSinceSnapshot,
-        acceptedCBSinceSnapshotCache,
-        awaiting,
-        lastSnapshotHeight,
-        snapshotHashes,
-        addressCacheData,
-        tips,
-        snapshotCache,
-        lastAcceptedTransactionRef
-      ).toSnapshotInfo()
-
-  private def deserializeSnapshotInfo(byteArray: Array[Byte]) =
-    Try {
-      logger.error(s"[${dao.id.short}] [Re-Download] deserializeSnapshotInfo begin deserializeCast[SnapshotInfo]")
-      KryoSerializer.deserializeCast[SnapshotInfo](byteArray)
-    } match {
-      case Success(value) => value
-      case Failure(exception) =>
-        throw new Exception(
-          s"[${dao.id.short}] Unable to parse snapshotInfo due to: ${exception.getMessage}",
-          exception
-        )
-    }
 
   private def downloadAndProcessSnapshotsFirstPass(snapshotHashes: Seq[String])(
     implicit snapshotClient: APIClient,

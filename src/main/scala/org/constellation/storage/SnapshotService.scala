@@ -14,13 +14,14 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.external.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
@@ -40,6 +41,7 @@ class SnapshotService[F[_]: Concurrent](
   soeService: SOEService[F],
   rewardsManager: RewardsManager[F],
   snapshotStorage: SnapshotStorage[F],
+  snapshotInfoStorage: SnapshotInfoStorage[F],
   dao: DAO
 )(implicit C: ContextShift[F], P: Parallel[F]) {
 
@@ -55,8 +57,6 @@ class SnapshotService[F[_]: Concurrent](
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
-
-  val recentSnapshotInfo = new StorageService[F, SnapshotInfoSer]("recent_snapshot_info".some, 2.some)
 
   def exists(hash: String): F[Boolean] =
     for {
@@ -121,50 +121,19 @@ class SnapshotService[F[_]: Concurrent](
       )
     } yield created
 
-  def writeSnapshotFile(path: String, part: Array[Byte]): F[Unit] =
-    Resource
-      .fromAutoCloseable(Sync[F].delay(new FileOutputStream(path)))
-      .use(
-        stream =>
-          Sync[F].delay {
-            stream.write(part)
-          }.flatTap { _ =>
-            logger.debug(s"SnapshotInfo part written for path: $path")
-          }
-      )
+  // TODO
+  //_ <- if (ConfigUtil.isEnabledCloudStorage) cloudStorage.upload(Seq(File(path))).void else Sync[F].unit
 
-  def writeSnapshotPart(path: String, part: Array[Byte]): F[Unit] =
-    for {
-      _ <- writeSnapshotFile(path, part)
-      _ <- if (ConfigUtil.isEnabledCloudStorage) cloudStorage.upload(Seq(File(path))).void else Sync[F].unit
-    } yield ()
-
-  def snapshotInfoWriterProc(plan: Seq[(String, Array[Byte])], basePath: String): F[List[Unit]] =
-    plan.toList.parTraverse {
-      case (path, part) => writeSnapshotPart(File(basePath, path).pathAsString, part)
-    }
-
-  def writeSnapshotInfoParts(info: SnapshotInfo, basePath: String): F[List[Unit]] =
-    info.toSnapshotInfoSer().write[F[List[Unit]]](snapshotInfoWriterProc)(basePath = basePath)
-
-  def snapshotInfoFileHeightPrefix(height: Long): String = s"${height}_"
-
-  def writeSnapshotInfoToDisk(
-    overWritePath: String = dao.snapshotInfoPath.pathAsString
-  ): EitherT[F, SnapshotInfoIOError, Unit] =
-    EitherT.liftF {
-      getSnapshotInfoWithFullData.flatMap { info =>
-      val heightPrefix = snapshotInfoFileHeightPrefix(info.lastSnapshotHeight)
+  def writeSnapshotInfoToDisk(): EitherT[F, SnapshotInfoIOError, Unit] =
+    getSnapshotInfoWithFullData.attemptT.flatMap { info =>
       val hash = info.snapshot.snapshot.hash
 
-        val path = File(overWritePath.concat(s"/$heightPrefix$hash/"))
-          .createDirectoryIfNotExists()
-
-        if (info.snapshot.snapshot == Snapshot.snapshotZero) Sync[F].unit
-        else writeSnapshotInfoParts(info, path.pathAsString).map(_ => ())
+      if (info.snapshot.snapshot == Snapshot.snapshotZero) {
+        EitherT.liftF[F, Throwable, Unit](Sync[F].unit)
+      } else {
+        snapshotInfoStorage.writeSnapshotInfo(hash, KryoSerializer.serializeAnyRef(info))
       }
     }.leftMap(SnapshotInfoIOError)
-
 
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
@@ -560,8 +529,9 @@ object SnapshotService {
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
     soeService: SOEService[F],
-    snapshotStorage: SnapshotStorage[F],
     rewardsManager: RewardsManager[F],
+    snapshotStorage: SnapshotStorage[F],
+    snapshotInfoStorage: SnapshotInfoStorage[F],
     dao: DAO
   )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
@@ -578,6 +548,7 @@ object SnapshotService {
       soeService,
       rewardsManager,
       snapshotStorage,
+      snapshotInfoStorage,
       dao
     )
 }
