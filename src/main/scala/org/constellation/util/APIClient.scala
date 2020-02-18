@@ -3,7 +3,8 @@ package org.constellation.util
 import cats.effect.{Async, ContextShift, Effect, IO}
 import com.softwaremill.sttp._
 import akka.util.ByteString
-import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
+import org.constellation.consensus.StoredSnapshot
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Schema.MetricsResult
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
@@ -109,8 +110,9 @@ class APIClient private (
     b: AnyRef,
     queryParams: Map[String, String] = Map(),
     timeout: Duration = 15.seconds
-  )(contextToReturn: ContextShift[F])(implicit m: Manifest[Array[Byte]],
-                                      f: Formats = constellation.constellationFormats): F[Array[Byte]] =
+  )(
+    contextToReturn: ContextShift[F]
+  )(implicit m: Manifest[Array[Byte]], f: Formats = constellation.constellationFormats): F[Array[Byte]] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
       postNonBlockingArrayByte(suffix, b, timeout, queryParams).onComplete {
         case Success(value) => cb(Right(value))
@@ -133,16 +135,18 @@ class APIClient private (
     })
 
   def getNonBlockingFLogged[F[_]: Async, T <: AnyRef](
-                                                       suffix: String,
-                                                       queryParams: Map[String, String] = Map(),
-                                                       timeout: Duration = 15.seconds,
-                                                       tag: String = "getNonBlockingLogged"
-                                                     )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
+    suffix: String,
+    queryParams: Map[String, String] = Map(),
+    timeout: Duration = 15.seconds,
+    tag: String = "getNonBlockingLogged"
+  )(contextToReturn: ContextShift[F])(implicit m: Manifest[T], f: Formats = constellation.constellationFormats): F[T] =
     contextToReturn.evalOn(ConstellationExecutionContext.unbounded)(Async[F].async { cb =>
-      FutureTimeTracker(getNonBlocking[T](suffix, queryParams, timeout))(ConstellationExecutionContext.unbounded).track(tag).onComplete {
-        case Success(value) => cb(Right(value))
-        case Failure(error) => cb(Left(error))
-      }(ConstellationExecutionContext.unbounded)
+      FutureTimeTracker(getNonBlocking[T](suffix, queryParams, timeout))(ConstellationExecutionContext.unbounded)
+        .track(tag)
+        .onComplete {
+          case Success(value) => cb(Right(value))
+          case Failure(error) => cb(Left(error))
+        }(ConstellationExecutionContext.unbounded)
     })
 
   def getNonBlockingF[F[_]: Async, T <: AnyRef](

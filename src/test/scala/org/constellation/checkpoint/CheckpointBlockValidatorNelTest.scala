@@ -12,7 +12,8 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.consensus.{RandomData, Snapshot, SnapshotInfo}
+import org.constellation.consensus.{RandomData, Snapshot}
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, GenesisObservation}

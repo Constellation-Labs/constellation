@@ -67,17 +67,6 @@ trait CommonEndpoints extends Json4sSupport {
           dao.snapshotService.getNextHeightInterval.map((dao.id, _))
         )(complete(_))
       } ~
-      path("info") {
-        val getInfo = dao.snapshotService.getSnapshotInfo.flatMap { info =>
-          info.acceptedCBSinceSnapshot.toList.traverse {
-            dao.checkpointService.fullData(_)
-          }.map(cbs => KryoSerializer.serializeAnyRef(info.copy(acceptedCBSinceSnapshotCache = cbs.flatten)).some)
-        }
-
-        APIDirective.handle(
-          dao.cluster.getNodeState.map(NodeState.canActAsRedownloadSource).ifM(getInfo, IO.pure(none[Array[Byte]]))
-        )(complete(_))
-      } ~
       path("storedSnapshot" / Segment) { s =>
         val getSnapshot = for {
           exists <- dao.snapshotService.exists(s)
