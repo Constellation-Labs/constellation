@@ -1,9 +1,12 @@
 package org.constellation.serializer
 
-import akka.util.ByteString
-import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
-import scala.util.Random
+import java.io.{FileOutputStream, OutputStream}
 
+import akka.util.ByteString
+import com.esotericsoftware.kryo.io.{Input, InputChunked, Output, OutputChunked}
+import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
+
+import scala.util.Random
 import org.constellation.p2p.SerializedUDPMessage
 
 object KryoSerializer {
@@ -14,13 +17,11 @@ object KryoSerializer {
     GUESS_THREADS_PER_CORE * cores
   }
 
-  val kryoPool: KryoPool = KryoPool.withBuffer(
-    guessThreads,
+  val kryoPool = KryoPool.withByteArrayOutputStream(
+    10,
     new ScalaKryoInstantiator()
       .setRegistrationRequired(true)
-      .withRegistrar(new ConstellationKryoRegistrar()),
-    32,
-    -1
+      .withRegistrar(new ConstellationKryoRegistrar())
   )
 
   def serializeGrouped[T](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {
