@@ -12,7 +12,7 @@ trait SnapshotInfoStorage[F[_]] {
 
   def writeSnapshotInfo(hash: String, bytes: Array[Byte]): EitherT[F, Throwable, Unit]
 
-  def removeSnapshot(hash: String): EitherT[F, Throwable, Unit]
+  def removeSnapshotInfo(hash: String): EitherT[F, Throwable, Unit]
 
   def getSnapshotInfoHashes: F[List[String]]
 
