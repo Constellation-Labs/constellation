@@ -67,20 +67,36 @@ trait CommonEndpoints extends Json4sSupport {
           dao.snapshotService.getNextHeightInterval.map((dao.id, _))
         )(complete(_))
       } ~
+      path("snapshot" / "info" / Segment) { s =>
+        val getSnapshotInfo = for {
+          exists <- dao.snapshotInfoStorage.exists(s)
+          bytes <- if (exists) {
+            dao.snapshotInfoStorage.getSnapshotInfoBytes(s).value.flatMap(IO.fromEither).map(Some(_))
+          } else none[Array[Byte]].pure[IO]
+        } yield bytes
+
+        APIDirective.onHandle(getSnapshotInfo) { res =>
+          val httpResponse: HttpResponse = res match {
+            case Failure(_) =>
+              HttpResponse(StatusCodes.NotFound)
+            case Success(None) =>
+              HttpResponse(StatusCodes.NotFound)
+            case Success(Some(bytes)) =>
+              HttpResponse(
+                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(bytes))
+              )
+          }
+
+          complete(httpResponse)
+        }
+      } ~
       path("storedSnapshot" / Segment) { s =>
         val getSnapshot = for {
-          exists <- dao.snapshotService.exists(s)
-          isStored <- dao.snapshotService.isStored(s)
-          bytes <- if (exists && isStored) {
-            IO(Snapshot.loadSnapshotBytes(s).toOption)
-          } else None.pure[IO]
-          memBytes <- if (exists && !isStored) {
-            for {
-              storedSnapshot <- dao.snapshotService.storedSnapshot.get
-              b <- IO { KryoSerializer.serializeAnyRef(storedSnapshot) }
-            } yield b.some
-          } else None.pure[IO]
-        } yield bytes.orElse(memBytes)
+          exists <- dao.snapshotStorage.exists(s)
+          bytes <- if (exists) {
+            dao.snapshotStorage.getSnapshotBytes(s).value.flatMap(IO.fromEither).map(Some(_))
+          } else none[Array[Byte]].pure[IO]
+        } yield bytes
 
         APIDirective.onHandle(getSnapshot) { res =>
           val httpResponse: HttpResponse = res match {
@@ -96,7 +112,6 @@ trait CommonEndpoints extends Json4sSupport {
 
           complete(httpResponse)
         }
-
       } ~
       path("genesis") {
         complete(dao.genesisObservation)
