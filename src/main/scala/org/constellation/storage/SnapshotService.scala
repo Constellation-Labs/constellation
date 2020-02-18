@@ -108,7 +108,11 @@ class SnapshotService[F[_]: Concurrent](
       _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
       _ <- EitherT.liftF(updateMetricsAfterSnapshot())
 
-      _ <- EitherT.liftF(storedSnapshot.set(StoredSnapshot(nextSnapshot, allBlocks.toSeq)))
+      snapshot = StoredSnapshot(nextSnapshot, allBlocks)
+      _ <- EitherT.liftF(storedSnapshot.set(snapshot))
+      // TODO: pass stored snapshot to writeSnapshotToDisk
+      _ <- writeSnapshotToDisk(snapshot.snapshot)
+      _ <- writeSnapshotInfoToDisk()
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
@@ -348,11 +352,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
-      for {
-        _ <- writeSnapshotToDisk(currentSnapshot)
-        _ <- writeSnapshotInfoToDisk()
-        _ <- applyAfterSnapshot(currentSnapshot)
-      } yield ()
+      applyAfterSnapshot(currentSnapshot)
 
     storedSnapshot.get.attemptT
       .leftMap(SnapshotUnexpectedError)
@@ -366,7 +366,7 @@ class SnapshotService[F[_]: Concurrent](
   def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
     Snapshot.writeSnapshot[F](snapshot)
 
-  private def writeSnapshotToDisk(
+  def writeSnapshotToDisk(
     currentSnapshot: Snapshot
   )(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] =
     currentSnapshot.checkpointBlocks.toList

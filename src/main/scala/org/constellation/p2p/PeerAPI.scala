@@ -18,7 +18,6 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.CustomDirectives.IPEnforcer
 import org.constellation.api.TokenAuthenticator
-import org.constellation.consensus.EdgeProcessor.chunkDeSerialize
 import org.constellation.consensus.{ConsensusRoute, _}
 import org.constellation.domain.trust.TrustData
 import org.constellation.primitives.Schema._
