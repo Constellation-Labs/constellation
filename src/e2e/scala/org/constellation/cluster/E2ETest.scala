@@ -201,10 +201,12 @@ class E2ETest extends E2E {
     })
   }
 
-  private def storeSnapshotInfo(allAPIs: Seq[APIClient]): Unit =
-    allAPIs
-      .map(_.snapshotsInfoDownload())
-      .foreach(_.toSnapshotInfoSer().writeLocal())
+  private def storeSnapshotInfo(allAPIs: Seq[APIClient]): Unit = {
+    // TODO: Implement store snapshot info
+//    allAPIs
+//      .map(_.snapshotsInfoDownload())
+//      .foreach(_.toSnapshotInfoSer().writeLocal())
+  }
 
   private def storeGenesis(allAPIs: Seq[APIClient]): Unit = {
     val genesis =
