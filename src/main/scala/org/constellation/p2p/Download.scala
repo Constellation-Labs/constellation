@@ -292,27 +292,23 @@ class DownloadProcess[F[_]: Concurrent: Timer: Clock](
   private def getSnapshotClient(peers: Peers) = peers.head._2.client.pure[F]
 
   private[p2p] def getMajoritySnapshot(peers: Peers, hashes: Seq[String]): F[SnapshotInfo] = {
-    val serHashes = hashes
-      .grouped(100)
-      .map(t => chunkSerialize(t, "acceptedCBSinceSnapshot"))
-      .toArray
     def makeAttempt(clients: List[PeerData]): F[SnapshotInfo] =
       clients match {
         case Nil =>
           Sync[F].raiseError[SnapshotInfo](
             new Exception(
-              s"[${dao.id.short}] Unable to get majority snapshot run out of peers, peers size ${peers.size}"
+              s"[${dao.id.short}] Unable to get snapshot info run out of peers, peers size ${peers.size}"
             )
           )
         case head :: tail =>
           head.client
-            .postNonBlockingArrayByteF[F]("snapshot/info", hashes, Map(), timeout = 45.seconds)(C)
+            .getNonBlockingArrayByteF[F](s"snapshot/info/<pass_hash_here>", Map(), timeout = 45.seconds)(C)
             .flatMap { a =>
               Sync[F].delay { KryoSerializer.deserializeCast[SnapshotInfo](a) }
             }
             .handleErrorWith(e => {
               Sync[F]
-                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Majority Snapshot Error : ${e.getMessage}")) >>
+                .delay(logger.error(s"[${dao.id.short}] [Re-Download] Get Snapshot Info Error : ${e.getMessage}")) >>
                 makeAttempt(tail)
             })
       }
