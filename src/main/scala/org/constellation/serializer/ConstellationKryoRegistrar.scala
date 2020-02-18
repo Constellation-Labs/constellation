@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
 import org.constellation.domain.observation._
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
 import org.constellation.primitives.Schema._

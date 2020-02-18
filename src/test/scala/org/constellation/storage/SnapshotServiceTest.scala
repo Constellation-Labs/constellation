@@ -6,9 +6,9 @@ import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation._
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, StoredSnapshot}
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
@@ -34,6 +34,7 @@ class SnapshotServiceTest
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
   var snapshotStorage: SnapshotStorage[IO] = _
+  var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
 
   before {
     dao = mockDAO
@@ -51,6 +52,7 @@ class SnapshotServiceTest
     val soeService = mock[SOEService[IO]]
     val rewardsManager = mock[RewardsManager[IO]]
     snapshotStorage = mock[SnapshotStorage[IO]]
+    snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
 
     snapshotService = new SnapshotService[IO](
       cts,
@@ -66,6 +68,7 @@ class SnapshotServiceTest
       soeService,
       rewardsManager,
       snapshotStorage,
+      snapshotInfoStorage,
       dao
     )
   }

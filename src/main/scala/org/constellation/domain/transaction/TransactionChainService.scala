@@ -6,11 +6,11 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.consensus.SnapshotInfo
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.primitives.Schema.TransactionEdgeData
 import org.constellation.primitives.{Edge, Transaction}
 import cats.effect.Sync
+import org.constellation.domain.snapshot.SnapshotInfo
 
 class TransactionChainService[F[_]: Concurrent] {
 

@@ -6,7 +6,8 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.consensus.{SnapshotInfo, StoredSnapshot}
+import org.constellation.consensus.StoredSnapshot
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Genesis
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.rewards.{RewardSnapshot, RewardsManager}
@@ -18,7 +19,7 @@ class RollbackService[F[_]: Concurrent](
   rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F],
   rollbackLoader: RollbackLoader,
-  rewardsManager: RewardsManager[F],
+  rewardsManager: RewardsManager[F]
 )(implicit C: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -50,7 +51,9 @@ class RollbackService[F[_]: Concurrent](
       genesisObservation <- EitherT.fromEither[F](rollbackLoader.loadGenesisObservation())
       _ <- EitherT.liftF(logger.info("GenesisObservation file loaded"))
 
-      balances <- EitherT.fromEither[F](rollbackBalances.calculate(snapshotInfo.snapshot.snapshot.lastSnapshot, snapshots))
+      balances <- EitherT.fromEither[F](
+        rollbackBalances.calculate(snapshotInfo.snapshot.snapshot.lastSnapshot, snapshots)
+      )
       genesisBalances <- EitherT.fromEither[F](rollbackBalances.calculate(genesisObservation))
       _ <- EitherT.fromEither[F](validateAccountBalance(balances |+| genesisBalances))
       _ <- EitherT.liftF(logger.info("Account balances validated"))
