@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
-import org.constellation.p2p.{Cluster, DownloadProcess}
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.NodeType
 import org.constellation.schema.Id
