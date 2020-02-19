@@ -193,15 +193,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     redownloadService = RedownloadService[IO](cluster, MajorityStateChooser(), snapshotStorage, snapshotInfoStorage)
 
-    val snapshotProcessor =
-      new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO], snapshotStorage)(
-        Concurrent(IO.ioConcurrentEffect),
-        ioTimer.clock,
-        this,
-        ConstellationExecutionContext.bounded,
-        IO.contextShift(ConstellationExecutionContext.bounded)
-      )
-
     eigenTrust = new EigenTrust[IO](id)
     rewardsManager = new RewardsManager[IO](
       eigenTrust = eigenTrust,
@@ -250,16 +241,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       rateLimiting,
       this
     )
-
-    val downloadProcess =
-      new DownloadProcess[IO](snapshotProcessor, cluster, checkpointAcceptanceService, snapshotStorage)(
-        Concurrent(IO.ioConcurrentEffect),
-        ioTimer,
-        ioTimer.clock,
-        this,
-        ConstellationExecutionContext.bounded,
-        IO.contextShift(ConstellationExecutionContext.bounded)
-      )
 
     val healthChecker = new HealthChecker[IO](
       this,
