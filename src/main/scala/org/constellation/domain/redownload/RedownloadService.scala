@@ -1,14 +1,12 @@
 package org.constellation.domain.redownload
 
-import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import org.constellation.ConfigUtil
-import org.constellation.consensus.StoredSnapshot
-import org.constellation.domain.redownload.RedownloadService.{PeersProposals, SnapshotsAtHeight}
-import org.constellation.domain.snapshot.SnapshotStorage
-import org.constellation.p2p.{Cluster, SnapshotsProcessor}
+import org.constellation.domain.redownload.RedownloadService.{PeersProposals, SnapshotInfoSerialized, SnapshotSerialized, SnapshotsAtHeight}
+import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
+import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.util.APIClient
 
@@ -19,6 +17,7 @@ class RedownloadService[F[_]](
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
   snapshotStorage: SnapshotStorage[F],
+  snapshotInfoStorage: SnapshotInfoStorage[F]
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   /**
@@ -88,13 +87,19 @@ class RedownloadService[F[_]](
       }
     } yield responses.toMap
 
-  def fetchSnapshotFromRandomPeer(hash: String, pool: Iterable[APIClient]): F[Array[Byte]] = {
+  def fetchSnapshotAndSnapshotInfoFromRandomPeer(
+    hash: String,
+    pool: Iterable[APIClient]
+  ): F[(SnapshotSerialized, SnapshotInfoSerialized)] = {
     val poolArray = pool.toArray
     val stopAt = Random.nextInt(poolArray.length)
 
-    def makeAttempt(index: Int): F[Array[Byte]] =
-      fetchSnapshot(hash, poolArray(index)).handleErrorWith {
-        case e if index == stopAt => F.raiseError[Array[Byte]](e)
+    def makeAttempt(index: Int): F[(SnapshotSerialized, SnapshotInfoSerialized)] =
+      (for {
+        snapshot <- fetchSnapshot(hash, poolArray(index))
+        snapshotInfo <- fetchSnapshotInfo(hash, poolArray(index))
+      } yield (snapshot, snapshotInfo)).handleErrorWith {
+        case e if index == stopAt => F.raiseError[(SnapshotSerialized, SnapshotInfoSerialized)](e)
         case _                    => makeAttempt((index + 1) % poolArray.length)
       }
 
@@ -106,23 +111,27 @@ class RedownloadService[F[_]](
       .getNonBlockingF[F, Seq[String]]("snapshot/stored")(C)
       .handleErrorWith(_ => F.pure(Seq.empty))
 
-  def fetchSnapshot(hash: String, client: APIClient): F[Array[Byte]] = {
+  def fetchSnapshotInfo(hash: String, client: APIClient): F[SnapshotInfoSerialized] =
+    client
+      .getNonBlockingArrayByteF("snapshot/info/" + hash, timeout = 45.second)(C)
+
+  def fetchSnapshot(hash: String, client: APIClient): F[SnapshotSerialized] =
     client
       .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = 45.second)(C)
-  }
 
-  def fetchAndStoreMissingSnapshots(snapshotsToDownload: SnapshotsAtHeight): F[Unit]  =
+  def fetchAndStoreMissingSnapshots(snapshotsToDownload: SnapshotsAtHeight): F[Unit] =
     for {
       storedSnapshots <- fetchStoredSnapshotsFromAllPeers
       candidates = snapshotsToDownload.values.toList.map { hash =>
         (hash, storedSnapshots.filter { case (_, hashes) => hashes.contains(hash) }.keySet)
       }.toMap
       missingSnapshots <- candidates.toList.traverse {
-        case (hash, pool) => fetchSnapshotFromRandomPeer(hash, pool).map(snapshot => (hash, snapshot))
+        case (hash, pool) => fetchSnapshotAndSnapshotInfoFromRandomPeer(hash, pool).map(snapshot => (hash, snapshot))
       }.map(_.toMap)
       _ <- missingSnapshots.toList.traverse {
-        case (hash, bytes) => snapshotStorage.writeSnapshot(hash, bytes).value.void
-      }
+        case (hash, (snapshot, snapshotInfo)) =>
+          snapshotStorage.writeSnapshot(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
+      }.value.void
     } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] =
@@ -213,9 +222,12 @@ object RedownloadService {
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
     snapshotStorage: SnapshotStorage[F],
+    snapshotInfoStorage: SnapshotInfoStorage[F],
   ): RedownloadService[F] =
-    new RedownloadService[F](cluster, majorityStateChooser, snapshotStorage)
+    new RedownloadService[F](cluster, majorityStateChooser, snapshotStorage, snapshotInfoStorage)
 
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type PeersProposals = Map[Id, SnapshotsAtHeight]
+  type SnapshotInfoSerialized = Array[Byte]
+  type SnapshotSerialized = Array[Byte]
 }
