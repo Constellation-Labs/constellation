@@ -182,8 +182,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       this
     )
 
-    redownloadService = RedownloadService[IO](cluster, MajorityStateChooser())
-
     consensusRemoteSender =
       new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
 
@@ -192,6 +190,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     snapshotInfoStorage = SnapshotInfoFileStorage(snapshotInfoPath)
     snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
+
+    redownloadService = RedownloadService[IO](cluster, MajorityStateChooser(), snapshotStorage)
 
     val snapshotProcessor =
       new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO], snapshotStorage)(
