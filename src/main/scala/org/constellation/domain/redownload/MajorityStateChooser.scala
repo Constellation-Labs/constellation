@@ -35,9 +35,9 @@ class MajorityStateChooser {
       occurrences / totalPeers.toDouble >= 0.5
     else false
 
-  private def getTheMostQuantity[A](occurrences: List[Occurrences[A]], totalPeers: Int): Option[Occurrences[A]] =
+  private def getTheMostQuantity(occurrences: List[Occurrences[String]], totalPeers: Int): Option[Occurrences[String]] =
     if (occurrences.map(_.n).sum == totalPeers) {
-      occurrences.sortBy(-_.percentage).headOption
+      occurrences.sortBy(o => (-o.percentage, o.value)).headOption
     } else None
 
   private def mapValuesToList[K, V](a: Map[K, V]): Map[K, List[V]] =
