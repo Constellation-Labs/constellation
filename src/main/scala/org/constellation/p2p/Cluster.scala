@@ -437,7 +437,8 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
         _ <- if (dao.seedsPath.nonEmpty && dao.peersInfoPath.isEmpty) {
           C.evalOn(ConstellationExecutionContext.bounded)(
-            Sync[F].delay(Download.download()(dao, ConstellationExecutionContext.bounded))
+            LiftIO[F].liftIO(dao.redownloadService.fetchAndUpdatePeersProposals) >>
+              LiftIO[F].liftIO(dao.redownloadService.checkForAlignmentWithMajoritySnapshot())
           )
         } else {
           logger.warn("No seeds configured yet. Skipping initial download.")
@@ -543,7 +544,12 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
   def join(hp: HostPort): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    logThread(attemptRegisterPeer(hp) >> Sync[F].delay(Download.download()), "cluster_join")
+    logThread(
+      attemptRegisterPeer(hp) >>
+        LiftIO[F].liftIO(dao.redownloadService.fetchAndUpdatePeersProposals) >>
+        LiftIO[F].liftIO(dao.redownloadService.checkForAlignmentWithMajoritySnapshot()),
+      "cluster_join"
+    )
   }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
