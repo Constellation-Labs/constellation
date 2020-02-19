@@ -1,8 +1,6 @@
 package org.constellation.domain.redownload
 
-import cats.effect.Concurrent
 import cats.implicits._
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.redownload.MajorityStateChooser.Occurrences
 import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.schema.Id
@@ -18,12 +16,12 @@ class MajorityStateChooser {
     val proposals = mergeByHeights(createdSnapshots, peersProposals)
 
     val flat = proposals
+      .mapValues(_.sorted)
       .mapValues(mapToOccurrences)
       .mapValues { occurrences =>
-        val sorted = occurrences.toList.sortBy(_.value)
-        sorted
+        occurrences
           .find(o => isInClearMajority(o.n, peersSize))
-          .orElse(getTheMostQuantity(sorted, peersSize))
+          .orElse(getTheMostQuantity(occurrences, peersSize))
       }
       .mapValues(_.map(_.value))
 
@@ -35,9 +33,12 @@ class MajorityStateChooser {
       occurrences / totalPeers.toDouble >= 0.5
     else false
 
-  private def getTheMostQuantity(occurrences: List[Occurrences[String]], totalPeers: Int): Option[Occurrences[String]] =
-    if (occurrences.map(_.n).sum == totalPeers) {
-      occurrences.sortBy(o => (-o.percentage, o.value)).headOption
+  private def getTheMostQuantity[A: Ordering](
+    occurrences: Set[Occurrences[A]],
+    totalPeers: Int
+  ): Option[Occurrences[A]] =
+    if (occurrences.toList.map(_.n).sum == totalPeers) {
+      occurrences.toList.sortBy(o => (-o.percentage, o.value)).headOption
     } else None
 
   private def mapValuesToList[K, V](a: Map[K, V]): Map[K, List[V]] =
