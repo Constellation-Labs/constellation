@@ -1,16 +1,24 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{Concurrent, ContextShift}
+import cats.data.EitherT
 import cats.effect.concurrent.Ref
+import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import org.constellation.ConfigUtil
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.redownload.RedownloadService.{PeersProposals, SnapshotsAtHeight}
-import org.constellation.p2p.Cluster
+import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.p2p.{Cluster, SnapshotsProcessor}
 import org.constellation.schema.Id
+import org.constellation.util.APIClient
+
+import scala.concurrent.duration._
+import scala.util.Random
 
 class RedownloadService[F[_]](
   cluster: Cluster[F],
-  majorityStateChooser: MajorityStateChooser
+  majorityStateChooser: MajorityStateChooser,
+  snapshotStorage: SnapshotStorage[F],
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   /**
@@ -70,7 +78,52 @@ class RedownloadService[F[_]](
       }
     } yield proposals
 
-  def fetchMissingSnapshots: F[SnapshotsAtHeight] = ??? // TODO: Implement
+  def fetchStoredSnapshotsFromAllPeers: F[Map[APIClient, Seq[String]]] =
+    for {
+      peers <- cluster.getPeerInfo.map(_.values.toList)
+      apiClients = peers.map(_.client)
+      responses <- apiClients.traverse { client =>
+        fetchStoredSnapshots(client)
+          .map(client -> _)
+      }
+    } yield responses.toMap
+
+  def fetchSnapshotFromRandomPeer(hash: String, pool: Iterable[APIClient]): F[Array[Byte]] = {
+    val poolArray = pool.toArray
+    val stopAt = Random.nextInt(poolArray.length)
+
+    def makeAttempt(index: Int): F[Array[Byte]] =
+      fetchSnapshot(hash, poolArray(index)).handleErrorWith {
+        case e if index == stopAt => F.raiseError[Array[Byte]](e)
+        case _                    => makeAttempt((index + 1) % poolArray.length)
+      }
+
+    makeAttempt((stopAt + 1) % poolArray.length)
+  }
+
+  def fetchStoredSnapshots(client: APIClient): F[Seq[String]] =
+    client
+      .getNonBlockingF[F, Seq[String]]("snapshot/stored")(C)
+      .handleErrorWith(_ => F.pure(Seq.empty))
+
+  def fetchSnapshot(hash: String, client: APIClient): F[Array[Byte]] = {
+    client
+      .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = 45.second)(C)
+  }
+
+  def fetchAndStoreMissingSnapshots(snapshotsToDownload: SnapshotsAtHeight): F[Unit]  =
+    for {
+      storedSnapshots <- fetchStoredSnapshotsFromAllPeers
+      candidates = snapshotsToDownload.values.toList.map { hash =>
+        (hash, storedSnapshots.filter { case (_, hashes) => hashes.contains(hash) }.keySet)
+      }.toMap
+      missingSnapshots <- candidates.toList.traverse {
+        case (hash, pool) => fetchSnapshotFromRandomPeer(hash, pool).map(snapshot => (hash, snapshot))
+      }.map(_.toMap)
+      _ <- missingSnapshots.toList.traverse {
+        case (hash, bytes) => snapshotStorage.writeSnapshot(hash, bytes).value.void
+      }
+    } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] =
     for {
@@ -85,17 +138,18 @@ class RedownloadService[F[_]](
 
       _ <- if (shouldRedownload(acceptedSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) {
         val plan = calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        applyRedownloadPlan(plan) // TODO: Actual redownload, rethink splitting the logic
+        applyRedownloadPlan(plan)
       } else F.unit
     } yield ()
 
-  private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): F[Unit] = for {
-    missingSnapshots <- fetchMissingSnapshots // TODO: Store these snapshots on disk now?
-    _ <- acceptedSnapshots.modify { m =>
-      val updated = plan.expectedResult // TODO: Is it the correct way?
-      (updated, ())
-    }
-  } yield ()
+  private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): F[Unit] =
+    for {
+      _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
+      _ <- acceptedSnapshots.modify { m =>
+        val updated = plan.toLeave |+| plan.toDownload
+        (updated, ())
+      }
+    } yield ()
 
   private[redownload] def shouldRedownload(
     acceptedSnapshots: SnapshotsAtHeight,
@@ -111,9 +165,9 @@ class RedownloadService[F[_]](
     acceptedSnapshots: SnapshotsAtHeight,
     majorityState: SnapshotsAtHeight
   ): RedownloadPlan = {
-    val toDownload = (majorityState.toSet diff acceptedSnapshots.toSet).toMap
-    val toRemove = (acceptedSnapshots.toSet diff majorityState.toSet).toMap
-    val toLeave = (acceptedSnapshots.toSet diff toRemove.toSet).toMap
+    val toDownload = majorityState.toSet.diff(acceptedSnapshots.toSet).toMap
+    val toRemove = acceptedSnapshots.toSet.diff(majorityState.toSet).toMap
+    val toLeave = acceptedSnapshots.toSet.diff(toRemove.toSet).toMap
     RedownloadPlan(toDownload, toRemove, toLeave)
   }
 
@@ -147,16 +201,20 @@ class RedownloadService[F[_]](
 
   private[redownload] def maxHeight(snapshots: SnapshotsAtHeight): Long =
     if (snapshots.isEmpty) 0
-    else snapshots.maxBy { case (height, _) => height } match { case (height, _) => height }
+    else
+      snapshots.maxBy { case (height, _) => height } match {
+        case (height, _) => height
+      }
 }
 
 object RedownloadService {
 
   def apply[F[_]: Concurrent: ContextShift](
     cluster: Cluster[F],
-    majorityStateChooser: MajorityStateChooser
+    majorityStateChooser: MajorityStateChooser,
+    snapshotStorage: SnapshotStorage[F],
   ): RedownloadService[F] =
-    new RedownloadService[F](cluster, majorityStateChooser)
+    new RedownloadService[F](cluster, majorityStateChooser, snapshotStorage)
 
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type PeersProposals = Map[Id, SnapshotsAtHeight]
