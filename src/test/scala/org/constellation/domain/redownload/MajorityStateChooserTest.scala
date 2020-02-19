@@ -112,12 +112,12 @@ class MajorityStateChooserTest
         "returns the proposal with the most quantity" in {
           val createdSnapshots = Map(2L -> "jj", 4L -> "kk", 6L -> "ll")
           val peersProposals = Map(
-            Id("a") -> Map(2L -> "gg", 4L -> "hh", 6L -> "ii"),
+            Id("a") -> Map(2L -> "gg", 4L -> "hh", 6L -> "zz"),
             Id("b") -> Map(2L -> "gg", 4L -> "hh", 6L -> "ii"),
             Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc"),
             Id("d") -> Map(2L -> "mm", 4L -> "nn", 6L -> "oo")
           )
-          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "ii")
+          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "cc")
 
           chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
         }
