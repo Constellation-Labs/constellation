@@ -191,7 +191,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     snapshotInfoStorage = SnapshotInfoFileStorage(snapshotInfoPath)
     snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-    redownloadService = RedownloadService[IO](cluster, MajorityStateChooser(), snapshotStorage, snapshotInfoStorage)
     downloadService = DownloadService[IO](redownloadService, cluster)
 
     eigenTrust = new EigenTrust[IO](id)
@@ -241,6 +240,15 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       cluster,
       rateLimiting,
       this
+    )
+
+    redownloadService = RedownloadService[IO](
+      cluster,
+      MajorityStateChooser(),
+      snapshotStorage,
+      snapshotInfoStorage,
+      snapshotService,
+      checkpointAcceptanceService
     )
 
     val healthChecker = new HealthChecker[IO](
