@@ -1,8 +1,5 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{ContextShift, IO}
-import org.constellation.ConstellationExecutionContext
-import org.constellation.domain.redownload.MajorityStateChooser.MajorityState
 import org.constellation.schema.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -44,18 +41,6 @@ class MajorityStateChooserTest
     }
 
     "if there is only one height" - {
-      "returns Map.empty" - {
-        "if none of the snapshot is in the majority (more than 50%)" in {
-          val createdSnapshots = Map(2L -> "aa")
-          val peersProposals = Map(
-            Id("a") -> Map(2L -> "bb"),
-            Id("b") -> Map(2L -> "cc")
-          )
-
-          chooseMajorityState(createdSnapshots, peersProposals) shouldBe Map.empty
-        }
-      }
-
       "returns Map with majority snapshot at this height" - {
         "if the snapshot is in the majority (more than 50%)" in {
           val createdSnapshots = Map(2L -> "aa")
@@ -71,19 +56,6 @@ class MajorityStateChooserTest
     }
 
     "if there are more than one heights" - {
-      "returns Map.empty" - {
-        "if none of the snapshot is in the majority (more than 50%)" in {
-          val createdSnapshots = Map(2L -> "aa", 4L -> "bb", 6L -> "cc")
-          val peersProposals = Map(
-            Id("a") -> Map(2L -> "aaa", 4L -> "abb", 6L -> "acc"),
-            Id("b") -> Map(2L -> "baa", 4L -> "bbb", 6L -> "bcc"),
-            Id("c") -> Map(2L -> "caa", 4L -> "cbb", 6L -> "ccc")
-          )
-
-          chooseMajorityState(createdSnapshots, peersProposals) shouldBe Map.empty
-        }
-      }
-
       "returns majority snapshot at each height if there is a clear majority (more than 50%)" in {
         val createdSnapshots = Map(2L -> "aa", 4L -> "bb", 6L -> "cc")
         val peersProposals = Map(
@@ -109,23 +81,48 @@ class MajorityStateChooserTest
         chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
       }
 
-      /**
-        * TODO: should every height be considered individually or should it be a consistent continuation
-        * To consider:
-        *  - node makes a snapshot after re-download (points to another previous snapshot)
-        *  - selected majority breaks the chain (previous hash is different)
-        */
-      "returns consistent continuation" ignore {
+      "does not return consistent continuation but treats each height individually" in {
         val createdSnapshots = Map(2L -> "xx", 4L -> "dd", 6L -> "zz")
         val peersProposals = Map(
           Id("a") -> Map(2L -> "xx", 4L -> "dd", 6L -> "zz"),
           Id("b") -> Map(2L -> "aa", 4L -> "ee", 6L -> "cc"),
           Id("c") -> Map(2L -> "aa", 4L -> "ee", 6L -> "cc")
         )
-        val result = Map(2L -> "aa", 4L -> "ee", 6L -> "cc")
+        val result = Map(2L -> "aa", 4L -> "dd", 6L -> "cc")
 
         chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
       }
+    }
+
+    "if there is no clear majority (less than 50%)" - {
+      "and each proposal has the same quantity" - {
+        "returns the first hash in alphabetical order" in {
+          val createdSnapshots = Map(2L -> "aa", 4L -> "ee", 6L -> "ii")
+          val peersProposals = Map(
+            Id("a") -> Map(2L -> "dd", 4L -> "bb", 6L -> "ff"),
+            Id("b") -> Map(2L -> "gg", 4L -> "hh", 6L -> "cc")
+          )
+          val result = Map(2L -> "aa", 4L -> "bb", 6L -> "cc")
+
+          chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
+        }
+      }
+
+      "and at least one proposal has bigger quantity" - {
+        "returns the proposal with the most quantity" in {
+          val createdSnapshots = Map(2L -> "jj", 4L -> "kk", 6L -> "ll")
+          val peersProposals = Map(
+            Id("a") -> Map(2L -> "gg", 4L -> "hh", 6L -> "ii"),
+            Id("b") -> Map(2L -> "gg", 4L -> "hh", 6L -> "ii"),
+            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc"),
+            Id("d") -> Map(2L -> "mm", 4L -> "nn", 6L -> "oo")
+          )
+          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "ii")
+
+          chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
+        }
+      }
+
     }
   }
 
