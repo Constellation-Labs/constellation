@@ -18,12 +18,12 @@ class MajorityStateChooser {
     val proposals = mergeByHeights(createdSnapshots, peersProposals)
 
     val flat = proposals
-      .mapValues(_.sorted)
       .mapValues(mapToOccurrences)
       .mapValues { occurrences =>
-        occurrences
+        val sorted = occurrences.toList.sortBy(_.value)
+        sorted
           .find(o => isInClearMajority(o.n, peersSize))
-          .orElse(getTheMostQuantity(occurrences, peersSize))
+          .orElse(getTheMostQuantity(sorted, peersSize))
       }
       .mapValues(_.map(_.value))
 
@@ -35,9 +35,9 @@ class MajorityStateChooser {
       occurrences / totalPeers.toDouble >= 0.5
     else false
 
-  private def getTheMostQuantity[A](occurrences: Set[Occurrences[A]], totalPeers: Int): Option[Occurrences[A]] =
-    if (occurrences.toList.map(_.n).sum == totalPeers) {
-      occurrences.toList.sortBy(-_.percentage).headOption
+  private def getTheMostQuantity[A](occurrences: List[Occurrences[A]], totalPeers: Int): Option[Occurrences[A]] =
+    if (occurrences.map(_.n).sum == totalPeers) {
+      occurrences.sortBy(-_.percentage).headOption
     } else None
 
   private def mapValuesToList[K, V](a: Map[K, V]): Map[K, List[V]] =
