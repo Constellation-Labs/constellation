@@ -25,7 +25,7 @@ import org.constellation.api.TokenAuthenticator
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
-import org.constellation.p2p.{ChangePeerState, Download, SetStateResult}
+import org.constellation.p2p.{ChangePeerState, SetStateResult}
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
 import org.constellation.primitives.Schema._
@@ -146,12 +146,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
         } ~
           path("channels") {
             complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
-          } ~
-          path("snapshotInfo") {
-            val downloadedMajority = Download.getMajoritySnapshotTest()(dao, ConstellationExecutionContext.bounded)
-            val io = downloadedMajority.get
-
-            APIDirective.handle(io)(complete(_))
           } ~
           pathPrefix("data") {
             path("channels") {
@@ -452,14 +446,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                 )(complete(_))
               }
             }
-        } ~
-        pathPrefix("download") {
-          path("start") {
-            Future { Download.download()(dao, ConstellationExecutionContext.bounded) }(
-              ConstellationExecutionContext.bounded
-            )
-            complete(StatusCodes.OK)
-          }
         } ~
         pathPrefix("config") {
           path("update") {
