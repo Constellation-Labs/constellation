@@ -4,6 +4,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
+import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
 import org.constellation.util.APIClient
@@ -24,11 +25,13 @@ class RedownloadServiceTest
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var majorityStateChooser: MajorityStateChooser = _
+  var snapshotStorage: SnapshotStorage[IO] = _
 
   override def beforeEach() = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
-    redownloadService = RedownloadService[IO](cluster, majorityStateChooser)
+    snapshotStorage = mock[SnapshotStorage[IO]]
+    redownloadService = RedownloadService[IO](cluster, majorityStateChooser, snapshotStorage)
   }
 
   "shouldRedownload" - {
@@ -350,7 +353,7 @@ class RedownloadServiceTest
     "above" - {
       val majorityState: SnapshotsAtHeight = Map(
         2L -> "a",
-        4L -> "x",
+        4L -> "x"
       )
 
       val acceptedSnapshots: SnapshotsAtHeight = Map(
@@ -364,7 +367,7 @@ class RedownloadServiceTest
       "returns snapshots to leave untouched" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
         diff.toLeave shouldEqual Map(
-          2L -> "a",
+          2L -> "a"
         )
       }
 
@@ -385,7 +388,7 @@ class RedownloadServiceTest
     "below" - {
       val acceptedSnapshots: SnapshotsAtHeight = Map(
         2L -> "a",
-        4L -> "b",
+        4L -> "b"
       )
 
       val majorityState: SnapshotsAtHeight = Map(
@@ -399,14 +402,14 @@ class RedownloadServiceTest
       "returns snapshots to leave untouched" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
         diff.toLeave shouldEqual Map(
-          2L -> "a",
+          2L -> "a"
         )
       }
 
       "returns both snapshots to download and remove" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
         diff.toRemove shouldEqual Map(
-          4L -> "b",
+          4L -> "b"
         )
         diff.toDownload shouldEqual Map(
           4L -> "x",
@@ -420,29 +423,47 @@ class RedownloadServiceTest
     "same height" - {
       val acceptedSnapshots: SnapshotsAtHeight = Map(
         2L -> "a",
-        4L -> "b",
+        4L -> "b"
       )
 
       val majorityState: SnapshotsAtHeight = Map(
         2L -> "a",
-        4L -> "x",
+        4L -> "x"
       )
 
       "returns snapshots to leave untouched" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
         diff.toLeave shouldEqual Map(
-          2L -> "a",
+          2L -> "a"
         )
       }
 
       "returns both snapshots to download and remove" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
         diff.toRemove shouldEqual Map(
-          4L -> "b",
+          4L -> "b"
         )
         diff.toDownload shouldEqual Map(
-          4L -> "x",
+          4L -> "x"
         )
+      }
+    }
+  }
+
+  "fetchStoredSnapshotsFromAllPeers" - {
+    "should fetch stored snapshots of all peers" in {
+      val peerInfo = Map(Id("node1") -> mock[PeerData], Id("node2") -> mock[PeerData])
+      peerInfo.values.foreach { peer =>
+        peer.client shouldReturn mock[APIClient]
+        peer.client.getNonBlockingF[IO, Seq[String]](*, *, *)(*)(*, *, *) shouldReturnF Seq.empty
+      }
+
+      cluster.getPeerInfo shouldReturnF peerInfo
+
+      redownloadService.fetchStoredSnapshotsFromAllPeers.unsafeRunSync
+
+      peerInfo.values.foreach { peer =>
+        peer.client.getNonBlockingF[IO, Seq[String]]("snapshot/stored", *, *)(*)(*, *, *).was(called)
       }
     }
   }
