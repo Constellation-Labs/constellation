@@ -191,7 +191,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     snapshotInfoStorage = SnapshotInfoFileStorage(snapshotInfoPath)
     snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-    redownloadService = RedownloadService[IO](cluster, MajorityStateChooser(), snapshotStorage)
+    redownloadService = RedownloadService[IO](cluster, MajorityStateChooser(), snapshotStorage, snapshotInfoStorage)
 
     val snapshotProcessor =
       new SnapshotsProcessor[IO](SnapshotsDownloader.downloadSnapshotByDistance[IO], snapshotStorage)(
