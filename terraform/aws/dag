@@ -55,7 +55,7 @@ updateJar() {
   checkTag
   echo -e "${blu} Updating jar${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo aws s3 cp s3://constellationlabs-dag/cluster/dag-$TAG.jar /home/admin/constellation/dag.jar" && \
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo wget https://constellationlabs-dag.s3.amazonaws.com/cluster/dag-$TAG.jar -O /home/admin/constellation/dag.jar" && \
   pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo chown -R admin:admin /home/admin/constellation"
 }
 
@@ -124,7 +124,7 @@ autostart() {
 
 ############
 
-usage="${blu} Usage: ${grn}$0${clr} {${yel}assemble${clr} | ${yel}upload${clr} | ${yel}start${clr} | ${yel}restart${clr} | ${yel}stop${clr} | ${yel}exportIPs${clr} | ${yel}redeploy${clr} | ${yel}autostart${clr}}"
+usage="${blu} Usage: ${grn}$0${clr} {${yel}assemble${clr} | ${yel}upload${clr} | ${yel}updateJar${clr} | ${yel}start${clr} | ${yel}restart${clr} | ${yel}stop${clr} | ${yel}exportIPs${clr} | ${yel}redeploy${clr} | ${yel}autostart${clr}}"
 
 if [[ $1 == "" ]]; then
   echo -e "$usage"
@@ -137,6 +137,9 @@ case "$1" in
     ;;
   upload)
     upload
+    ;;
+  updateJar)
+    updateJar
     ;;
   start)
     start
