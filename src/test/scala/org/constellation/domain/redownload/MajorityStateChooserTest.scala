@@ -113,12 +113,15 @@ class MajorityStateChooserTest
           val createdSnapshots = Map(2L -> "jj", 4L -> "kk", 6L -> "ll")
           val peersProposals = Map(
             Id("a") -> Map(2L -> "gg", 4L -> "hh", 6L -> "zz"),
-            Id("b") -> Map(2L -> "gg", 4L -> "hh", 6L -> "ii"),
-            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc"),
-            Id("d") -> Map(2L -> "mm", 4L -> "nn", 6L -> "oo")
+            Id("b") -> Map(2L -> "gg", 4L -> "hh", 6L -> "zz"),
+            Id("c") -> Map(2L -> "gg", 4L -> "hh", 6L -> "yy"),
+            Id("d") -> Map(2L -> "gg", 4L -> "hh", 6L -> "yy"),
+            Id("e") -> Map(2L -> "aa", 4L -> "bb", 6L -> "xx"),
+            Id("f") -> Map(2L -> "mm", 4L -> "nn", 6L -> "xx"),
+            Id("g") -> Map(2L -> "aa", 4L -> "bb", 6L -> "aa"),
+            Id("h") -> Map(2L -> "mm", 4L -> "nn", 6L -> "cc")
           )
-          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "cc")
-
+          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "xx")
           chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
         }
       }
