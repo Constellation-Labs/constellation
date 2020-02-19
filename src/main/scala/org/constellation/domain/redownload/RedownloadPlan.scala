@@ -7,8 +7,4 @@ case class RedownloadPlan(
   toDownload: SnapshotsAtHeight,
   toRemove: SnapshotsAtHeight,
   toLeave: SnapshotsAtHeight,
-) {
-  // TODO: Is it the proper place/way of calculating the expected state of acceptedSnapshots after redownload?
-  lazy val expectedResult: SnapshotsAtHeight =
-    toLeave |+| toDownload
-}
+) {}
