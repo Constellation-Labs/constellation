@@ -3,10 +3,12 @@ package org.constellation.domain.redownload
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
+import org.constellation.storage.SnapshotService
 import org.constellation.util.APIClient
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -26,6 +28,8 @@ class RedownloadServiceTest
   var redownloadService: RedownloadService[IO] = _
   var majorityStateChooser: MajorityStateChooser = _
   var snapshotStorage: SnapshotStorage[IO] = _
+  var snapshotService: SnapshotService[IO] = _
+  var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
 
   override def beforeEach() = {
@@ -33,7 +37,14 @@ class RedownloadServiceTest
     majorityStateChooser = mock[MajorityStateChooser]
     snapshotStorage = mock[SnapshotStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
-    redownloadService = RedownloadService[IO](cluster, majorityStateChooser, snapshotStorage, snapshotInfoStorage)
+    redownloadService = RedownloadService[IO](
+      cluster,
+      majorityStateChooser,
+      snapshotStorage,
+      snapshotInfoStorage,
+      snapshotService,
+      checkpointAcceptanceService
+    )
   }
 
   "shouldRedownload" - {

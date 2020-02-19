@@ -1,9 +1,11 @@
 package org.constellation.domain.redownload
 
+import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import org.constellation.ConfigUtil
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.redownload.RedownloadService.{
   PeersProposals,
   SnapshotInfoSerialized,
@@ -14,6 +16,7 @@ import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
+import org.constellation.storage.SnapshotService
 import org.constellation.util.APIClient
 
 import scala.concurrent.duration._
@@ -23,7 +26,9 @@ class RedownloadService[F[_]](
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
   snapshotStorage: SnapshotStorage[F],
-  snapshotInfoStorage: SnapshotInfoStorage[F]
+  snapshotInfoStorage: SnapshotInfoStorage[F],
+  snapshotService: SnapshotService[F],
+  checkpointAcceptanceService: CheckpointAcceptanceService[F]
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   /**
@@ -153,7 +158,7 @@ class RedownloadService[F[_]](
 
       _ <- if (shouldRedownload(acceptedSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) {
         val plan = calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        applyRedownloadPlan(plan)
+        applyRedownloadPlan(plan).value // TODO: Avoid mixing F[Unit] with EitherT
       } else F.unit
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
     } yield ()
@@ -167,13 +172,25 @@ class RedownloadService[F[_]](
     }
   }
 
-  private def applyRedownloadPlan(plan: RedownloadPlan): F[Unit] =
+  private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     for {
-      _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
+      _ <- fetchAndStoreMissingSnapshots(plan.toDownload).attemptT
+
       _ <- acceptedSnapshots.modify { m =>
         val updated = plan.toLeave |+| plan.toDownload
-        (updated, ())
-      }
+        (updated, updated)
+      }.attemptT
+
+      highestSnapshotInfo <- getAcceptedSnapshots().attemptT
+        .map(_.maxBy { case (height, _) => height } match { case (_, hash) => hash })
+        .flatMap(hash => snapshotInfoStorage.readSnapshotInfo(hash))
+
+      _ <- snapshotService.setSnapshot(highestSnapshotInfo).attemptT
+      _ <- snapshotService
+        .syncBufferPull()
+        .flatMap(_.values.toList.traverse(checkpointAcceptanceService.accept(_)))
+        .attemptT
+
     } yield ()
 
   private[redownload] def shouldRedownload(
@@ -238,9 +255,18 @@ object RedownloadService {
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
     snapshotStorage: SnapshotStorage[F],
-    snapshotInfoStorage: SnapshotInfoStorage[F]
+    snapshotInfoStorage: SnapshotInfoStorage[F],
+    snapshotService: SnapshotService[F],
+    checkpointAcceptanceService: CheckpointAcceptanceService[F]
   ): RedownloadService[F] =
-    new RedownloadService[F](cluster, majorityStateChooser, snapshotStorage, snapshotInfoStorage)
+    new RedownloadService[F](
+      cluster,
+      majorityStateChooser,
+      snapshotStorage,
+      snapshotInfoStorage,
+      snapshotService,
+      checkpointAcceptanceService
+    )
 
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type PeersProposals = Map[Id, SnapshotsAtHeight]
