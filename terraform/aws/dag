@@ -82,8 +82,15 @@ restart() {
 
   sleep 10
 
-  ip=`head -1 $HOSTS_FILE`
-  grep "" $HOSTS_FILE | tail -n +2 | xargs -I {} curl -s -X POST http://\{\}:9001/join -H "Content-type: application/json" -d "{ \"host\": \"$ip\", \"port\": 9001 }"
+  headIP=`head -1 $HOSTS_FILE`
+  while read ip; do
+    if [ "$ip" == "$headIP" ]; then
+      echo "Skipping genesis node"
+    else
+      curl -s -X POST http://"$ip":9001/join -H "Content-type: application/json" -d "{ \"host\": \"$headIP\", \"port\": 9001 }"
+      sleep 5
+    fi
+  done <$HOSTS_FILE
 }
 
 stop() {
