@@ -62,6 +62,25 @@ trait CommonEndpoints extends Json4sSupport {
       path("snapshotHashes") {
         APIDirective.handle(dao.snapshotStorage.getSnapshotHashes)(complete(_))
       } ~
+      path("snapshot" / "stored") {
+        val storedSnapshots = dao.snapshotStorage.getSnapshotHashes
+        val recentSnapshot = dao.snapshotService.storedSnapshot.get.map(_.snapshot.hash)
+        val hashes = storedSnapshots.flatMap { h =>
+          recentSnapshot.map(hh => List(hh) ++ h)
+        }
+
+        APIDirective.handle(hashes)(complete(_))
+      } ~
+      path("snapshot" / "own") {
+        val snapshots = dao.redownloadService.getCreatedSnapshots
+
+        APIDirective.handle(snapshots)(complete(_))
+      } ~
+      path("snapshot" / "accepted") {
+        val snapshots = dao.redownloadService.getAcceptedSnapshots()
+
+        APIDirective.handle(snapshots)(complete(_))
+      } ~
       path("snapshot" / "nextHeight") {
         APIDirective.handle(
           dao.snapshotService.getNextHeightInterval.map((dao.id, _))
