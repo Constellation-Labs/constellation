@@ -11,11 +11,12 @@ import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.ConsensusRemoteSender
+import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
@@ -142,6 +143,18 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     val cluster = mock[Cluster[IO]]
     cluster.getNodeState shouldReturnF NodeState.Ready
     dao.cluster shouldReturn cluster
+
+    val ba = mock[BlacklistedAddresses[IO]]
+    dao.blacklistedAddresses shouldReturn ba
+
+    val tcs = mock[TransactionChainService[IO]]
+    dao.transactionChainService shouldReturn tcs
+
+    val as = mock[AddressService[IO]]
+    dao.addressService shouldReturn as
+
+    val ds = mock[DownloadService[IO]]
+    dao.downloadService shouldReturn ds
 
     dao.miscLogger shouldReturn Logger("miscLogger")
 

@@ -20,7 +20,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.{MajorityStateChooser, RedownloadService}
+import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -192,6 +192,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
     redownloadService = RedownloadService[IO](cluster, MajorityStateChooser(), snapshotStorage, snapshotInfoStorage)
+    downloadService = DownloadService[IO](redownloadService, cluster)
 
     eigenTrust = new EigenTrust[IO](id)
     rewardsManager = new RewardsManager[IO](
