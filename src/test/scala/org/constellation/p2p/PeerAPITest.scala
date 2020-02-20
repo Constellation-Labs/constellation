@@ -51,7 +51,7 @@ class PeerAPITest
         StoredSnapshot(Snapshot.snapshotZero, Seq.empty)
       )
 
-      Get("/snapshot/stored") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[List[String]] shouldBe List(Snapshot.snapshotZeroHash)
       }
     }
@@ -64,7 +64,7 @@ class PeerAPITest
         StoredSnapshot(Snapshot.snapshotZero, Seq.empty)
       )
 
-      Get("/snapshot/stored") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[List[String]] shouldBe List(Snapshot.snapshotZeroHash, "aa", "bb")
       }
     }
@@ -78,7 +78,7 @@ class PeerAPITest
         StoredSnapshot(snapshot, Seq.empty)
       )
 
-      Get("/snapshot/stored") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[List[String]] shouldBe List(snapshot.hash, "aa", "bb")
       }
     }
@@ -88,7 +88,7 @@ class PeerAPITest
     "response should return empty map if there are no snapshots" in {
       dao.redownloadService.getCreatedSnapshots() shouldReturnF Map.empty
 
-      Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe Map.empty
       }
     }
@@ -98,7 +98,7 @@ class PeerAPITest
 
       dao.redownloadService.getCreatedSnapshots() shouldReturnF ownSnapshots
 
-      Get("/snapshot/own") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe ownSnapshots
       }
     }
@@ -108,7 +108,7 @@ class PeerAPITest
     "response should return empty map if there are no snapshots" in {
       dao.redownloadService.getAcceptedSnapshots() shouldReturnF Map.empty
 
-      Get("/snapshot/accepted") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/accepted") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe Map.empty
       }
     }
@@ -118,7 +118,7 @@ class PeerAPITest
 
       dao.redownloadService.getAcceptedSnapshots() shouldReturnF acceptedSnapshots
 
-      Get("/snapshot/accepted") ~> peerAPI.mixedEndpoints(socketAddress) ~> check {
+      Get("/snapshot/accepted") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe acceptedSnapshots
       }
     }
