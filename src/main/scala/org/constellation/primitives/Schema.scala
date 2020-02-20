@@ -29,8 +29,8 @@ object Schema {
   object NodeState extends Enumeration {
     type NodeState = Value
 
-    val PendingDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, SnapshotCreation, Ready, Leaving,
-      Offline =
+    val PendingDownload, ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, SnapshotCreation,
+      Ready, Leaving, Offline =
       Value
 
     val all: Set[NodeState.Value] = values.toSet
@@ -39,15 +39,16 @@ object Schema {
 
     val initial: Set[NodeState] = Set(Offline, PendingDownload)
 
-    val broadcastStates: Set[NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload)
+    val broadcastStates: Set[NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload, ReadyForDownload)
 
     val offlineStates: Set[NodeState.Value] = Set(Offline)
 
-    val validDuringDownload: Set[NodeState.Value] = Set(DownloadInProgress, DownloadCompleteAwaitingFinalSync)
+    val validDuringDownload: Set[NodeState.Value] =
+      Set(ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
     val validForDownload: Set[NodeState.Value] = Set(PendingDownload, Ready)
 
-    val validForRedownload: Set[NodeState.Value] = Set(Ready)
+    val validForRedownload: Set[NodeState.Value] = Set(ReadyForDownload, Ready)
 
     val validForSnapshotCreation: Set[NodeState.Value] = Set(Ready, Leaving)
 
