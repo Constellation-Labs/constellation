@@ -4,6 +4,7 @@ import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.redownload.RedownloadService.{
@@ -51,6 +52,8 @@ class RedownloadService[F[_]](
   private[redownload] val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
 
+  private val logger = Slf4jLogger.getLogger[F]
+
   def persistCreatedSnapshot(height: Long, hash: String): F[Unit] =
     createdSnapshots.modify { m =>
       val updated = if (m.contains(height)) m else m.updated(height, hash)
@@ -74,6 +77,7 @@ class RedownloadService[F[_]](
 
   def fetchAndUpdatePeersProposals: F[PeersProposals] =
     for {
+      _ <- logger.debug("Fetching and updating peer proposals")
       peers <- cluster.getPeerInfo.map(_.values.toList)
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
@@ -147,6 +151,7 @@ class RedownloadService[F[_]](
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] = {
     val wrappedCheck = for {
+      _ <- logger.debug("Checking alignment with majority snapshot...")
       peersProposals <- getPeerProposals()
       createdSnapshots <- getCreatedSnapshots()
       acceptedSnapshots <- getAcceptedSnapshots()
@@ -158,8 +163,23 @@ class RedownloadService[F[_]](
 
       _ <- if (shouldRedownload(acceptedSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) {
         val plan = calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        applyRedownloadPlan(plan).value // TODO: Avoid mixing F[Unit] with EitherT
-      } else F.unit
+        for {
+          _ <- logger.debug("Redownload needed! - applying the following redownload plan:")
+          _ <- logger.debug("To download:")
+          _ <- plan.toDownload.toList.sortBy { case (height, _) => height }.traverse {
+            case (height, hash) => logger.debug(s"[$height] - $hash")
+          }
+          _ <- logger.debug("To remove:")
+          _ <- plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
+            case (height, hash) => logger.debug(s"[$height] - $hash")
+          }
+          _ <- logger.debug("To leave:")
+          _ <- plan.toLeave.toList.sortBy { case (height, _) => height }.traverse {
+            case (height, hash) => logger.debug(s"[$height] - $hash")
+          }
+          _ <- applyRedownloadPlan(plan).value
+        } yield ()
+      } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
     } yield ()
 
@@ -174,22 +194,30 @@ class RedownloadService[F[_]](
 
   private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     for {
+      _ <- EitherT.liftF(logger.debug("Fetching missing snapshots."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload).attemptT
-
+      _ <- EitherT.liftF(logger.debug("Updating acceptedSnapshots by majority state."))
       _ <- acceptedSnapshots.modify { m =>
         val updated = plan.toLeave |+| plan.toDownload
         (updated, updated)
       }.attemptT
 
+      _ <- EitherT.liftF(logger.debug("Checking which SnapshotInfo is the highest one."))
+
       highestSnapshotInfo <- getAcceptedSnapshots().attemptT
         .map(_.maxBy { case (height, _) => height } match { case (_, hash) => hash })
         .flatMap(hash => snapshotInfoStorage.readSnapshotInfo(hash))
 
+      _ <- EitherT.liftF(logger.debug("Updating highest SnapshotInfo in SnapshotService."))
       _ <- snapshotService.setSnapshot(highestSnapshotInfo).attemptT
+
+      _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks from the highest SnapshotInfo."))
       _ <- snapshotService
         .syncBufferPull()
         .flatMap(_.values.toList.traverse(checkpointAcceptanceService.accept(_)))
         .attemptT
+
+      _ <- EitherT.liftF(logger.debug("Redownload plan has been applied succesfully."))
 
     } yield ()
 
