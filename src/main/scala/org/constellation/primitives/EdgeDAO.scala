@@ -16,7 +16,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
@@ -194,6 +194,7 @@ trait EdgeDAO {
   var rollbackService: RollbackService[IO] = _
   var cloudStorage: CloudStorage[IO] = _
   var redownloadService: RedownloadService[IO] = _
+  var downloadService: DownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
   var genesisObservationWriter: GenesisObservationWriter[IO] = _
