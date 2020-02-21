@@ -296,7 +296,7 @@ class RedownloadServiceTest
       redownloadService.fetchAndUpdatePeersProposals.unsafeRunSync
 
       peerInfo.values.foreach { peer =>
-        peer.client.getNonBlockingF[IO, Map[Long, String]]("/snapshot/own", *, *)(*)(*, *, *).was(called)
+        peer.client.getNonBlockingF[IO, Map[Long, String]]("snapshot/own", *, *)(*)(*, *, *).was(called)
       }
     }
 
