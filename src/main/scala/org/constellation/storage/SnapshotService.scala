@@ -117,8 +117,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- writeSnapshotInfoToDisk()
 
       _ <- EitherT.liftF(removeLeavingPeers())
-
-      _ <- EitherT.liftF(rewardsManager.attemptReward(nextSnapshot, nextHeightInterval))
+      _ <- removeSnapshotFromDisk()
+      removedStoredSnapshot <- removeSnapshotInfoFromDisk()//todo should chain this and below and throw exception
+      _ <- EitherT.liftF(rewardsManager.attemptReward(removedStoredSnapshot.snapshot, removedStoredSnapshot.height))
 
       created = SnapshotCreated(
         nextSnapshot.hash,
@@ -140,6 +141,10 @@ class SnapshotService[F[_]: Concurrent](
         snapshotInfoStorage.writeSnapshotInfo(hash, KryoSerializer.serializeAnyRef(info))
       }
     }.leftMap(SnapshotInfoIOError)
+
+  def removeSnapshotFromDisk(): EitherT[F, SnapshotIOError, Unit] = ???
+
+  def removeSnapshotInfoFromDisk(): EitherT[F, SnapshotInfoIOError, StoredSnapshot] = ???
 
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {

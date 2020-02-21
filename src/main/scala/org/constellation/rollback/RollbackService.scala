@@ -90,15 +90,8 @@ class RollbackService[F[_]: Concurrent](
 
   private def acceptRewards(
     snapshots: Seq[StoredSnapshot]
-  ): F[Unit] = {
-    val rewardSnapshots = snapshots
-      .map(s => {
-        val snapshotheight = s.checkpointCache.flatMap(_.height).maxBy(_.max).max
-        RewardSnapshot(s.snapshot.hash, snapshotheight, s.checkpointCache.flatMap(_.checkpointBlock.observations))
-      })
-
-    rewardSnapshots.toList.traverse(rewardsManager.attemptReward).void
-  }
+  ) =
+    snapshots.toList.traverse(storedSnap => rewardsManager.attemptReward(storedSnap.snapshot, storedSnap.height)).void
 
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {
