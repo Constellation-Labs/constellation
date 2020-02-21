@@ -18,6 +18,7 @@ import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
+import scala.collection.SortedMap
 import scala.concurrent.duration._
 
 class PeerAPITest
@@ -73,7 +74,7 @@ class PeerAPITest
       dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
       dao.snapshotStorage.getSnapshotHashes shouldReturnF List("aa", "bb")
 
-      val snapshot = Snapshot("cc", Seq.empty, Map.empty)
+      val snapshot = Snapshot("cc", Seq.empty, SortedMap.empty)
       dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
         StoredSnapshot(snapshot, Seq.empty)
       )
