@@ -34,6 +34,8 @@ class RedownloadServiceTest
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
   var cloudStorage: CloudStorage[IO] = _
 
+  val recentSnapshots = 5
+
   override def beforeEach() = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
@@ -41,6 +43,7 @@ class RedownloadServiceTest
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
     cloudStorage = mock[CloudStorage[IO]]
     redownloadService = RedownloadService[IO](
+      recentSnapshots,
       cluster,
       majorityStateChooser,
       snapshotStorage,
@@ -57,33 +60,18 @@ class RedownloadServiceTest
     "above" - {
       "returns true" - {
         "if reached redownload interval" in {
-          val acceptedSnapshots: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b",
-            6L -> "c",
-            8L -> "d"
-          )
+          val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c", 8L -> "d")
 
-          val majorityState: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b"
-          )
+          val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
           redownloadService
             .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
         }
 
         "if not reached redownload interval yet but already misaligned" in {
-          val acceptedSnapshots: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "x",
-            6L -> "c"
-          )
+          val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x", 6L -> "c")
 
-          val majorityState: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b"
-          )
+          val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
           redownloadService
             .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
@@ -91,16 +79,9 @@ class RedownloadServiceTest
       }
       "returns false" - {
         "if aligned but not reached redownload interval yet" in {
-          val acceptedSnapshots: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b",
-            6L -> "c"
-          )
+          val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c")
 
-          val majorityState: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b"
-          )
+          val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
           redownloadService
             .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
@@ -111,33 +92,18 @@ class RedownloadServiceTest
     "below" - {
       "returns true" - {
         "if reached redownload interval" in {
-          val acceptedSnapshots: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b"
-          )
+          val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
-          val majorityState: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b",
-            6L -> "c",
-            8L -> "d"
-          )
+          val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c", 8L -> "d")
 
           redownloadService
             .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
         }
 
         "if not reached redownload interval yet but already misaligned" in {
-          val acceptedSnapshots: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "x"
-          )
+          val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x")
 
-          val majorityState: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b",
-            6L -> "c"
-          )
+          val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c")
 
           redownloadService
             .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
@@ -145,16 +111,9 @@ class RedownloadServiceTest
       }
       "returns false" - {
         "if aligned but not reached redownload interval yet" in {
-          val acceptedSnapshots: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b"
-          )
+          val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
-          val majorityState: SnapshotsAtHeight = Map(
-            2L -> "a",
-            4L -> "b",
-            6L -> "c"
-          )
+          val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c")
 
           redownloadService
             .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
@@ -164,30 +123,18 @@ class RedownloadServiceTest
 
     "same height" - {
       "returns true if misaligned" in {
-        val acceptedSnapshots: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "c"
-        )
+        val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "c")
 
-        val majorityState: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b"
-        )
+        val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
         redownloadService
           .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe true
       }
 
       "returns false if aligned" in {
-        val acceptedSnapshots: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b"
-        )
+        val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
-        val majorityState: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b"
-        )
+        val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
         redownloadService
           .shouldRedownload(acceptedSnapshots, majorityState, snapshotRedownloadHeightDelayInterval) shouldBe false
@@ -221,6 +168,16 @@ class RedownloadServiceTest
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "aaaa".some
     }
+
+    s"should trim the Map to the last ${recentSnapshots} heights" in {
+      val snapshots = (1 to recentSnapshots + 1).map(_ * 2).map(_.toLong).toList
+      val expectedSnapshots = snapshots.takeRight(recentSnapshots)
+
+      val persist = snapshots.traverse(s => redownloadService.persistCreatedSnapshot(s, s.toString))
+      val check = redownloadService.createdSnapshots.get.map(_.keys.toList.sorted)
+
+      (persist >> check).unsafeRunSync shouldBe expectedSnapshots.sorted
+    }
   }
 
   "persistAcceptedSnapshot" - {
@@ -237,6 +194,16 @@ class RedownloadServiceTest
       val check = redownloadService.acceptedSnapshots.get.map(_.get(2L))
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "bbbb".some
+    }
+
+    s"should trim the Map to the last ${recentSnapshots} heights" in {
+      val snapshots = (1 to recentSnapshots + 1).map(_ * 2).map(_.toLong).toList
+      val expectedSnapshots = snapshots.takeRight(recentSnapshots)
+
+      val persist = snapshots.traverse(s => redownloadService.persistAcceptedSnapshot(s, s.toString))
+      val check = redownloadService.acceptedSnapshots.get.map(_.keys.toList.sorted)
+
+      (persist >> check).unsafeRunSync shouldBe expectedSnapshots.sorted
     }
   }
 
@@ -368,101 +335,53 @@ class RedownloadServiceTest
 
   "calculateDiff" - {
     "above" - {
-      val majorityState: SnapshotsAtHeight = Map(
-        2L -> "a",
-        4L -> "x"
-      )
+      val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x")
 
-      val acceptedSnapshots: SnapshotsAtHeight = Map(
-        2L -> "a",
-        4L -> "b",
-        6L -> "c",
-        8L -> "d",
-        10L -> "e"
-      )
+      val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c", 8L -> "d", 10L -> "e")
 
       "returns snapshots to leave untouched" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toLeave shouldEqual Map(
-          2L -> "a"
-        )
+        diff.toLeave shouldEqual Map(2L -> "a")
       }
 
       "returns both snapshots to download and remove" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map(
-          4L -> "b",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e"
-        )
-        diff.toDownload shouldEqual Map(
-          4L -> "x"
-        )
+        diff.toRemove shouldEqual Map(4L -> "b", 6L -> "c", 8L -> "d", 10L -> "e")
+        diff.toDownload shouldEqual Map(4L -> "x")
       }
     }
 
     "below" - {
-      val acceptedSnapshots: SnapshotsAtHeight = Map(
-        2L -> "a",
-        4L -> "b"
-      )
+      val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
-      val majorityState: SnapshotsAtHeight = Map(
-        2L -> "a",
-        4L -> "x",
-        6L -> "c",
-        8L -> "d",
-        10L -> "e"
-      )
+      val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x", 6L -> "c", 8L -> "d", 10L -> "e")
 
       "returns snapshots to leave untouched" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toLeave shouldEqual Map(
-          2L -> "a"
-        )
+        diff.toLeave shouldEqual Map(2L -> "a")
       }
 
       "returns both snapshots to download and remove" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map(
-          4L -> "b"
-        )
-        diff.toDownload shouldEqual Map(
-          4L -> "x",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e"
-        )
+        diff.toRemove shouldEqual Map(4L -> "b")
+        diff.toDownload shouldEqual Map(4L -> "x", 6L -> "c", 8L -> "d", 10L -> "e")
       }
     }
 
     "same height" - {
-      val acceptedSnapshots: SnapshotsAtHeight = Map(
-        2L -> "a",
-        4L -> "b"
-      )
+      val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
-      val majorityState: SnapshotsAtHeight = Map(
-        2L -> "a",
-        4L -> "x"
-      )
+      val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x")
 
       "returns snapshots to leave untouched" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toLeave shouldEqual Map(
-          2L -> "a"
-        )
+        diff.toLeave shouldEqual Map(2L -> "a")
       }
 
       "returns both snapshots to download and remove" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map(
-          4L -> "b"
-        )
-        diff.toDownload shouldEqual Map(
-          4L -> "x"
-        )
+        diff.toRemove shouldEqual Map(4L -> "b")
+        diff.toDownload shouldEqual Map(4L -> "x")
       }
     }
   }
