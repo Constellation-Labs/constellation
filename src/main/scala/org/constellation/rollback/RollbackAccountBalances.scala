@@ -11,7 +11,7 @@ import scala.util.Try
 
 class RollbackAccountBalances {
 
-  private val zeroSnapshotHash = Snapshot("", Seq(), Map.empty).hash
+  private val zeroSnapshotHash = Snapshot.snapshotZeroHash
 
   def calculate(snapshotHash: String, snapshots: Seq[StoredSnapshot]): Either[RollbackException, AccountBalances] =
     Try(calculateSnapshotsBalances(snapshotHash, snapshots))

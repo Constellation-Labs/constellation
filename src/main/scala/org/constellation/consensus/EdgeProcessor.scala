@@ -9,6 +9,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation.{getCCParams, _}
+import org.apache.commons.collections.OrderedMap
 import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.p2p.PeerData
@@ -21,6 +22,7 @@ import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.async.Async.{async, await}
+import scala.collection.SortedMap
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
@@ -220,7 +222,7 @@ object EdgeProcessor extends StrictLogging {
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
 
-case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: Map[Id, Double])
+case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: SortedMap[Id, Double])
     extends Signable
 
 case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache]) {
@@ -390,7 +392,7 @@ object Snapshot extends StrictLogging {
     findLatestMessageWithSnapshotHashInner(depth, lastMessage)
   }
 
-  val snapshotZero = Snapshot("", Seq(), Map.empty)
-  val snapshotZeroHash: String = Snapshot("", Seq(), Map.empty).hash
+  val snapshotZero = Snapshot("", Seq(), SortedMap.empty)
+  val snapshotZeroHash: String = Snapshot("", Seq(), SortedMap.empty).hash
 
 }

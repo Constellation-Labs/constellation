@@ -8,6 +8,8 @@ import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers}
 
+import scala.collection.SortedMap
+
 object CheckOpenedFileDescriptors {
 
   def check(f: => Any): Unit = {
@@ -76,7 +78,7 @@ class SnapshotFileStorageTest extends FreeSpec with Matchers with BeforeAndAfter
         val snapshotStorage = SnapshotFileStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        val snapshot = Snapshot("lastHash", Seq.empty[String], Map.empty)
+        val snapshot = Snapshot("lastHash", Seq.empty[String], SortedMap.empty)
         val storedSnapshot = StoredSnapshot(snapshot, Seq.empty[CheckpointCache])
 
         val hash = "abc123"
