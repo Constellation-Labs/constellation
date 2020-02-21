@@ -25,6 +25,7 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 class RedownloadService[F[_]](
+  recentSnapshots: Int,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
   snapshotStorage: SnapshotStorage[F],
@@ -63,13 +64,15 @@ class RedownloadService[F[_]](
   def persistCreatedSnapshot(height: Long, hash: String): F[Unit] =
     createdSnapshots.modify { m =>
       val updated = if (m.contains(height)) m else m.updated(height, hash)
-      (updated, ())
+      val recent = calculateRecent(updated, recentSnapshots)
+      (recent, ())
     }
 
   def persistAcceptedSnapshot(height: Long, hash: String): F[Unit] =
     acceptedSnapshots.modify { m =>
       val updated = m.updated(height, hash)
-      (updated, ())
+      val recent = calculateRecent(updated, recentSnapshots)
+      (recent, ())
     }
 
   def getCreatedSnapshots(): F[SnapshotsAtHeight] = createdSnapshots.get
@@ -127,6 +130,13 @@ class RedownloadService[F[_]](
       }
 
     makeAttempt((stopAt + 1) % poolArray.length)
+  }
+
+  private def calculateRecent[K, V](data: Map[K, V], recent: Int)(implicit O: Ordering[K]): Map[K, V] = {
+    val keys = data.keys.toList.sorted
+    val toOmit = keys.diff(keys.takeRight(recent))
+
+    data -- toOmit
   }
 
   private def fetchStoredSnapshots(client: APIClient): F[Seq[String]] =
@@ -220,18 +230,31 @@ class RedownloadService[F[_]](
 
     } yield ()
 
+  def removeUnacceptedSnapshotsFromDisk(): EitherT[F, Throwable, Unit] =
+    for {
+      stored <- snapshotStorage.getSnapshotHashes.attemptT
+      accepted <- getAcceptedSnapshots().attemptT
+      diff = stored.toSet.diff(accepted.values.toSet)
+      _ <- diff.toList.traverse { hash =>
+        snapshotStorage.removeSnapshot(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
+      }
+    } yield ()
+
   private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     for {
       _ <- EitherT.liftF(logger.debug("Fetching missing snapshots."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload).attemptT
+
       _ <- EitherT.liftF(logger.debug("Updating acceptedSnapshots by majority state."))
-      _ <- acceptedSnapshots.modify { m =>
+      _ <- acceptedSnapshots.modify { _ =>
         val updated = plan.toLeave |+| plan.toDownload
         (updated, updated)
       }.attemptT
 
-      _ <- EitherT.liftF(logger.debug("Checking which SnapshotInfo is the highest one."))
+      _ <- EitherT.liftF(logger.debug("Removing unaccepted snapshots from disk."))
+      _ <- removeUnacceptedSnapshotsFromDisk()
 
+      _ <- EitherT.liftF(logger.debug("Checking which SnapshotInfo is the highest one."))
       highestSnapshotInfo <- getAcceptedSnapshots().attemptT
         .map(_.maxBy { case (height, _) => height } match { case (_, hash) => hash })
         .flatMap(hash => snapshotInfoStorage.readSnapshotInfo(hash))
@@ -246,7 +269,6 @@ class RedownloadService[F[_]](
         .attemptT
 
       _ <- EitherT.liftF(logger.debug("Redownload plan has been applied succesfully."))
-
     } yield ()
 
   private[redownload] def shouldRedownload(
@@ -308,6 +330,7 @@ class RedownloadService[F[_]](
 object RedownloadService {
 
   def apply[F[_]: Concurrent: ContextShift](
+    recentSnapshots: Int,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
     snapshotStorage: SnapshotStorage[F],
@@ -317,6 +340,7 @@ object RedownloadService {
     cloudStorage: CloudStorage[F]
   ): RedownloadService[F] =
     new RedownloadService[F](
+      recentSnapshots,
       cluster,
       majorityStateChooser,
       snapshotStorage,
