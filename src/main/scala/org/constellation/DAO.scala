@@ -249,6 +249,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
 
     redownloadService = RedownloadService[IO](
+      ConfigUtil.constellation.getInt("snapshot.recentSnapshots"),
       cluster,
       MajorityStateChooser(),
       snapshotStorage,
