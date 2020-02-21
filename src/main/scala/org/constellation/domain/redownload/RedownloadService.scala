@@ -82,8 +82,10 @@ class RedownloadService[F[_]](
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
         client
-          .getNonBlockingF[F, SnapshotsAtHeight]("/snapshot/own")(C)
-          .handleErrorWith(_ => F.pure(Map.empty))
+          .getNonBlockingF[F, SnapshotsAtHeight]("snapshot/own")(C)
+          .handleErrorWith { e =>
+            logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
+          }
           .map(client.id -> _)
       }
       proposals <- peersProposals.modify { m =>
@@ -171,10 +173,6 @@ class RedownloadService[F[_]](
           }
           _ <- logger.debug("To remove:")
           _ <- plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
-            case (height, hash) => logger.debug(s"[$height] - $hash")
-          }
-          _ <- logger.debug("To leave:")
-          _ <- plan.toLeave.toList.sortBy { case (height, _) => height }.traverse {
             case (height, hash) => logger.debug(s"[$height] - $hash")
           }
           _ <- applyRedownloadPlan(plan).value
