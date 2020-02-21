@@ -6,7 +6,7 @@ import com.google.common.hash.Hashing
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.hexToPublicKey
 
-case class Id(hex: String) {
+case class Id(hex: String) extends Ordered[Id] {
 
   @transient
   val short: String = hex.toString.slice(0, 5)
@@ -28,4 +28,6 @@ case class Id(hex: String) {
 
   @transient
   lazy val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
+
+  override def compare(that: Id): Int = hex.compare(that.hex)
 }

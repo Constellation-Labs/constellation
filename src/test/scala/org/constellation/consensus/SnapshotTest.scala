@@ -15,6 +15,8 @@ import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite, Matchers}
 
+import scala.collection.SortedMap
+
 class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with IdiomaticMockito with IdiomaticMockitoCats {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
@@ -45,7 +47,10 @@ class SnapshotTest extends FunSuite with BeforeAndAfter with Matchers with Idiom
 
   test("should remove snapshot distinctly and suppress not found messages") {
     val ss =
-      StoredSnapshot(Snapshot(randomHash, Seq.fill(50)(randomHash), Map.empty), Seq.fill(50)(CheckpointCache(randomCB)))
+      StoredSnapshot(
+        Snapshot(randomHash, Seq.fill(50)(randomHash), SortedMap.empty),
+        Seq.fill(50)(CheckpointCache(randomCB))
+      )
     Snapshot.writeSnapshot[IO](ss).value.unsafeRunSync()
     Snapshot
       .removeSnapshots[IO](List(ss.snapshot.hash, ss.snapshot.hash))
