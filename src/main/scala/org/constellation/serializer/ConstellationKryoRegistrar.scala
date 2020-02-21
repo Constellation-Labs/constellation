@@ -12,6 +12,9 @@ import org.constellation.primitives.{SignedData, _}
 import org.constellation.schema.Id
 import org.constellation.util.{HashSignature, SignatureBatch}
 
+import scala.collection.SortedMap
+import scala.collection.immutable.TreeMap
+
 class ConstellationKryoRegistrar extends IKryoRegistrar {
 
   override def apply(kryo: Kryo): Unit =
@@ -38,6 +41,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Map[String, TipData]])
     kryo.register(classOf[Map[String, LastTransactionRef]])
     kryo.register(classOf[Map[Id, Double]])
+    kryo.register(classOf[SortedMap[Id, Double]])
+    kryo.register(classOf[TreeMap[Id, Double]])
     kryo.register(classOf[Seq[(String, AddressCacheData)]])
     kryo.register(classOf[Seq[(String, TipData)]])
     kryo.register(classOf[Seq[(String, LastTransactionRef)]])
@@ -89,6 +94,10 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Boolean])
 
     kryo.register(classOf[AddressMetaData])
+
+    kryo.register(Class.forName("scala.math.LowPriorityOrderingImplicits$$anon$3"))
+    kryo.register(Class.forName("scala.Predef$$anon$2"))
+    kryo.register(scala.math.Ordering.String.getClass)
 
     kryo.register(Class.forName("org.constellation.primitives.Schema$EdgeHashType$"))
     kryo.register(Class.forName("scala.Enumeration$Val"))

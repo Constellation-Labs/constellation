@@ -4,12 +4,21 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.{CheckpointBlockInvalid, CheckpointBlockWithMissingParents, CheckpointBlockWithMissingSoe, Observation, ObservationEvent, RequestTimeoutOnConsensus, RequestTimeoutOnResolving}
+import org.constellation.domain.observation.{
+  CheckpointBlockInvalid,
+  CheckpointBlockWithMissingParents,
+  CheckpointBlockWithMissingSoe,
+  Observation,
+  ObservationEvent,
+  RequestTimeoutOnConsensus,
+  RequestTimeoutOnResolving
+}
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
 
+import scala.collection.SortedMap
 
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 
@@ -29,8 +38,10 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
 
           idMappedScores = SelfAvoidingWalk
-            .runWalkFeedbackUpdateSingleNode(scoringMap(nodeId),
-                                             TrustManager.calculateTrustNodes(scores, nodeId, scoringMap))
+            .runWalkFeedbackUpdateSingleNode(
+              scoringMap(nodeId),
+              TrustManager.calculateTrustNodes(scores, nodeId, scoringMap)
+            )
             .edges
             .map(e => idxMap(e.dst) -> e.trust)
             .toMap
@@ -73,7 +84,8 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 }
 
 object TrustManager {
-  def observationScoring(event: ObservationEvent): Double = {
+
+  def observationScoring(event: ObservationEvent): Double =
     event match {
       case _: CheckpointBlockWithMissingParents => -0.1
       case _: CheckpointBlockWithMissingSoe     => -0.1
@@ -82,7 +94,6 @@ object TrustManager {
       case _: CheckpointBlockInvalid            => -0.1
       case _                                    => 0d
     }
-  }
 
   def calculateScoringMap(scores: List[Id]): Map[Id, Int] =
     scores.sortBy { _.hex }.zipWithIndex.toMap

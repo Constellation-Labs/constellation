@@ -9,6 +9,8 @@ import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers}
 
+import scala.collection.SortedMap
+
 class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndAfterAll {
 
   "createDirectoryIfNotExists" - {
@@ -57,7 +59,7 @@ class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndA
         val snapshotInfoStorage = SnapshotInfoFileStorage[IO](snapshotInfosDir.pathAsString)
         snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        val snapshot = Snapshot("lastHash", Seq.empty[String], Map.empty)
+        val snapshot = Snapshot("lastHash", Seq.empty[String], SortedMap.empty)
         val storedSnapshot = StoredSnapshot(snapshot, Seq.empty[CheckpointCache])
         val snapshotInfo = SnapshotInfo(storedSnapshot)
 
