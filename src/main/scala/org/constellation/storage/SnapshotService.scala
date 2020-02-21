@@ -27,6 +27,8 @@ import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
+import scala.collection.SortedMap
+
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
   cloudStorage: CloudStorage[F],
@@ -345,10 +347,13 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
-  private def getNextSnapshot(hashesForNextSnapshot: Seq[String], publicReputation: Map[Id, Double]): F[Snapshot] =
+  private def getNextSnapshot(
+    hashesForNextSnapshot: Seq[String],
+    publicReputation: Map[Id, Double]
+  ): F[Snapshot] =
     storedSnapshot.get
       .map(_.snapshot.hash)
-      .map(hash => Snapshot(hash, hashesForNextSnapshot, publicReputation))
+      .map(hash => Snapshot(hash, hashesForNextSnapshot, SortedMap(publicReputation.toSeq: _*)))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
