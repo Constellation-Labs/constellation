@@ -190,18 +190,30 @@ class RedownloadService[F[_]](
     }
   }
 
+  private[redownload] def removeUnacceptedSnapshotsFromDisk: EitherT[F, Throwable, Unit] = for {
+    stored <- snapshotStorage.getSnapshotHashes.attemptT
+    accepted <- getAcceptedSnapshots().attemptT
+    diff = stored.toSet diff accepted.values.toSet
+    _ <- diff.toList.traverse { hash =>
+      snapshotStorage.removeSnapshot(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
+    }
+  } yield ()
+
   private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     for {
       _ <- EitherT.liftF(logger.debug("Fetching missing snapshots."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload).attemptT
+
       _ <- EitherT.liftF(logger.debug("Updating acceptedSnapshots by majority state."))
-      _ <- acceptedSnapshots.modify { m =>
+      _ <- acceptedSnapshots.modify { _ =>
         val updated = plan.toLeave |+| plan.toDownload
         (updated, updated)
       }.attemptT
 
-      _ <- EitherT.liftF(logger.debug("Checking which SnapshotInfo is the highest one."))
+      _ <- EitherT.liftF(logger.debug("Removing unaccepted snapshots from disk."))
+      _ <- removeUnacceptedSnapshotsFromDisk
 
+      _ <- EitherT.liftF(logger.debug("Checking which SnapshotInfo is the highest one."))
       highestSnapshotInfo <- getAcceptedSnapshots().attemptT
         .map(_.maxBy { case (height, _) => height } match { case (_, hash) => hash })
         .flatMap(hash => snapshotInfoStorage.readSnapshotInfo(hash))
@@ -216,7 +228,6 @@ class RedownloadService[F[_]](
         .attemptT
 
       _ <- EitherT.liftF(logger.debug("Redownload plan has been applied succesfully."))
-
     } yield ()
 
   private[redownload] def shouldRedownload(
