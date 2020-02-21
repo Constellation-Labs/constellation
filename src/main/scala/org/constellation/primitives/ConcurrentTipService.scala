@@ -99,7 +99,7 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
               tipData <- get(h)
               size <- size
               reuseTips = size < maxWidth
-              aboveMinimumTip = size > numFacilitatorPeers
+              aboveMinimumTip = size >= numFacilitatorPeers
               _ <- tipData match {
                 case None => Sync[F].unit
                 case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
