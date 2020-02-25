@@ -87,7 +87,7 @@ class PeerAPITest
 
   "GET snapshot/own" - {
     "response should return empty map if there are no snapshots" in {
-      dao.redownloadService.getCreatedSnapshots() shouldReturnF Map.empty
+      dao.redownloadService.getCreatedSnapshots shouldReturnF Map.empty
 
       Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe Map.empty
@@ -97,7 +97,7 @@ class PeerAPITest
     "response should return map with all own snapshots" in {
       val ownSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
 
-      dao.redownloadService.getCreatedSnapshots() shouldReturnF ownSnapshots
+      dao.redownloadService.getCreatedSnapshots shouldReturnF ownSnapshots
 
       Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe ownSnapshots
@@ -107,7 +107,7 @@ class PeerAPITest
 
   "GET snapshot/accepted" - {
     "response should return empty map if there are no snapshots" in {
-      dao.redownloadService.getAcceptedSnapshots() shouldReturnF Map.empty
+      dao.redownloadService.getAcceptedSnapshots shouldReturnF Map.empty
 
       Get("/snapshot/accepted") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe Map.empty
@@ -117,7 +117,7 @@ class PeerAPITest
     "response should return map with all accepted snapshots" in {
       val acceptedSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
 
-      dao.redownloadService.getAcceptedSnapshots() shouldReturnF acceptedSnapshots
+      dao.redownloadService.getAcceptedSnapshots shouldReturnF acceptedSnapshots
 
       Get("/snapshot/accepted") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, String]] shouldBe acceptedSnapshots

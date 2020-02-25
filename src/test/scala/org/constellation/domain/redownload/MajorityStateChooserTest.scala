@@ -131,7 +131,7 @@ class MajorityStateChooserTest
 
   private def chooseMajorityState(
     createdSnapshots: Map[Long, String],
-    peersProposals: Map[Id, Map[Long, String]]
+    peersProposals: Map[Id, Map[Long, String]],
   ) = {
     val chooser = MajorityStateChooser()
 
