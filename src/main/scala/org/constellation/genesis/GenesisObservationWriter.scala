@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage.external.CloudStorage
+import org.constellation.domain.cloud.CloudStorage
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.ExecutionContext
@@ -31,7 +31,7 @@ class GenesisObservationWriter[F[_]: Concurrent](
       isEnabledCloudStorage = ConfigUtil.isEnabledCloudStorage
       _ <- EitherT.liftF(logger.info(s"Cloud storage is enabled : $isEnabledCloudStorage"))
 
-      result <- sendToCloudIfRequired(genesisObservation)
+      result <- sendToCloudIfEnabled()
       _ <- EitherT.liftF(logger.info(s"Genesis observation files saved on cloud : ${result.size} : ${result}"))
     } yield ()
 
@@ -43,14 +43,12 @@ class GenesisObservationWriter[F[_]: Concurrent](
       }
     }
 
-  private def sendToCloudIfRequired(
-    genesis: GenesisObservation
-  ): EitherT[F, GenesisObservationWriterException, List[String]] =
-    if (ConfigUtil.isEnabledCloudStorage) EitherT(sendToCloud(genesis)) else EitherT.rightT(List.empty)
+  private def sendToCloudIfEnabled(): EitherT[F, GenesisObservationWriterException, List[String]] =
+    if (ConfigUtil.isEnabledCloudStorage) EitherT(sendToCloud()) else EitherT.rightT(List.empty)
 
-  private def sendToCloud(genesis: GenesisObservation): F[Either[GenesisObservationWriterException, List[String]]] =
+  private def sendToCloud(): F[Either[GenesisObservationWriterException, List[String]]] =
     executionContext.evalOn(fileOperationContext) {
-      cloudStorage.upload(List(getFilePathToGenesisObservation)).map {
+      cloudStorage.upload(List(getFilePathToGenesisObservation), "genesis".some).map {
         case Nil  => Left(CannotSendGenesisObservationToCloud("List is empty"))
         case list => Right(list)
       }
