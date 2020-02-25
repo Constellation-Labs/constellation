@@ -34,16 +34,18 @@ class RedownloadServiceTest
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
   var cloudStorage: CloudStorage[IO] = _
 
-  val recentSnapshots = 5
+  val meaningfulSnapshotsCount = 4
+  val redownloadInterval = 2
 
-  override def beforeEach() = {
+  override def beforeEach(): Unit = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
     snapshotStorage = mock[SnapshotStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
     cloudStorage = mock[CloudStorage[IO]]
     redownloadService = RedownloadService[IO](
-      recentSnapshots,
+      meaningfulSnapshotsCount,
+      redownloadInterval,
       cluster,
       majorityStateChooser,
       snapshotStorage,
@@ -169,9 +171,9 @@ class RedownloadServiceTest
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "aaaa".some
     }
 
-    s"should trim the Map to the last ${recentSnapshots} heights" in {
-      val snapshots = (1 to recentSnapshots + 1).map(_ * 2).map(_.toLong).toList
-      val expectedSnapshots = snapshots.takeRight(recentSnapshots)
+    s"should trim the Map to the last ${meaningfulSnapshotsCount + redownloadInterval * 2} heights" in {
+      val snapshots = (1 to meaningfulSnapshotsCount + redownloadInterval * 2 + 1).map(_ * 2).map(_.toLong).toList
+      val expectedSnapshots = snapshots.takeRight(meaningfulSnapshotsCount + redownloadInterval * 2)
 
       val persist = snapshots.traverse(s => redownloadService.persistCreatedSnapshot(s, s.toString))
       val check = redownloadService.createdSnapshots.get.map(_.keys.toList.sorted)
@@ -196,9 +198,9 @@ class RedownloadServiceTest
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "bbbb".some
     }
 
-    s"should trim the Map to the last ${recentSnapshots} heights" in {
-      val snapshots = (1 to recentSnapshots + 1).map(_ * 2).map(_.toLong).toList
-      val expectedSnapshots = snapshots.takeRight(recentSnapshots)
+    s"should trim the Map to the last ${meaningfulSnapshotsCount + redownloadInterval * 2} heights" in {
+      val snapshots = (1 to meaningfulSnapshotsCount + redownloadInterval * 2 + 1).map(_ * 2).map(_.toLong).toList
+      val expectedSnapshots = snapshots.takeRight(meaningfulSnapshotsCount + redownloadInterval * 2)
 
       val persist = snapshots.traverse(s => redownloadService.persistAcceptedSnapshot(s, s.toString))
       val check = redownloadService.acceptedSnapshots.get.map(_.keys.toList.sorted)
@@ -264,7 +266,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      redownloadService.fetchAndUpdatePeersProposals.unsafeRunSync
+      redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
 
       peerInfo.values.foreach { peer =>
         peer.client.getNonBlockingF[IO, Map[Long, String]]("snapshot/own", *, *)(*)(*, *, *).was(called)
@@ -289,7 +291,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      val fetch = redownloadService.fetchAndUpdatePeersProposals
+      val fetch = redownloadService.fetchAndUpdatePeersProposals()
       val check = redownloadService.peersProposals.get
 
       (fetch >> check).unsafeRunSync shouldBe Map(
@@ -323,7 +325,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      val fetch = redownloadService.fetchAndUpdatePeersProposals
+      val fetch = redownloadService.fetchAndUpdatePeersProposals()
       val check = redownloadService.peersProposals.get
 
       (fetch >> check).unsafeRunSync shouldBe Map(
@@ -333,38 +335,179 @@ class RedownloadServiceTest
     }
   }
 
-  "calculateDiff" - {
+  "calculateRedownloadPlan" - {
     "above" - {
-      val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x")
+      "ignores missing snapshots below ignorePoint (inclusive)" in {
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "x",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f"
+        )
 
-      val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b", 6L -> "c", 8L -> "d", 10L -> "e")
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+//          2L -> "a",
+//          4L -> "b",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f",
+          14L -> "g",
+          16L -> "h",
+          18L -> "i"
+        )
 
-      "returns snapshots to leave untouched" in {
+        // recentSnapshots = 4
+        // redownloadInterval = 2
+        // ignorePoint = maxHeight - recentSnapshots * 2 = 12 - 4*2 = 12 - 8 = 4
+
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toLeave shouldEqual Map(2L -> "a")
+        diff.toRemove shouldEqual Map(
+          14L -> "g",
+          16L -> "h",
+          18L -> "i"
+        )
+        diff.toDownload shouldEqual Map.empty
+      }
+
+      "ignores incorrect snapshots below ignorePoint (inclusive)" in {
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "x",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f"
+        )
+
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b", // incorrect but ignored
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f",
+          14L -> "g",
+          16L -> "h",
+          18L -> "i"
+        )
+
+        // recentSnapshots = 4
+        // redownloadInterval = 2
+        // ignorePoint = maxHeight - recentSnapshots = 12 - 4 = 8
+
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toRemove shouldEqual Map(
+          14L -> "g",
+          16L -> "h",
+          18L -> "i"
+        )
+        diff.toDownload shouldEqual Map.empty
       }
 
       "returns both snapshots to download and remove" in {
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "x",
+          6L -> "c"
+        )
+
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f"
+        )
+
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map(4L -> "b", 6L -> "c", 8L -> "d", 10L -> "e")
+        diff.toRemove shouldEqual Map(4L -> "b", 8L -> "d", 10L -> "e", 12L -> "f")
         diff.toDownload shouldEqual Map(4L -> "x")
       }
     }
 
     "below" - {
-      val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
+      "ignores missing snapshots below ignorePoint (inclusive)" in {
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f",
+          14L -> "g",
+          16L -> "h", // ignorePoint
+          18L -> "i",
+          20L -> "j",
+          22L -> "k",
+          24L -> "l"
+        )
 
-      val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x", 6L -> "c", 8L -> "d", 10L -> "e")
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b",
+          6L -> "c",
+          8L -> "d"
+        )
 
-      "returns snapshots to leave untouched" in {
+        // recentSnapshots = 4
+        // redownloadInterval = 2
+        // ignorePoint = maxHeight - recentSnapshots = 24 - 4 = 20
+
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toLeave shouldEqual Map(2L -> "a")
+        diff.toRemove shouldEqual Map.empty
+        diff.toDownload shouldEqual Map(
+          22L -> "k",
+          24L -> "l"
+        )
+      }
+
+      "ignores incorrect snapshots below ignorePoint (inclusive)" in {
+        val majorityState: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "b",
+          6L -> "c",
+          8L -> "d",
+          10L -> "e",
+          12L -> "f",
+          14L -> "g",
+          16L -> "h", // ignorePoint
+          18L -> "i",
+          20L -> "j",
+          22L -> "k",
+          24L -> "l"
+        )
+
+        val acceptedSnapshots: SnapshotsAtHeight = Map(
+          2L -> "a",
+          4L -> "x", // incorrect but ignored
+          6L -> "c",
+          8L -> "d"
+        )
+
+        // recentSnapshots = 4
+        // redownloadInterval = 2
+        // ignorePoint = maxHeight - recentSnapshots = 24 - 4 = 20
+
+        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
+        diff.toRemove shouldEqual Map.empty
+        diff.toDownload shouldEqual Map(
+          22L -> "k",
+          24L -> "l"
+        )
       }
 
       "returns both snapshots to download and remove" in {
+        val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
+
+        val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x", 6L -> "c")
+
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
         diff.toRemove shouldEqual Map(4L -> "b")
-        diff.toDownload shouldEqual Map(4L -> "x", 6L -> "c", 8L -> "d", 10L -> "e")
+        diff.toDownload shouldEqual Map(4L -> "x", 6L -> "c")
       }
     }
 
@@ -372,11 +515,6 @@ class RedownloadServiceTest
       val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
       val majorityState: SnapshotsAtHeight = Map(2L -> "a", 4L -> "x")
-
-      "returns snapshots to leave untouched" in {
-        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toLeave shouldEqual Map(2L -> "a")
-      }
 
       "returns both snapshots to download and remove" in {
         val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
@@ -396,7 +534,7 @@ class RedownloadServiceTest
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
-      redownloadService.fetchStoredSnapshotsFromAllPeers.unsafeRunSync
+      redownloadService.fetchStoredSnapshotsFromAllPeers().unsafeRunSync
 
       peerInfo.values.foreach { peer =>
         peer.client.getNonBlockingF[IO, Seq[String]]("snapshot/stored", *, *)(*)(*, *, *).was(called)
