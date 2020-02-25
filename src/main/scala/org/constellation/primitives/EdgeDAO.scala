@@ -33,7 +33,7 @@ import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.storage.external.CloudStorage
+import org.constellation.domain.cloud.CloudStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}

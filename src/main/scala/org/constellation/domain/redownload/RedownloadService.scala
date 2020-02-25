@@ -7,6 +7,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.RedownloadService.{
   PeersProposals,
   SnapshotInfoSerialized,
@@ -29,7 +30,8 @@ class RedownloadService[F[_]](
   snapshotStorage: SnapshotStorage[F],
   snapshotInfoStorage: SnapshotInfoStorage[F],
   snapshotService: SnapshotService[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F]
+  checkpointAcceptanceService: CheckpointAcceptanceService[F],
+  cloudStorage: CloudStorage[F]
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   /**
@@ -48,6 +50,10 @@ class RedownloadService[F[_]](
     * Majority proposals from other peers. It is used to calculate majority state.
     */
   private[redownload] val peersProposals: Ref[F, PeersProposals] = Ref.unsafe(Map.empty)
+
+  private[redownload] val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
+
+  private[redownload] var lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
   private[redownload] val snapshotHeightRedownloadDelayInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
@@ -148,7 +154,7 @@ class RedownloadService[F[_]](
       _ <- missingSnapshots.toList.traverse {
         case (hash, (snapshot, snapshotInfo)) =>
           snapshotStorage.writeSnapshot(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
-      }.value.void
+      }.value.flatMap(F.fromEither).void
     } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] = {
@@ -163,6 +169,8 @@ class RedownloadService[F[_]](
         peersProposals
       )
 
+      _ <- lastMajorityState.modify(_ => (majorityState, ()))
+
       _ <- if (shouldRedownload(acceptedSnapshots, majorityState, snapshotHeightRedownloadDelayInterval)) {
         val plan = calculateRedownloadPlan(acceptedSnapshots, majorityState)
         for {
@@ -175,9 +183,12 @@ class RedownloadService[F[_]](
           _ <- plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
             case (height, hash) => logger.debug(s"[$height] - $hash")
           }
-          _ <- applyRedownloadPlan(plan).value
+          _ <- applyRedownloadPlan(plan).value.flatMap(F.fromEither)
         } yield ()
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
+
+      _ <- sendMajoritySnapshotsToCloud()
+
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
     } yield ()
 
@@ -189,6 +200,25 @@ class RedownloadService[F[_]](
       } else F.unit
     }
   }
+
+  private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] =
+    for {
+      majorityState <- lastMajorityState.get
+      lastHeight <- lastSentHeight.get
+
+      toSend = majorityState.filterKeys(_ > lastHeight)
+      hashes = toSend.values.toList
+      snapshotFiles <- snapshotStorage.getSnapshotFiles(hashes)
+      snapshotInfoFiles <- snapshotInfoStorage.getSnapshotInfoFiles(hashes)
+
+      _ <- cloudStorage.upload(snapshotFiles, "snapshots".some)
+      _ <- cloudStorage.upload(snapshotInfoFiles, "snapshot-infos".some)
+      _ <- if (toSend.nonEmpty) {
+        val maxHeight = toSend.keys.max
+        lastSentHeight.modify(_ => (maxHeight, ()))
+      } else F.unit
+
+    } yield ()
 
   private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     for {
@@ -283,7 +313,8 @@ object RedownloadService {
     snapshotStorage: SnapshotStorage[F],
     snapshotInfoStorage: SnapshotInfoStorage[F],
     snapshotService: SnapshotService[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F]
+    checkpointAcceptanceService: CheckpointAcceptanceService[F],
+    cloudStorage: CloudStorage[F]
   ): RedownloadService[F] =
     new RedownloadService[F](
       cluster,
@@ -291,7 +322,8 @@ object RedownloadService {
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
-      checkpointAcceptanceService
+      checkpointAcceptanceService,
+      cloudStorage
     )
 
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
