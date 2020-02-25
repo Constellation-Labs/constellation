@@ -10,7 +10,7 @@ class MajorityStateChooser {
   // TODO: Use RedownloadService type definitions
   def chooseMajorityState(
     createdSnapshots: SnapshotsAtHeight,
-    peersProposals: Map[Id, SnapshotsAtHeight]
+    peersProposals: Map[Id, SnapshotsAtHeight],
   ): SnapshotsAtHeight = {
     val peersSize = peersProposals.size + 1 // +1 - it's an own node
     val proposals = mergeByHeights(createdSnapshots, peersProposals)
