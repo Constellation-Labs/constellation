@@ -13,7 +13,7 @@ import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.storage.external.CloudStorage
+import org.constellation.domain.cloud.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats

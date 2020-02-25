@@ -47,7 +47,7 @@ import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.storage.external.{AWSStorage, GCPStorage}
+import org.constellation.infrastructure.cloud.{AWSStorage, GCPStorage}
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
@@ -123,9 +123,17 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     if (ConfigUtil.isEnabledAWSStorage) {
-      cloudStorage = new AWSStorage[IO]
+      cloudStorage = new AWSStorage[IO](
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
     } else if (ConfigUtil.isEnabledGCPStorage) {
-      cloudStorage = new GCPStorage[IO]
+      cloudStorage = new GCPStorage[IO](
+        ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
+        ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
+      )
     }
 
     rateLimiting = new RateLimiting[IO]
@@ -246,7 +254,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
-      checkpointAcceptanceService
+      checkpointAcceptanceService,
+      cloudStorage
     )
 
     downloadService = DownloadService[IO](redownloadService, cluster)

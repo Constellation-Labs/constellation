@@ -1,4 +1,4 @@
-package org.constellation.storage.external
+package org.constellation.infrastructure.cloud
 
 sealed trait CloudStorageException extends Throwable {
   val exceptionMessage: String
