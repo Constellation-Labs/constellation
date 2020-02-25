@@ -64,6 +64,12 @@ class SnapshotInfoFileStorage[F[_]](dirPath: String)(implicit F: Sync[F]) extend
     }
   }
 
+  def getSnapshotInfoFiles(hashes: List[String]): F[List[File]] = getSnapshotInfoFiles.map {
+    _.filter { file =>
+      hashes.contains(file.name)
+    }
+  }
+
   def getSnapshotInfoBytes(hash: String): EitherT[F, Throwable, Array[Byte]] =
     dir
       .map(_ / hash)

@@ -4,6 +4,7 @@ import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.{Cluster, PeerData}
@@ -31,19 +32,22 @@ class RedownloadServiceTest
   var snapshotService: SnapshotService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
+  var cloudStorage: CloudStorage[IO] = _
 
   override def beforeEach() = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
     snapshotStorage = mock[SnapshotStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
+    cloudStorage = mock[CloudStorage[IO]]
     redownloadService = RedownloadService[IO](
       cluster,
       majorityStateChooser,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
-      checkpointAcceptanceService
+      checkpointAcceptanceService,
+      cloudStorage
     )
   }
 

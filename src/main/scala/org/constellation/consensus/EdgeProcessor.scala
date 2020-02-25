@@ -288,9 +288,6 @@ object Snapshot extends StrictLogging {
     snapshots: List[String]
   )(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
-      _ <- if (shouldSendSnapshotsToCloud) {
-        sendSnapshotsToCloud[F](snapshots)
-      } else Sync[F].unit
       _ <- snapshots.distinct.traverse { snapId =>
         withMetric(
           LiftIO[F].liftIO(dao.snapshotStorage.removeSnapshot(snapId).value.flatMap(IO.fromEither)).handleErrorWith {
@@ -312,22 +309,6 @@ object Snapshot extends StrictLogging {
         )
       }
     } yield ()
-
-  private def sendSnapshotsToCloud[F[_]: Concurrent](
-    snapshotsHash: List[String]
-  )(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
-    for {
-      files <- C.evalOn(ConstellationExecutionContext.unbounded)(
-        LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotFiles(snapshotsHash))
-      )
-      blobsNames <- C.evalOn(ConstellationExecutionContext.unbounded)(
-        LiftIO[F].liftIO(dao.cloudStorage.upload(files.toList))
-      )
-      _ <- Sync[F].delay(logger.debug(s"Snapshots send to cloud amount : ${blobsNames.size}"))
-    } yield ()
-
-  private def shouldSendSnapshotsToCloud: Boolean =
-    ConfigUtil.isEnabledCloudStorage
 
   def isOverDiskCapacity(bytesLengthToAdd: Long)(implicit dao: DAO): IO[Boolean] = {
     val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
