@@ -77,7 +77,7 @@ trait CommonEndpoints extends Json4sSupport {
         APIDirective.handle(snapshots)(complete(_))
       } ~
       path("snapshot" / "accepted") {
-        val snapshots = dao.redownloadService.getAcceptedSnapshots()
+        val snapshots = dao.redownloadService.getAcceptedSnapshots
 
         APIDirective.handle(snapshots)(complete(_))
       } ~
