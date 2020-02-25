@@ -18,6 +18,8 @@ trait SnapshotInfoStorage[F[_]] {
 
   def getSnapshotInfoFiles: F[List[File]]
 
+  def getSnapshotInfoFiles(hashes: List[String]): F[List[File]]
+
   def getSnapshotInfoBytes(hash: String): EitherT[F, Throwable, Array[Byte]]
 
 }

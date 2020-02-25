@@ -22,7 +22,7 @@ import org.constellation.primitives._
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.storage.external.CloudStorage
+import org.constellation.domain.cloud.CloudStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
