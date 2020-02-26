@@ -10,7 +10,7 @@ import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
-import org.constellation.util.APIClient
+import org.constellation.util.{APIClient, Metrics}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfterEach, FreeSpec, Matchers}
@@ -33,6 +33,7 @@ class RedownloadServiceTest
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
   var cloudStorage: CloudStorage[IO] = _
+  var metrics: Metrics = _
 
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
@@ -46,13 +47,15 @@ class RedownloadServiceTest
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,
+      false,
       cluster,
       majorityStateChooser,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
       checkpointAcceptanceService,
-      cloudStorage
+      cloudStorage,
+      metrics
     )
   }
 
@@ -337,76 +340,6 @@ class RedownloadServiceTest
 
   "calculateRedownloadPlan" - {
     "above" - {
-      "ignores missing snapshots below ignorePoint (inclusive)" in {
-        val majorityState: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "x",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e",
-          12L -> "f"
-        )
-
-        val acceptedSnapshots: SnapshotsAtHeight = Map(
-//          2L -> "a",
-//          4L -> "b",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e",
-          12L -> "f",
-          14L -> "g",
-          16L -> "h",
-          18L -> "i"
-        )
-
-        // recentSnapshots = 4
-        // redownloadInterval = 2
-        // ignorePoint = maxHeight - recentSnapshots * 2 = 12 - 4*2 = 12 - 8 = 4
-
-        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map(
-          14L -> "g",
-          16L -> "h",
-          18L -> "i"
-        )
-        diff.toDownload shouldEqual Map.empty
-      }
-
-      "ignores incorrect snapshots below ignorePoint (inclusive)" in {
-        val majorityState: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "x",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e",
-          12L -> "f"
-        )
-
-        val acceptedSnapshots: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b", // incorrect but ignored
-          6L -> "c",
-          8L -> "d",
-          10L -> "e",
-          12L -> "f",
-          14L -> "g",
-          16L -> "h",
-          18L -> "i"
-        )
-
-        // recentSnapshots = 4
-        // redownloadInterval = 2
-        // ignorePoint = maxHeight - recentSnapshots = 12 - 4 = 8
-
-        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map(
-          14L -> "g",
-          16L -> "h",
-          18L -> "i"
-        )
-        diff.toDownload shouldEqual Map.empty
-      }
-
       "returns both snapshots to download and remove" in {
         val majorityState: SnapshotsAtHeight = Map(
           2L -> "a",
@@ -430,76 +363,6 @@ class RedownloadServiceTest
     }
 
     "below" - {
-      "ignores missing snapshots below ignorePoint (inclusive)" in {
-        val majorityState: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e",
-          12L -> "f",
-          14L -> "g",
-          16L -> "h", // ignorePoint
-          18L -> "i",
-          20L -> "j",
-          22L -> "k",
-          24L -> "l"
-        )
-
-        val acceptedSnapshots: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b",
-          6L -> "c",
-          8L -> "d"
-        )
-
-        // recentSnapshots = 4
-        // redownloadInterval = 2
-        // ignorePoint = maxHeight - recentSnapshots = 24 - 4 = 20
-
-        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map.empty
-        diff.toDownload shouldEqual Map(
-          22L -> "k",
-          24L -> "l"
-        )
-      }
-
-      "ignores incorrect snapshots below ignorePoint (inclusive)" in {
-        val majorityState: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "b",
-          6L -> "c",
-          8L -> "d",
-          10L -> "e",
-          12L -> "f",
-          14L -> "g",
-          16L -> "h", // ignorePoint
-          18L -> "i",
-          20L -> "j",
-          22L -> "k",
-          24L -> "l"
-        )
-
-        val acceptedSnapshots: SnapshotsAtHeight = Map(
-          2L -> "a",
-          4L -> "x", // incorrect but ignored
-          6L -> "c",
-          8L -> "d"
-        )
-
-        // recentSnapshots = 4
-        // redownloadInterval = 2
-        // ignorePoint = maxHeight - recentSnapshots = 24 - 4 = 20
-
-        val diff = redownloadService.calculateRedownloadPlan(acceptedSnapshots, majorityState)
-        diff.toRemove shouldEqual Map.empty
-        diff.toDownload shouldEqual Map(
-          22L -> "k",
-          24L -> "l"
-        )
-      }
-
       "returns both snapshots to download and remove" in {
         val acceptedSnapshots: SnapshotsAtHeight = Map(2L -> "a", 4L -> "b")
 
