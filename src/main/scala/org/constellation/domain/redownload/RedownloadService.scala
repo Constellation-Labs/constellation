@@ -295,8 +295,9 @@ class RedownloadService[F[_]](
     snapshotService
       .syncBufferPull()
       .flatMap(_.values.toList.traverse(checkpointAcceptanceService.accept(_)))
-      .attemptT
       .void
+      .handleErrorWith(_ => F.unit)
+      .attemptT
 
   private[redownload] def updateHighestSnapshotInfo(): EitherT[F, Throwable, Unit] =
     for {
