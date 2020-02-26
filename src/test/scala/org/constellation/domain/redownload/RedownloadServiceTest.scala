@@ -200,7 +200,6 @@ class RedownloadServiceTest
     "should persist own snapshot internally if snapshot at given height doesn't exist" in {
       val persist = redownloadService.persistCreatedSnapshot(2L, "aabbcc")
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
-      println
       (persist >> check).unsafeRunSync shouldBe "aabbcc".some
     }
 
