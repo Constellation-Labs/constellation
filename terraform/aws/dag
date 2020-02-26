@@ -129,9 +129,16 @@ autostart() {
   start
 }
 
+clearLogs() {
+  checkHosts
+  echo -e "${blu} Clear all logs${clr}"
+
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/logs'
+}
+
 ############
 
-usage="${blu} Usage: ${grn}$0${clr} {${yel}assemble${clr} | ${yel}upload${clr} | ${yel}updateJar${clr} | ${yel}start${clr} | ${yel}restart${clr} | ${yel}stop${clr} | ${yel}exportIPs${clr} | ${yel}redeploy${clr} | ${yel}autostart${clr}}"
+usage="${blu} Usage: ${grn}$0${clr} {${yel}assemble${clr} | ${yel}upload${clr} | ${yel}updateJar${clr} | ${yel}start${clr} | ${yel}restart${clr} | ${yel}stop${clr} | ${yel}exportIPs${clr} | ${yel}redeploy${clr} | ${yel}autostart${clr} | ${yel}clearLogs${clr}}"
 
 if [[ $1 == "" ]]; then
   echo -e "$usage"
@@ -165,6 +172,9 @@ case "$1" in
     ;;
   autostart)
     autostart "$@"
+    ;;
+  clearLogs)
+    clearLogs
     ;;
   *)
     echo -e "$usage"
