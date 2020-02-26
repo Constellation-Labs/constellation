@@ -1,5 +1,6 @@
 package org.constellation.domain.redownload
 
+import better.files.File
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
@@ -47,7 +48,7 @@ class RedownloadServiceTest
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,
-      false,
+      true,
       cluster,
       majorityStateChooser,
       snapshotStorage,
@@ -442,6 +443,55 @@ class RedownloadServiceTest
 
       peerInfo.values.foreach { peer =>
         peer.client.getNonBlockingF[IO, Seq[String]]("snapshot/stored", *, *)(*)(*, *, *).was(called)
+      }
+    }
+  }
+
+  "sendMajoritySnapshotsToCloud" - {
+    "if cloud storage enabled" - {
+      "should upload snapshot and according snapshot info files" in {
+        File.usingTemporaryFile() { file1 =>
+          File.usingTemporaryFile() { file2 =>
+            val lastMajorityState = Map(2L -> "a", 4L -> "b", 6L -> "c")
+            val lastSentHeight = 4L
+
+            val setMajority = redownloadService.lastMajorityState.set(lastMajorityState)
+            val setLastSentHeight = redownloadService.lastSentHeight.set(lastSentHeight)
+
+            cloudStorage.upload(*, *) shouldReturnF List("c")
+            snapshotStorage.getSnapshotFiles(List("c")) shouldReturnF List(file1)
+            snapshotInfoStorage.getSnapshotInfoFiles(List("c")) shouldReturnF List(file2)
+
+            val check = redownloadService.sendMajoritySnapshotsToCloud()
+
+            (setMajority >> setLastSentHeight >> check).unsafeRunSync
+
+            cloudStorage.upload(List(file1), "snapshots".some).was(called)
+            cloudStorage.upload(List(file2), "snapshot-infos".some).was(called)
+          }
+        }
+      }
+    }
+
+    "if cloud storage disabled" - {
+      "should do nothing" in {
+        val redownloadService = RedownloadService[IO](
+          meaningfulSnapshotsCount,
+          redownloadInterval,
+          false,
+          cluster,
+          majorityStateChooser,
+          snapshotStorage,
+          snapshotInfoStorage,
+          snapshotService,
+          checkpointAcceptanceService,
+          cloudStorage,
+          metrics
+        )
+
+        val check = redownloadService.sendMajoritySnapshotsToCloud()
+
+        cloudStorage.upload(*, *).wasNever(called)
       }
     }
   }
