@@ -5,6 +5,7 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.RedownloadService.{
@@ -18,7 +19,7 @@ import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
-import org.constellation.util.APIClient
+import org.constellation.util.{APIClient, Metrics}
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -26,13 +27,15 @@ import scala.util.Random
 class RedownloadService[F[_]](
   meaningfulSnapshotsCount: Int,
   redownloadInterval: Int,
+  isEnabledCloudStorage: Boolean,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
   snapshotStorage: SnapshotStorage[F],
   snapshotInfoStorage: SnapshotInfoStorage[F],
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  cloudStorage: CloudStorage[F]
+  cloudStorage: CloudStorage[F],
+  metrics: Metrics
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   /**
@@ -61,14 +64,18 @@ class RedownloadService[F[_]](
   def persistCreatedSnapshot(height: Long, hash: String): F[Unit] =
     createdSnapshots.modify { m =>
       val updated = if (m.contains(height)) m else m.updated(height, hash)
-      val limited = takeNHighest(updated, meaningfulSnapshotsCount + redownloadInterval * 2)
+      val max = maxHeight(updated)
+      val removalPoint = getRemovalPoint(max)
+      val limited = takeHighestUntilKey(updated, removalPoint)
       (limited, ())
     }
 
   def persistAcceptedSnapshot(height: Long, hash: String): F[Unit] =
     acceptedSnapshots.modify { m =>
       val updated = m.updated(height, hash)
-      val limited = takeNHighest(updated, meaningfulSnapshotsCount + redownloadInterval * 2)
+      val max = maxHeight(updated)
+      val removalPoint = getRemovalPoint(max)
+      val limited = takeHighestUntilKey(updated, removalPoint)
       (limited, ())
     }
 
@@ -129,13 +136,6 @@ class RedownloadService[F[_]](
     makeAttempt((stopAt + 1) % poolArray.length)
   }
 
-  private def takeNHighest[K, V](data: Map[K, V], n: Int)(implicit O: Ordering[K]): Map[K, V] = {
-    val keys = data.keys.toList.sorted
-    val toOmit = keys.diff(keys.takeRight(n))
-
-    data -- toOmit
-  }
-
   private def takeHighestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
     data.filterKeys(_ > key)
 
@@ -154,15 +154,14 @@ class RedownloadService[F[_]](
 
   private def fetchAndStoreMissingSnapshots(snapshotsToDownload: SnapshotsAtHeight): EitherT[F, Throwable, Unit] =
     for {
-      storedSnapshots <- EitherT.liftF(fetchStoredSnapshotsFromAllPeers())
+      storedSnapshots <- fetchStoredSnapshotsFromAllPeers().attemptT
       candidates = snapshotsToDownload.values.toList.map { hash =>
         (hash, storedSnapshots.filter { case (_, hashes) => hashes.contains(hash) }.keySet)
       }.toMap
-      missingSnapshots <- EitherT.liftF {
-        candidates.toList.traverse {
-          case (hash, pool) => fetchSnapshotAndSnapshotInfoFromRandomPeer(hash, pool).map(snapshot => (hash, snapshot))
-        }.map(_.toMap)
-      }
+      missingSnapshots <- candidates.toList.traverse {
+        case (hash, pool) => fetchSnapshotAndSnapshotInfoFromRandomPeer(hash, pool).map(snapshot => (hash, snapshot))
+      }.map(_.toMap).attemptT
+
       _ <- missingSnapshots.toList.traverse {
         case (hash, (snapshot, snapshotInfo)) =>
           snapshotStorage.writeSnapshot(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
@@ -181,32 +180,45 @@ class RedownloadService[F[_]](
         peersProposals
       )
 
+      maxMajorityHeight = maxHeight(majorityState)
+      ignorePoint = getIgnorePoint(maxMajorityHeight)
+      meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
+      meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint)
+
       _ <- lastMajorityState.modify(_ => (majorityState, ()))
 
-      _ <- if (shouldRedownload(acceptedSnapshots, majorityState, redownloadInterval)) {
-        val plan = calculateRedownloadPlan(acceptedSnapshots, majorityState)
+      _ <- if (shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)) {
+        val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
+        val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
         for {
+          _ <- logger.debug(s"Alignment result: $result")
           _ <- logger.debug("Redownload needed! Applying the following redownload plan:")
           _ <- applyRedownloadPlan(plan).value.flatMap(F.fromEither)
         } yield ()
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
 
+      _ <- logger.debug("Sending majority snapshots to cloud (if enabled).")
       _ <- sendMajoritySnapshotsToCloud()
+
+      _ <- logger.debug("Removing unaccepted snapshots from disk.")
+      _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
 
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
     } yield ()
 
     cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
       if (state.isNewSet) {
-        wrappedCheck.handleErrorWith { _ =>
-          cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready).void
+        wrappedCheck.handleErrorWith { error =>
+          logger.error(s"Redownload error: ${error.getMessage}") >> cluster
+            .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+            .void
         }
       } else F.unit
     }
   }
 
-  private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] =
-    for {
+  private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] = {
+    val send = for {
       majorityState <- lastMajorityState.get
       lastHeight <- lastSentHeight.get
 
@@ -224,29 +236,25 @@ class RedownloadService[F[_]](
 
     } yield ()
 
+    if (isEnabledCloudStorage) send else F.unit
+  }
+
   private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     for {
       _ <- EitherT.liftF(logger.debug("To download:"))
-      _ <- EitherT.liftF {
-        plan.toDownload.toList.sortBy { case (height, _) => height }.traverse {
-          case (height, hash) => logger.debug(s"[$height] - $hash")
-        }
-      }
+      _ <- plan.toDownload.toList.sortBy { case (height, _) => height }.traverse {
+        case (height, hash) => logger.debug(s"[$height] - $hash")
+      }.attemptT
       _ <- EitherT.liftF(logger.debug("To remove:"))
-      _ <- EitherT.liftF {
-        plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
-          case (height, hash) => logger.debug(s"[$height] - $hash")
-        }
-      }
+      _ <- plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
+        case (height, hash) => logger.debug(s"[$height] - $hash")
+      }.attemptT
 
       _ <- EitherT.liftF(logger.debug("Fetching and storing missing snapshots on disk."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
 
       _ <- EitherT.liftF(logger.debug("Replacing acceptedSnapshots by majority state"))
       _ <- updateAcceptedSnapshots(plan)
-
-      _ <- EitherT.liftF(logger.debug("Removing unaccepted snapshots from disk."))
-      _ <- removeUnacceptedSnapshotsFromDisk()
 
       _ <- EitherT.liftF(logger.debug("Updating highest SnapshotInfo in SnapshotService."))
       _ <- updateHighestSnapshotInfo()
@@ -255,15 +263,20 @@ class RedownloadService[F[_]](
       _ <- acceptCheckpointBlocks()
 
       _ <- EitherT.liftF(logger.debug("RedownloadPlan has been applied succesfully."))
+
+      _ <- EitherT.liftF(metrics.incrementMetricAsync("dag_reDownloadFinished_total"))
     } yield ()
 
   private[redownload] def getIgnorePoint(maxHeight: Long): Long = maxHeight - meaningfulSnapshotsCount
 
+  private[redownload] def getRemovalPoint(maxHeight: Long): Long = getIgnorePoint(maxHeight) - redownloadInterval * 2
+
   def removeUnacceptedSnapshotsFromDisk(): EitherT[F, Throwable, Unit] =
     for {
-      stored <- snapshotStorage.getSnapshotHashes.attemptT
-      accepted <- getAcceptedSnapshots().attemptT
-      diff = stored.toSet.diff(accepted.values.toSet)
+      stored <- snapshotStorage.getSnapshotHashes.attemptT.map(_.toSet)
+      accepted <- getAcceptedSnapshots().attemptT.map(_.values.toSet)
+      created <- getCreatedSnapshots().attemptT.map(_.values.toSet)
+      diff = stored.diff(accepted ++ created)
       _ <- diff.toList.traverse { hash =>
         snapshotStorage.removeSnapshot(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
       }
@@ -307,14 +320,9 @@ class RedownloadService[F[_]](
     acceptedSnapshots: SnapshotsAtHeight,
     majorityState: SnapshotsAtHeight
   ): RedownloadPlan = {
-    val maxMajorityHeight = maxHeight(majorityState)
-    val ignorePoint = getIgnorePoint(maxMajorityHeight)
-    val meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
-    val meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint)
-
-    val toDownload = meaningfulMajorityState.toSet.diff(meaningfulAcceptedSnapshots.toSet).toMap
-    val toRemove = meaningfulAcceptedSnapshots.toSet.diff(meaningfulMajorityState.toSet).toMap
-    val toLeave = meaningfulAcceptedSnapshots.toSet.diff(toRemove.toSet).toMap
+    val toDownload = majorityState.toSet.diff(acceptedSnapshots.toSet).toMap
+    val toRemove = acceptedSnapshots.toSet.diff(majorityState.toSet).toMap
+    val toLeave = acceptedSnapshots.toSet.diff(toRemove.toSet).toMap
     RedownloadPlan(toDownload, toRemove, toLeave)
   }
 
@@ -323,12 +331,12 @@ class RedownloadService[F[_]](
     majorityState: SnapshotsAtHeight,
     redownloadInterval: Int
   ): MajorityAlignmentResult = {
-    val highestCreatedHeight = maxHeight(acceptedSnapshots)
+    val highestAcceptedHeight = maxHeight(acceptedSnapshots)
     val highestMajorityHeight = maxHeight(majorityState)
 
-    val isAbove = highestCreatedHeight > highestMajorityHeight
-    val isBelow = highestCreatedHeight < highestMajorityHeight
-    val heightDiff = Math.abs(highestCreatedHeight - highestMajorityHeight)
+    val isAbove = highestAcceptedHeight > highestMajorityHeight
+    val isBelow = highestAcceptedHeight < highestMajorityHeight
+    val heightDiff = Math.abs(highestAcceptedHeight - highestMajorityHeight)
     val reachedRedownloadInterval = heightDiff >= redownloadInterval
 
     if (heightDiff == 0 && !majorityState.equals(acceptedSnapshots)) {
@@ -356,24 +364,28 @@ object RedownloadService {
   def apply[F[_]: Concurrent: ContextShift](
     meaningfulSnapshotsCount: Int,
     redownloadInterval: Int,
+    isEnabledCloudStorage: Boolean,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
     snapshotStorage: SnapshotStorage[F],
     snapshotInfoStorage: SnapshotInfoStorage[F],
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
-    cloudStorage: CloudStorage[F]
+    cloudStorage: CloudStorage[F],
+    metrics: Metrics
   ): RedownloadService[F] =
     new RedownloadService[F](
       meaningfulSnapshotsCount,
       redownloadInterval,
+      isEnabledCloudStorage,
       cluster,
       majorityStateChooser,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
       checkpointAcceptanceService,
-      cloudStorage
+      cloudStorage,
+      metrics
     )
 
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
