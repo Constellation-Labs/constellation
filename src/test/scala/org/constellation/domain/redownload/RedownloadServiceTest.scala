@@ -158,11 +158,48 @@ class RedownloadServiceTest
     }
   }
 
-  "persistOwnSnapshot" - {
+  "getIgnorePoint" - {
+    "is below maxHeight" in {
+      val maxHeight = 30L
+      val ignorePoint = redownloadService.getIgnorePoint(maxHeight)
+      ignorePoint < maxHeight shouldBe true
+    }
+
+    "is above the removal point" in {
+      val maxHeight = 30L
+      val ignorePoint = redownloadService.getIgnorePoint(maxHeight)
+      val removalPoint = redownloadService.getRemovalPoint(maxHeight)
+      ignorePoint > removalPoint shouldBe true
+    }
+  }
+
+  "getRemovalPoint" - {
+    "is below maxHeight" in {
+      val maxHeight = 30L
+      val removalPoint = redownloadService.getRemovalPoint(maxHeight)
+      removalPoint < maxHeight shouldBe true
+    }
+
+    "is below ignore point" in {
+      val maxHeight = 30L
+      val ignorePoint = redownloadService.getIgnorePoint(maxHeight)
+      val removalPoint = redownloadService.getRemovalPoint(maxHeight)
+      removalPoint < ignorePoint shouldBe true
+    }
+
+    "is delayed from ignorePoint by more than redownloadInterval" in {
+      val maxHeight = 30L
+      val ignorePoint = redownloadService.getIgnorePoint(maxHeight)
+      val removalPoint = redownloadService.getRemovalPoint(maxHeight)
+      removalPoint + redownloadInterval < ignorePoint shouldBe true
+    }
+  }
+
+  "persistCreatedSnapshot" - {
     "should persist own snapshot internally if snapshot at given height doesn't exist" in {
       val persist = redownloadService.persistCreatedSnapshot(2L, "aabbcc")
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
-
+      println
       (persist >> check).unsafeRunSync shouldBe "aabbcc".some
     }
 
@@ -174,14 +211,15 @@ class RedownloadServiceTest
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "aaaa".some
     }
 
-    s"should trim the Map to the last ${meaningfulSnapshotsCount + redownloadInterval * 2} heights" in {
-      val snapshots = (1 to meaningfulSnapshotsCount + redownloadInterval * 2 + 1).map(_ * 2).map(_.toLong).toList
-      val expectedSnapshots = snapshots.takeRight(meaningfulSnapshotsCount + redownloadInterval * 2)
+    s"should limit the Map to removal point" in {
+      val removalPoint = 30
+      val snapshots = (1 to removalPoint + 10 by 2).map(_.toLong).toList
 
       val persist = snapshots.traverse(s => redownloadService.persistCreatedSnapshot(s, s.toString))
-      val check = redownloadService.createdSnapshots.get.map(_.keys.toList.sorted)
+      val check =
+        redownloadService.createdSnapshots.get.map(_.find { case (height, _) => height <= removalPoint }).map(_.isEmpty)
 
-      (persist >> check).unsafeRunSync shouldBe expectedSnapshots.sorted
+      (persist >> check).unsafeRunSync shouldBe true
     }
   }
 
@@ -201,14 +239,17 @@ class RedownloadServiceTest
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "bbbb".some
     }
 
-    s"should trim the Map to the last ${meaningfulSnapshotsCount + redownloadInterval * 2} heights" in {
-      val snapshots = (1 to meaningfulSnapshotsCount + redownloadInterval * 2 + 1).map(_ * 2).map(_.toLong).toList
-      val expectedSnapshots = snapshots.takeRight(meaningfulSnapshotsCount + redownloadInterval * 2)
+    s"should limit the Map to removal point" in {
+      val removalPoint = 30
+      val snapshots = (1 to removalPoint + 10 by 2).map(_.toLong).toList
 
       val persist = snapshots.traverse(s => redownloadService.persistAcceptedSnapshot(s, s.toString))
-      val check = redownloadService.acceptedSnapshots.get.map(_.keys.toList.sorted)
+      val check =
+        redownloadService.acceptedSnapshots.get
+          .map(_.find { case (height, _) => height <= removalPoint })
+          .map(_.isEmpty)
 
-      (persist >> check).unsafeRunSync shouldBe expectedSnapshots.sorted
+      (persist >> check).unsafeRunSync shouldBe true
     }
   }
 
