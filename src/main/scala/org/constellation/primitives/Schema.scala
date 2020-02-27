@@ -272,10 +272,15 @@ object Schema {
     children: Int = 0,
     height: Option[Height] = None
   )
+
+  object CheckpointCache {
+    implicit val checkpointCacheOrdering: Ordering[CheckpointCache] =
+      Ordering.by[CheckpointCache, Long](_.height.fold(0L)(_.min))
+  }
   case class CheckpointCache(
     checkpointBlock: CheckpointBlock,
     children: Int = 0,
-    height: Option[Height] = None
+    height: Option[Height] = None // TODO: Check if Option if needed
   ) {
     /*
 
