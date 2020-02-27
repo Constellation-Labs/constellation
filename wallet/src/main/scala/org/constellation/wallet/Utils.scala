@@ -96,18 +96,44 @@ object Hashable {
   def hash(a: AnyRef): String = Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(a)).toString
 }
 
-case class LastTransactionRef(hash: String, ordinal: Long)
+trait Signable {
+
+  def signInput: Array[Byte] = hash.getBytes()
+
+  def hash: String = Hashable.hash(getRunLengthEncoding)
+
+  def short: String = hash.slice(0, 5)
+
+  def getRunLengthEncoding: String = Hashable.hash(this)
+
+}
+
+case class LastTransactionRef(prevHash: String, ordinal: Long) extends Signable {
+  override def getRunLengthEncoding = {
+    val hashLengthString = prevHash.length.toString
+    val ordinalLengthString = prevHash.length.toString
+    hashLengthString :: prevHash :: ordinalLengthString :: ordinal.toString :: Nil mkString ""
+  }
+}
 
 object LastTransactionRef {
   val empty = LastTransactionRef("", 0L)
 }
 
-case class TransactionEdgeData(
+case class TransactionEdgeData(//todo need to duplicate with Schema
   amount: Long,
   lastTxRef: LastTransactionRef,
   fee: Option[Long] = None,
   salt: Long = Random.nextLong()
-)
+) extends Signable  {
+  override def getRunLengthEncoding = {
+    val amountLengthString = amount.toString.length.toString
+    val feeLengthString = fee.getOrElse(0L).toString.length
+    val saltLengthString = amount.toString.length.toString
+    amountLengthString :: amount.toString :: lastTxRef.getRunLengthEncoding :: feeLengthString ::
+      fee.getOrElse(0L).toString :: saltLengthString :: salt.toString :: Nil mkString ""
+  }
+}
 
 object EdgeHashType extends Enumeration {
   type EdgeHashType = Value
@@ -120,7 +146,14 @@ case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[
 case class ObservationEdge(
   parents: Seq[TypedEdgeHash],
   data: TypedEdgeHash
-)
+) extends Signable {
+  override def getRunLengthEncoding = {
+    val numParentsLengthString = parents.length.toString
+    val parentValuesString = parents.flatMap(parent => parent.hash.length :: parent.hash :: Nil).mkString("")
+    val runEncodedTxData = data.hash //todo call this something else? Payload?
+    (numParentsLengthString :: parentValuesString :: runEncodedTxData :: Nil).mkString("")
+  }
+}
 
 case class HashSignature(
   signature: String,
@@ -201,7 +234,7 @@ object TransactionEdge {
         TypedEdgeHash(src, EdgeHashType.AddressHash),
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
-      TypedEdgeHash(Hashable.hash(txData), EdgeHashType.TransactionDataHash)
+      TypedEdgeHash(txData.getRunLengthEncoding, EdgeHashType.TransactionDataHash)
     )
     val soe = SignHelp.signedObservationEdge(oe)(keyPair)
     Edge(oe, soe, txData)

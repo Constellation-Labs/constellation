@@ -13,9 +13,11 @@ trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
 
-  def hash: String = this.kryo.sha256
+  def hash: String = hashSerialized(getRunLengthEncoding)
 
   def short: String = hash.slice(0, 5)
+
+  def getRunLengthEncoding: String = hashSerialized(this)
 
 }
 

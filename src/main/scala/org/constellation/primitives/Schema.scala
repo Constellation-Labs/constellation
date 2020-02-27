@@ -149,10 +149,11 @@ object Schema {
   /**
     * Wrapper for encapsulating a typed hash reference
     *
-    * @param hash : String of hashed value
+    * @param hashReference : String of hashed value or reference to be signed
     * @param hashType : Strictly typed from set of allowed edge formats
     */ // baseHash Temporary to debug heights missing
-  case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)
+  case class TypedEdgeHash(hashReference: String, //todo we should pass in runLengthEncodings for all Signable here and rely on hashSignBatchZeroTyped for hashing
+                           hashType: EdgeHashType, baseHash: Option[String] = None)
 
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
@@ -164,7 +165,15 @@ object Schema {
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
     parents: Seq[TypedEdgeHash],
     data: TypedEdgeHash
-  ) extends Signable
+  ) extends Signable {
+
+    override def getRunLengthEncoding = {
+      val numParentsLengthString = parents.length.toString
+      val parentValuesString = parents.flatMap(parent => parent.hashReference.length :: parent.hashReference :: Nil).mkString("")
+      val runEncodedTxData = data.hashReference//todo call this something else? Payload?
+        numParentsLengthString :: parentValuesString :: runEncodedTxData :: Nil mkString ""
+    }
+  }
 
   /**
     * Encapsulation for all witness information about a given observation edge.
@@ -199,7 +208,16 @@ object Schema {
     lastTxRef: LastTransactionRef,
     fee: Option[Long] = None,
     salt: Long = Random.nextLong()
-  ) extends Signable
+  ) extends Signable {
+
+    override def getRunLengthEncoding = {
+      val amountLengthString = amount.toString.length.toString
+      val feeLengthString = fee.getOrElse(0L).toString.length
+      val saltLengthString = amount.toString.length.toString
+      amountLengthString :: amount.toString :: lastTxRef.getRunLengthEncoding :: feeLengthString ::
+        fee.getOrElse(0L).toString :: saltLengthString :: salt.toString :: Nil mkString ""
+    }
+  }
 
   /**
     * Collection of references to transaction hashes

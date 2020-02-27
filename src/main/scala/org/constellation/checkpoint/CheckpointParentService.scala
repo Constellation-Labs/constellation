@@ -21,7 +21,7 @@ class CheckpointParentService[F[_]: Sync](
       if (soeHash == Genesis.Coinbase) {
         none[String]
       } else {
-        cb.checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap(_.baseHash)
+        cb.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap(_.baseHash)
       }
     }.getOrElse(List.empty)
 
@@ -35,7 +35,7 @@ class CheckpointParentService[F[_]: Sync](
             logger
               .debug(s"SOEHash $soeHash missing from soeService for cb: ${cb.baseHash}")
               .flatTap(_ => dao.metrics.incrementMetricAsync("parentSOEServiceQueryFailed"))
-              .map(_ => cb.checkpoint.edge.observationEdge.parents.find(_.hash == soeHash).flatMap { _.baseHash })
+              .map(_ => cb.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap { _.baseHash })
               .flatTap(
                 parentDirect =>
                   if (parentDirect.isEmpty) dao.metrics.incrementMetricAsync("parentDirectTipReferenceMissing")

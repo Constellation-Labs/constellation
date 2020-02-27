@@ -35,7 +35,7 @@ object Fixtures {
     storePath: String,
     kp: KeyPair = KeyUtils.makeKeyPair()
   ) = {
-    val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
+    val transactionEdge = TransactionService.createTransactionEdge(
       KeyUtils.publicKeyToAddressString(kp.getPublic),
       destination,
       lastTxRef,

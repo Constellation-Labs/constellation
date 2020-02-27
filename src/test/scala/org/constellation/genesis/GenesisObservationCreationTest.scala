@@ -26,7 +26,7 @@ class GenesisObservationCreationTest
   "genesis block should have coinbase tips" in {
     val go = Genesis.createGenesisObservation(Seq.empty)
     go.genesis.checkpoint.edge.observationEdge.parents.foreach(tip => {
-      tip.hash shouldBe Genesis.Coinbase
+      tip.hashReference shouldBe Genesis.Coinbase
     })
   }
 
@@ -42,7 +42,7 @@ class GenesisObservationCreationTest
       balances.forall { ab =>
         go.genesis.transactions.exists { tx =>
           tx.edge.observationEdge.parents match {
-            case Seq(a, b) => a.hash == Genesis.Coinbase && b.hash == ab.accountHash
+            case Seq(a, b) => a.hashReference == Genesis.Coinbase && b.hashReference == ab.accountHash
           }
         }
       } shouldBe true
@@ -61,10 +61,10 @@ class GenesisObservationCreationTest
       go.initialDistribution.transactions.size shouldBe 1
       go.initialDistribution2.transactions.size shouldBe 1
       go.initialDistribution.checkpoint.edge.observationEdge.parents.foreach(parent => {
-        parent.hash shouldBe genesisHash
+        parent.hashReference shouldBe genesisHash
       })
       go.initialDistribution2.checkpoint.edge.observationEdge.parents.foreach(parent => {
-        parent.hash shouldBe genesisHash
+        parent.hashReference shouldBe genesisHash
       })
     }
   }
@@ -83,10 +83,10 @@ class GenesisObservationCreationTest
       go.initialDistribution.transactions.size shouldBe 1
       go.initialDistribution2.transactions.size shouldBe 1
       go.initialDistribution.checkpoint.edge.observationEdge.parents.foreach(parent => {
-        parent.hash shouldBe genesisHash
+        parent.hashReference shouldBe genesisHash
       })
       go.initialDistribution2.checkpoint.edge.observationEdge.parents.foreach(parent => {
-        parent.hash shouldBe genesisHash
+        parent.hashReference shouldBe genesisHash
       })
     }
   }

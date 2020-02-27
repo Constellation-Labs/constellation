@@ -509,7 +509,7 @@ object CheckpointAcceptanceService {
               .map(a => {
                 if (txs.headOption.map(_.lastTxRef).contains(a)) {
                   List.empty
-                } else txs.map(_.lastTxRef.hash).filterNot(_ == "")
+                } else txs.map(_.lastTxRef.prevHash).filterNot(_ == "")
               })
         }
       }

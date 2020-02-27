@@ -113,7 +113,6 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   }
 
   implicit class KryoSerExt(anyRef: AnyRef) {
-
     def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
   }
 
@@ -175,6 +174,8 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     def toId: Id = kp.getPublic.toId
 
   }
+
+  def hashSerialized(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256
 
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))
