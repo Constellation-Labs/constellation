@@ -5,8 +5,8 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.RedownloadService.{
   PeersProposals,
@@ -265,7 +265,7 @@ class RedownloadService[F[_]](
 
       _ <- EitherT.liftF(logger.debug("RedownloadPlan has been applied succesfully."))
 
-      _ <- EitherT.liftF(metrics.incrementMetricAsync("dag_reDownloadFinished_total"))
+      _ <- EitherT.liftF(metrics.incrementMetricAsync("reDownloadFinished_total"))
     } yield ()
 
   private[redownload] def getIgnorePoint(maxHeight: Long): Long = maxHeight - meaningfulSnapshotsCount
@@ -292,10 +292,17 @@ class RedownloadService[F[_]](
       (updated, ())
     }.attemptT
 
-  private[redownload] def acceptCheckpointBlocks(): EitherT[F, Throwable, Unit] =
+  private[redownload] def acceptCheckpointBlocks()(
+    implicit ord: Ordering[FinishedCheckpoint]
+  ): EitherT[F, Throwable, Unit] =
     snapshotService
       .syncBufferPull()
-      .flatMap(_.values.toList.traverse(checkpointAcceptanceService.accept(_).handleErrorWith(_ => F.unit)))
+      .flatMap(
+        _.values.toList.sorted.reverse.traverse(
+          b =>
+            logger.debug(s"Accepting block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService.accept(b)
+        )
+      )
       .void
       .attemptT
 

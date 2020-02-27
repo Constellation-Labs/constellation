@@ -37,6 +37,11 @@ case class CreateCheckpointEdgeResponse(
 case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
 
 case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
+
+object FinishedCheckpoint {
+  implicit val ord: Ordering[FinishedCheckpoint] =
+    Ordering.by[FinishedCheckpoint, CheckpointCache](_.checkpointCacheData)
+}
 case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators: Set[Id])
 
 case class FinishedCheckpointResponse(isSuccess: Boolean = false)
