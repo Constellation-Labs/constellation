@@ -103,7 +103,8 @@ class RedownloadService[F[_]](
       }
       proposals <- peersProposals.modify { m =>
         val updated = m ++ responses.toMap
-        (updated, updated)
+        val ignored = updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a))))
+        (ignored, ignored)
       }
     } yield proposals
 
@@ -185,7 +186,7 @@ class RedownloadService[F[_]](
       meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
       meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint)
 
-      _ <- lastMajorityState.modify(_ => (majorityState, ()))
+      _ <- lastMajorityState.modify(_ => (meaningfulMajorityState, ()))
 
       _ <- if (shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)) {
         val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
@@ -294,9 +295,8 @@ class RedownloadService[F[_]](
   private[redownload] def acceptCheckpointBlocks(): EitherT[F, Throwable, Unit] =
     snapshotService
       .syncBufferPull()
-      .flatMap(_.values.toList.traverse(checkpointAcceptanceService.accept(_)))
+      .flatMap(_.values.toList.traverse(checkpointAcceptanceService.accept(_).handleErrorWith(_ => F.unit)))
       .void
-      .handleErrorWith(_ => F.unit)
       .attemptT
 
   private[redownload] def updateHighestSnapshotInfo(): EitherT[F, Throwable, Unit] =
