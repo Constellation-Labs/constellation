@@ -96,7 +96,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     val rds = mock[RedownloadService[IO]]
     dao.redownloadService shouldReturn rds
     dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
-    dao.redownloadService.persistCreatedSnapshot(*, *) shouldReturnF Unit
+    dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
 
     val ss = mock[SOEService[IO]]
     dao.soeService shouldReturn ss
