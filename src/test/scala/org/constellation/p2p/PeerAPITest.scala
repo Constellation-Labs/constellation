@@ -11,8 +11,10 @@ import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.TestHelpers
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.snapshot.SnapshotStorage
 import org.constellation.primitives.IPManager
+import org.constellation.schema.Id
 import org.json4s.native.Serialization
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
@@ -90,17 +92,18 @@ class PeerAPITest
       dao.redownloadService.getCreatedSnapshots shouldReturnF Map.empty
 
       Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
-        responseAs[Map[Long, String]] shouldBe Map.empty
+        responseAs[Map[Long, SnapshotProposal]] shouldBe Map.empty
       }
     }
 
     "response should return map with all own snapshots" in {
-      val ownSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
+      val ownSnapshots =
+        Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc").mapValues(SnapshotProposal(_, SortedMap(Id("nodeA") -> 1.0)))
 
       dao.redownloadService.getCreatedSnapshots shouldReturnF ownSnapshots
 
       Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
-        responseAs[Map[Long, String]] shouldBe ownSnapshots
+        responseAs[Map[Long, SnapshotProposal]] shouldBe ownSnapshots
       }
     }
   }
@@ -115,7 +118,8 @@ class PeerAPITest
     }
 
     "response should return map with all accepted snapshots" in {
-      val acceptedSnapshots = Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
+      val acceptedSnapshots =
+        Map(2L -> "aaaa", 4L -> "bbbb", 6L -> "cccc")
 
       dao.redownloadService.getAcceptedSnapshots shouldReturnF acceptedSnapshots
 
