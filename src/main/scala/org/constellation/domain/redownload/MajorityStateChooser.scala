@@ -1,22 +1,27 @@
 package org.constellation.domain.redownload
 
 import cats.implicits._
-import org.constellation.domain.redownload.MajorityStateChooser.Occurrences
+import org.constellation.domain.redownload.MajorityStateChooser.{
+  Occurrences,
+  SnapshotProposal,
+  SnapshotProposalsAtHeight
+}
 import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.schema.Id
+
+import scala.collection.SortedMap
 
 class MajorityStateChooser {
 
   // TODO: Use RedownloadService type definitions
   def chooseMajorityState(
-    createdSnapshots: SnapshotsAtHeight,
-    peersProposals: Map[Id, SnapshotsAtHeight],
+    createdSnapshots: SnapshotProposalsAtHeight,
+    peersProposals: Map[Id, SnapshotProposalsAtHeight]
   ): SnapshotsAtHeight = {
     val peersSize = peersProposals.size + 1 // +1 - it's an own node
     val proposals = mergeByHeights(createdSnapshots, peersProposals)
 
     val flat = proposals
-      .mapValues(_.sorted)
       .mapValues(mapToOccurrences)
       .mapValues { occurrences =>
         occurrences
@@ -30,7 +35,7 @@ class MajorityStateChooser {
 
   private def isInClearMajority(occurrences: Int, totalPeers: Int): Boolean =
     if (totalPeers > 0)
-      occurrences / totalPeers.toDouble >= 0.5
+      occurrences / totalPeers.toDouble > 0.5
     else false
 
   private def getTheMostQuantity[A: Ordering](
@@ -45,19 +50,26 @@ class MajorityStateChooser {
     a.mapValues(List(_))
 
   private def mergeByHeights(
-    createdSnapshots: SnapshotsAtHeight,
-    peersProposals: Map[Id, SnapshotsAtHeight]
-  ): Map[Long, List[String]] =
+    createdSnapshots: SnapshotProposalsAtHeight,
+    peersProposals: Map[Id, SnapshotProposalsAtHeight]
+  ): Map[Long, List[SnapshotProposal]] =
     (peersProposals.mapValues(mapValuesToList).values.toList ++ List(mapValuesToList(createdSnapshots)))
       .fold(Map.empty)(_ |+| _)
 
-  private def mapToOccurrences(values: List[String]): Set[Occurrences[String]] =
-    values.toSet.map((a: String) => Occurrences(a, values.count(_ == a), values.size))
+  private def mapToOccurrences(values: List[SnapshotProposal]): Set[Occurrences[String]] =
+    values.toSet.map((a: SnapshotProposal) => Occurrences(a.hash, values.count(_.hash == a.hash), values.size))
 
 }
 
 object MajorityStateChooser {
   def apply(): MajorityStateChooser = new MajorityStateChooser()
+
+  case class SnapshotProposal(hash: String, reputation: SortedMap[Id, Double] = SortedMap.empty)
+      extends Ordered[SnapshotProposal] {
+    override def compare(that: SnapshotProposal): Int = that.hash.compare(hash)
+  }
+
+  type SnapshotProposalsAtHeight = Map[Long, SnapshotProposal]
 
   case class Occurrences[A](value: A, n: Int, of: Int) {
     val percentage: Double = n / of.toDouble

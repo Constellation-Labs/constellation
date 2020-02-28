@@ -8,6 +8,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.FinishedCheckpoint
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{
   PeersProposals,
   SnapshotInfoSerialized,
@@ -177,8 +178,8 @@ class RedownloadService[F[_]](
       acceptedSnapshots <- getAcceptedSnapshots()
 
       majorityState = majorityStateChooser.chooseMajorityState(
-        createdSnapshots,
-        peersProposals
+        createdSnapshots.mapValues(SnapshotProposal(_)),
+        peersProposals.mapValues(_.mapValues(SnapshotProposal(_)))
       )
 
       maxMajorityHeight = maxHeight(majorityState)
