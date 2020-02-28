@@ -1,5 +1,6 @@
 package org.constellation.domain.redownload
 
+import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.schema.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -131,11 +132,14 @@ class MajorityStateChooserTest
 
   private def chooseMajorityState(
     createdSnapshots: Map[Long, String],
-    peersProposals: Map[Id, Map[Long, String]],
+    peersProposals: Map[Id, Map[Long, String]]
   ) = {
     val chooser = MajorityStateChooser()
 
-    chooser.chooseMajorityState(createdSnapshots, peersProposals)
+    chooser.chooseMajorityState(
+      createdSnapshots.mapValues(SnapshotProposal(_)),
+      peersProposals.mapValues(_.mapValues(SnapshotProposal(_)))
+    )
   }
 
 }
