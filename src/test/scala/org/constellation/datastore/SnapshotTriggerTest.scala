@@ -11,6 +11,8 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
+import scala.collection.SortedMap
+
 class SnapshotTriggerTest
     extends FreeSpec
     with Matchers
@@ -31,7 +33,7 @@ class SnapshotTriggerTest
     "if snapshot has been created" - {
       "calls redownload service to persist it as created snapshot" in {
         val snapshotTrigger = new SnapshotTrigger()
-        dao.redownloadService.persistCreatedSnapshot(*, *) shouldReturnF Unit
+        dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
 
@@ -43,7 +45,7 @@ class SnapshotTriggerTest
         val cancel = snapshotTrigger.cancel()
 
         trigger.guarantee(cancel).unsafeRunSync
-        dao.redownloadService.persistCreatedSnapshot(2L, "aaa").was(called)
+        dao.redownloadService.persistCreatedSnapshot(2L, "aaa", SortedMap.empty).was(called)
       }
 
       "calls redownload service to persist it as accepted snapshot" in {

@@ -10,6 +10,7 @@ import org.constellation.storage.{HeightIntervalConditionNotMet, SnapshotError, 
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._
 
+import scala.collection.SortedMap
 import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])
@@ -47,10 +48,13 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
           case Left(err) =>
             handleError(err, stateSet)
           case Right(created) =>
-            resetNodeState(stateSet)
-              .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success))
-              .flatMap(_ => dao.redownloadService.persistCreatedSnapshot(created.height, created.hash))
-              .flatMap(_ => dao.redownloadService.persistAcceptedSnapshot(created.height, created.hash))
+            dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success) >>
+              dao.redownloadService
+                .persistCreatedSnapshot(created.height, created.hash, SortedMap(created.publicReputation.toSeq: _*)) >>
+              dao.redownloadService
+                .persistAcceptedSnapshot(created.height, created.hash) >>
+              resetNodeState(stateSet)
+
         }
       } yield (),
       IO.unit
