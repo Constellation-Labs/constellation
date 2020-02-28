@@ -11,7 +11,9 @@ import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{
   PeersProposals,
+  Reputation,
   SnapshotInfoSerialized,
+  SnapshotProposalsAtHeight,
   SnapshotSerialized,
   SnapshotsAtHeight
 }
@@ -22,6 +24,7 @@ import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
 import org.constellation.util.{APIClient, Metrics}
 
+import scala.collection.SortedMap
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -44,7 +47,7 @@ class RedownloadService[F[_]](
     * (even incorrect snapshots which have been "fixed" by majority in acceptedSnapshots).
     * It is used as own proposals along with peerProposals to calculate majority state.
     */
-  private[redownload] val createdSnapshots: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
+  private[redownload] val createdSnapshots: Ref[F, SnapshotProposalsAtHeight] = Ref.unsafe(Map.empty)
 
   /**
     * Can be modified ("fixed"/"aligned") by redownload process. It stores current state of snapshots after auto-healing.
@@ -62,9 +65,9 @@ class RedownloadService[F[_]](
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  def persistCreatedSnapshot(height: Long, hash: String): F[Unit] =
+  def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
-      val updated = if (m.contains(height)) m else m.updated(height, hash)
+      val updated = if (m.contains(height)) m else m.updated(height, SnapshotProposal(hash, reputation))
       val max = maxHeight(updated)
       val removalPoint = getRemovalPoint(max)
       val limited = takeHighestUntilKey(updated, removalPoint)
@@ -80,13 +83,13 @@ class RedownloadService[F[_]](
       (limited, ())
     }
 
-  def getCreatedSnapshots(): F[SnapshotsAtHeight] = createdSnapshots.get
+  def getCreatedSnapshots(): F[SnapshotProposalsAtHeight] = createdSnapshots.get
 
   def getAcceptedSnapshots(): F[SnapshotsAtHeight] = acceptedSnapshots.get
 
   def getPeerProposals(): F[PeersProposals] = peersProposals.get
 
-  def getCreatedSnapshot(height: Long): F[Option[String]] =
+  def getCreatedSnapshot(height: Long): F[Option[SnapshotProposal]] =
     getCreatedSnapshots().map(_.get(height))
 
   def fetchAndUpdatePeersProposals(): F[PeersProposals] =
@@ -96,7 +99,7 @@ class RedownloadService[F[_]](
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
         client
-          .getNonBlockingF[F, SnapshotsAtHeight]("snapshot/own")(C)
+          .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/own")(C)
           .handleErrorWith { e =>
             logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
           }
@@ -154,7 +157,9 @@ class RedownloadService[F[_]](
     client
       .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = 45.second)(C)
 
-  private def fetchAndStoreMissingSnapshots(snapshotsToDownload: SnapshotsAtHeight): EitherT[F, Throwable, Unit] =
+  private def fetchAndStoreMissingSnapshots(
+    snapshotsToDownload: SnapshotsAtHeight
+  ): EitherT[F, Throwable, Unit] =
     for {
       storedSnapshots <- fetchStoredSnapshotsFromAllPeers().attemptT
       candidates = snapshotsToDownload.values.toList.map { hash =>
@@ -178,8 +183,8 @@ class RedownloadService[F[_]](
       acceptedSnapshots <- getAcceptedSnapshots()
 
       majorityState = majorityStateChooser.chooseMajorityState(
-        createdSnapshots.mapValues(SnapshotProposal(_)),
-        peersProposals.mapValues(_.mapValues(SnapshotProposal(_)))
+        createdSnapshots,
+        peersProposals
       )
 
       maxMajorityHeight = maxHeight(majorityState)
@@ -277,7 +282,7 @@ class RedownloadService[F[_]](
     for {
       stored <- snapshotStorage.getSnapshotHashes.attemptT.map(_.toSet)
       accepted <- getAcceptedSnapshots().attemptT.map(_.values.toSet)
-      created <- getCreatedSnapshots().attemptT.map(_.values.toSet)
+      created <- getCreatedSnapshots().attemptT.map(_.values.map(_.hash).toSet)
       diff = stored.diff(accepted ++ created)
       _ <- diff.toList.traverse { hash =>
         snapshotStorage.removeSnapshot(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
@@ -287,7 +292,7 @@ class RedownloadService[F[_]](
   private[redownload] def updateAcceptedSnapshots(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     acceptedSnapshots.modify { m =>
       // It removes everything from "ignored" pool!
-      val updated = plan.toLeave |+| plan.toDownload
+      val updated = plan.toLeave ++ plan.toDownload // TODO: mwadon - is correct?
       // It leaves "ignored" pool untouched and aligns above "ignored" pool
       // val updated = (m -- plan.toRemove.keySet) |+| plan.toDownload
       (updated, ())
@@ -363,7 +368,7 @@ class RedownloadService[F[_]](
     }
   }
 
-  private[redownload] def maxHeight(snapshots: SnapshotsAtHeight): Long =
+  private[redownload] def maxHeight[V](snapshots: Map[Long, V]): Long =
     if (snapshots.isEmpty) 0
     else snapshots.keySet.max
 }
@@ -397,8 +402,10 @@ object RedownloadService {
       metrics
     )
 
+  type Reputation = SortedMap[Id, Double]
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
-  type PeersProposals = Map[Id, SnapshotsAtHeight]
+  type SnapshotProposalsAtHeight = Map[Long, SnapshotProposal]
+  type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 }
