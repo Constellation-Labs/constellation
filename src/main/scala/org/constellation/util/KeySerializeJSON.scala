@@ -2,10 +2,13 @@ package org.constellation.util
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
 
+import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.keytool.KeyUtils.{hexToPrivateKey, hexToPublicKey, privateKeyToHex, publicKeyToHex}
 import org.constellation.schema.Id
-import org.json4s.JsonAST.JString
-import org.json4s.{CustomKeySerializer, CustomSerializer, Formats, JObject}
+import org.json4s.JsonAST.{JDouble, JString, JValue}
+import org.json4s.{CustomKeySerializer, CustomSerializer, Extraction, Formats, JObject}
+
+import scala.collection.SortedMap
 
 trait KeySerializeJSON {
 
@@ -66,6 +69,32 @@ trait KeySerializeJSON {
           }, {
             case id: Id =>
               id.hex
+          })
+      )
+
+  class SnapshotProposalSerializer
+      extends CustomSerializer[SnapshotProposal](
+        format =>
+          ({
+            case jObj: JObject =>
+              val hash = (jObj \ "hash").extract[String]
+              val reputation = (jObj \ "reputation").extract[Map[Id, Double]]
+              SnapshotProposal(hash, SortedMap(reputation.toSeq: _*))
+          }, {
+            case proposal: SnapshotProposal =>
+              JObject(
+                "hash" -> JString(proposal.hash),
+                "reputation" -> {
+                  JObject(
+                    proposal.reputation
+                      .mapValues(JDouble)
+                      .toList
+                      .map {
+                        case (id, trust) => (id.hex, trust)
+                      }
+                  )
+                }
+              )
           })
       )
 

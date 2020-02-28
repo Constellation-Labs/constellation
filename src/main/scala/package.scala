@@ -76,6 +76,7 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new PrivateKeySerializer +
     new KeyPairSerializer +
     new IdSerializer +
+    new SnapshotProposalSerializer +
     new InetSocketAddressSerializer +
     new EnumNameSerializer(EdgeHashType) +
     new EnumNameSerializer(NodeState) +
