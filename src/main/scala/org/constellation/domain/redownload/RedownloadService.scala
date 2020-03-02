@@ -99,7 +99,7 @@ class RedownloadService[F[_]](
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
         client
-          .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/own")(C)
+          .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/created")(C)
           .handleErrorWith { e =>
             logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
           }

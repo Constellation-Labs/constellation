@@ -46,52 +46,21 @@ class PeerAPITest
   }
 
   "GET snapshot/stored" - {
-    "response should return the zero snapshot hash if there are no snapshots" in {
-      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
-      dao.snapshotStorage.getSnapshotHashes shouldReturnF List.empty
-
-      dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
-        StoredSnapshot(Snapshot.snapshotZero, Seq.empty)
-      )
-
-      Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
-        responseAs[List[String]] shouldBe List(Snapshot.snapshotZeroHash)
-      }
-    }
-
     "response should return all snapshots stored on disk" in {
       dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
       dao.snapshotStorage.getSnapshotHashes shouldReturnF List("aa", "bb")
 
-      dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
-        StoredSnapshot(Snapshot.snapshotZero, Seq.empty)
-      )
-
       Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
-        responseAs[List[String]] shouldBe List(Snapshot.snapshotZeroHash, "aa", "bb")
-      }
-    }
-
-    "response should contain the snapshot hash from the most recent snapshot info" in {
-      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
-      dao.snapshotStorage.getSnapshotHashes shouldReturnF List("aa", "bb")
-
-      val snapshot = Snapshot("cc", Seq.empty, SortedMap.empty)
-      dao.snapshotService.storedSnapshot shouldReturn Ref.unsafe[IO, StoredSnapshot](
-        StoredSnapshot(snapshot, Seq.empty)
-      )
-
-      Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
-        responseAs[List[String]] shouldBe List(snapshot.hash, "aa", "bb")
+        responseAs[List[String]] shouldBe List("aa", "bb")
       }
     }
   }
 
-  "GET snapshot/own" - {
+  "GET snapshot/created" - {
     "response should return empty map if there are no snapshots" in {
       dao.redownloadService.getCreatedSnapshots shouldReturnF Map.empty
 
-      Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
+      Get("/snapshot/created") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, SnapshotProposal]] shouldBe Map.empty
       }
     }
@@ -102,7 +71,7 @@ class PeerAPITest
 
       dao.redownloadService.getCreatedSnapshots shouldReturnF ownSnapshots
 
-      Get("/snapshot/own") ~> peerAPI.routes(socketAddress) ~> check {
+      Get("/snapshot/created") ~> peerAPI.routes(socketAddress) ~> check {
         responseAs[Map[Long, SnapshotProposal]] shouldBe ownSnapshots
       }
     }

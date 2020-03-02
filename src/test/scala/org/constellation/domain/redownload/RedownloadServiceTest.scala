@@ -308,7 +308,7 @@ class RedownloadServiceTest
   }
 
   "fetchAndUpdatePeersProposals" - {
-    "should fetch own proposals of all the peers" in {
+    "should fetch created proposals of all the peers" in {
       val peerInfo = Map(Id("node1") -> mock[PeerData], Id("node2") -> mock[PeerData])
       peerInfo.values.foreach { peer =>
         peer.client shouldReturn mock[APIClient]
@@ -320,7 +320,7 @@ class RedownloadServiceTest
       redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
 
       peerInfo.values.foreach { peer =>
-        peer.client.getNonBlockingF[IO, Map[Long, String]]("snapshot/own", *, *)(*)(*, *, *).was(called)
+        peer.client.getNonBlockingF[IO, Map[Long, String]]("snapshot/created", *, *)(*)(*, *, *).was(called)
       }
     }
 
