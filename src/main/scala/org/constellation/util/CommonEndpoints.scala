@@ -11,11 +11,9 @@ import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
-import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.NodeState.NodeState
+import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.Schema.NodeType.NodeType
-import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
 import scala.util.{Failure, Success}
