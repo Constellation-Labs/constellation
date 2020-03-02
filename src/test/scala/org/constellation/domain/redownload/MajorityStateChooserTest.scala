@@ -59,15 +59,15 @@ class MajorityStateChooserTest
     }
 
     "if there is only one height" - {
-      "returns Map with majority snapshot at this height" - {
-        "if the snapshot is in the majority (more than 50%)" in {
+      "and not all peers made snapshot" - {
+        "returns empty Map without majority snapshot at this height" - {
           val createdSnapshots = Map(2L -> "aa").toSnapshotProposals
           val peersProposals = Map(
             Id("a") -> Map(2L -> "bb"),
             Id("b") -> Map(2L -> "bb"),
             Id("c") -> Map.empty[Long, String]
           ).toSnapshotProposals
-          val result = Map(2L -> "bb")
+          val result = Map.empty[Long, String]
 
           chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
         }
@@ -129,6 +129,22 @@ class MajorityStateChooserTest
           chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
         }
       }
+
+      "if there is positive and negative reputation" - {
+        "return the majority calculated by trust proposers" in {
+          val trust = SortedMap[Id, Double](Id("z") -> 1, Id("a") -> -1, Id("b") -> -0.1, Id("c") -> -0.1)
+          val createdSnapshots = Map(2L -> "xx", 4L -> "yy", 6L -> "zz").mapValues(SnapshotProposal(_, trust))
+          val peersProposals = Map(
+            Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz").mapValues(SnapshotProposal(_, trust)),
+            Id("b") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").mapValues(SnapshotProposal(_, trust)),
+            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").mapValues(SnapshotProposal(_, trust))
+          )
+
+          val result = Map(2L -> "xx", 4L -> "yy", 6L -> "zz")
+
+          chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
+        }
+      }
     }
 
     "if there is no clear majority (less than 50%)" - {
@@ -178,12 +194,29 @@ class MajorityStateChooserTest
             Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd").mapValues(SnapshotProposal(_, trustC))
           )
 
-          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "ii", 8L -> "dd")
+          val result = Map(2L -> "gg", 4L -> "hh", 6L -> "ii")
+
+          chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
+        }
+
+        "with sum of trust all yielding 0.0 returns the proposal weighted by ratio of occurrences" in {
+          val trustOwn = SortedMap[Id, Double](Id("z") -> 0.8, Id("a") -> 0.4, Id("b") -> 0.1, Id("c") -> 0.1)
+          val trustA = SortedMap[Id, Double](Id("z") -> -0.4, Id("a") -> 0.2, Id("b") -> -0.3, Id("c") -> 0.1)
+          val trustB = SortedMap[Id, Double](Id("z") -> -0.4, Id("a") -> 0.4, Id("b") -> 0.1, Id("c") -> -0.1)
+          val trustC = SortedMap[Id, Double](Id("z") -> 0.0, Id("a") -> -1, Id("b") -> 0.1, Id("c") -> -0.1)
+
+          val createdSnapshots = Map(2L -> "gg", 4L -> "hh", 6L -> "ii").mapValues(SnapshotProposal(_, trustOwn))
+          val peersProposals = Map(
+            Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz", 8L -> "dd").mapValues(SnapshotProposal(_, trustA)),
+            Id("b") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").mapValues(SnapshotProposal(_, trustB)),
+            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd").mapValues(SnapshotProposal(_, trustC))
+          )
+
+          val result = Map(2L -> "aa", 4L -> "bb", 6L -> "cc")
 
           chooseMajorityState(createdSnapshots, peersProposals) shouldBe result
         }
       }
-
     }
   }
 
@@ -198,5 +231,4 @@ class MajorityStateChooserTest
       peersProposals
     )
   }
-
 }
