@@ -1,12 +1,13 @@
 package org.constellation.domain.redownload
 
+import cats.NonEmptyParallel
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
-import org.constellation.consensus.FinishedCheckpoint
+import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{
@@ -17,10 +18,11 @@ import org.constellation.domain.redownload.RedownloadService.{
   SnapshotSerialized,
   SnapshotsAtHeight
 }
-import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.{APIClient, Metrics}
 
@@ -40,7 +42,7 @@ class RedownloadService[F[_]](
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   cloudStorage: CloudStorage[F],
   metrics: Metrics
-)(implicit F: Concurrent[F], C: ContextShift[F]) {
+)(implicit F: Concurrent[F], C: ContextShift[F], NEP: NonEmptyParallel[F]) {
 
   /**
     * It contains immutable historical data
@@ -89,21 +91,13 @@ class RedownloadService[F[_]](
 
   def getPeerProposals(): F[PeersProposals] = peersProposals.get
 
-  def getCreatedSnapshot(height: Long): F[Option[SnapshotProposal]] =
-    getCreatedSnapshots().map(_.get(height))
-
   def fetchAndUpdatePeersProposals(): F[PeersProposals] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
       peers <- cluster.getPeerInfo.map(_.values.toList)
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
-        client
-          .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/created")(C)
-          .handleErrorWith { e =>
-            logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
-          }
-          .map(client.id -> _)
+        fetchOwnSnapshots(client).map(client.id -> _)
       }
       proposals <- peersProposals.modify { m =>
         val updated = m ++ responses.toMap
@@ -112,13 +106,13 @@ class RedownloadService[F[_]](
       }
     } yield proposals
 
-  private[redownload] def fetchStoredSnapshotsFromAllPeers(): F[Map[APIClient, Seq[String]]] =
+  private[redownload] def fetchStoredSnapshotsFromAllPeers(): F[Map[APIClient, Set[String]]] =
     for {
       peers <- cluster.getPeerInfo.map(_.values.toList)
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
         fetchStoredSnapshots(client)
-          .map(client -> _)
+          .map(client -> _.toSet)
       }
     } yield responses.toMap
 
@@ -131,8 +125,8 @@ class RedownloadService[F[_]](
 
     def makeAttempt(index: Int): F[(SnapshotSerialized, SnapshotInfoSerialized)] =
       (for {
-        snapshot <- fetchSnapshot(hash, poolArray(index))
-        snapshotInfo <- fetchSnapshotInfo(hash, poolArray(index))
+        snapshot <- fetchSnapshot(hash)(poolArray(index))
+        snapshotInfo <- fetchSnapshotInfo(hash)(poolArray(index))
       } yield (snapshot, snapshotInfo)).handleErrorWith {
         case e if index == stopAt => F.raiseError[(SnapshotSerialized, SnapshotInfoSerialized)](e)
         case _                    => makeAttempt((index + 1) % poolArray.length)
@@ -141,24 +135,34 @@ class RedownloadService[F[_]](
     makeAttempt((stopAt + 1) % poolArray.length)
   }
 
-  private def takeHighestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
-    data.filterKeys(_ > key)
-
+  // TODO: Extract to HTTP layer
   private def fetchAcceptedSnapshots(client: APIClient): F[SnapshotsAtHeight] =
     client
       .getNonBlockingF[F, SnapshotsAtHeight]("snapshot/accepted")(C)
       .handleErrorWith(_ => F.pure(Map.empty))
 
+  // TODO: Extract to HTTP layer
+  private def fetchOwnSnapshots(client: APIClient): F[SnapshotProposalsAtHeight] =
+    client
+      .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/own")(C)
+      .handleErrorWith { e =>
+        logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
+      }
+
+  // TODO: Extract to HTTP layer
   private def fetchStoredSnapshots(client: APIClient): F[Seq[String]] =
     client
       .getNonBlockingF[F, Seq[String]]("snapshot/stored")(C)
       .handleErrorWith(_ => F.pure(Seq.empty))
 
-  private def fetchSnapshotInfo(hash: String, client: APIClient): F[SnapshotInfoSerialized] =
+  // TODO: Extract to HTTP layer
+  private def fetchSnapshotInfo(client: APIClient): F[SnapshotInfoSerialized] = ???
+  private def fetchSnapshotInfo(hash: String)(client: APIClient): F[SnapshotInfoSerialized] =
     client
       .getNonBlockingArrayByteF("snapshot/info/" + hash, timeout = 45.second)(C)
 
-  private def fetchSnapshot(hash: String, client: APIClient): F[SnapshotSerialized] =
+  // TODO: Extract to HTTP layer
+  private def fetchSnapshot(hash: String)(client: APIClient): F[SnapshotSerialized] =
     client
       .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = 45.second)(C)
 
@@ -170,14 +174,64 @@ class RedownloadService[F[_]](
       candidates = snapshotsToDownload.values.toList.map { hash =>
         (hash, storedSnapshots.filter { case (_, hashes) => hashes.contains(hash) }.keySet)
       }.toMap
-      missingSnapshots <- candidates.toList.traverse {
-        case (hash, pool) => fetchSnapshotAndSnapshotInfoFromRandomPeer(hash, pool).map(snapshot => (hash, snapshot))
-      }.map(_.toMap).attemptT
 
-      _ <- missingSnapshots.toList.traverse {
+      missingSnapshots <- candidates.toList.traverse {
+        case (hash, pool) =>
+          useRandomClient(pool) { client =>
+            (fetchSnapshot(hash)(client), fetchSnapshotInfo(hash)(client)).parMapN { (snapshot, snapshotInfo) =>
+              (hash, (snapshot, snapshotInfo))
+            }
+          }
+      }.attemptT
+
+      _ <- missingSnapshots.traverse {
         case (hash, (snapshot, snapshotInfo)) =>
           snapshotStorage.writeSnapshot(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
       }.void
+    } yield ()
+
+  private def useRandomClient[A](pool: Set[APIClient])(fetchFn: APIClient => F[A]): F[A] = {
+    val poolArray = pool.toArray
+    val stopAt = Random.nextInt(poolArray.length)
+
+    def makeAttempt(index: Int): F[A] = {
+      val client = poolArray(index)
+      fetchFn(client).handleErrorWith {
+        case e if index == stopAt => F.raiseError[A](e)
+        case _                    => makeAttempt((index + 1) % poolArray.length)
+      }
+    }
+
+    makeAttempt((stopAt + 1) % poolArray.length)
+  }
+
+  private def fetchAndPersistBlocksAboveMajority(majorityState: SnapshotsAtHeight): F[Unit] =
+    for {
+      storedSnapshots <- fetchStoredSnapshotsFromAllPeers()
+
+      majorityHashes = majorityState.values.toSet
+      peersWithMajority = storedSnapshots.filter { case (_, hashes) => hashes.subsetOf(majorityHashes) }.keySet
+
+      _ <- useRandomClient(peersWithMajority) { client =>
+        for {
+          accepted <- fetchAcceptedSnapshots(client)
+
+          maxMajorityHeight = maxHeight(majorityState)
+          acceptedSnapshotHashesAboveMajority = takeHighestUntilKey(accepted, maxMajorityHeight).values
+
+          acceptedSnapshots <- acceptedSnapshotHashesAboveMajority.toList
+            .traverse(hash => fetchSnapshot(hash)(client))
+            .map(_.map(KryoSerializer.deserializeCast[StoredSnapshot]))
+
+          snapshotInfoFromMemPool <- fetchSnapshotInfo(client)
+            .map(KryoSerializer.deserializeCast[SnapshotInfo])
+
+          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache) // TODO: Accept now!
+          blocksFromMemPool = snapshotInfoFromMemPool.awaitingCbs.toSet
+
+          blocks = blocksFromSnapshots |+| blocksFromMemPool
+        } yield ()
+      }
     } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] = {
@@ -265,14 +319,14 @@ class RedownloadService[F[_]](
       _ <- EitherT.liftF(logger.debug("Fetching and storing missing snapshots on disk."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
 
-      _ <- EitherT.liftF(logger.debug("Replacing acceptedSnapshots by majority state"))
-      _ <- updateAcceptedSnapshots(plan)
+//      _ <- EitherT.liftF(logger.debug("Replacing acceptedSnapshots by majority state"))
+//      _ <- updateAcceptedSnapshots(plan)
 
-      _ <- EitherT.liftF(logger.debug("Updating highest SnapshotInfo in SnapshotService."))
-      _ <- updateHighestSnapshotInfo()
+//      _ <- EitherT.liftF(logger.debug("Updating highest SnapshotInfo in SnapshotService."))
+//      _ <- updateHighestSnapshotInfo()
 
-      _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
-      _ <- acceptCheckpointBlocks()
+//      _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
+//      _ <- acceptCheckpointBlocks()
 
       _ <- EitherT.liftF(logger.debug("RedownloadPlan has been applied succesfully."))
 
@@ -293,6 +347,9 @@ class RedownloadService[F[_]](
         snapshotStorage.removeSnapshot(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
       }
     } yield ()
+
+  private def takeHighestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
+    data.filterKeys(_ > key)
 
   private[redownload] def updateAcceptedSnapshots(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     acceptedSnapshots.modify { m =>
