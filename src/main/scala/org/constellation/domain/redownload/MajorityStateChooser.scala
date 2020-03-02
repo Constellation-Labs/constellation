@@ -1,7 +1,7 @@
 package org.constellation.domain.redownload
 
 import cats.implicits._
-import org.constellation.domain.redownload.MajorityStateChooser.ExtendedSnapshotProposal
+import org.constellation.domain.redownload.MajorityStateChooser.{ExtendedSnapshotProposal, SnapshotProposal}
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.schema.Id
 
@@ -30,16 +30,19 @@ class MajorityStateChooser(id: Id) {
     proposersCount: Int
   ): Option[ExtendedSnapshotProposal] =
     proposals.toList.sortBy(o => (-o.trust, -o.percentage, o.hash)).headOption.flatMap { s =>
-      if (areAllProposals(proposals, proposersCount) || isClearMajority(proposals)) {
-        s.some
-      } else None
+      if (areAllProposals(proposals, proposersCount)) s.some
+      else None
     }
 
   private def areAllProposals(proposals: Set[ExtendedSnapshotProposal], proposersCount: Int): Boolean =
     proposals.toList.map(_.n).sum == proposersCount
 
-  private def isClearMajority(proposals: Set[ExtendedSnapshotProposal]): Boolean =
-    proposals.toList.count(_.totalPercentage >= 0.5) == 1
+  private def roundError(value: Double): Double =
+    if (value < 1.0e-10 && value > -1.0e-10) 0d
+    else value
+
+  private def totalReputation(proposals: Map[Id, SnapshotProposalsAtHeight], height: Long, id: Id): Double =
+    proposals.values.flatMap { _.get(height).map(_.reputation.getOrElse(id, 0d)) }.sum
 
   private def mergeByHeights(
     proposals: Map[Id, SnapshotProposalsAtHeight],
@@ -47,7 +50,13 @@ class MajorityStateChooser(id: Id) {
   ): Map[Long, Set[ExtendedSnapshotProposal]] =
     proposals.map {
       case (id, v) =>
-        v.mapValues(p => ExtendedSnapshotProposal(p.hash, p.reputation.getOrElse(id, 0.0), Set(id), 1, proposersCount))
+        v.map {
+          case (height, p) =>
+            (
+              height,
+              ExtendedSnapshotProposal(p.hash, totalReputation(proposals, height, id), Set(id), 1, proposersCount)
+            )
+        }
     }.toList
       .map(_.mapValues(List(_)))
       .foldRight(Map.empty[Long, List[ExtendedSnapshotProposal]])(_ |+| _)
@@ -58,7 +67,7 @@ class MajorityStateChooser(id: Id) {
             case (hash, hashProposals) =>
               ExtendedSnapshotProposal(
                 hash,
-                hashProposals.foldRight(0.0)(_.trust + _),
+                roundError(hashProposals.foldRight(0.0)(_.trust + _)),
                 hashProposals.foldRight(Set.empty[Id])(_.ids ++ _),
                 heightProposals.size,
                 proposersCount
