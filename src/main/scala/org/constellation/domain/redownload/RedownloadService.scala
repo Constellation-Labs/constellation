@@ -144,6 +144,11 @@ class RedownloadService[F[_]](
   private def takeHighestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
     data.filterKeys(_ > key)
 
+  private def fetchAcceptedSnapshots(client: APIClient): F[SnapshotsAtHeight] =
+    client
+      .getNonBlockingF[F, SnapshotsAtHeight]("snapshot/accepted")(C)
+      .handleErrorWith(_ => F.pure(Map.empty))
+
   private def fetchStoredSnapshots(client: APIClient): F[Seq[String]] =
     client
       .getNonBlockingF[F, Seq[String]]("snapshot/stored")(C)
