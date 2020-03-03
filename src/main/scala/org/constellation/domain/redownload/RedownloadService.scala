@@ -97,7 +97,7 @@ class RedownloadService[F[_]](
       peers <- cluster.getPeerInfo.map(_.values.toList)
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
-        fetchOwnSnapshots(client).map(client.id -> _)
+        fetchCreatedSnapshots(client).map(client.id -> _)
       }
       proposals <- peersProposals.modify { m =>
         val updated = m ++ responses.toMap
@@ -123,9 +123,9 @@ class RedownloadService[F[_]](
       .handleErrorWith(_ => F.pure(Map.empty))
 
   // TODO: Extract to HTTP layer
-  private def fetchOwnSnapshots(client: APIClient): F[SnapshotProposalsAtHeight] =
+  private def fetchCreatedSnapshots(client: APIClient): F[SnapshotProposalsAtHeight] =
     client
-      .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/own")(C)
+      .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/created")(C)
       .handleErrorWith { e =>
         logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
       }
@@ -137,7 +137,11 @@ class RedownloadService[F[_]](
       .handleErrorWith(_ => F.pure(Seq.empty))
 
   // TODO: Extract to HTTP layer
-  private def fetchSnapshotInfo(client: APIClient): F[SnapshotInfoSerialized] = ???
+  private def fetchSnapshotInfo(client: APIClient): F[SnapshotInfoSerialized] =
+    client
+      .getNonBlockingArrayByteF("snapshot/info", timeout = 45.second)(C)
+
+  // TODO: Extract to HTTP layer
   private def fetchSnapshotInfo(hash: String)(client: APIClient): F[SnapshotInfoSerialized] =
     client
       .getNonBlockingArrayByteF("snapshot/info/" + hash, timeout = 45.second)(C)
