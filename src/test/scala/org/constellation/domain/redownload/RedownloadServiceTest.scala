@@ -292,21 +292,6 @@ class RedownloadServiceTest
     }
   }
 
-  "getCreatedSnapshot" - {
-    "should return hash if snapshot at given height exists" in {
-      val persist = redownloadService.persistCreatedSnapshot(2L, "aaaa", SortedMap.empty)
-      val check = redownloadService.getCreatedSnapshot(2L)
-
-      (persist >> check).unsafeRunSync shouldBe SnapshotProposal("aaaa", SortedMap.empty).some
-    }
-
-    "should return None if snapshot at given height does not exist" in {
-      val check = redownloadService.getCreatedSnapshot(2L)
-
-      check.unsafeRunSync shouldBe none[String]
-    }
-  }
-
   "fetchAndUpdatePeersProposals" - {
     "should fetch created proposals of all the peers" in {
       val peerInfo = Map(Id("node1") -> mock[PeerData], Id("node2") -> mock[PeerData])
