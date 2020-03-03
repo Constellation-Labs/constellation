@@ -218,7 +218,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusManager,
       trustManager,
       soeService,
-      rewardsManager,
       snapshotStorage,
       snapshotInfoStorage,
       this
@@ -259,6 +258,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotService,
       checkpointAcceptanceService,
       cloudStorage,
+      rewardsManager,
       metrics
     )
 

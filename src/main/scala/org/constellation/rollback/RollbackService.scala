@@ -64,8 +64,9 @@ class RollbackService[F[_]: Concurrent](
       _ <- acceptSnapshots(rollbackData._1)
       _ <- EitherT.liftF(logger.info("Snapshots restored on disk"))
 
-      _ <- EitherT.liftF(acceptRewards(rollbackData._1))
-      _ <- EitherT.liftF(logger.info("Rewards restored"))
+      // TODO: Adopt rollback to redownload and rewards
+//      _ <- EitherT.liftF(acceptRewards(rollbackData._1))
+//      _ <- EitherT.liftF(logger.info("Rewards restored"))
 
       _ <- EitherT.liftF(acceptGenesis(rollbackData._3))
       _ <- EitherT.liftF(logger.info("GenesisObservation restored"))
@@ -88,17 +89,18 @@ class RollbackService[F[_]: Concurrent](
       .traverse(snapshotService.addSnapshotToDisk)
       .bimap(_ => CannotWriteToDisk, _ => ())
 
-  private def acceptRewards(
-    snapshots: Seq[StoredSnapshot]
-  ): F[Unit] = {
-    val rewardSnapshots = snapshots
-      .map(s => {
-        val snapshotheight = s.checkpointCache.flatMap(_.height).maxBy(_.max).max
-        RewardSnapshot(s.snapshot.hash, snapshotheight, s.checkpointCache.flatMap(_.checkpointBlock.observations))
-      })
-
-    rewardSnapshots.toList.traverse(rewardsManager.attemptReward).void
-  }
+  // TODO: Adopt rollback to redownload and rewards
+//  private def acceptRewards(
+//    snapshots: Seq[StoredSnapshot]
+//  ): F[Unit] = {
+//    val rewardSnapshots = snapshots
+//      .map(s => {
+//        val snapshotheight = s.checkpointCache.flatMap(_.height).maxBy(_.max).max
+//        RewardSnapshot(s.snapshot.hash, snapshotheight, s.checkpointCache.flatMap(_.checkpointBlock.observations))
+//      })
+//
+//    rewardSnapshots.toList.traverse(rewardsManager.attemptReward).void
+//  }
 
   private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
     accountBalances.count(_._2 < 0) match {
