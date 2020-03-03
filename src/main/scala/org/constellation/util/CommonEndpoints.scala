@@ -11,6 +11,7 @@ import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.Schema.NodeType.NodeType
@@ -79,6 +80,30 @@ trait CommonEndpoints extends Json4sSupport {
         APIDirective.handle(
           dao.snapshotService.getNextHeightInterval.map((dao.id, _))
         )(complete(_))
+      } ~
+      path("snapshot" / "info") {
+        val getSnapshotInfo = dao.snapshotService.getSnapshotInfoWithFullData
+          .map(KryoSerializer.serialize[SnapshotInfo])
+
+        val result = dao.cluster.getNodeState
+          .map(NodeState.canActAsRedownloadSource)
+          .ifM(
+            getSnapshotInfo.map(_.some),
+            None.pure[IO]
+          )
+
+        APIDirective.onHandle(result) { res =>
+          val httpResponse: HttpResponse = res match {
+            case Failure(_) => HttpResponse(StatusCodes.ServiceUnavailable)
+            case Success(Some(snapshotInfo)) =>
+              HttpResponse(
+                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(snapshotInfo))
+              )
+            case Success(None) => HttpResponse(StatusCodes.ServiceUnavailable)
+          }
+
+          complete(httpResponse)
+        }
       } ~
       path("snapshot" / "info" / Segment) { s =>
         val getSnapshotInfo = for {
