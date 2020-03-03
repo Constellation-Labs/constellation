@@ -97,7 +97,7 @@ class HealthChecker[F[_]: Concurrent](
       minHeights = minTipHeights.values.toList
       nodesWithHeights = minHeights.filter(_ > 0)
 
-      _ = if (minHeights.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
+      _ <- if (minHeights.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
         val heightsOfMinimumFacilitators = nodesWithHeights
           .groupBy(a => a)
           .filter(_._2.size >= dao.processingConfig.numFacilitatorPeers)
