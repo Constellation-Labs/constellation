@@ -116,25 +116,6 @@ class RedownloadService[F[_]](
       }
     } yield responses.toMap
 
-  private[redownload] def fetchSnapshotAndSnapshotInfoFromRandomPeer(
-    hash: String,
-    pool: Iterable[APIClient]
-  ): F[(SnapshotSerialized, SnapshotInfoSerialized)] = {
-    val poolArray = pool.toArray
-    val stopAt = Random.nextInt(poolArray.length)
-
-    def makeAttempt(index: Int): F[(SnapshotSerialized, SnapshotInfoSerialized)] =
-      (for {
-        snapshot <- fetchSnapshot(hash)(poolArray(index))
-        snapshotInfo <- fetchSnapshotInfo(hash)(poolArray(index))
-      } yield (snapshot, snapshotInfo)).handleErrorWith {
-        case e if index == stopAt => F.raiseError[(SnapshotSerialized, SnapshotInfoSerialized)](e)
-        case _                    => makeAttempt((index + 1) % poolArray.length)
-      }
-
-    makeAttempt((stopAt + 1) % poolArray.length)
-  }
-
   // TODO: Extract to HTTP layer
   private def fetchAcceptedSnapshots(client: APIClient): F[SnapshotsAtHeight] =
     client
@@ -190,23 +171,26 @@ class RedownloadService[F[_]](
       }.void
     } yield ()
 
-  private def useRandomClient[A](pool: Set[APIClient])(fetchFn: APIClient => F[A]): F[A] = {
-    val poolArray = pool.toArray
-    val stopAt = Random.nextInt(poolArray.length)
+  private def useRandomClient[A](pool: Set[APIClient])(fetchFn: APIClient => F[A]): F[A] =
+    if (pool.isEmpty) {
+      F.raiseError[A](new Throwable("Client pool is empty!"))
+    } else {
+      val poolArray = pool.toArray
+      val stopAt = Random.nextInt(poolArray.length)
 
-    def makeAttempt(index: Int): F[A] = {
-      val client = poolArray(index)
-      fetchFn(client).handleErrorWith {
-        case e if index == stopAt => F.raiseError[A](e)
-        case _                    => makeAttempt((index + 1) % poolArray.length)
+      def makeAttempt(index: Int): F[A] = {
+        val client = poolArray(index)
+        fetchFn(client).handleErrorWith {
+          case e if index == stopAt => F.raiseError[A](e)
+          case _                    => makeAttempt((index + 1) % poolArray.length)
+        }
       }
+
+      makeAttempt((stopAt + 1) % poolArray.length)
     }
 
-    makeAttempt((stopAt + 1) % poolArray.length)
-  }
-
-  private def fetchAndPersistBlocksAboveMajority(majorityState: SnapshotsAtHeight): F[Unit] =
-    for {
+  private def fetchAndPersistBlocksAboveMajority(majorityState: SnapshotsAtHeight): EitherT[F, Throwable, Unit] =
+    (for {
       storedSnapshots <- fetchStoredSnapshotsFromAllPeers()
 
       majorityHashes = majorityState.values.toSet
@@ -221,18 +205,17 @@ class RedownloadService[F[_]](
 
           acceptedSnapshots <- acceptedSnapshotHashesAboveMajority.toList
             .traverse(hash => fetchSnapshot(hash)(client))
-            .map(_.map(KryoSerializer.deserializeCast[StoredSnapshot]))
+            .map(snapshotsSerialized => snapshotsSerialized.map(KryoSerializer.deserializeCast[StoredSnapshot]))
 
           snapshotInfoFromMemPool <- fetchSnapshotInfo(client)
             .map(KryoSerializer.deserializeCast[SnapshotInfo])
 
-          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache) // TODO: Accept now!
-          blocksFromMemPool = snapshotInfoFromMemPool.awaitingCbs.toSet
+          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
 
-          blocks = blocksFromSnapshots |+| blocksFromMemPool
+          _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool, blocksFromSnapshots)
         } yield ()
       }
-    } yield ()
+    } yield ()).attemptT
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] = {
     val wrappedCheck = for {
@@ -259,7 +242,7 @@ class RedownloadService[F[_]](
         for {
           _ <- logger.debug(s"Alignment result: $result")
           _ <- logger.debug("Redownload needed! Applying the following redownload plan:")
-          _ <- applyRedownloadPlan(plan).value.flatMap(F.fromEither)
+          _ <- applyRedownloadPlan(plan, meaningfulMajorityState).value.flatMap(F.fromEither)
         } yield ()
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
 
@@ -305,7 +288,10 @@ class RedownloadService[F[_]](
     if (isEnabledCloudStorage) send else F.unit
   }
 
-  private[redownload] def applyRedownloadPlan(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
+  private[redownload] def applyRedownloadPlan(
+    plan: RedownloadPlan,
+    majorityState: SnapshotsAtHeight
+  ): EitherT[F, Throwable, Unit] =
     for {
       _ <- EitherT.liftF(logger.debug("To download:"))
       _ <- plan.toDownload.toList.sortBy { case (height, _) => height }.traverse {
@@ -319,14 +305,14 @@ class RedownloadService[F[_]](
       _ <- EitherT.liftF(logger.debug("Fetching and storing missing snapshots on disk."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
 
-//      _ <- EitherT.liftF(logger.debug("Replacing acceptedSnapshots by majority state"))
-//      _ <- updateAcceptedSnapshots(plan)
+      _ <- EitherT.liftF(logger.debug("Replacing acceptedSnapshots by majority state"))
+      _ <- updateAcceptedSnapshots(plan)
 
-//      _ <- EitherT.liftF(logger.debug("Updating highest SnapshotInfo in SnapshotService."))
-//      _ <- updateHighestSnapshotInfo()
+      _ <- EitherT.liftF(logger.debug("Fetching and persisting blocks above majority."))
+      _ <- fetchAndPersistBlocksAboveMajority(majorityState)
 
-//      _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
-//      _ <- acceptCheckpointBlocks()
+      _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
+      _ <- acceptCheckpointBlocks()
 
       _ <- EitherT.liftF(logger.debug("RedownloadPlan has been applied succesfully."))
 
@@ -437,7 +423,7 @@ class RedownloadService[F[_]](
 
 object RedownloadService {
 
-  def apply[F[_]: Concurrent: ContextShift](
+  def apply[F[_]: Concurrent: ContextShift: NonEmptyParallel](
     meaningfulSnapshotsCount: Int,
     redownloadInterval: Int,
     isEnabledCloudStorage: Boolean,
