@@ -26,64 +26,18 @@ class RewardsManager[F[_]: Concurrent](
   checkpointService: CheckpointService[F],
   addressService: AddressService[F]
 ) {
-
-  /**
-    * We are caching there RewardSnapshots until we reach snapshotHeightRedownloadDelayInterval.
-    * Then we are rewarding, clearing cache and caching next interval.
-    */
-  private val snapshotCacheByHeight: Ref[F, Map[Long, RewardSnapshot]] = Ref.unsafe(Map.empty)
   private val accumulatedRewards: Ref[F, Map[String, Long]] = Ref.unsafe(Map.empty)
 
-  private val snapshotHeightRedownloadDelayInterval: Int =
-    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval")
-  private val snapshotHeightDelayInterval: Int =
-    ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
-
-  val logger = Slf4jLogger.getLogger[F]
-
-  def createRewardSnapshot(snapshot: Snapshot, height: Long): F[RewardSnapshot] =
-    observationsFromSnapshot(snapshot).map(RewardSnapshot(snapshot.hash, height, _))
-
-  def getSnapshotDelayedByRedownloadIntervalFromLastHeight(lastHeight: Long, cache: Map[Long, RewardSnapshot]): F[Option[RewardSnapshot]] = {
-    val candidateHeight = lastHeight - snapshotHeightRedownloadDelayInterval - snapshotHeightDelayInterval
-
-    cache.get(candidateHeight) match {
-      case None =>
-        logger
-          .warn(
-            s"[Rewards] Skipping rewards. Couldn't find snapshot delayed by ${snapshotHeightRedownloadDelayInterval + snapshotHeightDelayInterval} from last height $lastHeight."
-          )
-          .map(_ => None)
-      case Some(rs) =>
-        logger
-          .debug(
-            s"[Rewards] Found snapshot (${rs.hash}) at height ${rs.height} which is delayed by ${snapshotHeightRedownloadDelayInterval + snapshotHeightDelayInterval} from last height $lastHeight."
-          )
-          .map(_ => Some(rs))
-    }
-  }
-
-  def attemptReward(rewardSnapshot: RewardSnapshot): F[Unit] =
-    for {
-      _ <- logger.debug(s"[Rewards] Trying to reward nodes after acceptance of ${rewardSnapshot.hash}")
-
-      cache <- snapshotCacheByHeight.modify { c =>
-        val updated = c + (rewardSnapshot.height -> rewardSnapshot)
-        (updated, updated)
-      }
-
-      candidate <- getSnapshotDelayedByRedownloadIntervalFromLastHeight(rewardSnapshot.height, cache)
-
-      _ <- candidate.fold(Concurrent[F].unit) { rs =>
-        updateBySnapshot(rs) >> snapshotCacheByHeight.modify(c => (c - rs.height, ()))
-      }
-    } yield ()
+  private val logger = Slf4jLogger.getLogger[F]
 
   def attemptReward(snapshot: Snapshot, height: Long): F[Unit] =
     createRewardSnapshot(snapshot, height)
-      .flatMap(attemptReward)
+      .flatMap(updateBySnapshot)
 
-  private def updateBySnapshot(rewardSnapshot: RewardSnapshot): F[Unit] =
+  private[rewards] def createRewardSnapshot(snapshot: Snapshot, height: Long): F[RewardSnapshot] =
+    observationsFromSnapshot(snapshot).map(RewardSnapshot(snapshot.hash, height, _))
+
+  private[rewards] def updateBySnapshot(rewardSnapshot: RewardSnapshot): F[Unit] =
     for {
       _ <- logger.debug(
         s"[Rewards] Updating rewards by snapshot ${rewardSnapshot.hash} at height ${rewardSnapshot.height}"
@@ -121,6 +75,10 @@ class RewardsManager[F[_]: Concurrent](
       }.values.toList.sequence
 
       _ <- updateAddressBalances(normalizedDistribution)
+
+      _ <- logger.debug(
+        s"[Rewards] Rewarding by ${rewardSnapshot.hash} succeeded."
+      )
     } yield ()
 
   private def normalize(contributions: Map[String, Double]): Map[String, Long] =
