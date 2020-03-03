@@ -50,7 +50,6 @@ class SnapshotServiceTest
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
     val soeService = mock[SOEService[IO]]
-    val rewardsManager = mock[RewardsManager[IO]]
     snapshotStorage = mock[SnapshotStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
 
@@ -66,7 +65,6 @@ class SnapshotServiceTest
       consensusManager,
       trustManager,
       soeService,
-      rewardsManager,
       snapshotStorage,
       snapshotInfoStorage,
       dao

@@ -10,14 +10,7 @@ import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
-import org.constellation.domain.redownload.RedownloadService.{
-  PeersProposals,
-  Reputation,
-  SnapshotInfoSerialized,
-  SnapshotProposalsAtHeight,
-  SnapshotSerialized,
-  SnapshotsAtHeight
-}
+import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
@@ -258,7 +251,7 @@ class RedownloadService[F[_]](
       _ <- sendMajoritySnapshotsToCloud()
 
       _ <- logger.debug("Rewarding majority snapshots.")
-      _ <- rewardMajoritySnapshots()
+      _ <- rewardMajoritySnapshots().value.flatMap(F.fromEither)
 
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
@@ -299,20 +292,25 @@ class RedownloadService[F[_]](
     if (isEnabledCloudStorage) send else F.unit
   }
 
-  private[redownload] def rewardMajoritySnapshots(): F[Unit] =
+  private[redownload] def rewardMajoritySnapshots(): EitherT[F, Throwable, Unit] =
     for {
-      majorityState <- lastMajorityState.get
-      lastHeight <- lastRewardedHeight.get
+      majorityState <- lastMajorityState.get.attemptT
+      lastHeight <- lastRewardedHeight.get.attemptT
 
-      toReward = majorityState.filterKeys(_ > lastHeight)
-      hashes = toReward.values.toList
+      _ <- EitherT.liftF(logger.debug(s"Last rewarded height is $lastHeight. Rewarding majority snapshots above."))
 
-      // TODO: rewardsManager.??
+      majoritySubsetToReward = takeHighestUntilKey(majorityState, lastHeight)
 
-      _ <- if (true) { // TODO: if rewarded
-        val max = maxHeight(toReward)
-        lastRewardedHeight.modify(_ => (max, ()))
-      } else F.unit
+      snapshotsToReward <- majoritySubsetToReward.toList.sortBy {
+        case (height, _) => height
+      }.traverse {
+        case (height, hash) => snapshotStorage.readSnapshot(hash).map(s => (height, s.snapshot))
+      }
+
+      _ <- snapshotsToReward.traverse {
+        case (height, snapshot) =>
+          rewardsManager.attemptReward(snapshot, height) >> lastRewardedHeight.modify(_ => (height, ()))
+      }.attemptT
     } yield ()
 
   private[redownload] def applyRedownloadPlan(
