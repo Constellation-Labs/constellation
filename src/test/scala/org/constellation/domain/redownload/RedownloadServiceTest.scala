@@ -10,6 +10,7 @@ import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
 import org.constellation.util.{APIClient, Metrics}
@@ -38,6 +39,7 @@ class RedownloadServiceTest
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
   var cloudStorage: CloudStorage[IO] = _
   var metrics: Metrics = _
+  var rewardsManager: RewardsManager[IO] = _
 
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
@@ -48,6 +50,7 @@ class RedownloadServiceTest
     snapshotStorage = mock[SnapshotStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
     cloudStorage = mock[CloudStorage[IO]]
+    rewardsManager = mock[RewardsManager[IO]]
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,
@@ -59,6 +62,7 @@ class RedownloadServiceTest
       snapshotService,
       checkpointAcceptanceService,
       cloudStorage,
+      rewardsManager,
       metrics
     )
   }
@@ -467,6 +471,7 @@ class RedownloadServiceTest
           snapshotService,
           checkpointAcceptanceService,
           cloudStorage,
+          rewardsManager,
           metrics
         )
 
