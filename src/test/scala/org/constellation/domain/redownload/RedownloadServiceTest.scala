@@ -1,7 +1,7 @@
 package org.constellation.domain.redownload
 
 import better.files.File
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointAcceptanceService
@@ -29,6 +29,7 @@ class RedownloadServiceTest
     with ArgumentMatchersSugar {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
