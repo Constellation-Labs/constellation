@@ -181,7 +181,7 @@ class SnapshotService[F[_]: Concurrent](
 
   def getCheckpointAcceptanceService = LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get)
 
-  def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
+  def setSnapshot(snapshotInfo: SnapshotInfo, additionalBlocks: Seq[CheckpointCache] = Seq.empty): F[Unit] =
     for {
       _ <- retainOldData()
       _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
@@ -191,16 +191,17 @@ class SnapshotService[F[_]: Concurrent](
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
-      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
-          checkpointService.put(h) >>
-          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
-          h.checkpointBlock.transactions.toList.traverse { tx =>
-            transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
-          } >>
-          h.checkpointBlock.observations.toList.traverse { obs =>
-            observationService.applyAfterRedownload(obs, Some(h))
-          }
+      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache ++ additionalBlocks).toList.traverse {
+        h =>
+          soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
+            checkpointService.put(h) >>
+            dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
+            h.checkpointBlock.transactions.toList.traverse { tx =>
+              transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
+            } >>
+            h.checkpointBlock.observations.toList.traverse { obs =>
+              observationService.applyAfterRedownload(obs, Some(h))
+            }
       }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
