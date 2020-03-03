@@ -3,7 +3,7 @@ package org.constellation.domain.redownload
 import cats.NonEmptyParallel
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift}
+import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
@@ -24,7 +24,7 @@ import scala.collection.SortedMap
 import scala.concurrent.duration._
 import scala.util.Random
 
-class RedownloadService[F[_]](
+class RedownloadService[F[_]: NonEmptyParallel](
   meaningfulSnapshotsCount: Int,
   redownloadInterval: Int,
   isEnabledCloudStorage: Boolean,
@@ -37,7 +37,7 @@ class RedownloadService[F[_]](
   cloudStorage: CloudStorage[F],
   rewardsManager: RewardsManager[F],
   metrics: Metrics
-)(implicit F: Concurrent[F], C: ContextShift[F], NEP: NonEmptyParallel[F]) {
+)(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
 
   /**
     * It contains immutable historical data
@@ -172,18 +172,19 @@ class RedownloadService[F[_]](
       }.void
     } yield ()
 
-  private def useRandomClient[A](pool: Set[APIClient])(fetchFn: APIClient => F[A]): F[A] =
+  private def useRandomClient[A](pool: Set[APIClient], attempts: Int = 3)(fetchFn: APIClient => F[A]): F[A] =
     if (pool.isEmpty) {
       F.raiseError[A](new Throwable("Client pool is empty!"))
     } else {
       val poolArray = pool.toArray
       val stopAt = Random.nextInt(poolArray.length)
 
-      def makeAttempt(index: Int): F[A] = {
+      def makeAttempt(index: Int, initialDelay: FiniteDuration = 0.6.seconds, errorsSoFar: Int = 0): F[A] = {
         val client = poolArray(index)
         fetchFn(client).handleErrorWith {
-          case e if index == stopAt => F.raiseError[A](e)
-          case _                    => makeAttempt((index + 1) % poolArray.length)
+          case e if index == stopAt         => F.raiseError[A](e)
+          case _ if errorsSoFar >= attempts => makeAttempt((index + 1) % poolArray.length)
+          case _                            => T.sleep(initialDelay) >> makeAttempt(index, initialDelay * 2, errorsSoFar + 1)
         }
       }
 
@@ -194,8 +195,8 @@ class RedownloadService[F[_]](
     (for {
       storedSnapshots <- fetchStoredSnapshotsFromAllPeers()
 
-      majorityHashes = majorityState.values.toSet
-      peersWithMajority = storedSnapshots.filter { case (_, hashes) => hashes.subsetOf(majorityHashes) }.keySet
+      maxMajorityHash = majorityState(maxHeight(majorityState))
+      peersWithMajority = storedSnapshots.filter { case (_, hashes) => hashes.contains(maxMajorityHash) }.keySet
 
       _ <- useRandomClient(peersWithMajority) { client =>
         for {
@@ -318,10 +319,16 @@ class RedownloadService[F[_]](
     majorityState: SnapshotsAtHeight
   ): EitherT[F, Throwable, Unit] =
     for {
+      _ <- EitherT.liftF(logger.debug("Majority state:"))
+      _ <- majorityState.toList.sortBy { case (height, _) => height }.traverse {
+        case (height, hash) => logger.debug(s"[$height] - $hash")
+      }.attemptT
+
       _ <- EitherT.liftF(logger.debug("To download:"))
       _ <- plan.toDownload.toList.sortBy { case (height, _) => height }.traverse {
         case (height, hash) => logger.debug(s"[$height] - $hash")
       }.attemptT
+
       _ <- EitherT.liftF(logger.debug("To remove:"))
       _ <- plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
         case (height, hash) => logger.debug(s"[$height] - $hash")
@@ -377,7 +384,7 @@ class RedownloadService[F[_]](
     snapshotService
       .syncBufferPull()
       .flatMap(
-        _.values.toList.sorted.reverse.traverse(
+        _.values.toList.reverse.traverse(
           b =>
             logger.debug(s"Accepting block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService
               .accept(b)
@@ -452,7 +459,7 @@ class RedownloadService[F[_]](
 
 object RedownloadService {
 
-  def apply[F[_]: Concurrent: ContextShift: NonEmptyParallel](
+  def apply[F[_]: Concurrent: ContextShift: NonEmptyParallel: Timer](
     meaningfulSnapshotsCount: Int,
     redownloadInterval: Int,
     isEnabledCloudStorage: Boolean,
