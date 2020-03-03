@@ -21,6 +21,7 @@ import org.constellation.domain.redownload.RedownloadService.{
 import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
+import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
@@ -41,6 +42,7 @@ class RedownloadService[F[_]](
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   cloudStorage: CloudStorage[F],
+  rewardsManager: RewardsManager[F],
   metrics: Metrics
 )(implicit F: Concurrent[F], C: ContextShift[F], NEP: NonEmptyParallel[F]) {
 
@@ -64,6 +66,8 @@ class RedownloadService[F[_]](
   private[redownload] val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
 
   private[redownload] var lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
+
+  private[redownload] var lastRewardedHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -253,6 +257,9 @@ class RedownloadService[F[_]](
       _ <- logger.debug("Sending majority snapshots to cloud (if enabled).")
       _ <- sendMajoritySnapshotsToCloud()
 
+      _ <- logger.debug("Rewarding majority snapshots.")
+      _ <- rewardMajoritySnapshots()
+
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
 
@@ -291,6 +298,22 @@ class RedownloadService[F[_]](
 
     if (isEnabledCloudStorage) send else F.unit
   }
+
+  private[redownload] def rewardMajoritySnapshots(): F[Unit] =
+    for {
+      majorityState <- lastMajorityState.get
+      lastHeight <- lastRewardedHeight.get
+
+      toReward = majorityState.filterKeys(_ > lastHeight)
+      hashes = toReward.values.toList
+
+      // TODO: rewardsManager.??
+
+      _ <- if (true) { // TODO: if rewarded
+        val max = maxHeight(toReward)
+        lastRewardedHeight.modify(_ => (max, ()))
+      } else F.unit
+    } yield ()
 
   private[redownload] def applyRedownloadPlan(
     plan: RedownloadPlan,
@@ -358,7 +381,11 @@ class RedownloadService[F[_]](
       .flatMap(
         _.values.toList.sorted.reverse.traverse(
           b =>
-            logger.debug(s"Accepting block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService.accept(b)
+            logger.debug(s"Accepting block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService
+              .accept(b)
+              .handleErrorWith(
+                error => logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+              )
         )
       )
       .void
@@ -438,6 +465,7 @@ object RedownloadService {
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
     cloudStorage: CloudStorage[F],
+    rewardsManager: RewardsManager[F],
     metrics: Metrics
   ): RedownloadService[F] =
     new RedownloadService[F](
@@ -451,6 +479,7 @@ object RedownloadService {
       snapshotService,
       checkpointAcceptanceService,
       cloudStorage,
+      rewardsManager,
       metrics
     )
 
