@@ -337,6 +337,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- EitherT.liftF(logger.debug("Fetching and storing missing snapshots on disk."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
 
+      _ <- EitherT.liftF(logger.debug("Filling missing createdSnapshots by majority state"))
+      _ <- updateCreatedSnapshots(plan)
+
       _ <- EitherT.liftF(logger.debug("Replacing acceptedSnapshots by majority state"))
       _ <- updateAcceptedSnapshots(plan)
 
@@ -368,6 +371,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   private def takeHighestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
     data.filterKeys(_ > key)
+
+  private[redownload] def updateCreatedSnapshots(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
+    plan.toDownload.map {
+      // IMPORTANT! persistCreatedSnapshot DOES NOT override existing values (!)
+      case (height, hash) => persistCreatedSnapshot(height, hash, SortedMap.empty)
+    }.toList.sequence.void.attemptT
 
   private[redownload] def updateAcceptedSnapshots(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     acceptedSnapshots.modify { m =>
