@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+#set -e
 
 red='\033[1;31m'
 grn='\033[1;32m'
@@ -11,13 +11,17 @@ clr='\033[0m'
 
 # TODO: Check for pssh
 
-DIR="${BASH_SOURCE%/*}"
-if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+READLINK=`readlink $0`
+if [[ "$READLINK" == "" ]]; then DIR="$PWD"; else DIR="$(dirname $READLINK)"; fi
+
+CONFIRMED=0
 
 ### Functions
 
 checkTag() {
+  pushd $DIR > /dev/null
   TAG=$(terraform workspace show)
+  popd > /dev/null
 }
 
 checkHosts() {
@@ -25,18 +29,29 @@ checkHosts() {
     echo -e "${red}HOSTS_FILE was not set${clr}"
     exit 1
   fi
+
+  if [ $CONFIRMED -eq 0 ]; then
+    name=$(basename $HOSTS_FILE)
+
+    read -p "$(echo -e "Do you want to continue using hosts: ${grn}$name${clr} (y/n)? ")" choice
+    case "$choice" in
+      y|Y ) CONFIRMED=1 ;;
+      n|N ) exit 1 ;;
+      * ) exit 1;;
+    esac
+  fi
 }
 
 setHosts() {
-  HOSTS_FILE=$(pwd)/hosts-$(terraform workspace show)
+  HOSTS_FILE=$DIR/hosts-$(terraform workspace show)
 }
 
 assemble() {
   echo -e "${blu} Assembling${clr}"
 
-  pushd ../../
+  pushd $DIR/../../ > /dev/null
   ./assemble.sh
-  popd
+  popd > /dev/null
 }
 
 upload() {
@@ -46,7 +61,7 @@ upload() {
 
   echo -e "${blu} Uploading ${yel}$jarName${blu} to S3 bucket${clr} as ${yel}dag-$TAG.jar${clr}"
 
-  aws s3 cp ../../target/scala-2.12/$jarName s3://constellationlabs-dag/cluster/dag-$TAG.jar --acl public-read-write
+  aws s3 cp $DIR/../../target/scala-2.12/$jarName s3://constellationlabs-dag/cluster/dag-$TAG.jar --acl public-read-write
   echo -e "dag-$TAG.jar has been sent to s3://constellationlabs-dag/cluster/dag-$TAG.jar"
 }
 
@@ -103,9 +118,11 @@ stop() {
 exportIPs() {
   checkTag
 
-  ./ips_to_hosts_file.sh > ./hosts-$TAG
+  pushd $DIR > /dev/null
+  terraform output -json instance_ips | jq ".[]" -r > hosts-$TAG
+  popd > /dev/null
 
-  echo "$(pwd)/hosts-$TAG"
+  echo "$DIR/hosts-$TAG"
 }
 
 redeploy() {
@@ -121,7 +138,9 @@ autostart() {
   assemble
   upload
 
+  pushd $DIR > /dev/null
   terraform apply -auto-approve -var "instance_count=$2"
+  popd > /dev/null
 
   exportIPs
   setHosts
@@ -136,9 +155,48 @@ clearLogs() {
   pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/logs'
 }
 
+output() {
+  pushd $DIR > /dev/null
+  terraform output
+  popd > /dev/null
+}
+
+workspace() {
+  pushd $DIR > /dev/null
+  terraform workspace $2 $3
+  popd > /dev/null
+}
+
+grafana() {
+  pushd $DIR > /dev/null
+  open "http://$(terraform output grafana_ip):3000/d/9DCwiDQiz/constellationnode-jvm"
+  popd > /dev/null
+}
+
 ############
 
-usage="${blu} Usage: ${grn}$0${clr} {${yel}assemble${clr} | ${yel}upload${clr} | ${yel}updateJar${clr} | ${yel}start${clr} | ${yel}restart${clr} | ${yel}stop${clr} | ${yel}exportIPs${clr} | ${yel}redeploy${clr} | ${yel}autostart${clr} | ${yel}clearLogs${clr}}"
+usage=$(cat <<-EOF
+Usage: $(basename $0) <command> [args]
+
+Common commands:
+    autostart ${grn}n${clr} \t Start cluster with ${grn}n${clr} nodes
+    restart \t\t Restart nodes with genesis flow
+    exportIPs \t\t Return path to the hosts file (use as ${grn}export HOSTS_FILE=\$(dag exportIPs)${clr})
+    redeploy \t\t Redeploy the cluster (assemble -> upload -> updateJar -> restart)
+
+Diagnostic commands:
+    assemble \t\t Assemble the jar file
+    upload \t\t Upload the jar file to s3
+    updateJar \t\t Update jar file on all nodes
+    start \t\t Start nodes using genesis flow
+    stop \t\t Stop constellation.service on all nodes
+    clearLogs \t\t Remove logs directory on all nodes
+
+Terraform commands:
+    output \t\t\t Display output from terraform
+    workspace ${grn}select|new ${red}name${clr} \t Manage workspace
+    grafana \t\t\t Open grafana
+EOF)
 
 if [[ $1 == "" ]]; then
   echo -e "$usage"
@@ -175,6 +233,15 @@ case "$1" in
     ;;
   clearLogs)
     clearLogs
+    ;;
+  output)
+    output
+    ;;
+  workspace)
+    workspace "$@"
+    ;;
+  grafana)
+    grafana
     ;;
   *)
     echo -e "$usage"
