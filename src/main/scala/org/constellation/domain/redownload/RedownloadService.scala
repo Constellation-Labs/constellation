@@ -192,11 +192,13 @@ class RedownloadService[F[_]: NonEmptyParallel](
     }
 
   private def fetchAndPersistBlocksAboveMajority(majorityState: SnapshotsAtHeight): EitherT[F, Throwable, Unit] =
-    (for {
-      storedSnapshots <- fetchStoredSnapshotsFromAllPeers()
+    for {
+      storedSnapshots <- fetchStoredSnapshotsFromAllPeers().attemptT
 
       maxMajorityHash = majorityState(maxHeight(majorityState))
       peersWithMajority = storedSnapshots.filter { case (_, hashes) => hashes.contains(maxMajorityHash) }.keySet
+
+      majoritySnapshotInfo <- snapshotInfoStorage.readSnapshotInfo(maxMajorityHash)
 
       _ <- useRandomClient(peersWithMajority) { client =>
         for {
@@ -213,11 +215,23 @@ class RedownloadService[F[_]: NonEmptyParallel](
             .map(KryoSerializer.deserializeCast[SnapshotInfo])
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
+          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
+          awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
+          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
+            .sortBy(_.height)
 
-          _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool, blocksFromSnapshots)
+          _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
+
+          _ <- blocksToAccept.traverse { b =>
+            logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
+              .accept(b)
+              .handleErrorWith(
+                error => logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+              )
+          }
         } yield ()
-      }
-    } yield ()).attemptT
+      }.attemptT
+    } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(): F[Unit] = {
     val wrappedCheck = for {
@@ -393,14 +407,18 @@ class RedownloadService[F[_]: NonEmptyParallel](
     snapshotService
       .syncBufferPull()
       .flatMap(
-        _.values.toList.reverse.traverse(
-          b =>
-            logger.debug(s"Accepting block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService
-              .accept(b)
-              .handleErrorWith(
-                error => logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
-              )
-        )
+        _.values.toList
+          .sortBy(_.checkpointCacheData.height)
+          .traverse(
+            b =>
+              logger
+                .debug(s"Accepting sync buffer block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService
+                .accept(b)
+                .handleErrorWith(
+                  error =>
+                    logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+                )
+          )
       )
       .void
       .attemptT
