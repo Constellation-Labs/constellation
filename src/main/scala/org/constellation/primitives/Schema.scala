@@ -253,7 +253,9 @@ object Schema {
   // override evict method, and clean up data.
   // We should also mark a given balance / rep as the 'primary' one.
 
-  case class Height(min: Long, max: Long)
+  case class Height(min: Long, max: Long) extends Ordered[Height] {
+    override def compare(that: Height): Int = min.compare(that.min)
+  }
 
   case class CommonMetadata(
     valid: Boolean = true,
