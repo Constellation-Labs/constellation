@@ -1,5 +1,6 @@
 package org.constellation.serializer
 
+import atb.common.DefaultRandomGenerator
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
@@ -11,6 +12,9 @@ import org.constellation.primitives.Schema._
 import org.constellation.primitives.{SignedData, _}
 import org.constellation.schema.Id
 import org.constellation.util.{HashSignature, SignatureBatch}
+import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import cern.jet.random.engine.MersenneTwister
+import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
 
 import scala.collection.SortedMap
 import scala.collection.immutable.TreeMap
@@ -92,6 +96,14 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Option[Long]])
     kryo.register(classOf[String])
     kryo.register(classOf[Boolean])
+
+    // EigenTrustJ
+    kryo.register(classOf[DefaultRandomGenerator])
+    kryo.register(classOf[MersenneTwister])
+    kryo.register(classOf[cern.jet.random.Normal])
+    kryo.register(classOf[cern.jet.random.Uniform])
+    kryo.register(Class.forName("[[I")) // To make int[][] serializable
+    kryo.register(classOf[EigenTrustJ])
 
     kryo.register(classOf[AddressMetaData])
 
