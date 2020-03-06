@@ -6,6 +6,7 @@ import cats.implicits._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorage.StorageName
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
@@ -452,8 +453,8 @@ class RedownloadServiceTest
 
             (setMajority >> setLastSentHeight >> check).unsafeRunSync
 
-            cloudStorage.upload(List(file1), "snapshots".some).was(called)
-            cloudStorage.upload(List(file2), "snapshot-infos".some).was(called)
+            cloudStorage.upload(List(file1), StorageName.Snapshot).was(called)
+            cloudStorage.upload(List(file2), StorageName.SnapshotInfo).was(called)
           }
         }
       }

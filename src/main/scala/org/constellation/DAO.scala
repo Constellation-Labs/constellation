@@ -301,13 +301,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       genesisObservationPath.pathAsString
     )
 
-    rollbackService = new RollbackService[IO](
-      this,
-      new RollbackAccountBalances,
-      snapshotService,
-      rollbackLoader,
-      rewardsManager
-    )
+//    rollbackService = new RollbackService[IO](
+//      this,
+//      new RollbackAccountBalances,
+//      snapshotService,
+//      rollbackLoader,
+//      rewardsManager
+//    )
 
     genesisObservationWriter = new GenesisObservationWriter[IO](
       cloudStorage,

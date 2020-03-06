@@ -3,8 +3,7 @@ package org.constellation.rollback
 import cats.implicits._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.GenesisObservation
-import org.constellation.util.AccountBalances
-import org.constellation.util.AccountBalances.AccountBalances
+import AccountBalances.AccountBalances
 
 import scala.annotation.tailrec
 import scala.util.Try

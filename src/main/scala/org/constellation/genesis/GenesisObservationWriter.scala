@@ -9,6 +9,7 @@ import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorage.StorageName
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.ExecutionContext
@@ -48,7 +49,7 @@ class GenesisObservationWriter[F[_]: Concurrent](
 
   private def sendToCloud(): F[Either[GenesisObservationWriterException, List[String]]] =
     executionContext.evalOn(fileOperationContext) {
-      cloudStorage.upload(List(getFilePathToGenesisObservation), "genesis".some).map {
+      cloudStorage.upload(List(getFilePathToGenesisObservation), StorageName.Genesis).map {
         case Nil  => Left(CannotSendGenesisObservationToCloud("List is empty"))
         case list => Right(list)
       }

@@ -1,4 +1,4 @@
-package org.constellation.util
+package org.constellation.rollback
 
 import cats.implicits._
 import org.constellation.consensus.StoredSnapshot
@@ -23,9 +23,9 @@ object AccountBalances {
   private def getAccountBalances(transactions: Seq[Transaction]): AccountBalances =
     spend(transactions) |+| received(transactions)
 
-  private def spend(transactions: Seq[Transaction]): AccountBalances =
+  def spend(transactions: Seq[Transaction]): AccountBalances =
     transactions.groupBy(_.src.address).mapValues(-_.map(_.amount).sum)
 
-  private def received(transactions: Seq[Transaction]): AccountBalances =
+  def received(transactions: Seq[Transaction]): AccountBalances =
     transactions.groupBy(_.dst.address).mapValues(_.map(_.amount).sum)
 }

@@ -4,10 +4,13 @@ import better.files.File
 import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials}
-import com.amazonaws.services.s3.model.PutObjectResult
+import com.amazonaws.services.s3.model.{PutObjectResult, S3Object}
 import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
+import com.amazonaws.util.IOUtils
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorage.StorageName
+import org.constellation.domain.cloud.CloudStorage.StorageName.StorageName
 
 import scala.util.{Failure, Success, Try}
 
@@ -16,7 +19,7 @@ class AWSStorage[F[_]: Concurrent](accessKey: String, secretKey: String, region:
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  override def upload(files: Seq[File], dir: Option[String] = None): F[List[String]] = {
+  def upload(files: Seq[File], storageName: StorageName): F[List[String]] = {
     val upload = for {
       service <- getService()
       _ <- logger.debug("[CloudStorage] Service created successfully")
@@ -24,7 +27,7 @@ class AWSStorage[F[_]: Concurrent](accessKey: String, secretKey: String, region:
       _ <- checkBucket(service)
       _ <- logger.debug("[CloudStorage] Bucket got successfully")
 
-      result <- saveToBucket(service, files, dir)
+      result <- saveToBucket(service, files, StorageName.toDirectory(storageName))
       _ <- logger.debug("[CloudStorage] Files saved successfully")
     } yield result.map(_._1)
 
@@ -39,11 +42,29 @@ class AWSStorage[F[_]: Concurrent](accessKey: String, secretKey: String, region:
     )
   }
 
-  private def saveToBucket(service: AmazonS3, files: Seq[File], dir: Option[String]) =
+  def get(filename: String, storageName: StorageName): F[Array[Byte]] =
+    for {
+      service <- getService()
+      _ <- checkBucket(service)
+      bytes <- getFromBucket(service, filename, StorageName.toDirectory(storageName))
+    } yield bytes
+
+  private def saveToBucket(service: AmazonS3, files: Seq[File], dir: String) =
     files.toList.traverse(file => uploadFile(service, file.name, dir, file))
 
-  private def uploadFile(service: AmazonS3, key: String, dir: Option[String], file: File) =
-    Sync[F].delay(Try(service.putObject(bucketName, dir.map(d => s"$d/$key").getOrElse(key), file.toJava))).flatMap {
+  private def getFromBucket(service: AmazonS3, filename: String, dir: String): F[Array[Byte]] =
+    for {
+      s3o <- Sync[F].delay { Try(service.getObject(bucketName, s"$dir/$filename")) }.flatMap {
+        case Success(result)    => result.pure[F]
+        case Failure(exception) => CannotGetFile(exception).raiseError[F, S3Object]
+      }
+      s3is = s3o.getObjectContent
+      bytes = IOUtils.toByteArray(s3is)
+      _ <- Sync[F].delay { s3is.close() }
+    } yield bytes
+
+  private def uploadFile(service: AmazonS3, key: String, dir: String, file: File) =
+    Sync[F].delay(Try(service.putObject(bucketName, s"$dir/$key", file.toJava))).flatMap {
       case Success(result)    => (key, result).pure[F]
       case Failure(exception) => CannotUploadFile(exception).raiseError[F, (String, PutObjectResult)]
     }

@@ -9,6 +9,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorage.StorageName
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
@@ -295,8 +296,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
       snapshotFiles <- snapshotStorage.getSnapshotFiles(hashes)
       snapshotInfoFiles <- snapshotInfoStorage.getSnapshotInfoFiles(hashes)
 
-      _ <- cloudStorage.upload(snapshotFiles, "snapshots".some)
-      _ <- cloudStorage.upload(snapshotInfoFiles, "snapshot-infos".some)
+      _ <- cloudStorage.upload(snapshotFiles, StorageName.Snapshot)
+      _ <- cloudStorage.upload(snapshotInfoFiles, StorageName.SnapshotInfo)
       _ <- if (toSend.nonEmpty) {
         val max = maxHeight(toSend)
         lastSentHeight.modify(_ => (max, ()))

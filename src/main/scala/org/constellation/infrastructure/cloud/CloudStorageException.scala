@@ -5,7 +5,7 @@ sealed trait CloudStorageException extends Throwable {
 }
 
 object CannotGetConfigProperty {
-  def apply(exception: Throwable) = new CannotGetConfigProperty(s"Cannot get config property : ${exception.getMessage}")
+  def apply(exception: Throwable) = new CannotGetConfigProperty(s"Cannot get config property: ${exception.getMessage}")
 }
 
 case class CannotGetConfigProperty(errorMessage: String) extends CloudStorageException {
@@ -13,7 +13,7 @@ case class CannotGetConfigProperty(errorMessage: String) extends CloudStorageExc
 }
 
 object CannotGetService {
-  def apply(exception: Throwable) = new CannotGetService(s"Cannot get service : ${exception.getMessage}")
+  def apply(exception: Throwable) = new CannotGetService(s"Cannot get service: ${exception.getMessage}")
 }
 
 case class CannotGetService(errorMessage: String) extends CloudStorageException {
@@ -21,7 +21,7 @@ case class CannotGetService(errorMessage: String) extends CloudStorageException 
 }
 
 object CannotGetBucket {
-  def apply(exception: Throwable) = new CannotGetBucket(s"Cannot get bucket : ${exception.getMessage}")
+  def apply(exception: Throwable) = new CannotGetBucket(s"Cannot get bucket: ${exception.getMessage}")
 }
 
 case class CannotGetBucket(errorMessage: String) extends CloudStorageException {
@@ -29,9 +29,17 @@ case class CannotGetBucket(errorMessage: String) extends CloudStorageException {
 }
 
 object CannotUploadFile {
-  def apply(exception: Throwable) = new CannotUploadFile(s"Cannot upload file : ${exception.getMessage}")
+  def apply(exception: Throwable) = new CannotUploadFile(s"Cannot upload file: ${exception.getMessage}")
 }
 
 case class CannotUploadFile(errorMessage: String) extends CloudStorageException {
   val exceptionMessage: String = errorMessage
+}
+
+case class CannotGetFile(errorMessage: String) extends CloudStorageException {
+  val exceptionMessage: String = errorMessage
+}
+
+object CannotGetFile {
+  def apply(exception: Throwable) = new CannotGetFile(s"Cannot get file: ${exception.getMessage}")
 }

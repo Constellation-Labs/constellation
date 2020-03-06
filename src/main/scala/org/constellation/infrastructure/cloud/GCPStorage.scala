@@ -10,6 +10,8 @@ import com.google.cloud.storage.{Blob, Bucket, Storage, StorageOptions}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorage.StorageName
+import org.constellation.domain.cloud.CloudStorage.StorageName.StorageName
 
 import scala.util.{Failure, Success, Try}
 
@@ -17,7 +19,7 @@ class GCPStorage[F[_]: Concurrent](bucketName: String, pathToPermissionFile: Str
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  override def upload(files: Seq[File], dir: Option[String] = None): F[List[String]] = {
+  def upload(files: Seq[File], storageName: StorageName): F[List[String]] = {
     val upload = for {
       credentials <- createGoogleCredentials()
       _ <- logger.debug("[CloudStorage] Credentials created successfully")
@@ -28,7 +30,7 @@ class GCPStorage[F[_]: Concurrent](bucketName: String, pathToPermissionFile: Str
       bucket <- getBucket(service)
       _ <- logger.debug("[CloudStorage] Bucket got successfully")
 
-      blobs <- saveToBucket(bucket, files, dir)
+      blobs <- saveToBucket(bucket, files, StorageName.toDirectory(storageName))
       _ <- logger.debug("[CloudStorage] Files saved successfully")
     } yield blobs.map(b => b.getName)
 
@@ -40,11 +42,28 @@ class GCPStorage[F[_]: Concurrent](bucketName: String, pathToPermissionFile: Str
     )
   }
 
-  private def saveToBucket(bucket: Bucket, files: Seq[File], dir: Option[String]): F[List[Blob]] =
+  def get(filename: String, storageName: StorageName): F[Array[Byte]] =
+    for {
+      credentials <- createGoogleCredentials()
+      service <- getStorage(credentials)
+      bucket <- getBucket(service)
+      blob <- getFromBucket(bucket, filename, StorageName.toDirectory(storageName))
+    } yield blob
+
+  private def saveToBucket(bucket: Bucket, files: Seq[File], dir: String): F[List[Blob]] =
     files.toList.traverse(file => uploadFile(bucket, dir, file))
 
-  private def uploadFile(bucket: Bucket, dir: Option[String], file: File): F[Blob] =
-    Sync[F].delay(Try(bucket.create(dir.map(d => s"$d/${file.name}").getOrElse(file.name), file.byteArray))).flatMap {
+  private def getFromBucket(bucket: Bucket, filename: String, dir: String): F[Array[Byte]] =
+    for {
+      blob <- Sync[F].delay { Try(bucket.get(s"$dir/${filename}")) }.flatMap {
+        case Success(blob)      => blob.pure[F]
+        case Failure(exception) => CannotGetFile(exception).raiseError[F, Blob]
+      }
+      bytes <- Sync[F].delay { blob.getContent() }
+    } yield bytes
+
+  private def uploadFile(bucket: Bucket, dir: String, file: File): F[Blob] =
+    Sync[F].delay(Try(bucket.create(s"$dir/${file.name}", file.byteArray))).flatMap {
       case Success(blob)      => Sync[F].pure(blob)
       case Failure(exception) => CannotUploadFile(exception).raiseError[F, Blob]
     }

@@ -35,6 +35,7 @@ lazy val versions = new {
   val json4s = "3.6.7"
   val mockito = "1.5.16"
   val twitterChill = "0.9.3"
+  val droste = "0.8.0"
 }
 
 lazy val sttpDependencies = Seq(
@@ -91,6 +92,7 @@ lazy val sharedDependencies = Seq(
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
   ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
+  "io.higherkindness" %% "droste-core" % versions.droste,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
 )
