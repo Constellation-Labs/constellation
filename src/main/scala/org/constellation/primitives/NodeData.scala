@@ -69,6 +69,9 @@ trait NodeData {
   def genesisObservationPath: File =
     File(s"tmp/${id.medium}/genesis/genesisObservation")
 
+  def eigenTrustPath: String =
+    s"tmp/${id.medium}/eigen_trust"
+
   def updateKeyPair(kp: KeyPair): Unit =
     nodeConfig = nodeConfig.copy(primaryKeyPair = kp)
 

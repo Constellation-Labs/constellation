@@ -16,6 +16,7 @@ import scala.collection.immutable.Map
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
+import org.constellation.domain.rewards.StoredEigenTrust
 import org.constellation.rewards.EigenTrust.{opinionSampleNum, opinionSampleSD, satisfactoryThreshold, weight}
 
 import scala.util.Random
@@ -72,22 +73,37 @@ object EigenTrust {
 class EigenTrust[F[_]: Concurrent](selfId: Id) {
   private final val secureRandom = SecureRandom.getInstanceStrong
   private final val agents: Ref[F, EigenTrustAgents] = Ref.unsafe(EigenTrustAgents.empty())
+  private final val eigenTrustJ: Ref[F, EigenTrustJ] = Ref.unsafe(new EigenTrustJ())
+
   private implicit val logger = Slf4jLogger.getLogger[F]
 
-  private final val eigenTrust = new EigenTrustJ()
-  eigenTrust.initialize(
-    EigenTrust.weight.asInstanceOf[Object],
-    EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
-    EigenTrust.opinionSampleNum.asInstanceOf[Object],
-    EigenTrust.opinionSampleSD.asInstanceOf[Object]
-  )
-  eigenTrust.setRandomGenerator(new DefaultRandomGenerator(0))
-  eigenTrust.processExperiences(List().asJava)
-  eigenTrust.calculateTrust()
+  def initializeModel(): F[Unit] = eigenTrustJ.modify { _ =>
+    val instance = new EigenTrustJ()
+    instance.initialize(
+      EigenTrust.weight.asInstanceOf[Object],
+      EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
+      EigenTrust.opinionSampleNum.asInstanceOf[Object],
+      EigenTrust.opinionSampleSD.asInstanceOf[Object]
+    )
+    instance.setRandomGenerator(new DefaultRandomGenerator(0))
+    instance.processExperiences(List().asJava)
+    instance.calculateTrust()
+    (instance, ())
+  }
+
+  def setModel(model: EigenTrustJ): F[Unit] = eigenTrustJ.modify { _ =>
+    (model, ())
+  }
+
+  def getModel(): F[EigenTrustJ] = eigenTrustJ.modify { et =>
+    (et, et)
+  }
 
   def registerSelf(): F[Unit] = registerAgent(selfId)
 
   def getAgents(): F[EigenTrustAgents] = agents.modify(a => (a, a))
+
+  def setAgents(value: EigenTrustAgents): F[Unit] = agents.modify(_ => (value, ()))
 
   def clearAgents(): F[Unit] = agents.modify(a => (a.clear(), a)).void
 
@@ -98,7 +114,8 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
         (updated, updated)
       })
       .flatMap(
-        agents => logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id.address)}")
+        agents =>
+          logger.debug(s"[EigenTrust] Registered EigenTrust agent: ${id.address} -> ${agents.getUnsafe(id.address)}")
       )
 
   def unregisterAgent(id: Id): F[Unit] =
@@ -109,11 +126,13 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
       })
       .flatMap(_ => logger.debug(s"[EigenTrust] Unregistered EigenTrust agent: ${id.address}"))
 
-  def seed(trustEdges: Seq[TrustEdge]): F[Unit] = Concurrent[F].delay {
-    val opinions = convertToOpinions(trustEdges)
-    eigenTrust.processOpinions(opinions.asJava)
-    eigenTrust.calculateTrust()
-  }
+  def seed(trustEdges: Seq[TrustEdge]): F[Unit] =
+    eigenTrustJ.modify { et =>
+      val opinions = convertToOpinions(trustEdges)
+      et.processOpinions(opinions.asJava)
+      et.calculateTrust()
+      (et, ())
+    }
 
   def retrain(observations: Seq[Observation]): F[Unit] = {
     val observationData = observations.map(_.signedObservationData.data)
@@ -121,12 +140,23 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
       _ <- logger.debug(s"[EigenTrust] Retraining")
       agents <- getAgents()
       experiences = convertToExperiences(observationData, agents).asJava
-      _ <- Concurrent[F].delay {
-        eigenTrust.processExperiences(experiences)
-        eigenTrust.calculateTrust()
+      _ <- eigenTrustJ.modify { et =>
+        et.processExperiences(experiences)
+        et.calculateTrust()
+        (et, ())
       }
     } yield ()
   }
+
+  def getTrustForAddresses: F[Map[String, Double]] =
+    for {
+      agents <- getAgents()
+      trust <- getTrust()
+      trustForAddresses = agents.getAllAsAddresses().transform {
+        // If node has no Experiences then it's entropy should be ~0
+        case (_, int) => trust.getOrElse(int, 0.0)
+      }
+    } yield trustForAddresses
 
   /**
     * Calculates experience outcome as o∈⟨0;1⟩.
@@ -136,14 +166,17 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
     * @param observationEvents
     * @return Normalized Experience outcome
     */
-  def calculateExperienceOutcome(observationEvents: Seq[ObservationEvent]): Double = {
+  private[rewards] def calculateExperienceOutcome(observationEvents: Seq[ObservationEvent]): Double = {
     val bestExperience = 1.0
     val negativeExperiences = observationEvents.map(TrustManager.observationScoring).sum
     val outcome = bestExperience + negativeExperiences
     if (outcome > 0) outcome else 0.0
   }
 
-  def convertToExperiences(observations: Seq[ObservationData], agents: EigenTrustAgents): Seq[Experience] =
+  private[rewards] def convertToExperiences(
+    observations: Seq[ObservationData],
+    agents: EigenTrustAgents
+  ): Seq[Experience] =
     observations
       .groupBy(_.id)
       .mapValues(data => calculateExperienceOutcome(data.map(_.event)))
@@ -153,27 +186,22 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
       .values
       .toSeq
 
-  def convertToOpinions(trustEdges: Seq[TrustEdge]): Seq[Opinion] =
+  private[rewards] def convertToOpinions(trustEdges: Seq[TrustEdge]): Seq[Opinion] =
     trustEdges
       .map(edge => {
         val trust = normalizeTrust(edge.trust)
         new Opinion(edge.src, edge.dst, EigenTrust.service, EigenTrust.service, trust, secureRandom.nextDouble / 10)
       })
 
-  def getTrust: Map[Integer, Double] =
-    eigenTrust
-      .getTrust(EigenTrust.service)
-      .asScala
-      .toMap
-      .mapValues(_.toDouble)
-
-  def getTrustForAddresses: F[Map[String, Double]] = getAgents().map { agents =>
-    val trust = getTrust
-    agents.getAllAsAddresses().transform {
-      // If node has no Experiences then it's entropy should be ~0
-      case (_, int) => trust.getOrElse(int, 0.0)
+  private[rewards] def getTrust(): F[Map[Integer, Double]] =
+    eigenTrustJ.modify { et =>
+      val trust = et
+        .getTrust(EigenTrust.service)
+        .asScala
+        .toMap
+        .mapValues(_.toDouble)
+      (et, trust)
     }
-  }
 
   /**
     * Normalizes trust t∈⟨-1;1⟩ to t∈⟨0;1⟩
@@ -181,5 +209,5 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
     * @param trust
     * @return normalized trust
     */
-  def normalizeTrust(trust: Double): Double = trust / 2 + 0.5
+  private[rewards] def normalizeTrust(trust: Double): Double = trust / 2 + 0.5
 }

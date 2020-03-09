@@ -1,6 +1,7 @@
 package org.constellation.rewards
 
 import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -39,13 +40,30 @@ class EigenTrustAgentsTest
     updated.get(int).get shouldBe addr
   }
 
-  "AgentsIterator" - {
-    "should return next int" in {
-      val iterator = AgentsIterator()
-      val next = iterator.next()
-      next shouldBe 1
-      val nextAfterNext = iterator.next()
-      nextAfterNext shouldBe 2
+  "Serialization/Deserialization" - {
+    "should keep iterator's state after deserialization" in {
+      val agents = EigenTrustAgents.empty()
+      val addr1 = "DAGfoo1"
+      val addr2 = "DAGfoo2"
+      val addr3 = "DAGbar"
+
+      val updated = agents.registerAgent(addr1).registerAgent(addr2)
+
+      val serialized = KryoSerializer.serialize[EigenTrustAgents](updated)
+      val deserialized = KryoSerializer.deserializeCast[EigenTrustAgents](serialized)
+
+      deserialized.getAllAsAddresses() shouldEqual Map(
+        addr1 -> 1,
+        addr2 -> 2
+      )
+
+      val updatedDeserialized = deserialized.registerAgent(addr3)
+
+      updatedDeserialized.getAllAsAddresses() shouldEqual Map(
+        addr1 -> 1,
+        addr2 -> 2,
+        addr3 -> 3
+      )
     }
   }
 }
