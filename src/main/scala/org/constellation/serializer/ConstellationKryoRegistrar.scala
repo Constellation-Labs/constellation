@@ -15,6 +15,7 @@ import org.constellation.util.{HashSignature, SignatureBatch}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
+import org.constellation.domain.rewards.StoredEigenTrust
 import org.constellation.rewards.EigenTrustAgents
 
 import scala.collection.SortedMap
@@ -106,6 +107,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("[[I")) // To make int[][] serializable
     kryo.register(classOf[EigenTrustJ])
     kryo.register(classOf[EigenTrustAgents])
+    kryo.register(classOf[StoredEigenTrust])
 
     kryo.register(classOf[AddressMetaData])
 
@@ -117,6 +119,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("scala.Enumeration$Val"))
     kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"))
     kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))
+    kryo.register(Class.forName("scala.collection.IndexedSeqLike$Elements"))
     kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))
     kryo.register(Class.forName("akka.util.ByteString$ByteString1C"))
     kryo.register(Class.forName("scala.None$"))
