@@ -22,6 +22,8 @@ import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.rewards.{EigenTrustStorage, StoredEigenTrust}
+import org.constellation.rewards.EigenTrust
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -42,6 +44,8 @@ class SnapshotService[F[_]: Concurrent](
   soeService: SOEService[F],
   snapshotStorage: SnapshotStorage[F],
   snapshotInfoStorage: SnapshotInfoStorage[F],
+  eigenTrustStorage: EigenTrustStorage[F],
+  eigenTrust: EigenTrust[F],
   dao: DAO
 )(implicit C: ContextShift[F], P: Parallel[F]) {
 
@@ -113,6 +117,7 @@ class SnapshotService[F[_]: Concurrent](
       // TODO: pass stored snapshot to writeSnapshotToDisk
       _ <- writeSnapshotToDisk(snapshot.snapshot)
       _ <- writeSnapshotInfoToDisk()
+      _ <- writeEigenTrustToDisk(snapshot.snapshot)
 
       _ <- EitherT.liftF(removeLeavingPeers())
 
@@ -136,6 +141,14 @@ class SnapshotService[F[_]: Concurrent](
         snapshotInfoStorage.writeSnapshotInfo(hash, KryoSerializer.serializeAnyRef(info))
       }
     }.leftMap(SnapshotInfoIOError)
+
+  def writeEigenTrustToDisk(snapshot: Snapshot): EitherT[F, EigenTrustIOError, Unit] =
+    (for {
+      agents <- eigenTrust.getAgents().attemptT
+      model <- eigenTrust.getModel().attemptT
+      storedEigenTrust = StoredEigenTrust(agents, model)
+      _ <- eigenTrustStorage.writeEigenTrust(snapshot.hash, KryoSerializer.serializeAnyRef(storedEigenTrust))
+    } yield ()).leftMap(EigenTrustIOError)
 
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
@@ -532,6 +545,8 @@ object SnapshotService {
     soeService: SOEService[F],
     snapshotStorage: SnapshotStorage[F],
     snapshotInfoStorage: SnapshotInfoStorage[F],
+    eigenTrustStorage: EigenTrustStorage[F],
+    eigenTrust: EigenTrust[F],
     dao: DAO
   )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
@@ -548,6 +563,8 @@ object SnapshotService {
       soeService,
       snapshotStorage,
       snapshotInfoStorage,
+      eigenTrustStorage,
+      eigenTrust,
       dao
     )
 }
@@ -589,6 +606,10 @@ case class SnapshotUnexpectedError(cause: Throwable) extends SnapshotError {
 
 case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError {
   def message: String = s"SnapshotInfo IO error: ${cause.getMessage}"
+}
+
+case class EigenTrustIOError(cause: Throwable) extends SnapshotError {
+  def message: String = s"EigenTrust IO error: ${cause.getMessage}"
 }
 
 case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])

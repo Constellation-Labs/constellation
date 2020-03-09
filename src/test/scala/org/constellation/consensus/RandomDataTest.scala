@@ -10,6 +10,7 @@ import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
+import org.constellation.rewards.EigenTrustAgents
 import org.constellation.{DAO, Fixtures, TestHelpers}
 import org.scalatest._
 

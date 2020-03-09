@@ -1,31 +1,13 @@
 package org.constellation.rewards
 
-import java.security.SecureRandom
 import org.constellation.rewards.EigenTrustAgents.BiDirectionalMap
-import org.constellation.schema.Id
 
 import scala.collection.immutable.Map
 
 object EigenTrustAgents {
   type BiDirectionalMap[A, B] = (Map[A, B], Map[B, A])
 
-  val iterator: AgentsIterator = AgentsIterator()
-
   def empty(): EigenTrustAgents = EigenTrustAgents((Map.empty[String, Int], Map.empty[Int, String]))
-}
-
-case class AgentsIterator() extends Iterator[Int] {
-  var current: Int = 0;
-
-  override def hasNext: Boolean = current != Int.MaxValue
-
-  override def next(): Int = {
-    if (hasNext) {
-      current = current + 1
-      current
-    } else
-      -1
-  }
 }
 
 /**
@@ -33,15 +15,17 @@ case class AgentsIterator() extends Iterator[Int] {
   * to fit Int's size. Therefore we store the mappings between Id and random Int to make a bridge between
   * the https://github.com/djelenc/alpha-testbed EigenTrust and our app
   */
-case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[String, Int] = (Map.empty[String, Int], Map.empty[Int, String])) {
+case class EigenTrustAgents(
+  private val agentMappings: BiDirectionalMap[String, Int] = (Map.empty[String, Int], Map.empty[Int, String]),
+  private val iterator: Iterator[Int] = (1 to Int.MaxValue).iterator
+) {
 
-  def registerAgent(address: String): EigenTrustAgents = {
+  def registerAgent(address: String): EigenTrustAgents =
     if (contains(address)) {
-      this.copy(agentMappings)
+      this
     } else {
-      this.copy(update(address, EigenTrustAgents.iterator.next()))
+      this.copy(update(address, iterator.next()))
     }
-  }
 
   def unregisterAgent(agent: Int): EigenTrustAgents = this.copy(remove(agent))
   def unregisterAgent(agent: String): EigenTrustAgents = this.copy(remove(agent))
@@ -50,8 +34,9 @@ case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[String, 
     agentMappings match {
       case (_, intToAddress: Map[Int, String]) => intToAddress.get(agent)
     }
+
   def get(address: String): Option[Int] =
-    agentMappings match  {
+    agentMappings match {
       case (addressToInt: Map[String, Int], _) => addressToInt.get(address)
     }
 
@@ -66,25 +51,22 @@ case class EigenTrustAgents(private val agentMappings: BiDirectionalMap[String, 
 
   def clear(): EigenTrustAgents = EigenTrustAgents.empty
 
-  private def update(key: String, value: Int): BiDirectionalMap[String, Int] = {
+  private def update(key: String, value: Int): BiDirectionalMap[String, Int] =
     agentMappings match {
       case (addressToInt: Map[String, Int], intToAddress: Map[Int, String]) if !contains(key) && !contains(value) =>
         (addressToInt + (key -> value), intToAddress + (value -> key))
       case _ => agentMappings
     }
-  }
 
-  private def remove(agent: Int): BiDirectionalMap[String, Int] = {
+  private def remove(agent: Int): BiDirectionalMap[String, Int] =
     agentMappings match {
       case (addressToInt: Map[String, Int], intToAddress: Map[Int, String]) =>
         (addressToInt - intToAddress(agent), intToAddress - agent)
     }
-  }
 
-  private def remove(id: String): BiDirectionalMap[String, Int] = {
+  private def remove(id: String): BiDirectionalMap[String, Int] =
     agentMappings match {
       case (idToInt: Map[String, Int], intToId: Map[Int, String]) =>
         (idToInt - id, intToId - idToInt(id))
     }
-  }
 }
