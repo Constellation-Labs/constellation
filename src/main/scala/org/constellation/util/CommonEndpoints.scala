@@ -63,7 +63,7 @@ trait CommonEndpoints extends Json4sSupport {
         APIDirective.handle(dao.snapshotStorage.getSnapshotHashes)(complete(_))
       } ~
       path("snapshot" / "stored") {
-        val storedSnapshots = dao.snapshotStorage.getSnapshotHashes
+        val storedSnapshots = dao.snapshotStorage.list().value
 
         APIDirective.handle(storedSnapshots)(complete(_))
       } ~
@@ -133,7 +133,7 @@ trait CommonEndpoints extends Json4sSupport {
         val getSnapshot = for {
           exists <- dao.snapshotStorage.exists(s)
           bytes <- if (exists) {
-            dao.snapshotStorage.getSnapshotBytes(s).value.flatMap(IO.fromEither).map(Some(_))
+            dao.snapshotStorage.readBytes(s).value.flatMap(IO.fromEither).map(Some(_))
           } else none[Array[Byte]].pure[IO]
         } yield bytes
 
