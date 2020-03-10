@@ -256,7 +256,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
                     tryWithMetric(
                       {
                         dao.snapshotStorage
-                          .readSnapshot(snapshotHash)
+                          .read(snapshotHash)
                           .value
                           .flatMap(IO.fromEither)
                           .unsafeRunSync // TODO: get rid of unsafeRunSync

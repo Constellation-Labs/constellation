@@ -10,6 +10,8 @@ trait SnapshotInfoStorage[F[_]] {
 
   def readSnapshotInfo(hash: String): EitherT[F, Throwable, SnapshotInfo]
 
+  def getSnapshotInfoBytes(hash: String): EitherT[F, Throwable, Array[Byte]]
+
   def writeSnapshotInfo(hash: String, bytes: Array[Byte]): EitherT[F, Throwable, Unit]
 
   def removeSnapshotInfo(hash: String): EitherT[F, Throwable, Unit]
@@ -19,7 +21,4 @@ trait SnapshotInfoStorage[F[_]] {
   def getSnapshotInfoFiles: F[List[File]]
 
   def getSnapshotInfoFiles(hashes: List[String]): F[List[File]]
-
-  def getSnapshotInfoBytes(hash: String): EitherT[F, Throwable, Array[Byte]]
-
 }
