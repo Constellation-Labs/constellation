@@ -91,7 +91,6 @@ case class ProcessingConfig(
   peerHealthCheckInterval: Int = 30,
   peerDiscoveryInterval: Int = 60,
   formCheckpointTimeout: Int = 60,
-  maxFaucetSize: Int = 1000,
   roundsPerMessage: Int = 10,
   recentSnapshotNumber: Int = 40, // must be equal to snapshotHeightRedownloadDelayInterval from application.conf
   maxInvalidSnapshotRate: Int = 51,

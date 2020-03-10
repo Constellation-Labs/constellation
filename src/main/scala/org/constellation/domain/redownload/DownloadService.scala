@@ -18,7 +18,6 @@ class DownloadService[F[_]](redownloadService: RedownloadService[F], cluster: Cl
   def download()(implicit dao: DAO): F[Unit] = {
     val wrappedDownload = for {
       _ <- clearDataBeforeDownload()
-      _ <- requestForFaucet()
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot()
@@ -35,9 +34,6 @@ class DownloadService[F[_]](redownloadService: RedownloadService[F], cluster: Cl
 
   }
 
-  // TODO: to be implemented
-  private[redownload] def requestForFaucet(): F[Unit] = F.unit
-
   private[redownload] def clearDataBeforeDownload()(implicit dao: DAO): F[Unit] =
     for {
       _ <- logger.debug("Clearing data before download.")
@@ -47,15 +43,16 @@ class DownloadService[F[_]](redownloadService: RedownloadService[F], cluster: Cl
       _ <- LiftIO[F].liftIO(dao.soeService.clear)
     } yield ()
 
-  private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] = for {
-    _ <- logger.debug("Downloading and accepting genesis.")
-    _ <- cluster
-      .broadcast(_.getNonBlockingF[F, Option[GenesisObservation]]("genesis")(C))
-      .map(_.values.flatMap(_.toOption))
-      .map(_.find(_.nonEmpty).flatten.get)
-      .flatTap(genesis => F.delay { Genesis.acceptGenesis(genesis) })
-      .void
-  } yield ()
+  private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] =
+    for {
+      _ <- logger.debug("Downloading and accepting genesis.")
+      _ <- cluster
+        .broadcast(_.getNonBlockingF[F, Option[GenesisObservation]]("genesis")(C))
+        .map(_.values.flatMap(_.toOption))
+        .map(_.find(_.nonEmpty).flatten.get)
+        .flatTap(genesis => F.delay { Genesis.acceptGenesis(genesis) })
+        .void
+    } yield ()
 }
 
 object DownloadService {
