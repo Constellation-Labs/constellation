@@ -8,7 +8,7 @@ import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
-import org.constellation.domain.snapshot.{SnapshotInfoStorage, SnapshotStorage}
+import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfoStorage}
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
@@ -34,7 +34,7 @@ class RedownloadServiceTest
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var majorityStateChooser: MajorityStateChooser = _
-  var snapshotStorage: SnapshotStorage[IO] = _
+  var snapshotStorage: SnapshotFileStorage[IO] = _
   var snapshotService: SnapshotService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
@@ -48,7 +48,7 @@ class RedownloadServiceTest
   override def beforeEach(): Unit = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
-    snapshotStorage = mock[SnapshotStorage[IO]]
+    snapshotStorage = mock[SnapshotFileStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
     cloudStorage = mock[CloudStorage[IO]]
     rewardsManager = mock[RewardsManager[IO]]
