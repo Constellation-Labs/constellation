@@ -3,7 +3,7 @@ package org.constellation.p2p
 import java.time.LocalDateTime
 
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
@@ -52,12 +52,14 @@ object PeerState extends Enumeration {
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
-class Cluster[F[_]: Concurrent: Timer: ContextShift](
+class Cluster[F[_]](
   ipManager: IPManager[F],
   joiningPeerValidator: JoiningPeerValidator[F],
   dao: DAO
 )(
-  implicit C: ContextShift[F]
+  implicit F: Concurrent[F],
+  C: ContextShift[F],
+  T: Timer[F]
 ) {
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
@@ -132,7 +134,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
         }
         _ <- if (isRemoved) {
           dao.metrics.incrementMetricAsync[F]("peerRemoved")
-        } else Sync[F].unit
+        } else F.unit
 
         _ <- updateMetrics()
         _ <- updatePersistentStore()
@@ -155,7 +157,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
   private def updatePersistentStore(): F[Unit] =
     peers.get.flatMap { p =>
-      Sync[F].delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
+      F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
     }
 
   def setNodeStatus(id: Id, state: NodeState): F[Unit] =
@@ -203,7 +205,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
   def addPeerMetadata(pm: PeerMetadata): F[Unit] = {
     val validHost = (pm.host != dao.externalHostString && pm.host != "127.0.0.1") || !dao.preventLocalhostAsPeer
 
-    if (pm.id == dao.id || !validHost) Sync[F].unit
+    if (pm.id == dao.id || !validHost) F.unit
 
     logThread(
       for {
@@ -212,7 +214,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
         _ <- peerDiscovery(client, pm.isSimulation)
 
-        _ <- Sync[F].delay(client.id = pm.id)
+        _ <- F.delay(client.id = pm.id)
 
         _ <- updatePeerInfo(PeerData(pm, client))
       } yield (),
@@ -237,7 +239,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
         isValid <- if (!isSimulation)
           joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
-        else Sync[F].pure(true)
+        else F.pure(true)
 
         _ <- if (badAttempt) {
           dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
@@ -252,12 +254,12 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
             if (sig.hashSignature.id != request.id) {
               logger.warn(s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}") >>
                 dao.metrics.incrementMetricAsync[F]("peerKeyMismatch")
-            } else Sync[F].unit
+            } else F.unit
           }.flatTap { sig =>
             if (!sig.valid) {
               logger.warn(s"Invalid peer signature $request $authSignRequest $sig") >>
                 dao.metrics.incrementMetricAsync[F]("invalidPeerRegistrationSignature")
-            } else Sync[F].unit
+            } else F.unit
           }.flatTap { sig =>
             dao.metrics.incrementMetricAsync[F]("peerAddedFromRegistrationFlow") >>
               logger.debug(s"Valid peer signature $request $authSignRequest $sig")
@@ -367,7 +369,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
                    case (_, data) => data.peerMetadata.host == hp.host && data.peerMetadata.httpPort == hp.port
                  } && validWithLoopbackGuard(hp.host)) {
           attemptRegisterPeer(hp).void
-        } else Sync[F].unit
+        } else F.unit
       } yield (),
       "cluster_hostPort"
     )
@@ -388,13 +390,13 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
               }
             }
           }.void
-        } else Sync[F].unit
+        } else F.unit
 
         _ <- if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
           peers.values.toList.traverse { d =>
             peerDiscovery(d.client)
           }.void
-        } else Sync[F].unit
+        } else F.unit
       } yield (),
       "cluster_internalHearthbeat"
     )
@@ -407,7 +409,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
             dao.peersInfoPath.lines.mkString.x[Seq[PeerMetadata]].toList.traverse(addPeerMetadata).void,
             "peerReloading"
           )
-        } else Sync[F].unit
+        } else F.unit
 
         _ <- if (dao.seedsPath.nonEmpty) {
           withMetric(
@@ -415,14 +417,14 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
               line.split(":") match {
                 case Array(host, port) =>
                   hostPort(HostPort(host, port.toInt))
-                case _ => Sync[F].unit
+                case _ => F.unit
               }
             }.void,
             "reedSeedsFile"
           )
-        } else Sync[F].unit
+        } else F.unit
 
-        _ <- Timer[F].sleep(15.seconds)
+        _ <- T.sleep(15.seconds)
 
         _ <- attemptRollback()
 
@@ -487,7 +489,7 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
 
     def attemptRejoin(lastKnownAPIClients: Seq[HostPort]): F[Unit] =
       lastKnownAPIClients match {
-        case Nil => Sync[F].raiseError(new RuntimeException("Couldn't rejoin the cluster"))
+        case Nil => F.raiseError(new RuntimeException("Couldn't rejoin the cluster"))
         case hostPort :: remainingHostPorts =>
           join(hostPort)
             .handleErrorWith(err => {
@@ -594,12 +596,12 @@ class Cluster[F[_]: Concurrent: Timer: ContextShift](
     }.flatTap(
         res =>
           if (res.isNewSet) LiftIO[F].liftIO(dao.metrics.updateMetricAsync[IO]("nodeState", newState.toString))
-          else Sync[F].unit
+          else F.unit
       )
       .flatTap {
         case SetStateResult(_, true) if !skipBroadcast && broadcastStates.contains(newState) =>
           broadcastNodeState(newState)
-        case _ => Sync[F].unit
+        case _ => F.unit
       }
 
   def getNodeState: F[NodeState] = nodeState.get
@@ -654,8 +656,7 @@ object Cluster {
     ipManager: IPManager[F],
     joiningPeerValidator: JoiningPeerValidator[F],
     dao: DAO
-  ) =
-    new Cluster(ipManager, joiningPeerValidator, dao)
+  ) = new Cluster(ipManager, joiningPeerValidator, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
 

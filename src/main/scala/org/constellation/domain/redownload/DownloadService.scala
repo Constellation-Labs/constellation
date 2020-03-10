@@ -19,7 +19,7 @@ class DownloadService[F[_]](redownloadService: RedownloadService[F], cluster: Cl
     val wrappedDownload = for {
       _ <- clearDataBeforeDownload()
       _ <- downloadAndAcceptGenesis()
-      _ <- redownloadService.fetchAndUpdatePeersProposals
+      _ <- redownloadService.fetchAndUpdatePeersProposals()
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot()
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
     } yield ()
