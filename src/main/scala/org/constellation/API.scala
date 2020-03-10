@@ -92,7 +92,6 @@ case class ProcessingConfig(
   peerDiscoveryInterval: Int = 60,
   formCheckpointTimeout: Int = 60,
   roundsPerMessage: Int = 10,
-  recentSnapshotNumber: Int = 40, // must be equal to snapshotHeightRedownloadDelayInterval from application.conf
   maxInvalidSnapshotRate: Int = 51,
   txGossipingFanout: Int = 2,
   leavingStandbyTimeout: Int = 30
