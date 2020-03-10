@@ -34,10 +34,6 @@ class DownloadServiceTest
     dao.soeService.clear shouldReturnF Unit
   }
 
-  "requestForFaucet" - {
-    "to be defined" ignore {}
-  }
-
   "clearDataBeforeDownload" - {
     "clears data" - {
       "from blacklistedAddress service" in {
