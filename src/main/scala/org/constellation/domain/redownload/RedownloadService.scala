@@ -11,7 +11,7 @@ import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
+import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.rewards.RewardsManager
@@ -30,7 +30,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   isEnabledCloudStorage: Boolean,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
-  snapshotStorage: SnapshotStorage[F],
+  snapshotStorage: SnapshotFileStorage[F],
   snapshotInfoStorage: SnapshotInfoStorage[F],
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
@@ -492,7 +492,7 @@ object RedownloadService {
     isEnabledCloudStorage: Boolean,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
-    snapshotStorage: SnapshotStorage[F],
+    snapshotStorage: SnapshotFileStorage[F],
     snapshotInfoStorage: SnapshotInfoStorage[F],
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],

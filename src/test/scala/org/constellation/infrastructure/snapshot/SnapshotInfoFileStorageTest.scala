@@ -44,7 +44,7 @@ class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndA
     "should return false if snapshot info does not exist" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotInfosDir = dir / "snapshots"
-        val snapshotInfoStorage = SnapshotFileStorage[IO](snapshotInfosDir.pathAsString)
+        val snapshotInfoStorage = SnapshotDiskFileStorage[IO](snapshotInfosDir.pathAsString)
         snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         snapshotInfoStorage.exists("unknown_file").unsafeRunSync shouldBe false

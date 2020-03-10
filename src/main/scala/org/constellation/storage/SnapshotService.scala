@@ -14,7 +14,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
+import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
@@ -42,7 +42,7 @@ class SnapshotService[F[_]: Concurrent](
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
   soeService: SOEService[F],
-  snapshotStorage: SnapshotStorage[F],
+  snapshotStorage: SnapshotFileStorage[F],
   snapshotInfoStorage: SnapshotInfoStorage[F],
   eigenTrustStorage: EigenTrustStorage[F],
   eigenTrust: EigenTrust[F],
@@ -543,7 +543,7 @@ object SnapshotService {
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
     soeService: SOEService[F],
-    snapshotStorage: SnapshotStorage[F],
+    snapshotStorage: SnapshotFileStorage[F],
     snapshotInfoStorage: SnapshotInfoStorage[F],
     eigenTrustStorage: EigenTrustStorage[F],
     eigenTrust: EigenTrust[F],

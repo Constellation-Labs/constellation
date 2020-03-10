@@ -12,7 +12,7 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.TestHelpers
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
-import org.constellation.domain.snapshot.SnapshotStorage
+import org.constellation.domain.snapshot.SnapshotFileStorage
 import org.constellation.primitives.IPManager
 import org.constellation.schema.Id
 import org.json4s.native.Serialization
@@ -47,7 +47,7 @@ class PeerAPITest
 
   "GET snapshot/stored" - {
     "response should return all snapshots stored on disk" in {
-      dao.snapshotStorage shouldReturn mock[SnapshotStorage[IO]]
+      dao.snapshotStorage shouldReturn mock[SnapshotFileStorage[IO]]
       dao.snapshotStorage.getSnapshotHashes shouldReturnF List("aa", "bb")
 
       Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {
