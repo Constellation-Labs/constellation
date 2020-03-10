@@ -43,6 +43,8 @@ object Schema {
 
     val offlineStates: Set[NodeState.Value] = Set(Offline)
 
+    val invalidForJoining: Set[NodeState.Value] = Set(Leaving, Offline)
+
     val validDuringDownload: Set[NodeState.Value] =
       Set(ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
@@ -65,6 +67,8 @@ object Schema {
     val validForCheckpointAcceptance: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
 
     val validForCheckpointPendingAcceptance: Set[NodeState.Value] = validDuringDownload
+
+    def canActAsJoiningSource(current: NodeState): Boolean = all.diff(invalidForJoining).contains(current)
 
     def canActAsDownloadSource(current: NodeState): Boolean = validForLettingOthersDownload.contains(current)
 
