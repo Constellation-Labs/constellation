@@ -32,7 +32,8 @@ case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
   client: APIClient,
-  notification: Seq[PeerNotification] = Seq.empty
+  notification: Seq[PeerNotification] = Seq.empty,
+  majorityHeight: MajorityHeight
 )
 
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
@@ -45,6 +46,8 @@ case class UpdatePeerInfo(peerData: PeerData)
 case class ChangePeerState(id: Id, state: NodeState)
 
 case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
+
+case class MajorityHeight(joined: Long, left: Option[Long])
 
 object PeerState extends Enumeration {
   type PeerState = Value
@@ -231,7 +234,9 @@ class Cluster[F[_]](
         peers <- peers.get
         existsNotOffline = peers.exists {
           case (_, d) =>
-            d.client.hostName == request.host && d.client.apiPort == request.port && d.peerMetadata.nodeState != NodeState.Offline
+            d.client.hostName == request.host && d.client.apiPort == request.port && NodeState.canActAsJoiningSource(
+              d.peerMetadata.nodeState
+            )
         }
 
         isSelfId = dao.id == request.id
@@ -282,7 +287,7 @@ class Cluster[F[_]](
                 )
                 client.id = id
                 val peerData = PeerData(add, client)
-                updatePeerInfo(peerData) >> C.shift >> implicitly[Concurrent[F]].start(peerDiscovery(client))
+                updatePeerInfo(peerData) >> C.shift >> F.start(peerDiscovery(client))
               }.void
 
           }.handleErrorWith { err =>
