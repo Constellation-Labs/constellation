@@ -271,7 +271,7 @@ object Snapshot extends StrictLogging {
             withMetric(
               LiftIO[F].liftIO {
                 dao.snapshotStorage
-                  .writeSnapshot(storedSnapshot.snapshot.hash, serialized)
+                  .write(storedSnapshot.snapshot.hash, serialized)
                   .value
                   .flatMap(IO.fromEither)
               },
@@ -283,19 +283,19 @@ object Snapshot extends StrictLogging {
 
   def removeOldSnapshots[F[_]: Concurrent]()(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
-      createdHashes <- LiftIO[F].liftIO(dao.redownloadService.getCreatedSnapshots().map(_.values.toList))
-      acceptedHashes <- LiftIO[F].liftIO(dao.redownloadService.getAcceptedSnapshots().map(_.values.toList))
-      diff <- LiftIO[F].liftIO(dao.snapshotStorage.getSnapshotHashes).map(_.diff(createdHashes ++ acceptedHashes))
-      _ <- removeSnapshots(diff) // TODO: To be confirmed
+      createdHashes <- LiftIO[F].liftIO(dao.redownloadService.getCreatedSnapshots().map(_.values.toList)).attempt
+      acceptedHashes <- LiftIO[F].liftIO(dao.redownloadService.getAcceptedSnapshots().map(_.values.toList)).attempt
+      diff <- dao.snapshotStorage.list().map(_.diff(createdHashes ++ acceptedHashes)).value
+      _ <- removeSnapshots(diff).attempt // TODO: To be confirmed
     } yield ()
 
   def removeSnapshots[F[_]: Concurrent](
     snapshots: List[String]
   )(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
     for {
-      _ <- snapshots.distinct.traverse { snapId =>
+      _ <- snapshots.distinct.traverse { hash =>
         withMetric(
-          LiftIO[F].liftIO(dao.snapshotStorage.removeSnapshot(snapId).value.flatMap(IO.fromEither)).handleErrorWith {
+          LiftIO[F].liftIO(dao.snapshotStorage.delete(hash).value.flatMap(IO.fromEither)).handleErrorWith {
             case e: NoSuchFileException =>
               Sync[F].delay(logger.warn(s"Snapshot to delete doesn't exist: ${e.getMessage}"))
           },

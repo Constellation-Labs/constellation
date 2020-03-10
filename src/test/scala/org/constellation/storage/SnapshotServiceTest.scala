@@ -8,7 +8,7 @@ import org.constellation._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, StoredSnapshot}
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage, SnapshotStorage}
+import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
@@ -34,7 +34,7 @@ class SnapshotServiceTest
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
-  var snapshotStorage: SnapshotStorage[IO] = _
+  var snapshotStorage: SnapshotFileStorage[IO] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
 
   before {
@@ -53,7 +53,7 @@ class SnapshotServiceTest
     val soeService = mock[SOEService[IO]]
     val eigenTrustStorage = mock[EigenTrustStorage[IO]]
     val eigenTrust = mock[EigenTrust[IO]]
-    snapshotStorage = mock[SnapshotStorage[IO]]
+    snapshotStorage = mock[SnapshotFileStorage[IO]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
 
     snapshotService = new SnapshotService[IO](
