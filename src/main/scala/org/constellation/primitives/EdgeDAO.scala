@@ -17,7 +17,7 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
-import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfoStorage}
+import org.constellation.domain.snapshot.SnapshotInfoStorage
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.{
@@ -35,6 +35,7 @@ import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.rewards.EigenTrustStorage
+import org.constellation.domain.storage.FileStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
@@ -183,7 +184,7 @@ trait EdgeDAO {
   var checkpointService: CheckpointService[IO] = _
   var checkpointParentService: CheckpointParentService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
-  var snapshotStorage: SnapshotFileStorage[IO] = _
+  var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
   var eigenTrustStorage: EigenTrustStorage[IO] = _
   var snapshotService: SnapshotService[IO] = _

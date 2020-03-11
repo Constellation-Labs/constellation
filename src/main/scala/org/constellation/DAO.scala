@@ -27,7 +27,6 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
-import org.constellation.domain.snapshot.SnapshotFileStorage
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -37,7 +36,7 @@ import org.constellation.domain.transaction.{
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
-import org.constellation.infrastructure.snapshot.{SnapshotDiskFileStorage, SnapshotInfoFileStorage}
+import org.constellation.infrastructure.snapshot.{SnapshotInfoFileStorage, SnapshotLocalStorage}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
@@ -194,7 +193,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     consensusRemoteSender =
       new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
 
-    snapshotStorage = SnapshotDiskFileStorage(snapshotPath)
+    snapshotStorage = SnapshotLocalStorage(snapshotPath)
     snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
     snapshotInfoStorage = SnapshotInfoFileStorage(snapshotInfoPath)
