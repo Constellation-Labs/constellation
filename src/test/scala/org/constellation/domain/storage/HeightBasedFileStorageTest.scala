@@ -43,7 +43,10 @@ class HeightBasedFileStorageTest
       instance.createDirectoryIfNotExists(4).value.unsafeRunSync()
       instance.createDirectoryIfNotExists(5).value.unsafeRunSync()
 
-      dir.children.toList shouldEqual List(dir / "4", dir / "5")
+      val dirs = dir.children.toList
+
+      dirs.contains(dir / "4") shouldBe true
+      dirs.contains(dir / "5") shouldBe true
     }
   }
 

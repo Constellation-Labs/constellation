@@ -1,14 +1,17 @@
 package org.constellation.domain.redownload
 
 import better.files.File
+import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
-import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfoStorage}
+import org.constellation.domain.snapshot.SnapshotInfoStorage
+import org.constellation.domain.storage.FileStorage
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
@@ -34,7 +37,7 @@ class RedownloadServiceTest
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var majorityStateChooser: MajorityStateChooser = _
-  var snapshotStorage: SnapshotFileStorage[IO] = _
+  var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
   var snapshotService: SnapshotService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
@@ -48,7 +51,7 @@ class RedownloadServiceTest
   override def beforeEach(): Unit = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
-    snapshotStorage = mock[SnapshotFileStorage[IO]]
+    snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
     cloudStorage = mock[CloudStorage[IO]]
     rewardsManager = mock[RewardsManager[IO]]
@@ -445,7 +448,7 @@ class RedownloadServiceTest
             val setLastSentHeight = redownloadService.lastSentHeight.set(lastSentHeight)
 
             cloudStorage.upload(*, *) shouldReturnF List("c")
-            snapshotStorage.getSnapshotFiles(List("c")) shouldReturnF List(file1)
+            snapshotStorage.getFiles(List("c")) shouldReturn EitherT.pure(List(file1))
             snapshotInfoStorage.getSnapshotInfoFiles(List("c")) shouldReturnF List(file2)
 
             val check = redownloadService.sendMajoritySnapshotsToCloud()

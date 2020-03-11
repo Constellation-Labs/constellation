@@ -1,8 +1,9 @@
 package org.constellation.infrastructure.snapshot
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
+import org.constellation.ConstellationExecutionContext
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Schema.CheckpointCache
@@ -12,6 +13,9 @@ import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers}
 import scala.collection.SortedMap
 
 class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndAfterAll {
+
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   "createDirectoryIfNotExists" - {
     "should create snapshot info directory if it does not exist" in CheckOpenedFileDescriptors.check {
@@ -44,7 +48,7 @@ class SnapshotInfoFileStorageTest extends FreeSpec with Matchers with BeforeAndA
     "should return false if snapshot info does not exist" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotInfosDir = dir / "snapshots"
-        val snapshotInfoStorage = SnapshotDiskFileStorage[IO](snapshotInfosDir.pathAsString)
+        val snapshotInfoStorage = SnapshotLocalStorage[IO](snapshotInfosDir.pathAsString)
         snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         snapshotInfoStorage.exists("unknown_file").unsafeRunSync shouldBe false

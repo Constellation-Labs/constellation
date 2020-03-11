@@ -1,13 +1,11 @@
 package org.constellation.domain.storage
 
-import better.files._
 import java.io.{File => JFile}
 
+import better.files._
 import cats.data.EitherT
-import cats.implicits._
 import cats.effect.Concurrent
-import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.domain.storage.StorageItemKind.StorageItemKind
+import cats.implicits._
 import org.constellation.serializer.KryoSerializer
 
 /**
@@ -44,6 +42,21 @@ abstract class FileStorage[F[_], A](baseDir: String)(implicit F: Concurrent[F]) 
       }.attemptT
     }
 
+  def getFile(fileName: String): EitherT[F, Throwable, Option[File]] =
+    getFiles().map {
+      _.find(_.name.contains(fileName))
+    }
+
+  def getFiles(): EitherT[F, Throwable, List[File]] =
+    dir.flatMap { a =>
+      F.delay { a.children.toList }
+    }.attemptT
+
+  def getFiles(fileNames: List[String]): EitherT[F, Throwable, List[File]] =
+    dir.flatMap { a =>
+      F.delay { a.collectChildren(f => fileNames.contains(f.name)).toList }
+    }.attemptT
+
   def readBytes(fileName: String): EitherT[F, Throwable, Array[Byte]] =
     dir
       .map(_ / fileName)
@@ -51,16 +64,6 @@ abstract class FileStorage[F[_], A](baseDir: String)(implicit F: Concurrent[F]) 
         F.delay { a.loadBytes }
       }
       .attemptT
-
-  def readFile(fileName: String): EitherT[F, Throwable, Option[File]] =
-    readFiles().map {
-      _.find(_.name.contains(fileName))
-    }
-
-  def readFiles(): EitherT[F, Throwable, List[File]] =
-    dir.flatMap { a =>
-      F.delay { a.children.toList }
-    }.attemptT
 
   def write(fileName: String, bytes: Array[Byte]): EitherT[F, Throwable, Unit] =
     dir
@@ -88,7 +91,7 @@ abstract class FileStorage[F[_], A](baseDir: String)(implicit F: Concurrent[F]) 
       .attemptT
 
   def list(): EitherT[F, Throwable, List[String]] =
-    readFiles().map(_.map(_.name))
+    getFiles().map(_.map(_.name))
 
   def getUsableSpace: F[Long] = jDir.flatMap { a =>
     F.delay { a.getUsableSpace }
