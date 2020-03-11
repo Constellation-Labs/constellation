@@ -49,17 +49,6 @@ trait NodeData {
   def externalHostString: String = nodeConfig.hostName
   def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
-  def peerRegistrationRequest(isSimulation: Boolean = false): PeerRegistrationRequest =
-    PeerRegistrationRequest(
-      externalHostString,
-      externalPeerHTTPPort,
-      id,
-      ResourceInfo(
-        diskUsableBytes = new java.io.File(snapshotPath).getUsableSpace
-      ),
-      isSimulation
-    )
-
   def snapshotPath: String =
     s"tmp/${id.medium}/snapshots"
 

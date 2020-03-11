@@ -65,6 +65,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   private val logger = Slf4jLogger.getLogger[F]
 
+  def latestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
+    (s, maxHeight(s))
+  }
+
+  def lowestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
+    (s, minHeight(s))
+  }
+
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
       val updated = if (m.contains(height)) m else m.updated(height, SnapshotProposal(hash, reputation))
@@ -241,6 +249,15 @@ class RedownloadService[F[_]: NonEmptyParallel](
       createdSnapshots <- getCreatedSnapshots()
       acceptedSnapshots <- getAcceptedSnapshots()
 
+      peers <- cluster.getPeerInfo
+      tpl = peers.map {
+        case (id, peerData) => (id, peerData.majorityHeight)
+      }
+      _ <- logger.debug(s"Peers with majority heights")
+      _ <- tpl.toList.traverse {
+        case (id, majorityHeight) => logger.debug(s"[$id]: $majorityHeight")
+      }
+
       majorityState = majorityStateChooser.chooseMajorityState(
         createdSnapshots,
         peersProposals
@@ -253,6 +270,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- lastMajorityState.modify(_ => (meaningfulMajorityState, ()))
 
+      _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
+
       _ <- if (shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)) {
         val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
         val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
@@ -264,10 +283,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
 
       _ <- logger.debug("Sending majority snapshots to cloud (if enabled).")
-      _ <- sendMajoritySnapshotsToCloud()
+      _ <- if (meaningfulMajorityState.nonEmpty) sendMajoritySnapshotsToCloud()
+      else logger.debug("No majority - skipping sending to cloud")
 
       _ <- logger.debug("Rewarding majority snapshots.")
-      _ <- rewardMajoritySnapshots().value.flatMap(F.fromEither)
+      _ <- if (meaningfulMajorityState.nonEmpty) rewardMajoritySnapshots().value.flatMap(F.fromEither)
+      else logger.debug("No majority - skipping rewarding")
 
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
@@ -437,10 +458,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
     majorityState: SnapshotsAtHeight,
     redownloadInterval: Int
   ): Boolean =
-    getAlignmentResult(acceptedSnapshots, majorityState, redownloadInterval) match {
-      case AlignedWithMajority => false
-      case _                   => true
-    }
+    if (majorityState.isEmpty) false
+    else
+      getAlignmentResult(acceptedSnapshots, majorityState, redownloadInterval) match {
+        case AlignedWithMajority => false
+        case _                   => true
+      }
 
   private[redownload] def calculateRedownloadPlan(
     acceptedSnapshots: SnapshotsAtHeight,
@@ -483,6 +506,10 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def maxHeight[V](snapshots: Map[Long, V]): Long =
     if (snapshots.isEmpty) 0
     else snapshots.keySet.max
+
+  private[redownload] def minHeight[V](snapshots: Map[Long, V]): Long =
+    if (snapshots.isEmpty) 0
+    else snapshots.keySet.min
 }
 
 object RedownloadService {
@@ -522,4 +549,6 @@ object RedownloadService {
   type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
+
+  case class LatestMajorityHeight(low: Long, high: Long)
 }
