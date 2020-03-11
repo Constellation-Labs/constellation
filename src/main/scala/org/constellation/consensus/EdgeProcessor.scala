@@ -301,17 +301,17 @@ object Snapshot extends StrictLogging {
     for {
       _ <- snapshots.distinct.traverse { hash =>
         withMetric(
-          LiftIO[F].liftIO(dao.snapshotStorage.delete(hash).value.flatMap(IO.fromEither)).handleErrorWith {
+          LiftIO[F].liftIO(dao.snapshotStorage.delete(hash).rethrowT).handleErrorWith {
             case e: NoSuchFileException =>
               Sync[F].delay(logger.warn(s"Snapshot to delete doesn't exist: ${e.getMessage}"))
           },
           "deleteSnapshot"
         )
       }
-      _ <- snapshots.distinct.traverse { snapId =>
+      _ <- snapshots.distinct.traverse { hash =>
         withMetric(
           LiftIO[F]
-            .liftIO(dao.snapshotInfoStorage.removeSnapshotInfo(snapId).value.flatMap(IO.fromEither))
+            .liftIO(dao.snapshotInfoStorage.delete(hash).rethrowT)
             .handleErrorWith {
               case e: NoSuchFileException =>
                 Sync[F].delay(logger.warn(s"Snapshot info to delete doesn't exist: ${e.getMessage}"))

@@ -17,7 +17,7 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
-import org.constellation.domain.snapshot.SnapshotInfoStorage
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
 import org.constellation.domain.transaction.{
@@ -185,7 +185,7 @@ trait EdgeDAO {
   var checkpointParentService: CheckpointParentService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
-  var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
+  var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
   var eigenTrustStorage: EigenTrustStorage[IO] = _
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _
