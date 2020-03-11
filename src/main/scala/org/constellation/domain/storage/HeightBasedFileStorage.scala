@@ -54,26 +54,26 @@ abstract class HeightBasedFileStorage[F[_], A](baseDir: String, kind: StorageIte
       }.attemptT
     }
 
-  def readBytes(height: Long): EitherT[F, Throwable, Array[Byte]] =
-    readFile(height).flatMap { a =>
-      F.delay {
-        a.loadBytes
-      }.attemptT
-    }
-
-  def readFile(height: Long): EitherT[F, Throwable, File] =
+  def getFile(height: Long): EitherT[F, Throwable, File] =
     dir.flatMap { a =>
       F.delay {
         a.glob(s"$height/${addSuffix("*")}").toList.head
       }
     }.attemptT
 
-  def readDirectories(): EitherT[F, Throwable, List[File]] =
+  def getDirectories(): EitherT[F, Throwable, List[File]] =
     dir.flatMap { a =>
       F.delay {
         a.collectChildren(_.isDirectory).toList
       }
     }.attemptT
+
+  def readBytes(height: Long): EitherT[F, Throwable, Array[Byte]] =
+    getFile(height).flatMap { a =>
+      F.delay {
+        a.loadBytes
+      }.attemptT
+    }
 
   def write(height: Long, hash: String, a: A): EitherT[F, Throwable, Unit] =
     F.delay {
@@ -89,12 +89,12 @@ abstract class HeightBasedFileStorage[F[_], A](baseDir: String, kind: StorageIte
       .void
 
   def delete(height: Long): EitherT[F, Throwable, Unit] =
-    readFile(height).flatMap { a =>
+    getFile(height).flatMap { a =>
       F.delay { a.delete() }.attemptT
     }.void
 
-  def list(): EitherT[F, Throwable, List[Long]] =
-    readDirectories().map(_.map(_.name.toLong))
+  def listDirectories(): EitherT[F, Throwable, List[Long]] =
+    getDirectories().map(_.map(_.name.toLong))
 
   def getUsableSpace: F[Long] = jDir.flatMap { a =>
     F.delay { a.getUsableSpace }

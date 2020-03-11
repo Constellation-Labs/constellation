@@ -11,7 +11,8 @@ import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
-import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.storage.FileStorage
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.rewards.RewardsManager
@@ -30,7 +31,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   isEnabledCloudStorage: Boolean,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
-  snapshotStorage: SnapshotFileStorage[F],
+  snapshotStorage: FileStorage[F, StoredSnapshot],
   snapshotInfoStorage: SnapshotInfoStorage[F],
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
@@ -168,7 +169,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- missingSnapshots.traverse {
         case (hash, (snapshot, snapshotInfo)) =>
-          snapshotStorage.writeSnapshot(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
+          snapshotStorage.write(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
       }.void
     } yield ()
 
@@ -292,7 +293,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       toSend = majorityState.filterKeys(_ > lastHeight)
       hashes = toSend.values.toList
-      snapshotFiles <- snapshotStorage.getSnapshotFiles(hashes)
+      snapshotFiles <- snapshotStorage.getFiles(hashes).rethrowT
       snapshotInfoFiles <- snapshotInfoStorage.getSnapshotInfoFiles(hashes)
 
       _ <- cloudStorage.upload(snapshotFiles, "snapshots".some)
@@ -319,7 +320,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       snapshotsToReward <- majoritySubsetToReward.toList.sortBy {
         case (height, _) => height
       }.traverse {
-        case (height, hash) => snapshotStorage.readSnapshot(hash).map(s => (height, s.snapshot))
+        case (height, hash) => snapshotStorage.read(hash).map(s => (height, s.snapshot))
       }
 
       _ <- snapshotsToReward.traverse {
@@ -374,12 +375,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def removeUnacceptedSnapshotsFromDisk(): EitherT[F, Throwable, Unit] =
     for {
-      stored <- snapshotStorage.getSnapshotHashes.attemptT.map(_.toSet)
+      stored <- snapshotStorage.list().map(_.toSet)
       accepted <- getAcceptedSnapshots().attemptT.map(_.values.toSet)
       created <- getCreatedSnapshots().attemptT.map(_.values.map(_.hash).toSet)
       diff = stored.diff(accepted ++ created)
       _ <- diff.toList.traverse { hash =>
-        snapshotStorage.removeSnapshot(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
+        snapshotStorage.delete(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
       }
     } yield ()
 
@@ -492,7 +493,7 @@ object RedownloadService {
     isEnabledCloudStorage: Boolean,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
-    snapshotStorage: SnapshotFileStorage[F],
+    snapshotStorage: FileStorage[F, StoredSnapshot],
     snapshotInfoStorage: SnapshotInfoStorage[F],
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],

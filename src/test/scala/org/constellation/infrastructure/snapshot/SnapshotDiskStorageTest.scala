@@ -1,14 +1,16 @@
 package org.constellation.infrastructure.snapshot
 
 import better.files._
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
+import org.constellation.ConstellationExecutionContext
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers}
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContextExecutor
 
 object CheckOpenedFileDescriptors {
 
@@ -21,6 +23,9 @@ object CheckOpenedFileDescriptors {
 }
 
 class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfterAll {
+
+  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+  implicit val cs: ContextShift[IO] = IO.contextShift(ec)
 
   var openedFiles: Long = 0
 
@@ -36,7 +41,7 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should create snapshot directory if it does not exist" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
 
         snapshotsDir.exists shouldBe false
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
@@ -49,7 +54,7 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should return true if snapshot exists" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         File.usingTemporaryFile("", "", snapshotsDir.some) { file1 =>
@@ -63,7 +68,7 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should return false if snapshot does not exist" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         snapshotStorage.exists("unknown_file").unsafeRunSync shouldBe false
@@ -75,7 +80,7 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should return StoredSnapshot if snapshot exists" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         val snapshot = Snapshot("lastHash", Seq.empty[String], SortedMap.empty)
@@ -86,27 +91,27 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
 
         (snapshotsDir / hash).writeBytes(bytes.toIterator)
 
-        snapshotStorage.readSnapshot(hash).value.flatMap(IO.fromEither).unsafeRunSync shouldBe storedSnapshot
+        snapshotStorage.read(hash).rethrowT.unsafeRunSync shouldBe storedSnapshot
       }
     }
     "should return an error if snapshot does not exists" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        snapshotStorage.readSnapshot("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
+        snapshotStorage.read("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
       }
     }
     "should return an error if snapshot file cannot be deserialized to StoredSnapshot" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         (snapshotsDir / "known").write("hello world")
 
-        snapshotStorage.readSnapshot("known").value.map(_.isLeft).unsafeRunSync shouldBe true
+        snapshotStorage.read("known").value.map(_.isLeft).unsafeRunSync shouldBe true
       }
     }
   }
@@ -115,12 +120,12 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should write snapshot on disk using the hash as a filename" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         val hash = "abc123"
         val bytes = "hello world".getBytes
-        snapshotStorage.writeSnapshot(hash, bytes).value.unsafeRunSync
+        snapshotStorage.write(hash, bytes).value.unsafeRunSync
 
         (snapshotsDir / hash).exists shouldBe true
         (snapshotsDir / hash).loadBytes shouldBe bytes
@@ -132,13 +137,13 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should remove snapshot from disk if exists" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         File.usingTemporaryFile("", "", snapshotsDir.some) { file =>
           val name = file.name
           file.write("hello world")
-          snapshotStorage.removeSnapshot(name).value.flatMap(IO.fromEither).unsafeRunSync
+          snapshotStorage.delete(name).value.flatMap(IO.fromEither).unsafeRunSync
           (snapshotsDir / name).exists shouldBe false
         }
       }
@@ -146,10 +151,10 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should return error if snapshot does not exist" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        snapshotStorage.removeSnapshot("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
+        snapshotStorage.delete("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
       }
     }
   }
@@ -158,7 +163,7 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should read usable space from snapshot directory" ignore CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         val usableSpace = snapshotsDir.toJava.getUsableSpace
@@ -172,7 +177,7 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should read occupied space from snapshot directory" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         val occupiedSpace = snapshotsDir.size
@@ -186,12 +191,12 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should return iterator with all snapshot filenames (hashes) from snapshot directory" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         File.usingTemporaryFile("", "", snapshotsDir.some) { file1 =>
           File.usingTemporaryFile("", "", snapshotsDir.some) { file2 =>
-            snapshotStorage.getSnapshotHashes.map(_.toSeq.sorted).unsafeRunSync shouldBe Seq(file1, file2)
+            snapshotStorage.list().rethrowT.map(_.toSeq.sorted).unsafeRunSync shouldBe Seq(file1, file2)
               .map(_.name)
               .sorted
           }
@@ -204,12 +209,12 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should return iterator with all snapshot files from snapshot directory" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         File.usingTemporaryFile("", "", snapshotsDir.some) { file1 =>
           File.usingTemporaryFile("", "", snapshotsDir.some) { file2 =>
-            snapshotStorage.getSnapshotFiles.map(_.toSeq.sortBy(_.name)).unsafeRunSync shouldBe Seq(file1, file2)
+            snapshotStorage.getFiles().rethrowT.map(_.toSeq.sortBy(_.name)).unsafeRunSync shouldBe Seq(file1, file2)
               .sortBy(_.name)
           }
         }
@@ -221,23 +226,23 @@ class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfter
     "should read snapshot as bytes if snapshot exists" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
         File.usingTemporaryFile("", "", snapshotsDir.some) { file2 =>
           file2.write("hello world")
           val bytes = file2.loadBytes
-          snapshotStorage.getSnapshotBytes(file2.name).value.flatMap(IO.fromEither).unsafeRunSync shouldBe bytes
+          snapshotStorage.readBytes(file2.name).value.flatMap(IO.fromEither).unsafeRunSync shouldBe bytes
         }
       }
     }
     "should return an error if snapshot does not exist" in CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
-        val snapshotStorage = SnapshotDiskFileStorage[IO](snapshotsDir.pathAsString)
+        val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        snapshotStorage.getSnapshotBytes("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
+        snapshotStorage.readBytes("unknown").value.map(_.isLeft).unsafeRunSync shouldBe true
       }
     }
   }

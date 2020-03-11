@@ -2,16 +2,12 @@ package org.constellation.consensus
 
 import java.nio.file.NoSuchFileException
 
-import better.files.File
 import cats.data.Validated.{Invalid, Valid}
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
-import constellation.{getCCParams, _}
-import org.apache.commons.collections.OrderedMap
-import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
-import org.constellation.domain.transaction.LastTransactionRef
+import constellation._
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -281,13 +277,23 @@ object Snapshot extends StrictLogging {
         }
     }
 
-  def removeOldSnapshots[F[_]: Concurrent]()(implicit dao: DAO, C: ContextShift[F]): F[Unit] =
-    for {
-      createdHashes <- LiftIO[F].liftIO(dao.redownloadService.getCreatedSnapshots().map(_.values.toList)).attempt
-      acceptedHashes <- LiftIO[F].liftIO(dao.redownloadService.getAcceptedSnapshots().map(_.values.toList)).attempt
-      diff <- dao.snapshotStorage.list().map(_.diff(createdHashes ++ acceptedHashes)).value
-      _ <- removeSnapshots(diff).attempt // TODO: To be confirmed
+  def removeOldSnapshots[F[_]: Concurrent]()(implicit dao: DAO, C: ContextShift[F]): F[Unit] = {
+    val removeF = for {
+      createdHashes <- LiftIO[F].liftIO {
+        dao.redownloadService.getCreatedSnapshots().map(_.values.toList.map(_.hash))
+      }.attemptT
+      acceptedHashes <- LiftIO[F].liftIO {
+        dao.redownloadService.getAcceptedSnapshots().map(_.values.toList)
+      }.attemptT
+      storedHashes <- EitherT(LiftIO[F].liftIO(dao.snapshotStorage.list().value))
+
+      diff = storedHashes.diff(createdHashes ++ acceptedHashes)
+
+      _ <- removeSnapshots(diff).attemptT // TODO: To be confirmed
     } yield ()
+
+    removeF.rethrowT
+  }
 
   def removeSnapshots[F[_]: Concurrent](
     snapshots: List[String]
@@ -338,13 +344,13 @@ object Snapshot extends StrictLogging {
 
   def loadSnapshot(snapshotHash: String)(implicit dao: DAO): Try[StoredSnapshot] =
     tryWithMetric(
-      dao.snapshotStorage.readSnapshot(snapshotHash).value.flatMap(IO.fromEither).unsafeRunSync,
+      dao.snapshotStorage.read(snapshotHash).rethrowT.unsafeRunSync,
       "loadSnapshot"
     )
 
   def loadSnapshotBytes(snapshotHash: String)(implicit dao: DAO): Try[Array[Byte]] =
     tryWithMetric(
-      dao.snapshotStorage.getSnapshotBytes(snapshotHash).value.flatMap(IO.fromEither).unsafeRunSync,
+      dao.snapshotStorage.readBytes(snapshotHash).rethrowT.unsafeRunSync,
       "loadSnapshot"
     )
 
