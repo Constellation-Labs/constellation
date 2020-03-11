@@ -47,7 +47,7 @@ import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, Roll
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.infrastructure.cloud.{AWSStorage, GCPStorage}
-import org.constellation.infrastructure.rewards.EigenTrustFileStorage
+import org.constellation.infrastructure.rewards.EigenTrustLocalStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
@@ -199,7 +199,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     snapshotInfoStorage = SnapshotInfoLocalStorage(snapshotInfoPath)
     snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-    eigenTrustStorage = EigenTrustFileStorage(eigenTrustPath)
+    eigenTrustStorage = EigenTrustLocalStorage(eigenTrustPath)
     eigenTrustStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
     eigenTrust = new EigenTrust[IO](id)

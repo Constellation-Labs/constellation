@@ -15,7 +15,7 @@ import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.domain.cloud.CloudStorage
-import org.constellation.domain.rewards.EigenTrustStorage
+import org.constellation.domain.rewards.StoredEigenTrust
 import org.constellation.domain.storage.FileStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
@@ -53,7 +53,7 @@ class SnapshotServiceTest
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
     val soeService = mock[SOEService[IO]]
-    val eigenTrustStorage = mock[EigenTrustStorage[IO]]
+    val eigenTrustStorage = mock[FileStorage[IO, StoredEigenTrust]]
     val eigenTrust = mock[EigenTrust[IO]]
     snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[FileStorage[IO, SnapshotInfo]]

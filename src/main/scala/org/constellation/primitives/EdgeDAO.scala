@@ -34,7 +34,7 @@ import org.constellation.rollback.{RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.domain.cloud.CloudStorage
-import org.constellation.domain.rewards.EigenTrustStorage
+import org.constellation.domain.rewards.StoredEigenTrust
 import org.constellation.domain.storage.FileStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{Metrics, SnapshotWatcher}
@@ -186,7 +186,7 @@ trait EdgeDAO {
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
   var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
-  var eigenTrustStorage: EigenTrustStorage[IO] = _
+  var eigenTrustStorage: FileStorage[IO, StoredEigenTrust] = _
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _
   var checkpointBlockValidator: CheckpointBlockValidator[IO] = _

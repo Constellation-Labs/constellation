@@ -22,7 +22,7 @@ import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.domain.cloud.CloudStorage
-import org.constellation.domain.rewards.{EigenTrustStorage, StoredEigenTrust}
+import org.constellation.domain.rewards.StoredEigenTrust
 import org.constellation.domain.storage.FileStorage
 import org.constellation.rewards.EigenTrust
 import org.constellation.trust.TrustManager
@@ -45,7 +45,7 @@ class SnapshotService[F[_]: Concurrent](
   soeService: SOEService[F],
   snapshotStorage: FileStorage[F, StoredSnapshot],
   snapshotInfoStorage: FileStorage[F, SnapshotInfo],
-  eigenTrustStorage: EigenTrustStorage[F],
+  eigenTrustStorage: FileStorage[F, StoredEigenTrust],
   eigenTrust: EigenTrust[F],
   dao: DAO
 )(implicit C: ContextShift[F], P: Parallel[F]) {
@@ -148,7 +148,7 @@ class SnapshotService[F[_]: Concurrent](
       agents <- eigenTrust.getAgents().attemptT
       model <- eigenTrust.getModel().attemptT
       storedEigenTrust = StoredEigenTrust(agents, model)
-      _ <- eigenTrustStorage.writeEigenTrust(snapshot.hash, KryoSerializer.serializeAnyRef(storedEigenTrust))
+      _ <- eigenTrustStorage.write(snapshot.hash, KryoSerializer.serializeAnyRef(storedEigenTrust))
     } yield ()).leftMap(EigenTrustIOError)
 
   def getSnapshotInfo(): F[SnapshotInfo] =
@@ -546,7 +546,7 @@ object SnapshotService {
     soeService: SOEService[F],
     snapshotStorage: FileStorage[F, StoredSnapshot],
     snapshotInfoStorage: FileStorage[F, SnapshotInfo],
-    eigenTrustStorage: EigenTrustStorage[F],
+    eigenTrustStorage: FileStorage[F, StoredEigenTrust],
     eigenTrust: EigenTrust[F],
     dao: DAO
   )(implicit C: ContextShift[F], P: Parallel[F]) =
