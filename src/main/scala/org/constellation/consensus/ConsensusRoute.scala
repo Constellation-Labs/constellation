@@ -50,8 +50,8 @@ class ConsensusRoute(
   def convert(r: RoundDataRemote): RoundData =
     RoundData(
       r.roundId,
-      r.peers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend))),
-      r.lightPeers.map(p => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend))),
+      r.peers.map { case (p, m)      => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend), m) },
+      r.lightPeers.map { case (p, m) => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend), m) },
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,
