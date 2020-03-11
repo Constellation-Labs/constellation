@@ -17,8 +17,7 @@ import scala.util.{Failure, Success}
 
 case class HostPort(
   host: String,
-  port: Int,
-  isSimulation: Boolean = false
+  port: Int
 )
 
 object APIClientBase {
