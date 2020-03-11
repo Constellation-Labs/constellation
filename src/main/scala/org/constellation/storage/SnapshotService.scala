@@ -14,7 +14,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus._
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
@@ -23,6 +23,7 @@ import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.rewards.{EigenTrustStorage, StoredEigenTrust}
+import org.constellation.domain.storage.FileStorage
 import org.constellation.rewards.EigenTrust
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
@@ -42,7 +43,7 @@ class SnapshotService[F[_]: Concurrent](
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
   soeService: SOEService[F],
-  snapshotStorage: SnapshotFileStorage[F],
+  snapshotStorage: FileStorage[F, StoredSnapshot],
   snapshotInfoStorage: SnapshotInfoStorage[F],
   eigenTrustStorage: EigenTrustStorage[F],
   eigenTrust: EigenTrust[F],
@@ -65,11 +66,11 @@ class SnapshotService[F[_]: Concurrent](
   def exists(hash: String): F[Boolean] =
     for {
       last <- storedSnapshot.get
-      hashes <- snapshotStorage.getSnapshotHashes
+      hashes <- snapshotStorage.list().rethrowT
     } yield last.snapshot.hash == hash || hashes.contains(hash)
 
   def isStored(hash: String): F[Boolean] =
-    snapshotStorage.getSnapshotHashes.map(_.contains(hash))
+    snapshotStorage.exists(hash)
 
   def getLastSnapshotHeight: F[Int] = lastSnapshotHeight.get
 
@@ -155,7 +156,7 @@ class SnapshotService[F[_]: Concurrent](
       s <- storedSnapshot.get
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
-      hashes <- snapshotStorage.getSnapshotHashes
+      hashes <- snapshotStorage.list().rethrowT
       addressCacheData <- addressService.toMap
       tips <- concurrentTipService.toMap
       lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
@@ -543,7 +544,7 @@ object SnapshotService {
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
     soeService: SOEService[F],
-    snapshotStorage: SnapshotFileStorage[F],
+    snapshotStorage: FileStorage[F, StoredSnapshot],
     snapshotInfoStorage: SnapshotInfoStorage[F],
     eigenTrustStorage: EigenTrustStorage[F],
     eigenTrust: EigenTrust[F],

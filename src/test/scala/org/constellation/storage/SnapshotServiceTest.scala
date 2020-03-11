@@ -1,6 +1,7 @@
 package org.constellation.storage
 
 import better.files.File
+import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
@@ -8,13 +9,14 @@ import org.constellation._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, StoredSnapshot}
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.{SnapshotFileStorage, SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.rewards.EigenTrustStorage
+import org.constellation.domain.storage.FileStorage
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
@@ -34,7 +36,7 @@ class SnapshotServiceTest
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
-  var snapshotStorage: SnapshotFileStorage[IO] = _
+  var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
   var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
 
   before {
@@ -53,7 +55,7 @@ class SnapshotServiceTest
     val soeService = mock[SOEService[IO]]
     val eigenTrustStorage = mock[EigenTrustStorage[IO]]
     val eigenTrust = mock[EigenTrust[IO]]
-    snapshotStorage = mock[SnapshotFileStorage[IO]]
+    snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
 
     snapshotService = new SnapshotService[IO](
@@ -82,7 +84,7 @@ class SnapshotServiceTest
 
       File.usingTemporaryDirectory() { dir =>
         File.usingTemporaryFile("", "", Some(dir)) { _ =>
-          snapshotStorage.getSnapshotHashes shouldReturnF List.empty
+          snapshotStorage.list() shouldReturn EitherT.pure(List.empty)
 
           snapshotService.exists(lastSnapshot.hash).unsafeRunSync shouldBe true
         }
@@ -93,7 +95,7 @@ class SnapshotServiceTest
   "should return true if snapshot hash exists" in {
     File.usingTemporaryDirectory() { dir =>
       File.usingTemporaryFile("", "", Some(dir)) { file =>
-        snapshotStorage.getSnapshotHashes shouldReturnF List(file.name)
+        snapshotStorage.list() shouldReturn EitherT.pure(List(file.name))
 
         snapshotService.exists(file.name).unsafeRunSync shouldBe true
       }
@@ -103,7 +105,7 @@ class SnapshotServiceTest
   "should return false if snapshot hash does not exist" in {
     File.usingTemporaryDirectory() { dir =>
       File.usingTemporaryFile("", "", Some(dir)) { _ =>
-        snapshotStorage.getSnapshotHashes shouldReturnF List("unknown")
+        snapshotStorage.list() shouldReturn EitherT.pure(List("unknown"))
 
         snapshotService.exists("dontexist").unsafeRunSync shouldBe false
       }

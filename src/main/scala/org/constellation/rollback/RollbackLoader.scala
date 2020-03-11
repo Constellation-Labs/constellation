@@ -3,7 +3,6 @@ package org.constellation.rollback
 import better.files.File
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.domain.snapshotInfo.SnapshotInfoChunk
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
