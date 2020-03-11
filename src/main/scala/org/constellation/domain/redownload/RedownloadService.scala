@@ -32,7 +32,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
   snapshotStorage: FileStorage[F, StoredSnapshot],
-  snapshotInfoStorage: SnapshotInfoStorage[F],
+  snapshotInfoStorage: FileStorage[F, SnapshotInfo],
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   cloudStorage: CloudStorage[F],
@@ -169,7 +169,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- missingSnapshots.traverse {
         case (hash, (snapshot, snapshotInfo)) =>
-          snapshotStorage.write(hash, snapshot) >> snapshotInfoStorage.writeSnapshotInfo(hash, snapshotInfo)
+          snapshotStorage.write(hash, snapshot) >> snapshotInfoStorage.write(hash, snapshotInfo)
       }.void
     } yield ()
 
@@ -199,7 +199,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       maxMajorityHash = majorityState(maxHeight(majorityState))
       peersWithMajority = storedSnapshots.filter { case (_, hashes) => hashes.contains(maxMajorityHash) }.keySet
 
-      majoritySnapshotInfo <- snapshotInfoStorage.readSnapshotInfo(maxMajorityHash)
+      majoritySnapshotInfo <- snapshotInfoStorage.read(maxMajorityHash)
 
       _ <- useRandomClient(peersWithMajority) { client =>
         for {
@@ -294,7 +294,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       toSend = majorityState.filterKeys(_ > lastHeight)
       hashes = toSend.values.toList
       snapshotFiles <- snapshotStorage.getFiles(hashes).rethrowT
-      snapshotInfoFiles <- snapshotInfoStorage.getSnapshotInfoFiles(hashes)
+      snapshotInfoFiles <- snapshotInfoStorage.getFiles(hashes).rethrowT
 
       _ <- cloudStorage.upload(snapshotFiles, "snapshots".some)
       _ <- cloudStorage.upload(snapshotInfoFiles, "snapshot-infos".some)
@@ -380,7 +380,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       created <- getCreatedSnapshots().attemptT.map(_.values.map(_.hash).toSet)
       diff = stored.diff(accepted ++ created)
       _ <- diff.toList.traverse { hash =>
-        snapshotStorage.delete(hash) >> snapshotInfoStorage.removeSnapshotInfo(hash)
+        snapshotStorage.delete(hash) >> snapshotInfoStorage.delete(hash)
       }
     } yield ()
 
@@ -428,7 +428,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     for {
       highestSnapshotInfo <- getAcceptedSnapshots().attemptT
         .map(_.maxBy { case (height, _) => height } match { case (_, hash) => hash })
-        .flatMap(hash => snapshotInfoStorage.readSnapshotInfo(hash))
+        .flatMap(hash => snapshotInfoStorage.read(hash))
       _ <- snapshotService.setSnapshot(highestSnapshotInfo).attemptT
     } yield ()
 
@@ -494,7 +494,7 @@ object RedownloadService {
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
     snapshotStorage: FileStorage[F, StoredSnapshot],
-    snapshotInfoStorage: SnapshotInfoStorage[F],
+    snapshotInfoStorage: FileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
     cloudStorage: CloudStorage[F],
