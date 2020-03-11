@@ -51,8 +51,8 @@ class ConsensusRouteTest
   "participate route  " - {
     val data = RoundDataRemote(
       ConsensusManager.generateRoundId,
-      Set.empty[PeerMetadata],
-      Set.empty[PeerMetadata],
+      Set.empty[(PeerMetadata, MajorityHeight)],
+      Set.empty[(PeerMetadata, MajorityHeight)],
       FacilitatorId(Id("foo")),
       List.empty[Transaction],
       TipSoe(Seq.empty[SignedObservationEdge], 2L.some),

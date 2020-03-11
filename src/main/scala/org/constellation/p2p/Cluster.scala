@@ -10,6 +10,7 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
+import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
@@ -32,13 +33,15 @@ case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
   client: APIClient,
-  notification: Seq[PeerNotification] = Seq.empty,
-  majorityHeight: MajorityHeight
+  majorityHeight: MajorityHeight,
+  notification: Seq[PeerNotification] = Seq.empty
 )
 
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 
 case class Deregistration(ip: String, port: Int, id: Id)
+
+case class JoinedHeight(id: Id, height: Long)
 
 case object GetPeerInfo
 
@@ -47,7 +50,7 @@ case class ChangePeerState(id: Id, state: NodeState)
 
 case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
 
-case class MajorityHeight(joined: Long, left: Option[Long])
+case class MajorityHeight(joined: Option[Long], left: Option[Long] = None)
 
 object PeerState extends Enumeration {
   type PeerState = Value
@@ -64,20 +67,21 @@ class Cluster[F[_]](
   C: ContextShift[F],
   T: Timer[F]
 ) {
+
+  val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]] {
+    if (dao.nodeConfig.isGenesisNode) Some(0L) else None
+  }
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
-
-  private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
   implicit val shadedDao: DAO = dao
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
-
-  def getPeerInfo: F[Map[Id, PeerData]] = peers.get
+  private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
 
   // TODO: wkoszycki consider using complex structure of peers so the lookup has O(n) complexity
   def getPeerData(host: String): F[Option[PeerData]] =
@@ -88,6 +92,10 @@ class Cluster[F[_]](
     getPeerInfo.map(_.values.toList.map(_.peerMetadata).map(ClusterNode(_))).flatMap { nodes =>
       getNodeState.map(ClusterNode(dao.id, dao.peerHostPort, _, 0L)).map(nodes ++ List(_))
     }
+
+  def getPeerInfo: F[Map[Id, PeerData]] = peers.get
+
+  def getNodeState: F[NodeState] = nodeState.get
 
   def updatePeerNotifications(notifications: List[PeerNotification]): F[Unit] =
     logThread(
@@ -104,25 +112,29 @@ class Cluster[F[_]](
       "cluster_updatePeerNotifications"
     )
 
-  def updatePeerInfo(peerData: PeerData): F[Unit] =
-    logThread(
-      for {
-        _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
-        ip = peerData.client.hostName
-        _ <- ipManager.addKnownIP(ip)
-        _ <- logger.debug(s"Added $ip to known peers.")
-        _ <- LiftIO[F].liftIO(dao.registerAgent(peerData.peerMetadata.id))
-        _ <- updateMetrics()
-        _ <- updatePersistentStore()
-      } yield (),
-      "cluster_updatePeerInfo"
-    )
+  def updateJoinedHeight(joinedHeight: JoinedHeight): F[Unit] = {
+    val peerId = joinedHeight.id
+
+    peers.modify { m =>
+      m.get(peerId) match {
+        case Some(peerData) =>
+          (
+            m.updated(
+              peerId,
+              peerData.copy(majorityHeight = peerData.majorityHeight.copy(joined = Some(joinedHeight.height)))
+            ),
+            ()
+          )
+        case _ => (m, ())
+      }
+    }
+  }
 
   def removePeerRequest(hp: Option[HostPort], id: Option[Id]): F[Unit] = {
     def filter(p: Map[Id, PeerData]) = p.filter {
       case (pid, d) =>
         val badHost = hp.exists {
-          case HostPort(host, port, isSimulation) =>
+          case HostPort(host, port) =>
             d.client.hostName == host && d.client.apiPort == port
         }
         val badId = id.contains(pid)
@@ -146,23 +158,6 @@ class Cluster[F[_]](
     )
   }
 
-  private def updateMetrics(): F[Unit] =
-    peers.get.flatMap { p =>
-      dao.metrics.updateMetricAsync[F](
-        "peers",
-        p.map {
-          case (idI, clientI) =>
-            val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
-            s"${idI.short} API: $addr"
-        }.mkString(" --- ")
-      )
-    }
-
-  private def updatePersistentStore(): F[Unit] =
-    peers.get.flatMap { p =>
-      F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
-    }
-
   def setNodeStatus(id: Id, state: NodeState): F[Unit] =
     logThread(
       for {
@@ -184,7 +179,7 @@ class Cluster[F[_]](
       "cluster_setNodeStatus"
     )
 
-  def peerDiscovery(client: APIClient, isSimulation: Boolean = false): F[Unit] =
+  def peerDiscovery(client: APIClient): F[Unit] =
     for {
       peersMetadata <- client.getNonBlockingF[F, Seq[PeerMetadata]]("peers")(C).handleErrorWith { err =>
         dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") >> err.raiseError[F, Seq[PeerMetadata]]
@@ -198,10 +193,12 @@ class Cluster[F[_]](
           .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
           .map((md, _))
       }
-      _ <- register.traverse(r => pendingRegistration(r._1.host, r._2, isSimulation))
+      _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
       registerResponse <- register.traverse { md =>
-        APIClient(md._1.host, md._1.httpPort)(dao.backend, dao)
-          .postNonBlockingUnitF[F]("register", dao.peerRegistrationRequest(isSimulation))(C)
+        for {
+          prr <- pendingRegistrationRequest
+          _ <- APIClient(md._1.host, md._1.httpPort)(dao.backend, dao).postNonBlockingUnitF[F]("register", prr)(C)
+        } yield ()
       }.void
     } yield registerResponse
 
@@ -215,17 +212,17 @@ class Cluster[F[_]](
         adjustedHost <- (if (pm.auxHost.nonEmpty) pm.auxHost else pm.host).pure[F]
         client = APIClient(adjustedHost, pm.httpPort)(dao.backend, dao)
 
-        _ <- peerDiscovery(client, pm.isSimulation)
+        _ <- peerDiscovery(client)
 
         _ <- F.delay(client.id = pm.id)
 
-        _ <- updatePeerInfo(PeerData(pm, client))
+        _ <- updatePeerInfo(PeerData(pm, client, MajorityHeight(None))) // TODO: mwadon
       } yield (),
       "cluster_addPeerMetadata"
     )
   }
 
-  def pendingRegistration(ip: String, request: PeerRegistrationRequest, isSimulation: Boolean = false): F[Unit] =
+  def pendingRegistration(ip: String, request: PeerRegistrationRequest): F[Unit] =
     logThread(
       for {
         pr <- PendingRegistration(ip, request).pure[F]
@@ -241,10 +238,7 @@ class Cluster[F[_]](
 
         isSelfId = dao.id == request.id
         badAttempt = isSelfId || !validExternalHost || existsNotOffline
-
-        isValid <- if (!isSimulation)
-          joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
-        else F.pure(true)
+        isValid <- joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
 
         _ <- if (badAttempt) {
           dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
@@ -275,19 +269,26 @@ class Cluster[F[_]](
                 "nodeState"
               )
 
-              state.flatMap { s =>
-                val id = sig.hashSignature.id
-                val add = PeerMetadata(
-                  request.host,
-                  request.port,
-                  id,
-                  nodeState = s.nodeState,
-                  auxAddresses = s.addresses,
-                  resourceInfo = request.resourceInfo
-                )
-                client.id = id
-                val peerData = PeerData(add, client)
-                updatePeerInfo(peerData) >> C.shift >> F.start(peerDiscovery(client))
+              state.flatMap {
+                s =>
+                  val id = sig.hashSignature.id
+                  val add = PeerMetadata(
+                    request.host,
+                    request.port,
+                    id,
+                    nodeState = s.nodeState,
+                    auxAddresses = s.addresses,
+                    resourceInfo = request.resourceInfo
+                  )
+                  client.id = id
+                  val peerData = PeerData(add, client, MajorityHeight(request.majorityHeight))
+
+                  val updateJoiningHeight =
+                    if (request.isGenesis)
+                      ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining as genesis peer")
+                    else F.unit
+
+                  updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(client))
               }.void
 
           }.handleErrorWith { err =>
@@ -299,20 +300,73 @@ class Cluster[F[_]](
       "cluster_pendingRegistration"
     )
 
-  def deregister(ip: String, port: Int, id: Id): F[Unit] =
+  def broadcastOwnJoinedHeight(): F[Unit] = {
+    val discoverJoinedHeight = for {
+      p <- peers.get
+      clients = p.map(_._2.client).toList
+      maxMajorityHeight <- clients
+        .traverse(_.getNonBlockingF[F, LatestMajorityHeight]("latestMajorityHeight")(C))
+        .map(heights => if (heights.nonEmpty) heights.map(_.high).max else 0L)
+      delay = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+      ownHeight = maxMajorityHeight + delay
+      _ <- ownJoinedHeight.modify(_ => (Some(ownHeight), ()))
+    } yield ownHeight
+
+    for {
+      height <- ownJoinedHeight.get
+      _ <- logger.debug(s"Broadcasting own joined height - step1: height=$height")
+      ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
+      _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
+      _ <- broadcast(_.postNonBlockingUnitF("joinedHeight", JoinedHeight(dao.id, ownHeight))(C))
+    } yield ()
+  }
+
+  def deregister(peerUnregister: PeerUnregister): F[Unit] =
     logThread(
       for {
         p <- peers.get
-        _ <- p.get(id).traverse { peer =>
+        _ <- p.get(peerUnregister.id).traverse { peer =>
           updatePeerInfo(
             peer.copy(
-              peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Leaving)
+              peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Leaving),
+              majorityHeight = peer.majorityHeight.copy(left = Some(peerUnregister.majorityHeight))
             )
           )
         }
       } yield (),
       "cluster_deregister"
     )
+
+  def updatePeerInfo(peerData: PeerData): F[Unit] =
+    logThread(
+      for {
+        _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
+        ip = peerData.client.hostName
+        _ <- ipManager.addKnownIP(ip)
+        _ <- logger.debug(s"Added $ip to known peers.")
+        _ <- LiftIO[F].liftIO(dao.registerAgent(peerData.peerMetadata.id))
+        _ <- updateMetrics()
+        _ <- updatePersistentStore()
+      } yield (),
+      "cluster_updatePeerInfo"
+    )
+
+  private def updateMetrics(): F[Unit] =
+    peers.get.flatMap { p =>
+      dao.metrics.updateMetricAsync[F](
+        "peers",
+        p.map {
+          case (idI, clientI) =>
+            val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
+            s"${idI.short} API: $addr"
+        }.mkString(" --- ")
+      )
+    }
+
+  private def updatePersistentStore(): F[Unit] =
+    peers.get.flatMap { p =>
+      F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
+    }
 
   // mwadon: Is it correct implementation?
   // TODO: Unused method?
@@ -337,11 +391,15 @@ class Cluster[F[_]](
       for {
         p <- peers.get
         peer = p.get(nodeId).filter(pd => pd.peerMetadata.nodeState != NodeState.Offline)
+        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
         _ <- peer
           .traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
         _ <- peer
           .traverse(peer => {
-            val peerData = peer.copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
+            val peerData = peer.copy(
+              peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline),
+              majorityHeight = peer.majorityHeight.copy(left = Some(majorityHeight))
+            )
             peers.modify(p => (p + (peerData.client.id -> peerData), p))
           })
         _ <- updateMetrics()
@@ -352,17 +410,23 @@ class Cluster[F[_]](
 
   def removePeer(pd: PeerData): F[Unit] =
     logThread(
-      for {
-        p <- peers.get
-        pm = pd.peerMetadata
+      LiftIO[F]
+        .liftIO(dao.redownloadService.lowestMajorityHeight)
+        .map(height => pd.majorityHeight.left.exists(_ > height))
+        .ifM(
+          for {
+            p <- peers.get
+            pm = pd.peerMetadata
 
-        _ <- ipManager.removeKnownIP(pm.host)
-        _ <- peers.modify(a => (a - pm.id, a - pm.id))
-        // Technically we shouldn't remove it from eigenTrust if we want to keep the trained model for that node
-//        _ <- LiftIO[F].liftIO(dao.eigenTrust.unregisterAgent(pm.id))
-        _ <- updateMetrics()
-        _ <- updatePersistentStore()
-      } yield (),
+            _ <- ipManager.removeKnownIP(pm.host)
+            _ <- peers.modify(a => (a - pm.id, a - pm.id))
+            // Technically we shouldn't remove it from eigenTrust if we want to keep the trained model for that node
+            //        _ <- LiftIO[F].liftIO(dao.eigenTrust.unregisterAgent(pm.id))
+            _ <- updateMetrics()
+            _ <- updatePersistentStore()
+          } yield (),
+          F.unit
+        ),
       "cluster_removePeer"
     )
 
@@ -457,14 +521,42 @@ class Cluster[F[_]](
     logThread(
       for {
         _ <- logger.info(s"Attempting to register with $hp")
+        prr <- pendingRegistrationRequest
         _ <- withMetric(
           APIClient(hp.host, hp.port)(dao.backend, dao)
-            .postNonBlockingUnitF("register", dao.peerRegistrationRequest(hp.isSimulation))(C),
+            .postNonBlockingUnitF("register", prr)(C),
           "addPeerWithRegistration"
         )
       } yield (),
       "cluster_attemptRegisterSelfWithPeer"
     )
+
+  def pendingRegistrationRequest: F[PeerRegistrationRequest] =
+    for {
+      height <- ownJoinedHeight.get
+
+      peers <- peers.get
+      peersSize = peers.size
+      minFacilitatorsSize = dao.processingConfig.numFacilitatorPeers
+      isGenesis = peersSize < minFacilitatorsSize
+
+      _ <- logger.debug(
+        s"Pending registration request: ownHeight=$height peers=$peersSize isGenesis=$isGenesis"
+      )
+
+      prr <- F.delay {
+        PeerRegistrationRequest(
+          dao.externalHostString,
+          dao.externalPeerHTTPPort,
+          dao.id,
+          ResourceInfo(
+            diskUsableBytes = new java.io.File(dao.snapshotPath).getUsableSpace
+          ),
+          height,
+          isGenesis = isGenesis
+        )
+      }
+    } yield prr
 
   def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
     logThread(
@@ -475,8 +567,11 @@ class Cluster[F[_]](
           client
             .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
             .flatMap { registrationRequest =>
-              pendingRegistration(hp.host, registrationRequest, hp.isSimulation) >>
-                client.postNonBlockingUnitF("register", dao.peerRegistrationRequest(hp.isSimulation))(C)
+              for {
+                _ <- pendingRegistration(hp.host, registrationRequest)
+                prr <- pendingRegistrationRequest
+                response <- client.postNonBlockingUnitF("register", prr)(C)
+              } yield response
             }
             .handleErrorWith { err =>
               logger.error(s"registration request failed: $err") >>
@@ -551,7 +646,11 @@ class Cluster[F[_]](
     implicit val ec = ConstellationExecutionContext.bounded
 
     logThread(
-      attemptRegisterPeer(hp) >> LiftIO[F].liftIO(dao.downloadService.download()),
+      for {
+        _ <- attemptRegisterPeer(hp)
+        _ <- F.start(T.sleep(30.seconds) >> broadcastOwnJoinedHeight())
+        _ <- LiftIO[F].liftIO(dao.downloadService.download())
+      } yield (),
       "cluster_join"
     )
   }
@@ -561,7 +660,8 @@ class Cluster[F[_]](
       for {
         _ <- logger.info("Trying to gracefully leave the cluster")
 
-        _ <- broadcastLeaveRequest()
+        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
+        _ <- broadcastLeaveRequest(majorityHeight)
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
         // TODO: make interval check to wait for last n snapshots, set Offline state only in Leaving see #641 for details
@@ -581,19 +681,6 @@ class Cluster[F[_]](
       "cluster_leave"
     )
 
-  def broadcastOfflineNodeState(nodeId: Id = dao.id): F[Unit] =
-    broadcastNodeState(NodeState.Offline, nodeId)
-
-  private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
-    logThread(
-      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(nodeId, nodeState))(C)).flatTap {
-        _.filter(_._2.isLeft).toList.traverse {
-          case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
-        }
-      }.void,
-      "cluster_broadcastNodeState"
-    )
-
   def compareAndSet(expected: Set[NodeState], newState: NodeState, skipBroadcast: Boolean = false): F[SetStateResult] =
     nodeState.modify { current =>
       if (expected.contains(current)) (newState, SetStateResult(current, isNewSet = true))
@@ -609,7 +696,23 @@ class Cluster[F[_]](
         case _ => F.unit
       }
 
-  def getNodeState: F[NodeState] = nodeState.get
+  private def broadcastLeaveRequest(majorityHeight: Long): F[Unit] = {
+    def peerUnregister(c: APIClient) = PeerUnregister(c.hostName, c.apiPort, dao.id, majorityHeight)
+    broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
+  }
+
+  def broadcastOfflineNodeState(nodeId: Id = dao.id): F[Unit] =
+    broadcastNodeState(NodeState.Offline, nodeId)
+
+  private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
+    logThread(
+      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(nodeId, nodeState))(C)).flatTap {
+        _.filter(_._2.isLeft).toList.traverse {
+          case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
+        }
+      }.void,
+      "cluster_broadcastNodeState"
+    )
 
   def broadcast[T](
     f: APIClient => F[T],
@@ -635,11 +738,6 @@ class Cluster[F[_]](
       } yield res,
       "cluster_broadcast"
     )
-
-  private def broadcastLeaveRequest(): F[Unit] = {
-    def peerUnregister(c: APIClient) = PeerUnregister(c.hostName, c.apiPort, c.id)
-    broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
-  }
 
   private def validWithLoopbackGuard(host: String): Boolean =
     (host != dao.externalHostString && host != "127.0.0.1" && host != "localhost") || !dao.preventLocalhostAsPeer

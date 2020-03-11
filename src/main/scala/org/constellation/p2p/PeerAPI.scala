@@ -39,10 +39,11 @@ case class PeerRegistrationRequest(
   port: Int,
   id: Id,
   resourceInfo: ResourceInfo,
-  isSimulation: Boolean = false
+  majorityHeight: Option[Long],
+  isGenesis: Boolean
 )
 
-case class PeerUnregister(host: String, port: Int, id: Id)
+case class PeerUnregister(host: String, port: Int, id: Id, majorityHeight: Long)
 
 object PeerAPI {
 
@@ -111,7 +112,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
                 s"Received peer registration request $request on $ip"
               )
               logger.debug("Parsed host, sending peer manager request")
-              APIDirective.handle(dao.cluster.pendingRegistration(ip, request, request.isSimulation))(
+              APIDirective.handle(dao.cluster.pendingRegistration(ip, request))(
                 _ => complete(StatusCodes.OK)
               )
             }
@@ -135,7 +136,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
       get {
         pathPrefix("registration") {
           path("request") {
-            complete(dao.peerRegistrationRequest()) // Include status also
+            APIDirective.handle(dao.cluster.pendingRegistrationRequest)(complete(_))
           }
         }
       }
@@ -154,10 +155,16 @@ class PeerAPI(override val ipManager: IPManager[IO])(
             APIDirective.handle(distanceSorted.map(d => Seq(d.head._2)))(complete(_))
           }
         }
+      } ~ path("joinedHeight") {
+        entity(as[JoinedHeight]) { request =>
+          val updatePeer = dao.cluster.updateJoinedHeight(request)
+
+          APIDirective.handle(updatePeer)(_ => complete(StatusCodes.OK))
+        }
       } ~
         path("deregister") {
           entity(as[PeerUnregister]) { request =>
-            APIDirective.handle(dao.cluster.deregister(request.host, request.port, request.id)) { _ =>
+            APIDirective.handle(dao.cluster.deregister(request)) { _ =>
               complete(StatusCodes.OK)
             }
           }

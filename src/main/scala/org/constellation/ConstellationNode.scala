@@ -157,6 +157,7 @@ class ConstellationNode(
 
   MDC.put("node_id", dao.id.short)
 
+  dao.eigenTrust.initializeModel().unsafeRunSync()
   dao.eigenTrust.registerSelf().unsafeRunSync()
 
   logger.info(
