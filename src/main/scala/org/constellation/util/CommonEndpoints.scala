@@ -110,7 +110,7 @@ trait CommonEndpoints extends Json4sSupport {
         val getSnapshotInfo = for {
           exists <- dao.snapshotInfoStorage.exists(s)
           bytes <- if (exists) {
-            dao.snapshotInfoStorage.getSnapshotInfoBytes(s).value.flatMap(IO.fromEither).map(Some(_))
+            dao.snapshotInfoStorage.readBytes(s).rethrowT.map(Some(_))
           } else none[Array[Byte]].pure[IO]
         } yield bytes
 

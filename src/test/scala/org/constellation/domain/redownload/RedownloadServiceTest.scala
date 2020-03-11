@@ -10,7 +10,7 @@ import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.CloudStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
-import org.constellation.domain.snapshot.SnapshotInfoStorage
+import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.domain.storage.FileStorage
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.rewards.RewardsManager
@@ -40,7 +40,7 @@ class RedownloadServiceTest
   var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
   var snapshotService: SnapshotService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
-  var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
+  var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
   var cloudStorage: CloudStorage[IO] = _
   var metrics: Metrics = _
   var rewardsManager: RewardsManager[IO] = _
@@ -52,7 +52,7 @@ class RedownloadServiceTest
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
     snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
-    snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
+    snapshotInfoStorage = mock[FileStorage[IO, SnapshotInfo]]
     cloudStorage = mock[CloudStorage[IO]]
     rewardsManager = mock[RewardsManager[IO]]
     redownloadService = RedownloadService[IO](
@@ -449,7 +449,7 @@ class RedownloadServiceTest
 
             cloudStorage.upload(*, *) shouldReturnF List("c")
             snapshotStorage.getFiles(List("c")) shouldReturn EitherT.pure(List(file1))
-            snapshotInfoStorage.getSnapshotInfoFiles(List("c")) shouldReturnF List(file2)
+            snapshotInfoStorage.getFiles(List("c")) shouldReturn EitherT.pure(List(file2))
 
             val check = redownloadService.sendMajoritySnapshotsToCloud()
 
