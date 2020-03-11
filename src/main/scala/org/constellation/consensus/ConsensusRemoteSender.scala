@@ -16,7 +16,7 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.domain.observation.{Observation, ObservationService, RequestTimeoutOnConsensus}
-import org.constellation.p2p.PeerData
+import org.constellation.p2p.{MajorityHeight, PeerData}
 import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
 
 class ConsensusRemoteSender[F[_]: Concurrent](
@@ -34,8 +34,8 @@ class ConsensusRemoteSender[F[_]: Concurrent](
       roundData.peers.toList,
       RoundDataRemote(
         roundData.roundId,
-        roundData.peers.map(_.peerMetadata),
-        roundData.lightPeers.map(_.peerMetadata),
+        roundData.peers.map(pd => (pd.peerMetadata, pd.majorityHeight)),
+        roundData.lightPeers.map(pd => (pd.peerMetadata, pd.majorityHeight)),
         roundData.facilitatorId,
         roundData.transactions,
         roundData.tipsSOE,
@@ -98,8 +98,8 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
 case class RoundDataRemote(
   roundId: RoundId,
-  peers: Set[PeerMetadata],
-  lightPeers: Set[PeerMetadata],
+  peers: Set[(PeerMetadata, MajorityHeight)],
+  lightPeers: Set[(PeerMetadata, MajorityHeight)],
   facilitatorId: FacilitatorId,
   transactions: List[Transaction],
   tipsSOE: TipSoe,

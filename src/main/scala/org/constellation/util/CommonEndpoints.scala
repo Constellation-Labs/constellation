@@ -11,6 +11,7 @@ import cats.implicits._
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
+import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{NodeState, NodeType}
@@ -163,6 +164,12 @@ trait CommonEndpoints extends Json4sSupport {
       } ~
       path("state") {
         APIDirective.handle(dao.cluster.getNodeState)(res => complete(NodeStateInfo(res, dao.addresses, dao.nodeType)))
+      } ~
+      path("latestMajorityHeight") {
+        val height = (dao.redownloadService.lowestMajorityHeight, dao.redownloadService.latestMajorityHeight)
+          .mapN(LatestMajorityHeight)
+
+        APIDirective.handle(height)(complete(_))
       } ~
       path("peers") {
         APIDirective.handle(dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq))(complete(_))
