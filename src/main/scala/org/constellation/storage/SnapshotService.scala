@@ -44,7 +44,7 @@ class SnapshotService[F[_]: Concurrent](
   trustManager: TrustManager[F],
   soeService: SOEService[F],
   snapshotStorage: FileStorage[F, StoredSnapshot],
-  snapshotInfoStorage: SnapshotInfoStorage[F],
+  snapshotInfoStorage: FileStorage[F, SnapshotInfo],
   eigenTrustStorage: EigenTrustStorage[F],
   eigenTrust: EigenTrust[F],
   dao: DAO
@@ -139,7 +139,7 @@ class SnapshotService[F[_]: Concurrent](
       if (info.snapshot.snapshot == Snapshot.snapshotZero) {
         EitherT.liftF[F, Throwable, Unit](Sync[F].unit)
       } else {
-        snapshotInfoStorage.writeSnapshotInfo(hash, KryoSerializer.serializeAnyRef(info))
+        snapshotInfoStorage.write(hash, KryoSerializer.serializeAnyRef(info))
       }
     }.leftMap(SnapshotInfoIOError)
 
@@ -545,7 +545,7 @@ object SnapshotService {
     trustManager: TrustManager[F],
     soeService: SOEService[F],
     snapshotStorage: FileStorage[F, StoredSnapshot],
-    snapshotInfoStorage: SnapshotInfoStorage[F],
+    snapshotInfoStorage: FileStorage[F, SnapshotInfo],
     eigenTrustStorage: EigenTrustStorage[F],
     eigenTrust: EigenTrust[F],
     dao: DAO

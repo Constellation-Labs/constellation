@@ -37,7 +37,7 @@ class SnapshotServiceTest
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
   var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
-  var snapshotInfoStorage: SnapshotInfoStorage[IO] = _
+  var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
 
   before {
     dao = mockDAO
@@ -56,7 +56,7 @@ class SnapshotServiceTest
     val eigenTrustStorage = mock[EigenTrustStorage[IO]]
     val eigenTrust = mock[EigenTrust[IO]]
     snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
-    snapshotInfoStorage = mock[SnapshotInfoStorage[IO]]
+    snapshotInfoStorage = mock[FileStorage[IO, SnapshotInfo]]
 
     snapshotService = new SnapshotService[IO](
       cts,
