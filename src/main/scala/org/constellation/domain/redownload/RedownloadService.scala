@@ -13,7 +13,7 @@ import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
 import org.constellation.domain.storage.FileStorage
-import org.constellation.p2p.Cluster
+import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
@@ -250,17 +250,19 @@ class RedownloadService[F[_]: NonEmptyParallel](
       acceptedSnapshots <- getAcceptedSnapshots()
 
       peers <- cluster.getPeerInfo
-      tpl = peers.map {
+      peersCache = peers.map {
         case (id, peerData) => (id, peerData.majorityHeight)
       }
+
       _ <- logger.debug(s"Peers with majority heights")
-      _ <- tpl.toList.traverse {
+      _ <- peersCache.toList.traverse {
         case (id, majorityHeight) => logger.debug(s"[$id]: $majorityHeight")
       }
 
       majorityState = majorityStateChooser.chooseMajorityState(
         createdSnapshots,
-        peersProposals
+        peersProposals,
+        peersCache
       )
 
       maxMajorityHeight = maxHeight(majorityState)
@@ -547,6 +549,7 @@ object RedownloadService {
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type SnapshotProposalsAtHeight = Map[Long, SnapshotProposal]
   type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
+  type PeersCache = Map[Id, MajorityHeight]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 
