@@ -14,6 +14,7 @@ import org.constellation.{ConstellationExecutionContext, PeerMetadata}
 import org.constellation.consensus.Consensus.FacilitatorId
 import org.constellation.domain.observation.Observation
 import org.constellation.domain.transaction.TransactionService
+import org.constellation.p2p.MajorityHeight
 import org.constellation.primitives.Schema.SignedObservationEdge
 import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
 import org.constellation.schema.Id
