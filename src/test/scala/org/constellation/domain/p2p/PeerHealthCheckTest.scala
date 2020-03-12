@@ -4,7 +4,7 @@ import cats.effect.{ContextShift, IO, Timer}
 import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
-import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
 import org.constellation.util.APIClient
 import org.mockito.cats.IdiomaticMockitoCats
@@ -30,12 +30,14 @@ class PeerHealthCheckTest
   val peer1 = PeerData(
     mock[PeerMetadata],
     mock[APIClient],
+    MajorityHeight.genesis,
     Seq.empty
   )
 
   val peer2 = PeerData(
     mock[PeerMetadata],
     mock[APIClient],
+    MajorityHeight.genesis,
     Seq.empty
   )
 
