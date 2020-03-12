@@ -52,6 +52,10 @@ case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime =
 
 case class MajorityHeight(joined: Option[Long], left: Option[Long] = None)
 
+object MajorityHeight {
+  def genesis: MajorityHeight = MajorityHeight(Some(0L), None)
+}
+
 object PeerState extends Enumeration {
   type PeerState = Value
   val Leave, Join = Value
@@ -672,6 +676,7 @@ class Cluster[F[_]](
         ips <- ipManager.listKnownIPs
         _ <- ips.toList.traverse(ipManager.removeKnownIP)
         _ <- peers.modify(_ => (Map.empty, Map.empty))
+        _ <- ownJoinedHeight.modify(_ => (if (dao.nodeConfig.isGenesisNode) Some(0L) else None, ()))
         _ <- LiftIO[F].liftIO(dao.eigenTrust.clearAgents())
         _ <- updateMetrics()
         _ <- updatePersistentStore()

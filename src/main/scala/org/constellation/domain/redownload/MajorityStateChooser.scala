@@ -2,7 +2,13 @@ package org.constellation.domain.redownload
 
 import cats.implicits._
 import org.constellation.domain.redownload.MajorityStateChooser.{ExtendedSnapshotProposal, SnapshotProposal}
-import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
+import org.constellation.domain.redownload.RedownloadService.{
+  PeersCache,
+  PeersProposals,
+  SnapshotProposalsAtHeight,
+  SnapshotsAtHeight
+}
+import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
 
 import scala.collection.SortedMap
@@ -12,14 +18,15 @@ class MajorityStateChooser(id: Id) {
   // TODO: Use RedownloadService type definitions
   def chooseMajorityState(
     createdSnapshots: SnapshotProposalsAtHeight,
-    peersProposals: Map[Id, SnapshotProposalsAtHeight]
+    peersProposals: PeersProposals,
+    peersCache: PeersCache
   ): SnapshotsAtHeight = {
     val proposals = peersProposals + (id -> createdSnapshots)
-    val proposersCount = proposals.size
-    val mergedProposals = mergeByHeights(proposals, proposersCount)
+    val filteredProposals = filterProposals(proposals, peersCache)
+    val mergedProposals = mergeByHeights(filteredProposals, peersCache)
 
     val flat = mergedProposals
-      .mapValues(getTheMostQuantity(_, proposersCount))
+      .mapValues(getTheMostQuantity(_, peersCache))
       .mapValues(_.map(_.hash))
 
     for ((k, Some(v)) <- flat) yield k -> v
@@ -27,15 +34,15 @@ class MajorityStateChooser(id: Id) {
 
   private def getTheMostQuantity(
     proposals: Set[ExtendedSnapshotProposal],
-    proposersCount: Int
+    peersCache: PeersCache
   ): Option[ExtendedSnapshotProposal] =
     proposals.toList.sortBy(o => (-o.trust, -o.percentage, o.hash)).headOption.flatMap { s =>
-      if (areAllProposals(proposals, proposersCount)) s.some
+      if (areAllProposals(proposals, peersCache)) s.some
       else None
     }
 
-  private def areAllProposals(proposals: Set[ExtendedSnapshotProposal], proposersCount: Int): Boolean =
-    proposals.toList.map(_.n).sum == proposersCount
+  private def areAllProposals(proposals: Set[ExtendedSnapshotProposal], peersCache: PeersCache): Boolean =
+    proposals.toList.map(_.n).sum == getProposersCount(proposals.headOption.map(_.height).getOrElse(-1L), peersCache)
 
   private def roundError(value: Double): Double =
     if (value < 1.0e-10 && value > -1.0e-10) 0d
@@ -46,16 +53,25 @@ class MajorityStateChooser(id: Id) {
 
   private def mergeByHeights(
     proposals: Map[Id, SnapshotProposalsAtHeight],
-    proposersCount: Int
+    peersCache: PeersCache
   ): Map[Long, Set[ExtendedSnapshotProposal]] =
     proposals.map {
       case (id, v) =>
         v.map {
-          case (height, p) =>
+          case (height, p) => {
             (
               height,
-              ExtendedSnapshotProposal(p.hash, totalReputation(proposals, height, id), Set(id), 1, proposersCount)
+              ExtendedSnapshotProposal(
+                p.hash,
+                height,
+                totalReputation(proposals, height, id),
+                Set(id),
+                1,
+                getProposersCount(height, peersCache)
+              )
             )
+          }
+
         }
     }.toList
       .map(_.mapValues(List(_)))
@@ -64,17 +80,42 @@ class MajorityStateChooser(id: Id) {
         heightProposals
           .groupBy(_.hash)
           .map {
-            case (hash, hashProposals) =>
+            case (hash, hashProposals) => {
+              val height = hashProposals.headOption.map(_.height).getOrElse(-1L)
               ExtendedSnapshotProposal(
                 hash,
+                height,
                 roundError(hashProposals.foldRight(0.0)(_.trust + _)),
                 hashProposals.foldRight(Set.empty[Id])(_.ids ++ _),
                 heightProposals.size,
-                proposersCount
+                getProposersCount(height, peersCache)
               )
+            }
           }
           .toSet
       }
+
+  private def getProposersCount(height: Long, peersCache: PeersCache): Int =
+    peersCache.count {
+      case (_, majorityHeight) => {
+        majorityHeight.joined.exists(_ < height) && majorityHeight.left.forall(_ >= height)
+      }
+    }
+
+  private def filterProposals(
+    peersProposals: PeersProposals,
+    peersCache: PeersCache
+  ): PeersProposals =
+    peersProposals.filter {
+      case (id, _) =>
+        peersCache.contains(id)
+    }.map {
+      case (id, proposals) =>
+        (id, proposals.filter {
+          case (height, _) =>
+            peersCache.get(id).exists(m => m.joined.exists(_ < height) && m.left.forall(_ >= height))
+        })
+    }
 
 }
 
@@ -83,7 +124,14 @@ object MajorityStateChooser {
 
   case class SnapshotProposal(hash: String, reputation: SortedMap[Id, Double])
 
-  case class ExtendedSnapshotProposal(hash: String, trust: Double, ids: Set[Id], of: Int, proposersCount: Int) {
+  case class ExtendedSnapshotProposal(
+    hash: String,
+    height: Long,
+    trust: Double,
+    ids: Set[Id],
+    of: Int,
+    proposersCount: Int
+  ) {
     val n: Int = ids.size
 
     val percentage: Double = n / of.toDouble
