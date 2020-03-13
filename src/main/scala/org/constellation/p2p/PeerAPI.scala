@@ -143,19 +143,7 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
   private[p2p] def postEndpoints(socketAddress: InetSocketAddress) =
     post {
-      pathPrefix("channel") {
-        path("neighborhood") {
-          entity(as[Id]) { peerId =>
-            val distanceSorted = dao.channelService
-              .toMap()
-              .map(_.toSeq.sortBy {
-                case (channelId, meta) =>
-                  Distance.calculate(meta.channelId, peerId)
-              }) // TODO: Determine appropriate fraction to respond with.
-            APIDirective.handle(distanceSorted.map(d => Seq(d.head._2)))(complete(_))
-          }
-        }
-      } ~ path("joinedHeight") {
+      path("joinedHeight") {
         entity(as[JoinedHeight]) { request =>
           val updatePeer = dao.cluster.updateJoinedHeight(request)
 

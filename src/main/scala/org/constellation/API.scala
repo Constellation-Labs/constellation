@@ -141,147 +141,26 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
           }
         } ~
-          path("channels") {
-            complete(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq)
-          } ~
           pathPrefix("data") {
-            path("channels") {
-              complete(ChannelUIOutput(dao.threadSafeMessageMemPool.activeChannels.keys.toSeq))
-            } ~
-              path("channel" / Segment / "info") { channelId =>
-                complete(dao.channelService.lookup(channelId).unsafeRunSync().map { cmd =>
-                  SingleChannelUIOutput(
-                    cmd.channelOpen,
-                    cmd.totalNumMessages,
-                    cmd.last25MessageHashes,
-                    cmd.genesisMessageMetadata.channelMessage.signedMessageData.signatures.signatures.head.address
-                  )
-                })
-              } ~
-              path("channel" / Segment / "schema") { channelId =>
-                complete(
-                  dao.channelService
-                    .lookup(channelId)
-                    .unsafeRunSync()
-                    .flatMap { cmd =>
-                      cmd.channelOpen.jsonSchema
-                    }
-                    .map { schemaStr =>
-                      import org.json4s.native.JsonMethods._
-                      pretty(render(parse(schemaStr)))
-                    }
-                )
-              } ~
-              path("graph") { // Debugging / mockup for peer graph
-                getFromResource("sample_data/dag.json")
-              } ~
-              path("blocks") {
+            path("blocks") {
 
-                val blocks = dao.recentBlockTracker.getAll.toSeq
-                //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.getSync}
-                complete(blocks.map { ccd =>
-                  val cb = ccd.checkpointBlock
+              val blocks = dao.recentBlockTracker.getAll.toSeq
+              //dao.threadSafeTipService.acceptedCBSinceSnapshot.flatMap{dao.checkpointService.getSync}
+              complete(blocks.map { ccd =>
+                val cb = ccd.checkpointBlock
 
-                  BlockUIOutput(
-                    cb.soeHash,
-                    ccd.height.get.min,
-                    cb.parentSOEHashes,
-                    cb.messages.map {
-                      _.signedMessageData.data.channelId
-                    }.distinct.map { channelId =>
-                      ChannelValidationInfo(channelId, true)
-                    }
-                  )
-                })
-              }
-          } ~
-          path("messageService" / Segment) { channelId =>
-            APIDirective.handle(dao.messageService.lookup(channelId))(complete(_))
-          } ~
-          path("channelKeys") {
-            APIDirective.handle(dao.channelService.toMap().map(_.keys.toSeq))(complete(_))
-          } ~
-          path("channel" / "genesis" / Segment) { channelId =>
-            APIDirective.handle(dao.channelService.lookup(channelId))(complete(_))
-          } ~
-          path("channel" / Segment) { channelHash =>
-            def makeProof(cmd: ChannelMessageMetadata, storedSnapshot: StoredSnapshot) = {
-              val blocksInSnapshot = storedSnapshot.snapshot.checkpointBlocks.toList
-              val blockHashForMessage = cmd.blockHash.get
-
-              if (!blocksInSnapshot.contains(blockHashForMessage)) {
-                logger.error("Message block hash not in snapshot")
-              }
-
-              val blockProof = MerkleTree(blocksInSnapshot).createProof(blockHashForMessage)
-
-              val block = storedSnapshot.checkpointCache.filter {
-                _.checkpointBlock.baseHash == blockHashForMessage
-              }.head.checkpointBlock
-
-              val messageProofInput = block.transactions.map {
-                _.hash
-              } ++ block.messages.map {
-                _.signedMessageData.signatures.hash
-              }
-
-              val messageProof = MerkleTree(messageProofInput.toList)
-                .createProof(cmd.channelMessage.signedMessageData.signatures.hash)
-
-              ChannelProof(
-                cmd,
-                blockProof,
-                messageProof
-              )
-            }
-
-            val proof = for {
-              msg <- dao.messageService.memPool.lookup(channelHash)
-              channelRes = Snapshot.findLatestMessageWithSnapshotHash(0, msg)
-
-              res <- if (channelRes.isDefined || msg.isEmpty) {
-                channelRes.pure[IO]
-              } else {
-                dao.messageService
-                  .lookup(msg.get.channelMessage.signedMessageData.hash)
-                  .map(Snapshot.findLatestMessageWithSnapshotHash(0, _))
-              }
-
-              exists <- res.flatMap(_.snapshotHash.map(dao.snapshotService.exists)).sequence.map(_.forall(_ == true))
-
-              proof = if (exists) {
-                res.flatMap { cmd =>
-                  cmd.snapshotHash.flatMap { snapshotHash =>
-                    tryWithMetric(
-                      {
-                        dao.snapshotStorage
-                          .read(snapshotHash)
-                          .value
-                          .flatMap(IO.fromEither)
-                          .unsafeRunSync // TODO: get rid of unsafeRunSync
-                      },
-                      "readSnapshotForMessage"
-                    ).toOption.map(makeProof(cmd, _))
+                BlockUIOutput(
+                  cb.soeHash,
+                  ccd.height.get.min,
+                  cb.parentSOEHashes,
+                  cb.messages.map {
+                    _.signedMessageData.data.channelId
+                  }.distinct.map { channelId =>
+                    ChannelValidationInfo(channelId, true)
                   }
-                }
-              } else None
-            } yield proof
-
-            APIDirective.handle(proof)(complete(_))
-          } ~
-          path("messages") {
-            APIDirective.handle(IO {
-              dao.channelStorage.getLastNMessages(20)
-            })(complete(_))
-          } ~
-          path("messages" / Segment) { channelId =>
-            APIDirective.handle(IO {
-              dao.channelStorage.getLastNMessages(20, Some(channelId))
-            })(complete(_))
-          } ~
-          path("restart") { // TODO: Revisit / fix
-            System.exit(0)
-            complete(StatusCodes.OK)
+                )
+              })
+            }
           } ~
           path("setKeyPair") { // TODO: Change to keys/set - update ui call
             parameter('keyPair) { kpp =>
@@ -390,60 +269,25 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
 
   val postEndpoints =
     post {
-      pathPrefix("channel") {
-        path("open") {
-          entity(as[ChannelOpen]) { request =>
-            val ioa = IO
-              .fromFuture(IO(ChannelMessage.createGenesis(request)))
-              .handleErrorWith(_ => IO(ChannelOpenResponse("Failed to open channel")))
-
-            APIDirective.handle(ioa)(complete(_))
+      pathPrefix("peer") {
+        path("remove") {
+          entity(as[ChangePeerState]) { e =>
+            APIDirective.handle(dao.cluster.setNodeStatus(e.id, e.state).map(_ => StatusCodes.OK))(complete(_))
           }
         } ~
-          path("send") {
-            entity(as[ChannelSendRequest]) { send =>
-              val ioa = IO
-                .fromFuture(IO(ChannelMessage.createMessages(send)))
-                .map(_.json)
-                .handleErrorWith(_ => IO(ChannelSendResponse("Failed to create messages", Seq()).json))
-              APIDirective.handle(ioa)(complete(_))
-            }
-          } ~
-          path("send" / "json") {
-            entity(as[ChannelSendRequestRawJson]) { send: ChannelSendRequestRawJson =>
-              import constellation._
-              val amended = ChannelSendRequest(
-                send.channelId,
-                send.messages.x[Seq[JValue]].map { _.json }
-              )
-
-              val ioa = IO
-                .fromFuture(IO(ChannelMessage.createMessages(amended)))
-                .map(_.json)
-                .handleErrorWith(_ => IO(ChannelOpenResponse("Failed to send raw json").json))
-              APIDirective.handle(ioa)(complete(_))
+          path("add") {
+            entity(as[HostPort]) { hp =>
+              APIDirective.handle(
+                dao.cluster
+                  .attemptRegisterPeer(hp)
+                  .map(result => {
+                    logger.debug(s"Add Peer Request: $hp. Result: $result")
+                    StatusCode.int2StatusCode(result.code)
+                  })
+              )(complete(_))
             }
           }
       } ~
-        pathPrefix("peer") {
-          path("remove") {
-            entity(as[ChangePeerState]) { e =>
-              APIDirective.handle(dao.cluster.setNodeStatus(e.id, e.state).map(_ => StatusCodes.OK))(complete(_))
-            }
-          } ~
-            path("add") {
-              entity(as[HostPort]) { hp =>
-                APIDirective.handle(
-                  dao.cluster
-                    .attemptRegisterPeer(hp)
-                    .map(result => {
-                      logger.debug(s"Add Peer Request: $hp. Result: $result")
-                      StatusCode.int2StatusCode(result.code)
-                    })
-                )(complete(_))
-              }
-            }
-        } ~
         pathPrefix("config") {
           path("update") {
             entity(as[ProcessingConfig]) { cu =>
