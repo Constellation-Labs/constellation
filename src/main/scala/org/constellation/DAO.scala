@@ -3,8 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.concurrent.Ref
-import cats.effect.{Blocker, Concurrent, ContextShift, IO, Timer}
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
 import com.softwaremill.sttp.prometheus.PrometheusBackend
 import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
@@ -27,15 +26,11 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
 import org.constellation.genesis.GenesisObservationWriter
+import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
+import org.constellation.infrastructure.rewards.EigenTrustLocalStorage
 import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
@@ -46,8 +41,6 @@ import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.infrastructure.cloud.{AWSStorage, GCPStorage}
-import org.constellation.infrastructure.rewards.EigenTrustLocalStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
 
@@ -123,14 +116,14 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     if (ConfigUtil.isEnabledAWSStorage) {
-      cloudStorage = new AWSStorage[IO](
+      cloudStorage = new AWSStorageOld[IO](
         ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
         ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
         ConfigUtil.constellation.getString("storage.aws.region"),
         ConfigUtil.constellation.getString("storage.aws.bucket-name")
       )
     } else if (ConfigUtil.isEnabledGCPStorage) {
-      cloudStorage = new GCPStorage[IO](
+      cloudStorage = new GCPStorageOld[IO](
         ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
         ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
       )

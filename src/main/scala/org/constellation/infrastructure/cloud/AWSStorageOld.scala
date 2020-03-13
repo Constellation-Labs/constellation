@@ -7,12 +7,12 @@ import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials}
 import com.amazonaws.services.s3.model.PutObjectResult
 import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorageOld
 
 import scala.util.{Failure, Success, Try}
 
-class AWSStorage[F[_]: Concurrent](accessKey: String, secretKey: String, region: String, bucketName: String)
-    extends CloudStorage[F] {
+class AWSStorageOld[F[_]: Concurrent](accessKey: String, secretKey: String, region: String, bucketName: String)
+    extends CloudStorageOld[F] {
 
   private val logger = Slf4jLogger.getLogger[F]
 

@@ -1,30 +1,26 @@
 package org.constellation.storage
 
-import java.io.FileOutputStream
-import java.nio.file.Path
-
-import better.files.File
 import cats.Parallel
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, LiftIO, Resource, Sync, _}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Sync, _}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
+import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
+import org.constellation.rewards.EigenTrust
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.domain.cloud.CloudStorage
-import org.constellation.domain.rewards.StoredEigenTrust
-import org.constellation.domain.storage.FileStorage
-import org.constellation.rewards.EigenTrust
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -33,7 +29,7 @@ import scala.collection.SortedMap
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
-  cloudStorage: CloudStorage[F],
+  cloudStorage: CloudStorageOld[F],
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
   messageService: MessageService[F],
@@ -43,9 +39,9 @@ class SnapshotService[F[_]: Concurrent](
   consensusManager: ConsensusManager[F],
   trustManager: TrustManager[F],
   soeService: SOEService[F],
-  snapshotStorage: FileStorage[F, StoredSnapshot],
-  snapshotInfoStorage: FileStorage[F, SnapshotInfo],
-  eigenTrustStorage: FileStorage[F, StoredEigenTrust],
+  snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+  snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
+  eigenTrustStorage: LocalFileStorage[F, StoredEigenTrust],
   eigenTrust: EigenTrust[F],
   dao: DAO
 )(implicit C: ContextShift[F], P: Parallel[F]) {
@@ -534,7 +530,7 @@ object SnapshotService {
 
   def apply[F[_]: Concurrent](
     concurrentTipService: ConcurrentTipService[F],
-    cloudStorage: CloudStorage[F],
+    cloudStorage: CloudStorageOld[F],
     addressService: AddressService[F],
     checkpointService: CheckpointService[F],
     messageService: MessageService[F],
@@ -544,9 +540,9 @@ object SnapshotService {
     consensusManager: ConsensusManager[F],
     trustManager: TrustManager[F],
     soeService: SOEService[F],
-    snapshotStorage: FileStorage[F, StoredSnapshot],
-    snapshotInfoStorage: FileStorage[F, SnapshotInfo],
-    eigenTrustStorage: FileStorage[F, StoredEigenTrust],
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
+    eigenTrustStorage: LocalFileStorage[F, StoredEigenTrust],
     eigenTrust: EigenTrust[F],
     dao: DAO
   )(implicit C: ContextShift[F], P: Parallel[F]) =

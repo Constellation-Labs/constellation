@@ -1,4 +1,4 @@
-package org.constellation.domain.snapshotInfo
+package org.constellation.domain.snapshot
 
 object SnapshotInfoChunk extends Enumeration {
 
