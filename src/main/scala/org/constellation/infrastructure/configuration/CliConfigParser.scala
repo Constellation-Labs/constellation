@@ -44,10 +44,10 @@ object CliConfigParser {
       opt[Unit]('t', "test-mode")
         .action((x, c) => c.copy(testMode = true))
         .text("Run with test settings"),
-      opt[String]('k', "keystore")
+      opt[String]('k', "keystore").required
         .action((x, c) => c.copy(keyStorePath = x))
         .text("Path to keystore file"),
-      opt[String]("alias")
+      opt[String]("alias").required
         .action((x, c) => c.copy(alias = x))
         .text("Alias for keypair in provided keystore file"),
       help("help").text("prints this usage text"),
@@ -58,10 +58,6 @@ object CliConfigParser {
             _ <- checkConfigOption(
               c.externalIp == null ^ c.externalPort == 0,
               "ip and port must either both be set, or neither."
-            )
-            _ <- checkConfigOption(
-              c.keyStorePath != null && c.alias == null,
-              "you must provide --alias when using keystore"
             )
           } yield ()
       )
