@@ -310,7 +310,7 @@ class Cluster[F[_]](
       clients = p.map(_._2.client).toList
       maxMajorityHeight <- clients
         .traverse(_.getNonBlockingF[F, LatestMajorityHeight]("latestMajorityHeight")(C))
-        .map(heights => if (heights.nonEmpty) heights.map(_.high).max else 0L)
+        .map(heights => if (heights.nonEmpty) heights.map(_.highest).max else 0L)
       delay = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
       ownHeight = maxMajorityHeight + delay
       _ <- ownJoinedHeight.modify(_ => (Some(ownHeight), ()))
@@ -474,48 +474,16 @@ class Cluster[F[_]](
       "cluster_internalHearthbeat"
     )
 
-  def initiatePeerReload(): F[Unit] =
+  def initiateRejoin(): F[Unit] =
     logThread(
       for {
         _ <- if (dao.peersInfoPath.nonEmpty) {
-          withMetric(
-            dao.peersInfoPath.lines.mkString.x[Seq[PeerMetadata]].toList.traverse(addPeerMetadata).void,
-            "peerReloading"
-          )
-        } else F.unit
-
-        _ <- if (dao.seedsPath.nonEmpty) {
-          withMetric(
-            dao.seedsPath.lines.toList.traverse { line =>
-              line.split(":") match {
-                case Array(host, port) =>
-                  hostPort(HostPort(host, port.toInt))
-                case _ => F.unit
-              }
-            }.void,
-            "reedSeedsFile"
-          )
-        } else F.unit
-
-        _ <- T.sleep(15.seconds)
-
-        _ <- attemptRollback()
-
-        _ <- if (dao.peersInfoPath.nonEmpty && dao.seedsPath.isEmpty) {
           logger.warn(
             "Found existing peers in persistent storage. Node probably crashed before and will try to rejoin the cluster."
           )
           rejoin()
         } else {
           logger.warn("No peers in persistent storage. Skipping rejoin.")
-        }
-
-        _ <- if (dao.seedsPath.nonEmpty && dao.peersInfoPath.isEmpty) {
-          C.evalOn(ConstellationExecutionContext.bounded)(
-            LiftIO[F].liftIO(dao.downloadService.download())
-          )
-        } else {
-          logger.warn("No seeds configured yet. Skipping initial download.")
         }
       } yield (),
       "cluster_initiatePeerReload"
@@ -646,18 +614,29 @@ class Cluster[F[_]](
       "cluster_addToPeer"
     )
 
-  def join(hp: HostPort): F[Unit] = {
-    implicit val ec = ConstellationExecutionContext.bounded
+  private def clearServicesBeforeJoin(): F[Unit] =
+    for {
+      _ <- ownJoinedHeight.modify(_ => (None, ()))
+      _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
+      _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
+      _ <- LiftIO[F].liftIO(dao.addressService.clear)
+      _ <- LiftIO[F].liftIO(dao.soeService.clear)
+      _ <- LiftIO[F].liftIO(dao.transactionService.clear)
+      _ <- LiftIO[F].liftIO(dao.observationService.clear)
+      _ <- LiftIO[F].liftIO(dao.redownloadService.clear)
+      // TODO: add services to clear if needed
+    } yield ()
 
+  def join(hp: HostPort): F[Unit] =
     logThread(
       for {
+        _ <- clearServicesBeforeJoin()
         _ <- attemptRegisterPeer(hp)
         _ <- F.start(T.sleep(30.seconds) >> broadcastOwnJoinedHeight())
         _ <- LiftIO[F].liftIO(dao.downloadService.download())
       } yield (),
       "cluster_join"
     )
-  }
 
   def leave(gracefulShutdown: => F[Unit]): F[Unit] =
     logThread(

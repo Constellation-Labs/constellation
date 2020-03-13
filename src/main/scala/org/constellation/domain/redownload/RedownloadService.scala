@@ -97,6 +97,16 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def getPeerProposals(): F[PeersProposals] = peersProposals.get
 
+  def clear: F[Unit] =
+    for {
+      _ <- createdSnapshots.modify(_ => (Map.empty, ()))
+      _ <- acceptedSnapshots.modify(_ => (Map.empty, ()))
+      _ <- peersProposals.modify(_ => (Map.empty, ()))
+      _ <- lastMajorityState.modify(_ => (Map.empty, ()))
+      _ <- lastSentHeight.modify(_ => (-1L, ()))
+      _ <- lastRewardedHeight.modify(_ => (-1L, ()))
+    } yield ()
+
   def fetchAndUpdatePeersProposals(): F[PeersProposals] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
@@ -123,7 +133,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield responses.toMap
 
   // TODO: Extract to HTTP layer
-  private def fetchAcceptedSnapshots(client: APIClient): F[SnapshotsAtHeight] =
+  private[redownload] def fetchAcceptedSnapshots(client: APIClient): F[SnapshotsAtHeight] =
     client
       .getNonBlockingF[F, SnapshotsAtHeight]("snapshot/accepted")(C)
       .handleErrorWith(_ => F.pure(Map.empty))
@@ -143,7 +153,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       .handleErrorWith(_ => F.pure(Seq.empty))
 
   // TODO: Extract to HTTP layer
-  private def fetchSnapshotInfo(client: APIClient): F[SnapshotInfoSerialized] =
+  private[redownload] def fetchSnapshotInfo(client: APIClient): F[SnapshotInfoSerialized] =
     client
       .getNonBlockingArrayByteF("snapshot/info", timeout = 45.second)(C)
 
@@ -153,7 +163,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       .getNonBlockingArrayByteF("snapshot/info/" + hash, timeout = 45.second)(C)
 
   // TODO: Extract to HTTP layer
-  private def fetchSnapshot(hash: String)(client: APIClient): F[SnapshotSerialized] =
+  private[redownload] def fetchSnapshot(hash: String)(client: APIClient): F[SnapshotSerialized] =
     client
       .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = 45.second)(C)
 
@@ -181,7 +191,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }.void
     } yield ()
 
-  private def useRandomClient[A](pool: Set[APIClient], attempts: Int = 3)(fetchFn: APIClient => F[A]): F[A] =
+  private[redownload] def useRandomClient[A](pool: Set[APIClient], attempts: Int = 3)(
+    fetchFn: APIClient => F[A]
+  ): F[A] =
     if (pool.isEmpty) {
       F.raiseError[A](new Throwable("Client pool is empty!"))
     } else {
@@ -553,5 +565,5 @@ object RedownloadService {
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 
-  case class LatestMajorityHeight(low: Long, high: Long)
+  case class LatestMajorityHeight(lowest: Long, highest: Long)
 }

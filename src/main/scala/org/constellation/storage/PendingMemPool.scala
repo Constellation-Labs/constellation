@@ -52,4 +52,7 @@ abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F,
   def size(): F[Long] =
     ref.get.map(_.size.toLong)
 
+  def clear: F[Unit] =
+    ref.modify(_ => (Map.empty, ()))
+
 }

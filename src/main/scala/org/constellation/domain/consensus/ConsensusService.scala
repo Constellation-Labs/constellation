@@ -188,6 +188,14 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
           else Sync[F].unit
       )
 
+  def clear: F[Unit] =
+    for {
+      _ <- pending.clear
+      _ <- inConsensus.clear
+      _ <- accepted.clear
+      _ <- unknown.clear
+    } yield ()
+
   def getLast20Accepted: F[List[A]] =
     accepted.getLast20()
 

@@ -265,10 +265,6 @@ class ConstellationNode(
 
   logger.info("Node started")
 
-  if (nodeConfig.attemptDownload) {
-    (nodeConfig.seeds.toList.traverse(dao.cluster.hostPort) >> dao.cluster.initiatePeerReload()).unsafeRunSync
-  }
-
   // TODO: Use this for full flow, right now this only works as a debugging measure, does not integrate properly
   // with other nodes joining
   if (nodeConfig.isGenesisNode) {
@@ -278,6 +274,8 @@ class ConstellationNode(
 
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   }
+
+  dao.cluster.initiateRejoin().unsafeRunSync
 
 //  Keeping disabled for now -- going to only use midDb for the time being.
 //  private val txMigrator = new TransactionPeriodicMigration
