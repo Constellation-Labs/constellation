@@ -4,16 +4,14 @@ import java.net.InetSocketAddress
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.util.Timeout
 import cats.data.EitherT
 import cats.effect.IO
-import cats.effect.concurrent.Ref
 import constellation._
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.TestHelpers
-import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
-import org.constellation.domain.storage.FileStorage
+import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.primitives.IPManager
 import org.constellation.schema.Id
 import org.json4s.native.Serialization
@@ -22,7 +20,6 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.collection.SortedMap
-import scala.concurrent.duration._
 
 class PeerAPITest
     extends FreeSpec
@@ -48,7 +45,7 @@ class PeerAPITest
 
   "GET snapshot/stored" - {
     "response should return all snapshots stored on disk" in {
-      dao.snapshotStorage shouldReturn mock[FileStorage[IO, StoredSnapshot]]
+      dao.snapshotStorage shouldReturn mock[LocalFileStorage[IO, StoredSnapshot]]
       dao.snapshotStorage.list() shouldReturn EitherT.pure(List("aa", "bb"))
 
       Get("/snapshot/stored") ~> peerAPI.routes(socketAddress) ~> check {

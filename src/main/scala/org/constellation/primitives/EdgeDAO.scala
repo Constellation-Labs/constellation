@@ -13,13 +13,14 @@ import org.constellation.checkpoint.{
 import org.constellation.consensus._
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
+import org.constellation.domain.cloud.{CloudStorage, CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
-import org.constellation.p2p.{Cluster, JoiningPeerValidator}
-import org.constellation.primitives.Schema._
+import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.{FileStorage, LocalFileStorage}
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -29,13 +30,12 @@ import org.constellation.domain.transaction.{
 import org.constellation.genesis.GenesisObservationWriter
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
+import org.constellation.p2p.{Cluster, JoiningPeerValidator}
+import org.constellation.primitives.Schema._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackLoader, RollbackService}
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.domain.cloud.CloudStorage
-import org.constellation.domain.rewards.StoredEigenTrust
-import org.constellation.domain.storage.FileStorage
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{Metrics, SnapshotWatcher}
 import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
@@ -184,9 +184,19 @@ trait EdgeDAO {
   var checkpointService: CheckpointService[IO] = _
   var checkpointParentService: CheckpointParentService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
-  var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
-  var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
-  var eigenTrustStorage: FileStorage[IO, StoredEigenTrust] = _
+
+  var genesisObservationStorage: FileStorage[IO, GenesisObservation] = _
+  var genesisObservationCloudStorage: CloudStorage[IO, GenesisObservation] = _
+
+  var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
+  var snapshotCloudStorage: CloudStorage[IO, StoredSnapshot] = _
+
+  var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
+  var snapshotInfoCloudStorage: CloudStorage[IO, SnapshotInfo] = _
+
+  var eigenTrustStorage: LocalFileStorage[IO, StoredEigenTrust] = _
+  var eigenTrustCloudStorage: CloudStorage[IO, StoredEigenTrust] = _
+
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _
   var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
@@ -195,7 +205,7 @@ trait EdgeDAO {
   var addressService: AddressService[IO] = _
   var snapshotWatcher: SnapshotWatcher = _
   var rollbackService: RollbackService[IO] = _
-  var cloudStorage: CloudStorage[IO] = _
+  var cloudStorage: CloudStorageOld[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var downloadService: DownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _

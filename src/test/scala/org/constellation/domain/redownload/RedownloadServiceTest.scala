@@ -7,18 +7,18 @@ import cats.implicits._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
-import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
-import org.constellation.domain.storage.FileStorage
+import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
 import org.constellation.util.{APIClient, Metrics}
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FreeSpec, Matchers}
 
 import scala.collection.SortedMap
@@ -37,11 +37,11 @@ class RedownloadServiceTest
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var majorityStateChooser: MajorityStateChooser = _
-  var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
+  var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
   var snapshotService: SnapshotService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
-  var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
-  var cloudStorage: CloudStorage[IO] = _
+  var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
+  var cloudStorage: CloudStorageOld[IO] = _
   var metrics: Metrics = _
   var rewardsManager: RewardsManager[IO] = _
 
@@ -51,9 +51,9 @@ class RedownloadServiceTest
   override def beforeEach(): Unit = {
     cluster = mock[Cluster[IO]]
     majorityStateChooser = mock[MajorityStateChooser]
-    snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
-    snapshotInfoStorage = mock[FileStorage[IO, SnapshotInfo]]
-    cloudStorage = mock[CloudStorage[IO]]
+    snapshotStorage = mock[LocalFileStorage[IO, StoredSnapshot]]
+    snapshotInfoStorage = mock[LocalFileStorage[IO, SnapshotInfo]]
+    cloudStorage = mock[CloudStorageOld[IO]]
     rewardsManager = mock[RewardsManager[IO]]
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,

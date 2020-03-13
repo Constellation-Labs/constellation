@@ -5,17 +5,17 @@ import cats.data.EitherT
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.domain.cloud.CloudStorage
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 class GenesisObservationWriter[F[_]: Concurrent](
-  cloudStorage: CloudStorage[F],
+  cloudStorage: CloudStorageOld[F],
   dao: DAO,
   executionContext: ContextShift[F],
   fileOperationContext: ExecutionContext

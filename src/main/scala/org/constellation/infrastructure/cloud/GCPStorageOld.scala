@@ -8,12 +8,11 @@ import cats.implicits._
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.storage.{Blob, Bucket, Storage, StorageOptions}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConfigUtil
-import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorageOld
 
 import scala.util.{Failure, Success, Try}
 
-class GCPStorage[F[_]: Concurrent](bucketName: String, pathToPermissionFile: String) extends CloudStorage[F] {
+class GCPStorageOld[F[_]: Concurrent](bucketName: String, pathToPermissionFile: String) extends CloudStorageOld[F] {
 
   private val logger = Slf4jLogger.getLogger[F]
 

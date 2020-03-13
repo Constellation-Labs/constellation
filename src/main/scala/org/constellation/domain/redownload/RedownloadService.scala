@@ -8,10 +8,13 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
-import org.constellation.domain.cloud.CloudStorage
+import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.LocalFileStorage
+import org.constellation.p2p.Cluster
+import org.constellation.domain.snapshot.{SnapshotInfo}
 import org.constellation.domain.storage.FileStorage
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.primitives.Schema.NodeState
@@ -31,11 +34,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
   isEnabledCloudStorage: Boolean,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
-  snapshotStorage: FileStorage[F, StoredSnapshot],
-  snapshotInfoStorage: FileStorage[F, SnapshotInfo],
+  snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+  snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  cloudStorage: CloudStorage[F],
+  cloudStorage: CloudStorageOld[F],
   rewardsManager: RewardsManager[F],
   metrics: Metrics
 )(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
@@ -534,11 +537,11 @@ object RedownloadService {
     isEnabledCloudStorage: Boolean,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
-    snapshotStorage: FileStorage[F, StoredSnapshot],
-    snapshotInfoStorage: FileStorage[F, SnapshotInfo],
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
-    cloudStorage: CloudStorage[F],
+    cloudStorage: CloudStorageOld[F],
     rewardsManager: RewardsManager[F],
     metrics: Metrics
   ): RedownloadService[F] =

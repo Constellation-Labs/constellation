@@ -3,22 +3,18 @@ package org.constellation.storage
 import better.files.File
 import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Timer}
-import cats.implicits._
-import com.typesafe.scalalogging.StrictLogging
 import org.constellation._
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.{ConsensusManager, RandomData, Snapshot, StoredSnapshot}
+import org.constellation.consensus.{ConsensusManager, Snapshot, StoredSnapshot}
+import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.snapshot.{SnapshotInfo, SnapshotInfoStorage}
+import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives.ConcurrentTipService
-import org.constellation.primitives.Schema.CheckpointCache
-import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.domain.cloud.CloudStorage
-import org.constellation.domain.rewards.StoredEigenTrust
-import org.constellation.domain.storage.FileStorage
+import org.constellation.rewards.EigenTrust
 import org.constellation.trust.TrustManager
-import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -36,15 +32,15 @@ class SnapshotServiceTest
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
-  var snapshotStorage: FileStorage[IO, StoredSnapshot] = _
-  var snapshotInfoStorage: FileStorage[IO, SnapshotInfo] = _
+  var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
+  var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
 
   before {
     dao = mockDAO
 
     val cts = mock[ConcurrentTipService[IO]]
     val addressService = mock[AddressService[IO]]
-    val cloudStorage = mock[CloudStorage[IO]]
+    val cloudStorage = mock[CloudStorageOld[IO]]
     val checkpointService = mock[CheckpointService[IO]]
     val messageService = mock[MessageService[IO]]
     val transactionService = mock[TransactionService[IO]]
@@ -53,10 +49,10 @@ class SnapshotServiceTest
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
     val soeService = mock[SOEService[IO]]
-    val eigenTrustStorage = mock[FileStorage[IO, StoredEigenTrust]]
+    val eigenTrustStorage = mock[LocalFileStorage[IO, StoredEigenTrust]]
     val eigenTrust = mock[EigenTrust[IO]]
-    snapshotStorage = mock[FileStorage[IO, StoredSnapshot]]
-    snapshotInfoStorage = mock[FileStorage[IO, SnapshotInfo]]
+    snapshotStorage = mock[LocalFileStorage[IO, StoredSnapshot]]
+    snapshotInfoStorage = mock[LocalFileStorage[IO, SnapshotInfo]]
 
     snapshotService = new SnapshotService[IO](
       cts,
