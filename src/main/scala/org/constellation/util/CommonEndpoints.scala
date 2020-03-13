@@ -177,9 +177,6 @@ trait CommonEndpoints extends Json4sSupport {
       path("transaction" / Segment) { h =>
         APIDirective.handle(dao.transactionService.lookup(h))(complete(_))
       } ~
-      path("message" / Segment) { h =>
-        APIDirective.handle(dao.messageService.memPool.lookup(h))(complete(_))
-      } ~
       path("checkpoint" / Segment) { h =>
         APIDirective.handle(dao.checkpointService.fullData(h))(complete(_))
       } ~
