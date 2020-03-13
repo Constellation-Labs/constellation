@@ -267,7 +267,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       metrics
     )
 
-    downloadService = DownloadService[IO](redownloadService, cluster)
+    downloadService = DownloadService[IO](redownloadService, cluster, checkpointAcceptanceService)
 
     val healthChecker = new HealthChecker[IO](
       this,

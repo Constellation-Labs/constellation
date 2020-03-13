@@ -1,6 +1,7 @@
 package org.constellation.domain.redownload
 
 import cats.effect.{ContextShift, IO}
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.constellation.p2p.Cluster
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -20,13 +21,15 @@ class DownloadServiceTest
   var cluster: Cluster[IO] = _
   var downloadService: DownloadService[IO] = _
   var redownloadService: RedownloadService[IO] = _
+  var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   implicit var dao: DAO = _
 
   override def beforeEach() = {
     dao = TestHelpers.prepareMockedDAO()
     cluster = dao.cluster
     redownloadService = dao.redownloadService
-    downloadService = new DownloadService(redownloadService, cluster)
+    checkpointAcceptanceService = dao.checkpointAcceptanceService
+    downloadService = new DownloadService(redownloadService, cluster, checkpointAcceptanceService)
 
     dao.blacklistedAddresses.clear shouldReturnF Unit
     dao.transactionChainService.clear shouldReturnF Unit
