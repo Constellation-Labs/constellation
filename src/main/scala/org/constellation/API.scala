@@ -162,19 +162,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               })
             }
           } ~
-          path("setKeyPair") { // TODO: Change to keys/set - update ui call
-            parameter('keyPair) { kpp =>
-              logger.debug("Set key pair " + kpp)
-              val res = if (kpp.length > 10) {
-                val rr = Try {
-                  dao.updateKeyPair(kpp.x[KeyPair])
-                  StatusCodes.OK
-                }.getOrElse(StatusCodes.BadRequest)
-                rr
-              } else StatusCodes.BadRequest
-              complete(res)
-            }
-          } ~
           pathPrefix("buildInfo") {
             concat(
               pathEnd {
@@ -196,26 +183,8 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
             complete(writer.toString)
           } ~
-          path("makeKeyPair") {
-            val pair = KeyUtils.makeKeyPair()
-            wallet :+= pair
-            complete(pair)
-          } ~
-          path("makeKeyPairs" / IntNumber) { numPairs =>
-            val pair = Seq.fill(numPairs) {
-              KeyUtils.makeKeyPair()
-            }
-            wallet ++= pair
-            complete(pair)
-          } ~
-          path("wallet") {
-            complete(wallet)
-          } ~
           path("selfAddress") {
             complete(id.address)
-          } ~
-          path("nodeKeyPair") {
-            complete(keyPair)
           } ~
           path("hasGenesis") {
             if (dao.genesisObservation.isDefined) {
@@ -270,44 +239,19 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   val postEndpoints =
     post {
       pathPrefix("peer") {
-        path("remove") {
-          entity(as[ChangePeerState]) { e =>
-            APIDirective.handle(dao.cluster.setNodeStatus(e.id, e.state).map(_ => StatusCodes.OK))(complete(_))
+        path("add") {
+          entity(as[HostPort]) { hp =>
+            APIDirective.handle(
+              dao.cluster
+                .attemptRegisterPeer(hp)
+                .map(result => {
+                  logger.debug(s"Add Peer Request: $hp. Result: $result")
+                  StatusCode.int2StatusCode(result.code)
+                })
+            )(complete(_))
           }
-        } ~
-          path("add") {
-            entity(as[HostPort]) { hp =>
-              APIDirective.handle(
-                dao.cluster
-                  .attemptRegisterPeer(hp)
-                  .map(result => {
-                    logger.debug(s"Add Peer Request: $hp. Result: $result")
-                    StatusCode.int2StatusCode(result.code)
-                  })
-              )(complete(_))
-            }
-          }
+        }
       } ~
-        pathPrefix("config") {
-          path("update") {
-            entity(as[ProcessingConfig]) { cu =>
-              dao.nodeConfig = dao.nodeConfig.copy(processingConfig = cu)
-              complete(StatusCodes.OK)
-            }
-          }
-        } ~
-        path("ready") {
-          def changeStateToReady: IO[SetStateResult] = dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready)
-
-          APIDirective.onHandle(changeStateToReady) {
-            case Success(SetStateResult(_, true))  => complete(StatusCodes.OK)
-            case Success(SetStateResult(_, false)) => complete(StatusCodes.Conflict)
-            case Failure(error) =>
-              logger.error(s"Can't transition state to ${error.getMessage}", error)
-              complete(StatusCodes.InternalServerError)
-          }
-
-        } ~
         path("peerHealthCheck") {
           val resetTimeout = 1.second
           val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 15.seconds, resetTimeout)(
@@ -330,22 +274,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               logger.warn("Failed to get peer health", e)
               complete(StatusCodes.InternalServerError)
           }
-        } ~
-        pathPrefix("genesis") {
-          path("create") {
-            entity(as[Seq[AccountBalance]]) { balances =>
-              logger.info(s"genesis created with balances ${balances}")
-              val go = Genesis.createGenesisObservation(balances)
-              complete(go)
-            }
-          } ~
-            path("accept") {
-              entity(as[GenesisObservation]) { go =>
-                Genesis.acceptGenesis(go, setAsTips = true)
-                // TODO: Report errors and add validity check
-                complete(StatusCodes.OK)
-              }
-            }
         } ~
         path("balance") {
           entity(as[String]) { address =>
@@ -373,24 +301,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             APIDirective.handle(io)(complete(_))
           }
-        } ~ path("send") {
-        entity(as[SendToAddress]) { sendRequest =>
-          logger.info(s"send transaction to address $sendRequest")
-          val tx = transactionChainService
-            .createAndSetLastTransaction(
-              dao.selfAddressStr,
-              sendRequest.dst,
-              sendRequest.amountActual,
-              dao.keyPair,
-              isDummy = false,
-              normalized = sendRequest.normalized
-            )
-            .flatMap(tx => dao.transactionService.put(TransactionCacheData(tx, path = Set(dao.id))))
-            .map(_.hash)
-
-          APIDirective.handle(tx)(complete(_))
-        }
-      } ~ path("restore") {
+        } ~ path("restore") {
         APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
           case Success(value) => complete(StatusCodes.OK)
           case Failure(error) =>
@@ -398,36 +309,6 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
             complete(StatusCodes.InternalServerError)
         }
       } ~
-        path("addPeer") {
-          entity(as[PeerMetadata]) { pm =>
-            (IO
-              .contextShift(ConstellationExecutionContext.bounded)
-              .shift >> dao.cluster.addPeerMetadata(pm)).unsafeRunAsyncAndForget
-
-            complete(StatusCodes.OK)
-          }
-        } ~
-        path("ip") {
-          entity(as[String]) { externalIp =>
-            var ipp: String = ""
-            val addr =
-              externalIp.replaceAll('"'.toString, "").split(":") match {
-                case Array(ip, port) =>
-                  ipp = ip
-                  import better.files._
-                  nodeConfig = nodeConfig.copy(hostName = ip)
-                  file"${ConstellationNode.LocalConfigFile}".write(LocalNodeConfig(ip).json)
-                  new InetSocketAddress(ip, port.toInt)
-                case a @ _ => {
-                  logger.debug(s"Unmatched Array: $a")
-                  throw new RuntimeException(s"Bad Match: $a")
-                }
-              }
-            logger.debug(s"Set external IP RPC request $externalIp $addr")
-            dao.metrics.updateMetric("externalHost", dao.externalHostString)
-            complete(StatusCodes.OK)
-          }
-        } ~
         path("reputation") {
           entity(as[Seq[UpdateReputation]]) { ur =>
             ur.foreach { r =>
