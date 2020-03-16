@@ -1,0 +1,79 @@
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+name: Create Release
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+      - uses: olegtarasov/get-tag@v2
+        id: tagName
+        with:
+          tagRegex: "v(.*)"
+          tagRegexGroup: 1
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Assemble assets
+        run: |
+          sbt "++ 2.12.10" "keytool/assembly" "++ 2.12.10" "wallet/assembly"
+          mkdir -p ./src/main/resources/ui/
+          cd ui && sbt clean fullOptJS && cd ..
+          cp ./ui/target/scala-2.12/*js* ./src/main/resources/ui/
+          sbt "++ 2.12.10" assembly
+
+      - name: Copy dependencies
+        run: |
+          cp ./keytool/target/scala-2.12/keytool-assembly-${{ steps.tagName.outputs.tag }}.jar docker/keytool/cl-keytool.jar
+          cp ./wallet/target/scala-2.12/wallet-assembly-${{ steps.tagName.outputs.tag }}.jar docker/wallet/cl-wallet.jar
+          cp ./target/scala-2.12/constellation-assembly-${{ steps.tagName.outputs.tag }}.jar docker/node/cl-node.jar
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.tagName.outputs.tag }}
+          draft: false
+          prerelease: true
+          body_path: CHANGELOG.md
+          files: |
+            docker/keytool/cl-keytool.jar
+            docker/wallet/cl-wallet.jar
+            docker/node/cl-node.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish docker keytool image
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: Constellation-Labs/constellation/keytool
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          tag_semver: true
+          workdir: docker/keytool
+          registry: docker.pkg.github.com
+      - name: Publish docker wallet image
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: Constellation-Labs/constellation/wallet
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          tag_semver: true
+          workdir: docker/wallet
+          registry: docker.pkg.github.com
+      - name: Publish docker node image
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: Constellation-Labs/constellation/node
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          tag_semver: true
+          workdir: docker/node
+          registry: docker.pkg.github.com
