@@ -2,12 +2,16 @@ FROM openjdk:8-jdk-alpine
 
 RUN adduser -S -h /var/lib/constellation constellation
 
-COPY constellation-node.jar /var/lib/constellation/constellation-node.jar
-COPY logback.xml /var/lib/constellation/logback.xml
+COPY cl-wallet.jar /var/lib/constellation/cl-wallet.jar
+COPY entrypoint.sh /var/lib/constellation/entrypoint.sh
 
 WORKDIR /var/lib/constellation/shared
 
+ENV CL_KEYSTORE_NAME ""
+ENV CL_ALIAS ""
+ENV CL_STOREPASS ""
+ENV CL_KEYPASS ""
+
 USER constellation
 
-ENTRYPOINT ["java", "-Dlogback.configurationFile=/var/lib/constellation/logback.xml", "-cp", "../constellation-node.jar"]
-CMD ["org.constellation.util.wallet.GenerateAddress"]
+ENTRYPOINT ["sh", "../entrypoint.sh"]
