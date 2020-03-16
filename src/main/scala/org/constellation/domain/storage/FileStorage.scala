@@ -20,6 +20,8 @@ trait FileStorage[F[_], A] {
 
   def write(path: String, a: A): EitherT[F, Throwable, Unit]
 
+  def write(file: File): EitherT[F, Throwable, Unit]
+
   def write(path: String, file: File): EitherT[F, Throwable, Unit]
 
   def delete(path: String): EitherT[F, Throwable, Unit]

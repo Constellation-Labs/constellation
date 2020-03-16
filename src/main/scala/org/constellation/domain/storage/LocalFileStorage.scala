@@ -92,9 +92,19 @@ abstract class LocalFileStorage[F[_], A](baseDir: String)(implicit F: Concurrent
       write(fileName, _)
     }
 
-  def write(path: String, file: File): EitherT[F, Throwable, Unit] =
+  def write(file: File): EitherT[F, Throwable, Unit] =
     for {
-      bytes <- F.delay { file.loadBytes }.attemptT
+      bytes <- F.delay {
+        file.loadBytes
+      }.attemptT
+      _ <- write(file.name, bytes)
+    } yield ()
+
+  override def write(path: String, file: File): EitherT[F, Throwable, Unit] =
+    for {
+      bytes <- F.delay {
+        file.loadBytes
+      }.attemptT
       _ <- write(path, bytes)
     } yield ()
 

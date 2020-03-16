@@ -1,5 +1,7 @@
 package org.constellation.util
 
+import java.io.{PrintWriter, StringWriter}
+
 import cats.effect.{Bracket, Clock, IO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
@@ -8,6 +10,12 @@ import org.constellation.ConstellationExecutionContext
 import scala.concurrent.duration._
 
 object Logging {
+
+  def stringifyStackTrace(e: Throwable): String = {
+    val sw = new StringWriter
+    e.printStackTrace(new PrintWriter(sw))
+    sw.toString
+  }
 
   implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
 

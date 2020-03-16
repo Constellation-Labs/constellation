@@ -8,7 +8,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
-import org.constellation.domain.cloud.CloudStorageOld
+import org.constellation.domain.cloud.HeightHashFileStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.snapshot.SnapshotInfo
@@ -22,6 +22,7 @@ import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
+import org.constellation.util.Logging.stringifyStackTrace
 import org.constellation.util.{APIClient, Metrics}
 
 import scala.collection.SortedMap
@@ -38,7 +39,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   snapshotService: SnapshotService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  cloudStorage: CloudStorageOld[F],
+  snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
+  snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
   rewardsManager: RewardsManager[F],
   metrics: Metrics
 )(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
@@ -63,8 +65,6 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
 
   private[redownload] var lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
-
-  private[redownload] var lastRewardedHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -107,7 +107,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- peersProposals.modify(_ => (Map.empty, ()))
       _ <- lastMajorityState.modify(_ => (Map.empty, ()))
       _ <- lastSentHeight.modify(_ => (-1L, ()))
-      _ <- lastRewardedHeight.modify(_ => (-1L, ()))
+      _ <- rewardsManager.clearLastRewardedHeight()
     } yield ()
 
   def fetchAndUpdatePeersProposals(): F[PeersProposals] =
@@ -316,7 +316,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
       if (state.isNewSet) {
         wrappedCheck.handleErrorWith { error =>
-          logger.error(s"Redownload error: ${error.getMessage}") >> cluster
+          logger.error(error)(s"Redownload error: ${stringifyStackTrace(error)}") >> cluster
             .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
             .void
         }
@@ -330,12 +330,25 @@ class RedownloadService[F[_]: NonEmptyParallel](
       lastHeight <- lastSentHeight.get
 
       toSend = majorityState.filterKeys(_ > lastHeight)
-      hashes = toSend.values.toList
-      snapshotFiles <- snapshotStorage.getFiles(hashes).rethrowT
-      snapshotInfoFiles <- snapshotInfoStorage.getFiles(hashes).rethrowT
+      hashes = toSend.toList
 
-      _ <- cloudStorage.upload(snapshotFiles, "snapshots".some)
-      _ <- cloudStorage.upload(snapshotInfoFiles, "snapshot-infos".some)
+      uploadSnapshots <- hashes.traverse {
+        case (height, hash) =>
+          snapshotStorage.getFile(hash).rethrowT.map {
+            snapshotCloudStorage.write(height, hash, _).rethrowT
+          }
+      }
+
+      uploadSnapshotInfos <- hashes.traverse {
+        case (height, hash) =>
+          snapshotInfoStorage.getFile(hash).rethrowT.map {
+            snapshotInfoCloudStorage.write(height, hash, _).rethrowT
+          }
+      }
+
+      _ <- uploadSnapshots.sequence
+      _ <- uploadSnapshotInfos.sequence
+
       _ <- if (toSend.nonEmpty) {
         val max = maxHeight(toSend)
         lastSentHeight.modify(_ => (max, ()))
@@ -349,7 +362,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def rewardMajoritySnapshots(): EitherT[F, Throwable, Unit] =
     for {
       majorityState <- lastMajorityState.get.attemptT
-      lastHeight <- lastRewardedHeight.get.attemptT
+      lastHeight <- rewardsManager.getLastRewardedHeight().attemptT
 
       _ <- EitherT.liftF(logger.debug(s"Last rewarded height is $lastHeight. Rewarding majority snapshots above."))
 
@@ -362,8 +375,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }
 
       _ <- snapshotsToReward.traverse {
-        case (height, snapshot) =>
-          rewardsManager.attemptReward(snapshot, height) >> lastRewardedHeight.modify(_ => (height, ()))
+        case (height, snapshot) => rewardsManager.attemptReward(snapshot, height)
       }.attemptT
     } yield ()
 
@@ -541,7 +553,8 @@ object RedownloadService {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
-    cloudStorage: CloudStorageOld[F],
+    snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
+    snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
     rewardsManager: RewardsManager[F],
     metrics: Metrics
   ): RedownloadService[F] =
@@ -555,7 +568,8 @@ object RedownloadService {
       snapshotInfoStorage,
       snapshotService,
       checkpointAcceptanceService,
-      cloudStorage,
+      snapshotCloudStorage,
+      snapshotInfoCloudStorage,
       rewardsManager,
       metrics
     )

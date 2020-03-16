@@ -10,7 +10,6 @@ import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials}
 import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
 import com.amazonaws.util.IOUtils
-import org.constellation.domain.storage.FileStorage
 import org.constellation.infrastructure.cloud.{CannotGetBucket, CannotGetService}
 import org.constellation.serializer.KryoSerializer
 
@@ -25,7 +24,7 @@ class S3Storage[F[_], A](
   dir: Option[String] = None
 )(
   implicit F: Concurrent[F]
-) extends FileStorage[F, A] {
+) extends CloudStorage[F, A] {
 
   def bucketExists(): F[Boolean] =
     getService().flatMap(checkBucket)
@@ -86,13 +85,19 @@ class S3Storage[F[_], A](
       KryoSerializer.serialize[A](a)
     }.attemptT.flatMap(write(path, _))
 
-  override def write(path: String, file: File): EitherT[F, Throwable, Unit] =
+  override def write(file: File): EitherT[F, Throwable, Unit] =
     for {
       s <- getService().attemptT
       _ <- F.delay {
-        s.putObject(bucket, getDirPath(path), file.toJava)
+        s.putObject(bucket, getDirPath(file.name), file.toJava)
       }.attemptT
     } yield ()
+
+  override def write(path: String, file: File): EitherT[F, Throwable, Unit] =
+    F.delay {
+      file.loadBytes
+    }.attemptT
+      .flatMap(write(path, _))
 
   override def delete(path: String): EitherT[F, Throwable, Unit] =
     for {

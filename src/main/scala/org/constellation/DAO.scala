@@ -27,11 +27,15 @@ import org.constellation.domain.transaction.{
   TransactionValidator
 }
 import org.constellation.genesis.GenesisObservationWriter
-import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
-import org.constellation.infrastructure.rewards.EigenTrustLocalStorage
-import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
+import org.constellation.infrastructure.rewards.{EigenTrustLocalStorage, EigenTrustS3Storage}
+import org.constellation.infrastructure.snapshot.{
+  SnapshotInfoLocalStorage,
+  SnapshotInfoS3Storage,
+  SnapshotLocalStorage,
+  SnapshotS3Storage
+}
 import org.constellation.p2p._
 import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.NodeType.NodeType
@@ -115,19 +119,20 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
-    if (ConfigUtil.isEnabledAWSStorage) {
-      cloudStorage = new AWSStorageOld[IO](
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
-    } else if (ConfigUtil.isEnabledGCPStorage) {
-      cloudStorage = new GCPStorageOld[IO](
-        ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
-        ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
-      )
-    }
+    // TODO: Add GCP support for new Rollback!
+    //    if (ConfigUtil.isEnabledAWSStorage) {
+    //      cloudStorage = new AWSStorageOld[IO](
+    //        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+    //        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+    //        ConfigUtil.constellation.getString("storage.aws.region"),
+    //        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+    //      )
+    //    } else if (ConfigUtil.isEnabledGCPStorage) {
+    //      cloudStorage = new GCPStorageOld[IO](
+    //        ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
+    //        ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
+    //      )
+    //    }
 
     rateLimiting = new RateLimiting[IO]
 
@@ -195,6 +200,27 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     eigenTrustStorage = EigenTrustLocalStorage(eigenTrustPath)
     eigenTrustStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
+    if (ConfigUtil.isEnabledAWSStorage) {
+      snapshotCloudStorage = SnapshotS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+      snapshotInfoCloudStorage = SnapshotInfoS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+      eigenTrustCloudStorage = EigenTrustS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+    }
+
     eigenTrust = new EigenTrust[IO](id)
     rewardsManager = new RewardsManager[IO](
       eigenTrust = eigenTrust,
@@ -255,7 +281,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotInfoStorage,
       snapshotService,
       checkpointAcceptanceService,
-      cloudStorage,
+      snapshotCloudStorage,
+      snapshotInfoCloudStorage,
       rewardsManager,
       metrics
     )

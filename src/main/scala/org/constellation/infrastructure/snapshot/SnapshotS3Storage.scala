@@ -9,8 +9,6 @@ class SnapshotS3Storage[F[_]: Concurrent](accessKey: String, secretKey: String, 
     extends S3Storage[F, StoredSnapshot](accessKey, secretKey, region, bucket, Some("snapshots"))
     with HeightHashFileStorage[F, StoredSnapshot] {
 
-//  override val baseDirectoryPath: String = "snapshots"
-//  override val fileSuffix: String = "snapshot"
   override val fileSuffix: String = "snapshot"
 }
 
