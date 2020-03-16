@@ -36,13 +36,13 @@ trait HeightHashFileStorage[F[_], A] extends FileStorage[F, A] {
     delete(getHeightHashPath(height, hash))
 
   private def getHeightHashDirectory(height: Long, hash: String): String =
-    s"${height}-${hash}/"
+    s"${height}-${hash}"
 
   private def getHeightHashFileName(height: Long, hash: String): String =
-    s"${hash}-${"uniqueFileSuffix"}"
+    s"${hash}-${fileSuffix}"
 
   private def getHeightHashPath(height: Long, hash: String): String =
     s"${getHeightHashDirectory(height, hash)}/${getHeightHashFileName(height, hash)}"
 }
 
-abstract class CloudStorage[F[_], A] extends FileStorage[F, A]
+abstract class CloudStorage[F[_], A] extends FileStorage[F, A] {}

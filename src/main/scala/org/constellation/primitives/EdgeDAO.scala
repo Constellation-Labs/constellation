@@ -189,13 +189,13 @@ trait EdgeDAO {
   var genesisObservationCloudStorage: CloudStorage[IO, GenesisObservation] = _
 
   var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
-  var snapshotCloudStorage: CloudStorage[IO, StoredSnapshot] = _
+  var snapshotCloudStorage: HeightHashFileStorage[IO, StoredSnapshot] = _
 
   var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
-  var snapshotInfoCloudStorage: CloudStorage[IO, SnapshotInfo] = _
+  var snapshotInfoCloudStorage: HeightHashFileStorage[IO, SnapshotInfo] = _
 
   var eigenTrustStorage: LocalFileStorage[IO, StoredEigenTrust] = _
-  var eigenTrustCloudStorage: CloudStorage[IO, StoredEigenTrust] = _
+  var eigenTrustCloudStorage: HeightHashFileStorage[IO, StoredEigenTrust] = _
 
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _

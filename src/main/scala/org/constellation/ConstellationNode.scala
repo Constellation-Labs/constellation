@@ -21,8 +21,7 @@ import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
-import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
-import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
+import org.constellation.keytool.KeyStoreUtils
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._

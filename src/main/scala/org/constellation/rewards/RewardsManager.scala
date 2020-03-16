@@ -4,14 +4,12 @@ import cats.effect._
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Snapshot
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema.CheckpointEdge
 import org.constellation.primitives.{ChannelMessage, Schema, Transaction}
-import org.constellation.schema.Id
 import org.constellation.storage.AddressService
 import org.constellation.trust.TrustEdge
 
@@ -29,6 +27,12 @@ class RewardsManager[F[_]: Concurrent](
   private val accumulatedRewards: Ref[F, Map[String, Long]] = Ref.unsafe(Map.empty)
 
   private val logger = Slf4jLogger.getLogger[F]
+
+  private[rewards] var lastRewardedHeight: Ref[F, Long] = Ref.unsafe(-1L)
+
+  def getLastRewardedHeight(): F[Long] = lastRewardedHeight.get
+
+  def clearLastRewardedHeight(): F[Unit] = lastRewardedHeight.modify(_ => (-1L, ()))
 
   def attemptReward(snapshot: Snapshot, height: Long): F[Unit] =
     createRewardSnapshot(snapshot, height)
@@ -75,6 +79,7 @@ class RewardsManager[F[_]: Concurrent](
       }.values.toList.sequence
 
       _ <- updateAddressBalances(normalizedDistribution)
+      _ <- lastRewardedHeight.modify(_ => (rewardSnapshot.height, ()))
 
       _ <- logger.debug(
         s"[Rewards] Rewarding by ${rewardSnapshot.hash} succeeded."
