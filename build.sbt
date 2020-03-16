@@ -213,6 +213,8 @@ lazy val root = (project in file("."))
 lazy val keytool = (project in file("keytool"))
   .enablePlugins(BuildInfoPlugin)
   .settings(
+    commonSettings,
+    name := "keytool",
     buildInfoKeys := Seq[BuildInfoKey](
       version
     ),
@@ -228,6 +230,8 @@ lazy val wallet = (project in file("wallet"))
   .enablePlugins(BuildInfoPlugin)
   .dependsOn(keytool)
   .settings(
+    commonSettings,
+    name := "wallet",
     buildInfoKeys := Seq[BuildInfoKey](
       version
     ),
