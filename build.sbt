@@ -21,7 +21,7 @@ javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
 // javacOptions := Seq("-XX:MaxMetaspaceSize=256m")
 
-lazy val _version = "1.0.12"
+lazy val _version = "2.0.0-rc"
 
 lazy val versions = new {
   val akka = "2.5.25"
