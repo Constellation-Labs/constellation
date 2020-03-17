@@ -27,6 +27,7 @@ import org.constellation.domain.transaction.{
   TransactionValidator
 }
 import org.constellation.genesis.GenesisObservationWriter
+import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.infrastructure.rewards.{EigenTrustLocalStorage, EigenTrustS3Storage}
@@ -200,25 +201,38 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     eigenTrustStorage = EigenTrustLocalStorage(eigenTrustPath)
     eigenTrustStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-    if (ConfigUtil.isEnabledAWSStorage) {
-      snapshotCloudStorage = SnapshotS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
-      snapshotInfoCloudStorage = SnapshotInfoS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
-      eigenTrustCloudStorage = EigenTrustS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
+    if (ConfigUtil.isEnabledCloudStorage) {
+      if (ConfigUtil.isEnabledAWSStorage) {
+        snapshotCloudStorage = SnapshotS3Storage(
+          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+          ConfigUtil.constellation.getString("storage.aws.region"),
+          ConfigUtil.constellation.getString("storage.aws.bucket-name")
+        )
+        snapshotInfoCloudStorage = SnapshotInfoS3Storage(
+          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+          ConfigUtil.constellation.getString("storage.aws.region"),
+          ConfigUtil.constellation.getString("storage.aws.bucket-name")
+        )
+        eigenTrustCloudStorage = EigenTrustS3Storage(
+          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+          ConfigUtil.constellation.getString("storage.aws.region"),
+          ConfigUtil.constellation.getString("storage.aws.bucket-name")
+        )
+        cloudStorage = new AWSStorageOld[IO](
+          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+          ConfigUtil.constellation.getString("storage.aws.region"),
+          ConfigUtil.constellation.getString("storage.aws.bucket-name")
+        )
+      } else if (ConfigUtil.isEnabledGCPStorage) {
+        cloudStorage = new GCPStorageOld[IO](
+          ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
+          ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
+        )
+      }
     }
 
     eigenTrust = new EigenTrust[IO](id)
