@@ -65,7 +65,9 @@ case class ChangePeerState(id: Id, state: NodeState)
 
 case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
 
-case class MajorityHeight(joined: Option[Long], left: Option[Long] = None)
+case class MajorityHeight(joined: Option[Long], left: Option[Long] = None) {
+  def isFinite = joined.isDefined && left.isDefined
+}
 
 object MajorityHeight {
   def genesis: MajorityHeight = MajorityHeight(Some(0L), None)
@@ -300,7 +302,9 @@ class Cluster[F[_]](
                   "nodeState"
                 )
                 id = sig.hashSignature.id
-                existingMajorityHeight <- getPeerInfo.map(_.get(id).map(_.majorityHeight))
+                existingMajorityHeight <- getPeerInfo.map(
+                  _.get(id).map(_.majorityHeight).filter(_.head.isFinite)
+                )
                 peerMetadata = PeerMetadata(
                   request.host,
                   request.port,

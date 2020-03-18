@@ -57,7 +57,11 @@ assemble() {
 upload() {
   checkTag
 
-  jarName="constellation-assembly-1.0.12.jar"
+  pushd $DIR/../../ > /dev/null
+  version=$(cat build.sbt | grep 'version\ \= \".*\"' | cut -d'"' -f2)
+  popd > /dev/null
+
+  jarName="constellation-assembly-$version.jar"
 
   echo -e "${blu} Uploading ${yel}$jarName${blu} to S3 bucket${clr} as ${yel}dag-$TAG.jar${clr}"
 
