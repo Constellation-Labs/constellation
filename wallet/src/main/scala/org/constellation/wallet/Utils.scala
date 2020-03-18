@@ -40,34 +40,34 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     this.registerClasses(kryo)
 
   def registerClasses(kryo: Kryo): Unit = {
-    kryo.register(classOf[Transaction])
-    kryo.register(classOf[ObservationEdge])
-    kryo.register(classOf[SignedObservationEdge])
-    kryo.register(classOf[TypedEdgeHash])
-    kryo.register(classOf[Edge[TransactionEdgeData]])
-    kryo.register(classOf[SignatureBatch])
-    kryo.register(classOf[HashSignature])
-    kryo.register(classOf[Enumeration#Value])
-    kryo.register(classOf[TransactionEdgeData])
-    kryo.register(classOf[LastTransactionRef])
+    kryo.register(classOf[Transaction], 1001)
+    kryo.register(classOf[ObservationEdge], 1002)
+    kryo.register(classOf[SignedObservationEdge], 1003)
+    kryo.register(classOf[TypedEdgeHash], 1004)
+    kryo.register(classOf[Edge[TransactionEdgeData]], 1005)
+    kryo.register(classOf[SignatureBatch], 1006)
+    kryo.register(classOf[HashSignature], 1007)
+    kryo.register(classOf[Enumeration#Value], 1008)
+    kryo.register(classOf[TransactionEdgeData], 1009)
+    kryo.register(classOf[LastTransactionRef], 1010)
 
-    kryo.register(classOf[Id])
+    kryo.register(classOf[Id], 1011)
 
-    kryo.register(classOf[Array[Byte]])
-    kryo.register(classOf[Option[Long]])
-    kryo.register(classOf[String])
-    kryo.register(classOf[Boolean])
+    kryo.register(classOf[Array[Byte]], 1012)
+    kryo.register(classOf[Option[Long]], 1013)
+    kryo.register(classOf[String], 1014)
+    kryo.register(classOf[Boolean], 1015)
 
 //    kryo.register(Class.forName("org.constellation.wallet.EdgeHashType$EdgeHashType$"))
-    kryo.register(EdgeHashType.getClass)
-    kryo.register(Class.forName("scala.Enumeration$Val"))
+    kryo.register(EdgeHashType.getClass, 1016)
+    kryo.register(Class.forName("scala.Enumeration$Val"), 1017)
 
-    kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"))
-    kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))
-    kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))
-    kryo.register(Class.forName("scala.None$"))
-    kryo.register(Class.forName("scala.collection.immutable.Nil$"))
-    kryo.register(Class.forName("scala.collection.immutable.Map$EmptyMap$"))
+    kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"), 1018)
+    kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"), 1019)
+    kryo.register(Class.forName("scala.collection.immutable.$colon$colon"), 1020)
+    kryo.register(Class.forName("scala.None$"), 1021)
+    kryo.register(Class.forName("scala.collection.immutable.Nil$"), 1022)
+    kryo.register(Class.forName("scala.collection.immutable.Map$EmptyMap$"), 1023)
   }
 }
 
@@ -79,17 +79,18 @@ object KryoSerializer {
     GUESS_THREADS_PER_CORE * cores
   }
 
-  val kryoPool: KryoPool = KryoPool.withBuffer(
-    guessThreads,
+  val kryoPool = KryoPool.withByteArrayOutputStream(
+    10,
     new ScalaKryoInstantiator()
       .setRegistrationRequired(true)
-      .withRegistrar(new ConstellationKryoRegistrar()),
-    32,
-    -1
+      .withRegistrar(new ConstellationKryoRegistrar())
   )
 
   def serializeAnyRef(anyRef: AnyRef): Array[Byte] =
     kryoPool.toBytesWithClass(anyRef)
+
+  def deserializeCast[T](bytes: Array[Byte]): T =
+    kryoPool.fromBytes(bytes).asInstanceOf[T]
 }
 
 object Hashable {
@@ -112,7 +113,8 @@ case class TransactionEdgeData(
 object EdgeHashType extends Enumeration {
   type EdgeHashType = Value
 
-  val AddressHash, TransactionDataHash, TransactionHash = Value
+  val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash, ValidationHash,
+    BundleDataHash, ChannelMessageDataHash = Value
 }
 
 case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)

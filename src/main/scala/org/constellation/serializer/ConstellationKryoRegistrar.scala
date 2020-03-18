@@ -16,6 +16,7 @@ import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
 import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
 import org.constellation.rewards.EigenTrustAgents
 
 import scala.collection.SortedMap
@@ -58,25 +59,24 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[AddressCacheData])
     kryo.register(classOf[TransactionCacheData])
     kryo.register(classOf[CheckpointCache])
-    kryo.register(classOf[Transaction])
+    kryo.register(classOf[Transaction], 1001)
     kryo.register(classOf[TransactionGossip])
-    kryo.register(classOf[Edge[TransactionEdgeData]])
+    kryo.register(classOf[Edge[TransactionEdgeData]], 1005)
     kryo.register(classOf[Edge[CheckpointEdgeData]])
-    kryo.register(classOf[SignatureBatch])
-    kryo.register(classOf[HashSignature])
-    kryo.register(classOf[SignedObservationEdge])
-    kryo.register(classOf[ObservationEdge])
+    kryo.register(classOf[SignatureBatch], 1006)
+    kryo.register(classOf[HashSignature], 1007)
+    kryo.register(classOf[SignedObservationEdge], 1003)
+    kryo.register(classOf[ObservationEdge], 1002)
     kryo.register(classOf[CheckpointBlock])
     kryo.register(classOf[PeerNotification])
     kryo.register(classOf[Seq[PeerNotification]])
-    kryo.register(classOf[TypedEdgeHash])
-    //  kryo.register(classOf[EdgeHashType])
-    kryo.register(classOf[Enumeration#Value])
-    kryo.register(classOf[TransactionEdgeData])
+    kryo.register(classOf[TypedEdgeHash], 1004)
+    kryo.register(classOf[Enumeration#Value], 1008)
+    kryo.register(classOf[TransactionEdgeData], 1009)
     kryo.register(classOf[CheckpointEdgeData])
     kryo.register(classOf[Snapshot])
     kryo.register(classOf[GenesisObservation])
-    kryo.register(classOf[LastTransactionRef])
+    kryo.register(classOf[LastTransactionRef], 1010)
     kryo.register(classOf[ObservationData])
     kryo.register(classOf[CheckpointBlockWithMissingParents])
     kryo.register(classOf[CheckpointBlockWithMissingSoe])
@@ -91,13 +91,13 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Seq[String]])
 
     kryo.register(classOf[SerializedUDPMessage])
-    kryo.register(classOf[Id])
+    kryo.register(classOf[Id], 1011)
 
-    kryo.register(classOf[Array[Byte]])
+    kryo.register(classOf[Array[Byte]], 1012)
     kryo.register(classOf[Array[Array[Byte]]])
-    kryo.register(classOf[Option[Long]])
-    kryo.register(classOf[String])
-    kryo.register(classOf[Boolean])
+    kryo.register(classOf[Option[Long]], 1013)
+    kryo.register(classOf[String], 1014)
+    kryo.register(classOf[Boolean], 1015)
 
     // EigenTrustJ
     kryo.register(classOf[DefaultRandomGenerator])
@@ -115,16 +115,17 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("scala.Predef$$anon$2"))
     kryo.register(scala.math.Ordering.String.getClass)
 
-    kryo.register(Class.forName("org.constellation.primitives.Schema$EdgeHashType$"))
-    kryo.register(Class.forName("scala.Enumeration$Val"))
-    kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"))
-    kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"))
+    kryo.register(EdgeHashType.getClass, 1016)
+
+    kryo.register(Class.forName("scala.Enumeration$Val"), 1017)
+    kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"), 1018)
+    kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"), 1019)
     kryo.register(Class.forName("scala.collection.IndexedSeqLike$Elements"))
-    kryo.register(Class.forName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Class.forName("scala.collection.immutable.$colon$colon"), 1020)
     kryo.register(Class.forName("akka.util.ByteString$ByteString1C"))
-    kryo.register(Class.forName("scala.None$"))
-    kryo.register(Class.forName("scala.collection.immutable.Nil$"))
-    kryo.register(Class.forName("scala.collection.immutable.Map$EmptyMap$"))
+    kryo.register(Class.forName("scala.None$"), 1021)
+    kryo.register(Class.forName("scala.collection.immutable.Nil$"), 1022)
+    kryo.register(Class.forName("scala.collection.immutable.Map$EmptyMap$"), 1023)
 
   }
 }
