@@ -2,10 +2,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-### Changed
-- Filter out offline peers for data resolving #947
 
+## [v2.0.2-rc] - 2020-03-18
 ### Fixed
+- Filter out offline peers for data resolving #947
 - Fixed transaction hash integrity between wallet and node #946
 - Historical join/leave heights #935
 
