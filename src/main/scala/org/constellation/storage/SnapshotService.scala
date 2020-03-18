@@ -116,7 +116,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- writeSnapshotInfoToDisk()
       _ <- writeEigenTrustToDisk(snapshot.snapshot)
 
-      _ <- EitherT.liftF(removeLeavingPeers())
+      _ <- EitherT.liftF(markLeavingPeersAsOffline())
 
       created = SnapshotCreated(
         nextSnapshot.hash,
@@ -522,8 +522,10 @@ class SnapshotService[F[_]: Concurrent](
       )
     } yield ()
 
-  private def removeLeavingPeers(): F[Unit] =
-    LiftIO[F].liftIO(dao.leavingPeers.flatMap(_.values.toList.traverse(dao.cluster.removePeer))).void
+  private def markLeavingPeersAsOffline(): F[Unit] =
+    LiftIO[F]
+      .liftIO(dao.leavingPeers.flatMap(_.values.toList.map(_.client.id).traverse(dao.cluster.markOfflinePeer)))
+      .void
 }
 
 object SnapshotService {

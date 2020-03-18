@@ -3,6 +3,7 @@ package org.constellation.consensus
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.implicits._
 import com.softwaremill.sttp.SttpBackend
@@ -52,8 +53,8 @@ class ConsensusRouteTest
   "participate route  " - {
     val data = RoundDataRemote(
       ConsensusManager.generateRoundId,
-      Set.empty[(PeerMetadata, MajorityHeight)],
-      Set.empty[(PeerMetadata, MajorityHeight)],
+      Set.empty[(PeerMetadata, NonEmptyList[MajorityHeight])],
+      Set.empty[(PeerMetadata, NonEmptyList[MajorityHeight])],
       FacilitatorId(Id("foo")),
       List.empty[Transaction],
       TipSoe(Seq.empty[SignedObservationEdge], 2L.some),

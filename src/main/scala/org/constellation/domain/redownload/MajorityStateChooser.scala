@@ -98,7 +98,7 @@ class MajorityStateChooser(id: Id) {
   private def getProposersCount(height: Long, peersCache: PeersCache): Int =
     peersCache.count {
       case (_, majorityHeight) => {
-        majorityHeight.joined.exists(_ < height) && majorityHeight.left.forall(_ >= height)
+        MajorityHeight.isHeightBetween(height)(majorityHeight)
       }
     }
 
@@ -113,7 +113,7 @@ class MajorityStateChooser(id: Id) {
       case (id, proposals) =>
         (id, proposals.filter {
           case (height, _) =>
-            peersCache.get(id).exists(m => m.joined.exists(_ < height) && m.left.forall(_ >= height))
+            peersCache.get(id).exists(MajorityHeight.isHeightBetween(height))
         })
     }
 
