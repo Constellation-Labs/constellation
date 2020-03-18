@@ -40,14 +40,12 @@ case class PeerData(
 
   def updateJoiningHeight(height: Long): PeerData =
     this.copy(
-      majorityHeight =
-        NonEmptyList.fromListUnsafe(majorityHeight.init ++ List(majorityHeight.last.copy(joined = Some(height))))
+      majorityHeight = NonEmptyList.one(majorityHeight.head.copy(joined = Some(height))) ++ majorityHeight.tail
     )
 
   def updateLeavingHeight(height: Long): PeerData =
     this.copy(
-      majorityHeight =
-        NonEmptyList.fromListUnsafe(majorityHeight.init ++ List(majorityHeight.last.copy(left = Some(height))))
+      majorityHeight = NonEmptyList.one(majorityHeight.head.copy(left = Some(height))) ++ majorityHeight.tail
     )
 
   def canBeRemoved(lowestMajorityHeight: Long): Boolean =
@@ -314,7 +312,7 @@ class Cluster[F[_]](
                 _ <- F.delay { client.id = id }
                 majorityHeight = MajorityHeight(request.majorityHeight)
                 majorityHeights = existingMajorityHeight
-                  .map(_.append(majorityHeight))
+                  .map(_.prepend(majorityHeight))
                   .getOrElse(NonEmptyList.one(majorityHeight))
                 peerData = PeerData(peerMetadata, client, majorityHeights)
                 _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(client))
