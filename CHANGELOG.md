@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Fixed transaction hash integrity between wallet and node #946
+- Historical join/leave heights #935
 
 ## [v2.0.1-rc] - 2020-03-17
 ### Changed
