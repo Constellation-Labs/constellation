@@ -10,7 +10,7 @@ import org.constellation.DAO
 import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, RequestTimeoutOnResolving}
-import org.constellation.primitives.Schema.{CheckpointCache, SignedObservationEdge}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState, SignedObservationEdge}
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.Logging._
 import org.constellation.util.{Distance, PeerApiClient}
@@ -398,7 +398,8 @@ class DataResolver {
 
   private[p2p] def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
     val peers = for {
-      ready <- dao.peerInfo
+      all <- dao.peerInfo
+      ready = all.filter { case (_, peer) => NodeState.isNotOffline(peer.peerMetadata.nodeState) }
       leaving <- dao.leavingPeers
     } yield (ready ++ leaving)
     peers.map(_.map(p => PeerApiClient(p._1, p._2.client)).toList)
