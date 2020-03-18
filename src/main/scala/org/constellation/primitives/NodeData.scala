@@ -47,6 +47,7 @@ trait NodeData {
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
 
   def externalHostString: String = nodeConfig.hostName
+
   def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort
 
   def snapshotPath: String =
@@ -55,10 +56,10 @@ trait NodeData {
   def snapshotInfoPath: String =
     s"tmp/${id.medium}/snapshot_infos"
 
-  def genesisObservationPath: File =
-    File(s"tmp/${id.medium}/genesis/genesisObservation")
+  def genesisObservationPath: String =
+    s"tmp/${id.medium}/genesis"
 
-  def eigenTrustPath: String =
+  def rewardsPath: String =
     s"tmp/${id.medium}/eigen_trust"
 
   def updateKeyPair(kp: KeyPair): Unit =

@@ -237,7 +237,8 @@ object Schema {
     ancestorBalances: Map[String, Long] = Map(),
     ancestorReputations: Map[String, Long] = Map(),
     //    recentTransactions: Seq[String] = Seq(),
-    balanceByLatestSnapshot: Long = 0L
+    balanceByLatestSnapshot: Long = 0L,
+    rewardsBalance: Long = 0L
   ) {
 
     def plus(previous: AddressCacheData): AddressCacheData =

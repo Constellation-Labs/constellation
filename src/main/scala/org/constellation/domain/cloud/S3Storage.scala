@@ -16,7 +16,7 @@ import org.constellation.serializer.KryoSerializer
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
-class S3Storage[F[_], A](
+abstract class S3Storage[F[_], A](
   accessKey: String,
   secretKey: String,
   region: String,
@@ -113,7 +113,10 @@ class S3Storage[F[_], A](
       summaries <- F.delay {
         s.listObjectsV2(bucket, dir.getOrElse("")).getObjectSummaries
       }.attemptT
-      fileNames = summaries.asScala.toList.map(_.getKey)
+      fileNames = summaries.asScala.toList
+        .map(_.getKey)
+        .map(_.stripPrefix(dir.map(d => s"${d}/").getOrElse("")))
+        .map(_.split("/").head)
     } yield fileNames
 
   private def checkBucket(service: AmazonS3) =

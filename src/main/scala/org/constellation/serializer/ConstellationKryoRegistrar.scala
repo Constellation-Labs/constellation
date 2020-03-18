@@ -15,8 +15,12 @@ import org.constellation.util.{HashSignature, SignatureBatch}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
-import org.constellation.domain.rewards.StoredEigenTrust
 import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
+import org.constellation.rewards.EigenTrustAgents
+import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import cern.jet.random.engine.MersenneTwister
+import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
+import org.constellation.domain.rewards.StoredRewards
 import org.constellation.rewards.EigenTrustAgents
 
 import scala.collection.SortedMap
@@ -107,7 +111,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("[[I")) // To make int[][] serializable
     kryo.register(classOf[EigenTrustJ])
     kryo.register(classOf[EigenTrustAgents])
-    kryo.register(classOf[StoredEigenTrust])
+    kryo.register(classOf[StoredRewards])
 
     kryo.register(classOf[AddressMetaData])
 

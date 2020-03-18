@@ -18,7 +18,7 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
-import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.{FileStorage, LocalFileStorage}
 import org.constellation.domain.transaction.{
@@ -27,7 +27,7 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
-import org.constellation.genesis.GenesisObservationWriter
+import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.p2p.{Cluster, JoiningPeerValidator}
@@ -185,8 +185,8 @@ trait EdgeDAO {
   var checkpointParentService: CheckpointParentService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
 
-  var genesisObservationStorage: FileStorage[IO, GenesisObservation] = _
-  var genesisObservationCloudStorage: CloudStorage[IO, GenesisObservation] = _
+  var genesisObservationStorage: GenesisObservationLocalStorage[IO] = _
+  var genesisObservationCloudStorage: GenesisObservationS3Storage[IO] = _
 
   var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
   var snapshotCloudStorage: HeightHashFileStorage[IO, StoredSnapshot] = _
@@ -194,8 +194,8 @@ trait EdgeDAO {
   var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
   var snapshotInfoCloudStorage: HeightHashFileStorage[IO, SnapshotInfo] = _
 
-  var eigenTrustStorage: LocalFileStorage[IO, StoredEigenTrust] = _
-  var eigenTrustCloudStorage: HeightHashFileStorage[IO, StoredEigenTrust] = _
+  var rewardsStorage: LocalFileStorage[IO, StoredRewards] = _
+  var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
 
   var snapshotService: SnapshotService[IO] = _
   var concurrentTipService: ConcurrentTipService[IO] = _
@@ -210,7 +210,6 @@ trait EdgeDAO {
   var downloadService: DownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
-  var genesisObservationWriter: GenesisObservationWriter[IO] = _
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _
   var consensusWatcher: ConsensusWatcher = _

@@ -1,16 +1,15 @@
 package org.constellation.primitives
 
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.util.AccountBalance
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 object Genesis extends StrictLogging {
 
@@ -132,13 +131,24 @@ object Genesis extends StrictLogging {
     dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
 
     // TODO: Get rid of unsafeRunSync
-    dao.genesisObservationWriter
+
+    dao.genesisObservationStorage
       .write(go)
       .fold(
-        err => logger.error(s"Cannot write genesis observation ${err.exceptionMessage}"),
+        err => logger.error(s"Cannot write genesis observation ${err.getMessage}"),
         _ => logger.debug("Genesis observation saved successfully")
       )
       .unsafeRunSync()
+
+    if (ConfigUtil.isEnabledCloudStorage) {
+      dao.genesisObservationCloudStorage
+        .write(go)
+        .fold(
+          err => logger.error(s"Cannot write genesis observation to cloud ${err.getMessage}"),
+          _ => logger.debug("Genesis observation saved successfully to cloud")
+        )
+        .unsafeRunSync()
+    }
   }
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
