@@ -1,5 +1,6 @@
 package org.constellation.domain.p2p
 
+import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO, Timer}
 import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -30,14 +31,14 @@ class PeerHealthCheckTest
   val peer1 = PeerData(
     mock[PeerMetadata],
     mock[APIClient],
-    MajorityHeight.genesis,
+    NonEmptyList.one(MajorityHeight.genesis),
     Seq.empty
   )
 
   val peer2 = PeerData(
     mock[PeerMetadata],
     mock[APIClient],
-    MajorityHeight.genesis,
+    NonEmptyList.one(MajorityHeight.genesis),
     Seq.empty
   )
 

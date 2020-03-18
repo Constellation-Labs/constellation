@@ -1,7 +1,7 @@
 package org.constellation.domain.redownload
 
 import cats.NonEmptyParallel
-import cats.data.EitherT
+import cats.data.{EitherT, NonEmptyList}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.implicits._
@@ -14,7 +14,7 @@ import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.Cluster
-import org.constellation.domain.snapshot.{SnapshotInfo}
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.FileStorage
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.primitives.Schema.NodeState
@@ -580,7 +580,7 @@ object RedownloadService {
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type SnapshotProposalsAtHeight = Map[Long, SnapshotProposal]
   type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
-  type PeersCache = Map[Id, MajorityHeight]
+  type PeersCache = Map[Id, NonEmptyList[MajorityHeight]]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 

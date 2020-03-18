@@ -2,6 +2,7 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
+import cats.data.NonEmptyList
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.implicits._
@@ -33,9 +34,25 @@ case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
   client: APIClient,
-  majorityHeight: MajorityHeight,
+  majorityHeight: NonEmptyList[MajorityHeight],
   notification: Seq[PeerNotification] = Seq.empty
-)
+) {
+
+  def updateJoiningHeight(height: Long): PeerData =
+    this.copy(
+      majorityHeight =
+        NonEmptyList.fromListUnsafe(majorityHeight.init ++ List(majorityHeight.last.copy(joined = Some(height))))
+    )
+
+  def updateLeavingHeight(height: Long): PeerData =
+    this.copy(
+      majorityHeight =
+        NonEmptyList.fromListUnsafe(majorityHeight.init ++ List(majorityHeight.last.copy(left = Some(height))))
+    )
+
+  def canBeRemoved(lowestMajorityHeight: Long): Boolean =
+    majorityHeight.forall(_.left.exists(_ < lowestMajorityHeight))
+}
 
 case class PendingRegistration(ip: String, request: PeerRegistrationRequest)
 
@@ -54,6 +71,12 @@ case class MajorityHeight(joined: Option[Long], left: Option[Long] = None)
 
 object MajorityHeight {
   def genesis: MajorityHeight = MajorityHeight(Some(0L), None)
+
+  def isHeightBetween(height: Long, majorityHeight: MajorityHeight): Boolean =
+    majorityHeight.joined.exists(_ < height) && majorityHeight.left.forall(_ >= height)
+
+  def isHeightBetween(height: Long)(majorityHeights: NonEmptyList[MajorityHeight]): Boolean =
+    majorityHeights.exists(isHeightBetween(height, _))
 }
 
 object PeerState extends Enumeration {
@@ -125,7 +148,7 @@ class Cluster[F[_]](
           (
             m.updated(
               peerId,
-              peerData.copy(majorityHeight = peerData.majorityHeight.copy(joined = Some(joinedHeight.height)))
+              peerData.updateJoiningHeight(joinedHeight.height)
             ),
             ()
           )
@@ -220,7 +243,7 @@ class Cluster[F[_]](
 
         _ <- F.delay(client.id = pm.id)
 
-        _ <- updatePeerInfo(PeerData(pm, client, MajorityHeight(None))) // TODO: mwadon
+        _ <- updatePeerInfo(PeerData(pm, client, NonEmptyList.of[MajorityHeight](MajorityHeight(None)))) // TODO: mwadon
       } yield (),
       "cluster_addPeerMetadata"
     )
@@ -268,33 +291,34 @@ class Cluster[F[_]](
               logger.debug(s"Valid peer signature $request $authSignRequest $sig")
           }.flatMap {
             sig =>
-              val state = withMetric(
-                client.getNonBlockingF[F, NodeStateInfo]("state")(C),
-                "nodeState"
-              )
+              val updateJoiningHeight =
+                if (request.isGenesis)
+                  ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining as genesis peer")
+                else F.unit
 
-              state.flatMap {
-                s =>
-                  val id = sig.hashSignature.id
-                  val add = PeerMetadata(
-                    request.host,
-                    request.port,
-                    id,
-                    nodeState = s.nodeState,
-                    auxAddresses = s.addresses,
-                    resourceInfo = request.resourceInfo
-                  )
-                  client.id = id
-                  val peerData = PeerData(add, client, MajorityHeight(request.majorityHeight))
-
-                  val updateJoiningHeight =
-                    if (request.isGenesis)
-                      ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining as genesis peer")
-                    else F.unit
-
-                  updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(client))
-              }.void
-
+              for {
+                state <- withMetric(
+                  client.getNonBlockingF[F, NodeStateInfo]("state")(C),
+                  "nodeState"
+                )
+                id = sig.hashSignature.id
+                existingMajorityHeight <- getPeerInfo.map(_.get(id).map(_.majorityHeight))
+                peerMetadata = PeerMetadata(
+                  request.host,
+                  request.port,
+                  id,
+                  nodeState = state.nodeState,
+                  auxAddresses = state.addresses,
+                  resourceInfo = request.resourceInfo
+                )
+                _ <- F.delay { client.id = id }
+                majorityHeight = MajorityHeight(request.majorityHeight)
+                majorityHeights = existingMajorityHeight
+                  .map(_.append(majorityHeight))
+                  .getOrElse(NonEmptyList.one(majorityHeight))
+                peerData = PeerData(peerMetadata, client, majorityHeights)
+                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(client))
+              } yield ()
           }.handleErrorWith { err =>
             logger.warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
               dao.metrics.incrementMetricAsync[F]("peerSignatureRequestFailed")
@@ -331,10 +355,9 @@ class Cluster[F[_]](
         p <- peers.get
         _ <- p.get(peerUnregister.id).traverse { peer =>
           updatePeerInfo(
-            peer.copy(
-              peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Leaving),
-              majorityHeight = peer.majorityHeight.copy(left = Some(peerUnregister.majorityHeight))
-            )
+            peer
+              .updateLeavingHeight(peerUnregister.majorityHeight)
+              .copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Leaving))
           )
         }
       } yield (),
@@ -400,10 +423,9 @@ class Cluster[F[_]](
           .traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
         _ <- peer
           .traverse(peer => {
-            val peerData = peer.copy(
-              peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline),
-              majorityHeight = peer.majorityHeight.copy(left = Some(majorityHeight))
-            )
+            val peerData = peer
+              .updateLeavingHeight(majorityHeight)
+              .copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
             peers.modify(p => (p + (peerData.client.id -> peerData), p))
           })
         _ <- updateMetrics()
@@ -416,7 +438,7 @@ class Cluster[F[_]](
     logThread(
       LiftIO[F]
         .liftIO(dao.redownloadService.lowestMajorityHeight)
-        .map(height => pd.majorityHeight.left.exists(_ > height))
+        .map(height => pd.canBeRemoved(height))
         .ifM(
           for {
             p <- peers.get

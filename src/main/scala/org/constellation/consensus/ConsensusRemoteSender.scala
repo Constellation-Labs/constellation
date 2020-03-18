@@ -3,6 +3,7 @@ package org.constellation.consensus
 import java.net.SocketTimeoutException
 import java.security.KeyPair
 
+import cats.data.NonEmptyList
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import com.softwaremill.sttp.Response
@@ -98,8 +99,8 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
 case class RoundDataRemote(
   roundId: RoundId,
-  peers: Set[(PeerMetadata, MajorityHeight)],
-  lightPeers: Set[(PeerMetadata, MajorityHeight)],
+  peers: Set[(PeerMetadata, NonEmptyList[MajorityHeight])],
+  lightPeers: Set[(PeerMetadata, NonEmptyList[MajorityHeight])],
   facilitatorId: FacilitatorId,
   transactions: List[Transaction],
   tipsSOE: TipSoe,
