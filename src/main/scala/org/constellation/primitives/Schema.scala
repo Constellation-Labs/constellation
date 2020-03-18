@@ -70,6 +70,8 @@ object Schema {
 
     def isNotOffline(current: NodeState): Boolean = !offlineStates.contains(current)
 
+    def isInvalidForJoining(current: NodeState): Boolean = invalidForJoining.contains(current)
+
     def canActAsJoiningSource(current: NodeState): Boolean = all.diff(invalidForJoining).contains(current)
 
     def canActAsDownloadSource(current: NodeState): Boolean = validForLettingOthersDownload.contains(current)
