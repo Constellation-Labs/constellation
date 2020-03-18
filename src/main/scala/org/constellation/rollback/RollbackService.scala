@@ -1,110 +1,144 @@
 package org.constellation.rollback
 
 import cats.data.EitherT
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
-import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
+import org.constellation.{ConfigUtil, DAO}
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.domain.cloud.HeightHashFileStorage
+import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.LocalFileStorage
+import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.Genesis
 import org.constellation.primitives.Schema.GenesisObservation
-import org.constellation.rewards.{RewardSnapshot, RewardsManager}
+import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
+
+case class RollbackData(
+  snapshotInfo: SnapshotInfo,
+  storedSnapshot: StoredSnapshot,
+  genesisObservation: GenesisObservation,
+  storedRewards: StoredRewards
+)
 
 class RollbackService[F[_]: Concurrent](
   dao: DAO,
   rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F],
   rollbackLoader: RollbackLoader,
-  rewardsManager: RewardsManager[F]
+  rewardsManager: RewardsManager[F],
+  eigenTrust: EigenTrust[F],
+  snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
+  snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
+  snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
+  snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
+  rewardsLocalStorage: LocalFileStorage[F, StoredRewards],
+  rewardsCloudStorage: HeightHashFileStorage[F, StoredRewards],
+  genesisObservationLocalStorage: GenesisObservationLocalStorage[F],
+  genesisObservationCloudStorage: GenesisObservationS3Storage[F],
+  redownloadService: RedownloadService[F],
+  cluster: Cluster[F]
 )(implicit C: ContextShift[F]) {
+  private val logger = Slf4jLogger.getLogger[F]
+  private val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  val logger = Slf4jLogger.getLogger[F]
-
-  type RollbackData = (Seq[StoredSnapshot], SnapshotInfo, GenesisObservation)
-
-  def validateAndRestoreFromSnapshotInfoOnly(): EitherT[F, RollbackException, Unit] =
+  def restore(): EitherT[F, Throwable, Unit] =
     for {
-      snapshotInfo <- EitherT.fromEither[F](rollbackLoader.loadSnapshotInfoFromFile())
-      _ <- EitherT.liftF(logger.info("SnapshotInfo file loaded"))
-      _ <- EitherT.liftF(acceptSnapshotInfo(snapshotInfo))
-      _ <- EitherT.liftF(logger.info("SnapshotInfo restored"))
+      _ <- logger.debug("Performing rollback by finding the highest snapshot in the cloud.").attemptT
+      highest <- getHighest()
+      _ <- logger.debug(s"Max height found: $highest").attemptT
+      _ <- highest match {
+        case (height, hash) => restore(height, hash)
+      }
     } yield ()
 
-  def validateAndRestore(): EitherT[F, RollbackException, Unit] =
+  def restore(height: Long, hash: String): EitherT[F, Throwable, Unit] =
+    validate(height, hash).flatMap(restore(_, height))
+
+  private[rollback] def validate(height: Long, hash: String): EitherT[F, Throwable, RollbackData] =
     for {
-      rollbackData <- validate()
-      _ <- restore(rollbackData)
+      _ <- logger.debug(s"Validating rollback data for height $height and hash $hash").attemptT
+      snapshot <- snapshotCloudStorage.read(height, hash)
+      snapshotInfo <- snapshotInfoCloudStorage.read(height, hash)
+      rewards <- rewardsCloudStorage.read(height, hash)
+      genesisObservation <- genesisObservationCloudStorage.read()
+      addressData = snapshotInfo.addressCacheData.map {
+        case (address, data) => (address, data.balance)
+      }
+      _ <- validateAccountBalance(addressData)
+    } yield RollbackData(snapshotInfo, snapshot, genesisObservation, rewards)
+
+  private[rollback] def restore(rollbackData: RollbackData, height: Long): EitherT[F, Throwable, Unit] =
+    for {
+      _ <- logger.debug("Applying the rollback.").attemptT
+      _ <- logger.debug(s"Accepting GenesisObservation").attemptT
+      _ <- acceptGenesis(rollbackData.genesisObservation)
+      _ <- logger.debug(s"Accepting Snapshot").attemptT
+      _ <- acceptSnapshot(rollbackData.storedSnapshot, height)
+      _ <- logger.debug(s"Accepting SnapshotInfo").attemptT
+      _ <- acceptSnapshotInfo(rollbackData.snapshotInfo)
+      // TODO: Enable if we want to restore EigenTrust as well
+      //      _ <- logger.debug(s"Accepting Rewards").attemptT
+      //      _ <- acceptRewards(rollbackData.storedRewards, height)
+      _ <- logger.debug("Rollback finished succesfully").attemptT
     } yield ()
 
-  def validate(): EitherT[F, RollbackException, RollbackData] =
+  private def getHighest(): EitherT[F, Throwable, (Long, String)] =
     for {
-      snapshots <- EitherT.fromEither[F](rollbackLoader.loadSnapshotsFromFile())
-      _ <- EitherT.liftF(logger.info("Snapshots files loaded"))
+      snapshotInfos <- snapshotInfoCloudStorage.list()
+      _ <- logger.debug("Fetched list of snapshotinfos:").attemptT
+      _ <- snapshotInfos.traverse(s => logger.debug(s"snapshotInfo: ${s}")).attemptT
+      highest = snapshotInfos.map {
+        _.split('-') match {
+          case Array(height, hash) => (height.toLong, hash)
+        }
+      }.maxBy { case (height, _) => height }
+    } yield highest
 
-      snapshotInfo <- EitherT.fromEither[F](rollbackLoader.loadSnapshotInfoFromFile())
-      _ <- EitherT.liftF(logger.info("SnapshotInfo file loaded"))
+  private def acceptGenesis(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
+    Concurrent[F].delay {
+      Genesis.acceptGenesis(genesisObservation)(dao)
+    }.attemptT
 
-      genesisObservation <- EitherT.fromEither[F](rollbackLoader.loadGenesisObservation())
-      _ <- EitherT.liftF(logger.info("GenesisObservation file loaded"))
-
-      balances <- EitherT.fromEither[F](
-        rollbackBalances.calculate(snapshotInfo.snapshot.snapshot.lastSnapshot, snapshots)
-      )
-      genesisBalances <- EitherT.fromEither[F](rollbackBalances.calculate(genesisObservation))
-      _ <- EitherT.fromEither[F](validateAccountBalance(balances |+| genesisBalances))
-      _ <- EitherT.liftF(logger.info("Account balances validated"))
-    } yield (snapshots, snapshotInfo, genesisObservation)
-
-  def restore(rollbackData: RollbackData): EitherT[F, RollbackException, Unit] =
+  private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): EitherT[F, Throwable, Unit] =
     for {
-      _ <- acceptSnapshots(rollbackData._1)
-      _ <- EitherT.liftF(logger.info("Snapshots restored on disk"))
-
-      // TODO: Adopt rollback to redownload and rewards
-//      _ <- EitherT.liftF(acceptRewards(rollbackData._1))
-//      _ <- EitherT.liftF(logger.info("Rewards restored"))
-
-      _ <- EitherT.liftF(acceptGenesis(rollbackData._3))
-      _ <- EitherT.liftF(logger.info("GenesisObservation restored"))
-
-      _ <- EitherT.liftF(acceptSnapshotInfo(rollbackData._2))
-      _ <- EitherT.liftF(logger.info("SnapshotInfo restored"))
+      _ <- snapshotInfoLocalStorage.write(snapshotInfo.snapshot.snapshot.hash, snapshotInfo)
+      _ <- snapshotService.setSnapshot(snapshotInfo).attemptT
     } yield ()
 
-  private def acceptGenesis(genesisObservation: GenesisObservation): F[Unit] = Sync[F].delay {
-    Genesis.acceptGenesis(genesisObservation)(dao)
-  }
+  private def acceptSnapshot(storedSnapshot: StoredSnapshot, height: Long): EitherT[F, Throwable, Unit] =
+    for {
+      _ <- snapshotLocalStorage.write(storedSnapshot.snapshot.hash, storedSnapshot)
 
-  private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =
-    snapshotService.setSnapshot(snapshotInfo)
+      ownJoinedHeight = height - snapshotHeightInterval
 
-  private def acceptSnapshots(
-    snapshots: Seq[StoredSnapshot]
-  )(implicit C: ContextShift[F]): EitherT[F, RollbackException, Unit] =
-    snapshots.toList
-      .traverse(snapshotService.addSnapshotToDisk)
-      .bimap(_ => CannotWriteToDisk, _ => ())
+      _ <- cluster.ownJoinedHeight.modify(_ => (Some(ownJoinedHeight), ())).attemptT
 
-  // TODO: Adopt rollback to redownload and rewards
-//  private def acceptRewards(
-//    snapshots: Seq[StoredSnapshot]
-//  ): F[Unit] = {
-//    val rewardSnapshots = snapshots
-//      .map(s => {
-//        val snapshotheight = s.checkpointCache.flatMap(_.height).maxBy(_.max).max
-//        RewardSnapshot(s.snapshot.hash, snapshotheight, s.checkpointCache.flatMap(_.checkpointBlock.observations))
-//      })
-//
-//    rewardSnapshots.toList.traverse(rewardsManager.attemptReward).void
-//  }
+      _ <- redownloadService
+        .persistAcceptedSnapshot(height, storedSnapshot.snapshot.hash)
+        .attemptT
 
-  private def validateAccountBalance(accountBalances: AccountBalances): Either[RollbackException, Unit] =
-    accountBalances.count(_._2 < 0) match {
-      case 0 => Right(())
-      case _ => Left(InvalidBalances)
+      _ <- redownloadService
+        .persistCreatedSnapshot(height, storedSnapshot.snapshot.hash, storedSnapshot.snapshot.publicReputation)
+        .attemptT
+
+      _ <- redownloadService.setLastMajorityState(Map(height -> storedSnapshot.snapshot.hash)).attemptT
+      _ <- redownloadService.setLastSentHeight(height).attemptT
+    } yield ()
+
+  private def acceptRewards(storedRewards: StoredRewards, height: Long): EitherT[F, Throwable, Unit] =
+    for {
+      _ <- eigenTrust.setModel(storedRewards.model).attemptT
+      _ <- rewardsManager.setLastRewardedHeight(height).attemptT
+    } yield ()
+
+  private def validateAccountBalance(accountBalances: AccountBalances): EitherT[F, Throwable, Unit] =
+    EitherT.fromEither {
+      if (accountBalances.exists { case (_, balance) => balance < 0 }) Left(InvalidBalances) else Right(())
     }
 }

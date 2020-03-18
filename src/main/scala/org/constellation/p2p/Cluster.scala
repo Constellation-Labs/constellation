@@ -247,8 +247,10 @@ class Cluster[F[_]](
           }.flatMap {
             sig =>
               val updateJoiningHeight =
-                if (request.isGenesis)
-                  ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining as genesis peer")
+                if (request.joinsToGenesisNode)
+                  ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining to genesis node")
+                else if (request.joinsToRollbackNode)
+                  logger.debug("Joining to rollback node")
                 else F.unit
 
               for {
@@ -454,10 +456,12 @@ class Cluster[F[_]](
       peers <- peers.get
       peersSize = peers.size
       minFacilitatorsSize = dao.processingConfig.numFacilitatorPeers
-      isGenesis = peersSize < minFacilitatorsSize
+      joinsToGenesisNode = dao.nodeConfig.isGenesisNode
+      joinsToRollbackNode = dao.nodeConfig.isRollbackNode
+      joinsAsInitialFacilitator = peersSize < minFacilitatorsSize
 
       _ <- logger.debug(
-        s"Pending registration request: ownHeight=$height peers=$peersSize isGenesis=$isGenesis"
+        s"Pending registration request: ownHeight=$height peers=$peersSize joinsToGenesisNode=$joinsToGenesisNode joinsToRollbackNode=$joinsToRollbackNode joinsAsInitialFacilitator=$joinsAsInitialFacilitator"
       )
 
       prr <- F.delay {
@@ -469,7 +473,9 @@ class Cluster[F[_]](
             diskUsableBytes = new java.io.File(dao.snapshotPath).getUsableSpace
           ),
           height,
-          isGenesis = isGenesis
+          joinsToGenesisNode = joinsToGenesisNode && !joinsToRollbackNode,
+          joinsToRollbackNode = joinsToRollbackNode && !joinsToGenesisNode,
+          joinsAsInitialFacilitator = joinsAsInitialFacilitator
         )
       }
     } yield prr
@@ -524,6 +530,19 @@ class Cluster[F[_]](
       _ <- attemptRejoin(lastKnownPeers)
     } yield ()
   }
+
+  def addToPeer(hp: HostPort): F[Response[Unit]] =
+    logThread(
+      withMetric(
+        {
+          val client = APIClient(hp.host, hp.port)(dao.backend, dao)
+
+          client.postNonBlockingUnitF("peer/add", dao.peerHostPort)(C)
+        },
+        "addToPeer"
+      ),
+      "cluster_addToPeer"
+    )
 
   private def clearServicesBeforeJoin(): F[Unit] =
     for {

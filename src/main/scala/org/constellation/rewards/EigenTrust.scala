@@ -16,7 +16,7 @@ import scala.collection.immutable.Map
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.domain.rewards.StoredRewards
 import org.constellation.rewards.EigenTrust.{opinionSampleNum, opinionSampleSD, satisfactoryThreshold, weight}
 
 import scala.util.Random

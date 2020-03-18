@@ -8,7 +8,6 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.consensus.FinishedCheckpoint
-import org.constellation.genesis.GenesisObservationWriterProperties
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
@@ -39,7 +38,7 @@ class CheckpointServiceTest
   }
 
   after {
-    File(GenesisObservationWriterProperties.path(dao.id), GenesisObservationWriterProperties.FILE_NAME).delete()
+    File(s"${dao.genesisObservationPath}/genesisObservation").delete()
     dao.unsafeShutdown()
   }
 
@@ -50,7 +49,7 @@ class CheckpointServiceTest
         setAsTips = true
       )
 
-      File(GenesisObservationWriterProperties.path(dao.id), GenesisObservationWriterProperties.FILE_NAME).exists shouldBe true
+      File(s"${dao.genesisObservationPath}/genesisObservation").exists shouldBe true
     }
   }
 

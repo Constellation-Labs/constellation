@@ -10,6 +10,7 @@ import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.{CloudStorage, CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
+import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.{Cluster, PeerData}
@@ -44,6 +45,8 @@ class RedownloadServiceTest
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
   var snapshotInfoCloudStorage: HeightHashFileStorage[IO, SnapshotInfo] = _
+  var rewardsStorage: LocalFileStorage[IO, StoredRewards] = _
+  var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
   var cloudStorage: CloudStorageOld[IO] = _
   var metrics: Metrics = _
   var rewardsManager: RewardsManager[IO] = _
@@ -56,8 +59,10 @@ class RedownloadServiceTest
     majorityStateChooser = mock[MajorityStateChooser]
     snapshotStorage = mock[LocalFileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[LocalFileStorage[IO, SnapshotInfo]]
+    rewardsStorage = mock[LocalFileStorage[IO, StoredRewards]]
     snapshotCloudStorage = mock[HeightHashFileStorage[IO, StoredSnapshot]]
     snapshotInfoCloudStorage = mock[HeightHashFileStorage[IO, SnapshotInfo]]
+    rewardsCloudStorage = mock[HeightHashFileStorage[IO, StoredRewards]]
     cloudStorage = mock[CloudStorageOld[IO]]
     rewardsManager = mock[RewardsManager[IO]]
     redownloadService = RedownloadService[IO](
@@ -68,10 +73,12 @@ class RedownloadServiceTest
       majorityStateChooser,
       snapshotStorage,
       snapshotInfoStorage,
+      rewardsStorage,
       snapshotService,
       checkpointAcceptanceService,
       snapshotCloudStorage,
       snapshotInfoCloudStorage,
+      rewardsCloudStorage,
       rewardsManager,
       metrics
     )
@@ -516,10 +523,12 @@ class RedownloadServiceTest
           majorityStateChooser,
           snapshotStorage,
           snapshotInfoStorage,
+          rewardsStorage,
           snapshotService,
           checkpointAcceptanceService,
           snapshotCloudStorage,
           snapshotInfoCloudStorage,
+          rewardsCloudStorage,
           rewardsManager,
           metrics
         )

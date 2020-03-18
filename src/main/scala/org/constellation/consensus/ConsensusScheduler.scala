@@ -18,13 +18,6 @@ class ConsensusScheduler(
   dao: DAO
 ) extends PeriodicIO("ConsensusScheduler") {
 
-  // TODO: Probably not used anymore
-  val edgeConsensus: IO[Unit] = IO
-    .fromFuture(IO {
-      EdgeProcessor.formCheckpoint(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))(dao)
-    })(IO.contextShift(ConstellationExecutionContext.bounded))
-    .void
-
   val crossTalkConsensus: IO[Unit] = consensusManager.startOwnConsensus().void.handleErrorWith {
     case error: ConsensusStartError => IO(logger.debug(error.getMessage))
     case error: ConsensusError      => IO(logger.debug(error.getMessage))
