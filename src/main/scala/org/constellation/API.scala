@@ -301,14 +301,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             APIDirective.handle(io)(complete(_))
           }
-        } ~ path("restore") {
-        APIDirective.onHandleEither(dao.rollbackService.validateAndRestore().value) {
-          case Success(value) => complete(StatusCodes.OK)
-          case Failure(error) =>
-            logger.error(s"Restored error ${error}")
-            complete(StatusCodes.InternalServerError)
-        }
-      } ~
+        } ~
         path("reputation") {
           entity(as[Seq[UpdateReputation]]) { ur =>
             ur.foreach { r =>

@@ -41,6 +41,9 @@ object CliConfigParser {
       opt[Unit]('g', "genesis")
         .action((x, c) => c.copy(genesisNode = true))
         .text("Start in single node genesis mode"),
+      opt[Unit]('r', "rollback")
+        .action((x, c) => c.copy(rollbackNode = true))
+        .text("Start in rollback mode"),
       opt[Unit]('t', "test-mode")
         .action((x, c) => c.copy(testMode = true))
         .text("Run with test settings"),
@@ -58,6 +61,10 @@ object CliConfigParser {
             _ <- checkConfigOption(
               c.externalIp == null ^ c.externalPort == 0,
               "ip and port must either both be set, or neither."
+            )
+            _ <- checkConfigOption(
+              c.genesisNode && c.rollbackNode,
+              "can't start in rollback mode and genesis mode at the same time"
             )
           } yield ()
       )

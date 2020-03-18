@@ -1,5 +1,6 @@
-package org.constellation.infrastructure.genesis
+package org.constellation.genesis
 
+import cats.data.EitherT
 import cats.effect.Concurrent
 import org.constellation.domain.cloud.S3Storage
 import org.constellation.primitives.Schema.GenesisObservation
@@ -9,7 +10,14 @@ class GenesisObservationS3Storage[F[_]: Concurrent](
   secretKey: String,
   region: String,
   bucket: String
-) extends S3Storage[F, GenesisObservation](accessKey, secretKey, region, bucket) {}
+) extends S3Storage[F, GenesisObservation](accessKey, secretKey, region, bucket) {
+
+  def write(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
+    write("genesisObservation", genesisObservation)
+
+  def read(): EitherT[F, Throwable, GenesisObservation] =
+    read("genesisObservation")
+}
 
 object GenesisObservationS3Storage {
 

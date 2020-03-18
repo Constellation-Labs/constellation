@@ -40,7 +40,9 @@ case class PeerRegistrationRequest(
   id: Id,
   resourceInfo: ResourceInfo,
   majorityHeight: Option[Long],
-  isGenesis: Boolean
+  joinsToGenesisNode: Boolean,
+  joinsToRollbackNode: Boolean,
+  joinsAsInitialFacilitator: Boolean
 )
 
 case class PeerUnregister(host: String, port: Int, id: Id, majorityHeight: Long)

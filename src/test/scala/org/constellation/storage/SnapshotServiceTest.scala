@@ -8,7 +8,7 @@ import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.{ConsensusManager, Snapshot, StoredSnapshot}
 import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.rewards.StoredEigenTrust
+import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
@@ -49,7 +49,7 @@ class SnapshotServiceTest
     val consensusManager = mock[ConsensusManager[IO]]
     val trustManager = mock[TrustManager[IO]]
     val soeService = mock[SOEService[IO]]
-    val eigenTrustStorage = mock[LocalFileStorage[IO, StoredEigenTrust]]
+    val eigenTrustStorage = mock[LocalFileStorage[IO, StoredRewards]]
     val eigenTrust = mock[EigenTrust[IO]]
     snapshotStorage = mock[LocalFileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[LocalFileStorage[IO, SnapshotInfo]]

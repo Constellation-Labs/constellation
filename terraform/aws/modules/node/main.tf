@@ -67,6 +67,18 @@ resource "aws_instance" "node" {
     }
   }
 
+    provisioner "file" {
+      source = "${path.module}/templates/start_rollback"
+      destination = "/tmp/start_rollback"
+
+      connection {
+        host = self.public_ip
+        type = "ssh"
+        user = local.ssh_user
+        timeout = "240s"
+      }
+    }
+
   provisioner "file" {
     source = "${path.module}/templates/start_node"
     destination = "/tmp/start_node"
