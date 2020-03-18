@@ -4,7 +4,7 @@ import better.files.File
 import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
-import org.constellation.ConstellationExecutionContext
+import org.constellation.{ConstellationExecutionContext, PeerMetadata}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.{CloudStorage, CloudStorageOld, HeightHashFileStorage}
@@ -13,6 +13,7 @@ import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.primitives.Schema.NodeState
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
@@ -311,6 +312,8 @@ class RedownloadServiceTest
       peerInfo.values.foreach { peer =>
         peer.client shouldReturn mock[APIClient]
         peer.client.getNonBlockingF[IO, Map[Long, String]](*, *, *)(*)(*, *, *) shouldReturnF Map.empty
+        peer.peerMetadata shouldReturn mock[PeerMetadata]
+        peer.peerMetadata.nodeState shouldReturn NodeState.Ready
       }
 
       cluster.getPeerInfo shouldReturnF peerInfo
@@ -336,6 +339,8 @@ class RedownloadServiceTest
           peer.client shouldReturn mock[APIClient]
           peer.client.id shouldReturn id
           peer.client.getNonBlockingF[IO, Map[Long, String]](*, *, *)(*)(*, *, *) shouldReturnF proposals
+          peer.peerMetadata shouldReturn mock[PeerMetadata]
+          peer.peerMetadata.nodeState shouldReturn NodeState.Ready
       }
 
       cluster.getPeerInfo shouldReturnF peerInfo
@@ -365,12 +370,16 @@ class RedownloadServiceTest
       peer1.client shouldReturn mock[APIClient]
       peer1.client.id shouldReturn Id("node1")
       peer1.client.getNonBlockingF[IO, Map[Long, String]](*, *, *)(*)(*, *, *) shouldReturnF proposals
+      peer1.peerMetadata shouldReturn mock[PeerMetadata]
+      peer1.peerMetadata.nodeState shouldReturn NodeState.Ready
 
       peer2.client shouldReturn mock[APIClient]
       peer2.client.id shouldReturn Id("node2")
       peer2.client.getNonBlockingF[IO, Map[Long, String]](*, *, *)(*)(*, *, *) shouldReturn IO.raiseError(
         new Throwable("error")
       )
+      peer2.peerMetadata shouldReturn mock[PeerMetadata]
+      peer2.peerMetadata.nodeState shouldReturn NodeState.Ready
 
       cluster.getPeerInfo shouldReturnF peerInfo
 
@@ -381,6 +390,35 @@ class RedownloadServiceTest
         Id("node1") -> proposals,
         Id("node2") -> Map.empty
       )
+    }
+
+    "should not request offline peers" in {
+      val peer1 = mock[PeerData]
+      val peer2 = mock[PeerData]
+
+      val peerInfo = Map(Id("node1") -> peer1, Id("node2") -> peer2)
+      val proposals = Map(2L -> "aa", 4L -> "bb")
+
+      peer1.client shouldReturn mock[APIClient]
+      peer1.client.id shouldReturn Id("node1")
+      peer1.client.getNonBlockingF[IO, Map[Long, String]](*, *, *)(*)(*, *, *) shouldReturnF proposals
+      peer1.peerMetadata shouldReturn mock[PeerMetadata]
+      peer1.peerMetadata.nodeState shouldReturn NodeState.Ready
+
+      peer2.client shouldReturn mock[APIClient]
+      peer2.client.id shouldReturn Id("node2")
+      peer2.peerMetadata shouldReturn mock[PeerMetadata]
+      peer2.peerMetadata.nodeState shouldReturn NodeState.Offline
+
+      cluster.getPeerInfo shouldReturnF peerInfo
+
+      val fetch = redownloadService.fetchAndUpdatePeersProposals()
+      val check = redownloadService.peersProposals.get
+
+      (fetch >> check).unsafeRunSync shouldBe Map(
+        Id("node1") -> proposals
+      )
+      peer2.client.getNonBlockingF[IO, Map[Long, String]](*, *, *)(*)(*, *, *).wasNever(called)
     }
   }
 

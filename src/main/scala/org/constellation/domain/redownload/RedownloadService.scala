@@ -113,7 +113,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
   def fetchAndUpdatePeersProposals(): F[PeersProposals] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
-      peers <- cluster.getPeerInfo.map(_.values.toList)
+      peers <- cluster.getPeerInfo.map(
+        _.values.toList.filter(p => NodeState.isNotOffline(p.peerMetadata.nodeState))
+      )
       apiClients = peers.map(_.client)
       responses <- apiClients.traverse { client =>
         fetchCreatedSnapshots(client).map(client.id -> _)
