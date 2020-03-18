@@ -64,7 +64,6 @@ upload() {
   jarName="constellation-assembly-$version.jar"
 
   echo -e "${blu} Uploading ${yel}$jarName${blu} to S3 bucket${clr} as ${yel}dag-$TAG.jar${clr}"
-
   aws s3 cp $DIR/../../target/scala-2.12/$jarName s3://constellationlabs-dag/cluster/dag-$TAG.jar --acl public-read-write
   echo -e "dag-$TAG.jar has been sent to s3://constellationlabs-dag/cluster/dag-$TAG.jar"
 }
@@ -91,6 +90,24 @@ start() {
   ssh admin@$ip -o StrictHostKeyChecking=no 'sudo cp /home/admin/constellation/start_genesis /home/admin/constellation/start'
 
   restart
+}
+
+rollback() {
+  stop
+  echo -e "${blu} Performing the rollback${clr}"
+
+  ip=`head -1 $HOSTS_FILE`
+
+  echo -e "${blu} Using: ${grn}$ip${blu} as a rollback node.${clr}"
+
+  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo cp /home/admin/constellation/start_node /home/admin/constellation/start'
+
+  ssh admin@$ip -o StrictHostKeyChecking=no 'sudo cp /home/admin/constellation/start_rollback /home/admin/constellation/start'
+
+  redeploy
+
+  ip=`head -1 $HOSTS_FILE`
+  echo -e "${blu} Used: ${grn}$ip${blu} as a rollback node.${clr}"
 }
 
 restart() {
@@ -219,6 +236,9 @@ case "$1" in
     ;;
   start)
     start
+    ;;
+  rollback)
+    rollback
     ;;
   restart)
     restart

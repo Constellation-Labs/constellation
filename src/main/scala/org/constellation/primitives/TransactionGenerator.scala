@@ -54,7 +54,7 @@ class TransactionGenerator[F[_]: Concurrent](
       _ <- EitherT.fromEither[F](validatePendingNumberOfTransactionIsLessThanMemPool(pendingTransactionCount))
 
       readyPeers <- EitherT.liftF(getReadyPeers)
-      _ <- EitherT.fromEither[F](validateNodeHasPeersOrIsGenesisNode(readyPeers))
+      _ <- EitherT.fromEither[F](validateNodeHasPeersOrIsFirstNode(readyPeers))
 
       numberOfTransaction <- EitherT.liftF(numberOfTransaction(readyPeers))
       _ <- EitherT.liftF(generateTransactions(readyPeers, numberOfTransaction))
@@ -232,8 +232,12 @@ class TransactionGenerator[F[_]: Concurrent](
   private def getAddressData: F[Option[AddressCacheData]] =
     addressService.lookup(dao.selfAddressStr)
 
-  private def validateNodeHasPeersOrIsGenesisNode(peers: Seq[(Id, PeerData)]): Either[TransactionGeneratorError, Unit] =
-    if (dao.nodeConfig.isGenesisNode || peers.nonEmpty) Right(()) else Left(NodeIsNotGenesisNodeAndPeersAreEmpty)
+  private def validateNodeHasPeersOrIsFirstNode(peers: Seq[(Id, PeerData)]): Either[TransactionGeneratorError, Unit] =
+    Either.cond(
+      dao.nodeConfig.isGenesisNode || dao.nodeConfig.isRollbackNode || peers.nonEmpty,
+      (),
+      NodeIsNotFirstNodeAndPeersAreEmpty
+    )
 
   private def validateNodeHasBalance(address: Option[AddressCacheData]): Either[TransactionGeneratorError, Unit] =
     address match {
@@ -279,5 +283,7 @@ sealed trait TransactionGeneratorError
 object NodeIsNotInRequiredState extends TransactionGeneratorError
 object NodeIsNotPermitToGenerateRandomTransaction extends TransactionGeneratorError
 object NodeHasNotRequiredBalance extends TransactionGeneratorError
+
 object NodeHasToManyPendingTransactions extends TransactionGeneratorError
-object NodeIsNotGenesisNodeAndPeersAreEmpty extends TransactionGeneratorError
+
+object NodeIsNotFirstNodeAndPeersAreEmpty extends TransactionGeneratorError

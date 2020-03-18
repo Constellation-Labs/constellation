@@ -6,11 +6,15 @@ import better.files._
 import cats.data.EitherT
 import cats.effect.Concurrent
 import cats.implicits._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.serializer.KryoSerializer
+import org.slf4j.Logger
 
 abstract class LocalFileStorage[F[_], A](baseDir: String)(implicit F: Concurrent[F])
     extends FileStorage[F, A]
     with DiskSpace[F] {
+
+  private lazy val logger = Slf4jLogger.getLogger[F]
 
   private lazy val dir: F[File] = F.delay {
     File(baseDir)
@@ -24,7 +28,7 @@ abstract class LocalFileStorage[F[_], A](baseDir: String)(implicit F: Concurrent
 
   def createDirectoryIfNotExists(): EitherT[F, Throwable, Unit] =
     dir.flatMap { a =>
-      F.delay {
+      logger.debug(s"Creating directory: ${a.pathAsString}") >> F.delay {
         a.createDirectoryIfNotExists()
       }
     }.void.attemptT

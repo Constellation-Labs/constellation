@@ -25,7 +25,7 @@ import org.constellation.keytool.KeyStoreUtils
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Metrics}
+import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
 import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -120,6 +120,7 @@ object ConstellationNode extends IOApp {
         primaryKeyPair = keyPair,
         isGenesisNode = cliConfig.genesisNode,
         isLightNode = cliConfig.lightNode,
+        isRollbackNode = cliConfig.rollbackNode,
         hostName = hostName,
         httpInterface = config.getString("http.interface"),
         httpPort = httpPort,
@@ -265,11 +266,19 @@ class ConstellationNode(
   if (nodeConfig.isGenesisNode) {
     logger.info("Creating genesis block")
     Genesis.start()
-    logger.info(s"Genesis block hash ${dao.genesisBlock.map { _.soeHash }.getOrElse("")}")
-
-    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
+    logger.info(s"Genesis block hash ${dao.genesisBlock.map {
+      _.soeHash
+    }.getOrElse("")}")
+  } else if (nodeConfig.isRollbackNode) {
+    logger.info("Performing rollback.")
+    dao.rollbackService
+      .restore()
+      .rethrowT
+      .handleError(e => logger.error(s"Rollback error: ${Logging.stringifyStackTrace(e)}"))
+      .unsafeRunSync()
   }
 
+  dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   dao.cluster.initiateRejoin().unsafeRunSync
 
 //  Keeping disabled for now -- going to only use midDb for the time being.

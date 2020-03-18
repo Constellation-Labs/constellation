@@ -2,6 +2,7 @@ package org.constellation.rollback
 
 import cats.implicits._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Schema.GenesisObservation
 import org.constellation.util.AccountBalances
 import org.constellation.util.AccountBalances.AccountBalances
@@ -13,33 +14,11 @@ class RollbackAccountBalances {
 
   private val zeroSnapshotHash = Snapshot.snapshotZeroHash
 
-  def calculate(snapshotHash: String, snapshots: Seq[StoredSnapshot]): Either[RollbackException, AccountBalances] =
-    Try(calculateSnapshotsBalances(snapshotHash, snapshots))
-      .map(Right(_))
-      .getOrElse(Left(CannotCalculate))
+  private def calculateSnapshotBalances(snapshot: StoredSnapshot): AccountBalances =
+    AccountBalances.getAccountBalancesFrom(snapshot)
 
-  @tailrec
-  private def calculateSnapshotsBalances(
-    snapshotHash: String,
-    snapshots: Seq[StoredSnapshot],
-    balances: AccountBalances = Map.empty[String, Long]
-  ): AccountBalances =
-    if (snapshotHash == zeroSnapshotHash) {
-      balances
-    } else {
-      val snapshot = findSnapshot(snapshotHash, snapshots)
-      calculateSnapshotsBalances(
-        snapshot.snapshot.lastSnapshot,
-        snapshots,
-        balances |+| AccountBalances.getAccountBalancesFrom(snapshot)
-      )
-    }
-
-  private def findSnapshot(hash: String, snapshots: Seq[StoredSnapshot]) =
-    snapshots.find(_.snapshot.hash == hash) match {
-      case Some(value) => value
-      case None        => throw new Exception(s"Cannot find snapshot $hash")
-    }
+  private def calculateSnapshotInfoBalances(snapshotInfo: SnapshotInfo): AccountBalances =
+    AccountBalances.getAccountBalancesFrom(snapshotInfo.snapshot)
 
   def calculate(genesisObservation: GenesisObservation): Either[RollbackException, AccountBalances] =
     Try(calculateGenesisObservationBalances(genesisObservation))

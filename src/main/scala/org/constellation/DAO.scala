@@ -26,11 +26,11 @@ import org.constellation.domain.transaction.{
   TransactionService,
   TransactionValidator
 }
-import org.constellation.genesis.GenesisObservationWriter
+import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
-import org.constellation.infrastructure.rewards.{EigenTrustLocalStorage, EigenTrustS3Storage}
+import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
 import org.constellation.infrastructure.snapshot.{
   SnapshotInfoLocalStorage,
   SnapshotInfoS3Storage,
@@ -120,21 +120,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
-    // TODO: Add GCP support for new Rollback!
-    //    if (ConfigUtil.isEnabledAWSStorage) {
-    //      cloudStorage = new AWSStorageOld[IO](
-    //        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-    //        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-    //        ConfigUtil.constellation.getString("storage.aws.region"),
-    //        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-    //      )
-    //    } else if (ConfigUtil.isEnabledGCPStorage) {
-    //      cloudStorage = new GCPStorageOld[IO](
-    //        ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
-    //        ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
-    //      )
-    //    }
-
     rateLimiting = new RateLimiting[IO]
 
     blacklistedAddresses = BlacklistedAddresses[IO]
@@ -198,41 +183,48 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     snapshotInfoStorage = SnapshotInfoLocalStorage(snapshotInfoPath)
     snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-    eigenTrustStorage = EigenTrustLocalStorage(eigenTrustPath)
-    eigenTrustStorage.createDirectoryIfNotExists().value.unsafeRunSync
+    rewardsStorage = RewardsLocalStorage(rewardsPath)
+    rewardsStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-    if (ConfigUtil.isEnabledCloudStorage) {
-      if (ConfigUtil.isEnabledAWSStorage) {
-        snapshotCloudStorage = SnapshotS3Storage(
-          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-          ConfigUtil.constellation.getString("storage.aws.region"),
-          ConfigUtil.constellation.getString("storage.aws.bucket-name")
-        )
-        snapshotInfoCloudStorage = SnapshotInfoS3Storage(
-          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-          ConfigUtil.constellation.getString("storage.aws.region"),
-          ConfigUtil.constellation.getString("storage.aws.bucket-name")
-        )
-        eigenTrustCloudStorage = EigenTrustS3Storage(
-          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-          ConfigUtil.constellation.getString("storage.aws.region"),
-          ConfigUtil.constellation.getString("storage.aws.bucket-name")
-        )
-        cloudStorage = new AWSStorageOld[IO](
-          ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-          ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-          ConfigUtil.constellation.getString("storage.aws.region"),
-          ConfigUtil.constellation.getString("storage.aws.bucket-name")
-        )
-      } else if (ConfigUtil.isEnabledGCPStorage) {
-        cloudStorage = new GCPStorageOld[IO](
-          ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
-          ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
-        )
-      }
+    genesisObservationStorage = GenesisObservationLocalStorage[IO](genesisObservationPath)
+    genesisObservationStorage.createDirectoryIfNotExists().value.unsafeRunSync
+
+    if (ConfigUtil.isEnabledAWSStorage) {
+      snapshotCloudStorage = SnapshotS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+      snapshotInfoCloudStorage = SnapshotInfoS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+      rewardsCloudStorage = RewardsS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+      genesisObservationCloudStorage = GenesisObservationS3Storage(
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+      cloudStorage = new AWSStorageOld[IO](
+        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+        ConfigUtil.constellation.getString("storage.aws.region"),
+        ConfigUtil.constellation.getString("storage.aws.bucket-name")
+      )
+    } else if (ConfigUtil.isEnabledGCPStorage) {
+      cloudStorage = new GCPStorageOld[IO](
+        ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
+        ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
+      )
     }
 
     eigenTrust = new EigenTrust[IO](id)
@@ -256,7 +248,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       soeService,
       snapshotStorage,
       snapshotInfoStorage,
-      eigenTrustStorage,
+      rewardsStorage,
       eigenTrust,
       this
     )
@@ -293,10 +285,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       MajorityStateChooser(id),
       snapshotStorage,
       snapshotInfoStorage,
+      rewardsStorage,
       snapshotService,
       checkpointAcceptanceService,
       snapshotCloudStorage,
       snapshotInfoCloudStorage,
+      rewardsCloudStorage,
       rewardsManager,
       metrics
     )
@@ -334,25 +328,23 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
-    rollbackLoader = new RollbackLoader(
-      snapshotPath,
-      snapshotInfoPath,
-      genesisObservationPath.pathAsString
-    )
-
     rollbackService = new RollbackService[IO](
       this,
       new RollbackAccountBalances,
       snapshotService,
       rollbackLoader,
-      rewardsManager
-    )
-
-    genesisObservationWriter = new GenesisObservationWriter[IO](
-      cloudStorage,
-      this,
-      IO.contextShift(ConstellationExecutionContext.bounded),
-      ConstellationExecutionContext.unbounded
+      rewardsManager,
+      eigenTrust,
+      snapshotStorage,
+      snapshotInfoStorage,
+      snapshotCloudStorage,
+      snapshotInfoCloudStorage,
+      rewardsStorage,
+      rewardsCloudStorage,
+      genesisObservationStorage,
+      genesisObservationCloudStorage,
+      redownloadService,
+      cluster
     )
   }
 

@@ -24,15 +24,15 @@ class RewardsManager[F[_]: Concurrent](
   checkpointService: CheckpointService[F],
   addressService: AddressService[F]
 ) {
-  private val accumulatedRewards: Ref[F, Map[String, Long]] = Ref.unsafe(Map.empty)
-
   private val logger = Slf4jLogger.getLogger[F]
 
   private[rewards] var lastRewardedHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
+  def setLastRewardedHeight(height: Long): F[Unit] = lastRewardedHeight.modify(_ => (height, ()))
+
   def getLastRewardedHeight(): F[Long] = lastRewardedHeight.get
 
-  def clearLastRewardedHeight(): F[Unit] = lastRewardedHeight.modify(_ => (-1L, ()))
+  def clearLastRewardedHeight(): F[Unit] = setLastRewardedHeight(-1)
 
   def attemptReward(snapshot: Snapshot, height: Long): F[Unit] =
     createRewardSnapshot(snapshot, height)
@@ -68,15 +68,6 @@ class RewardsManager[F[_]: Concurrent](
       _ <- normalizedDistribution.toList.traverse {
         case (address, reward) => logger.debug(s"[Rewards] Address: ${address}, Reward: ${reward}")
       }
-
-      acc <- accumulatedRewards.modify(r => {
-        val updated = r |+| normalizedDistribution
-        (updated, updated)
-      })
-
-      _ <- acc.transform {
-        case (address, reward) => logger.debug(s"[Rewards] Accumulated rewards of ${address}: ${reward}")
-      }.values.toList.sequence
 
       _ <- updateAddressBalances(normalizedDistribution)
       _ <- lastRewardedHeight.modify(_ => (rewardSnapshot.height, ()))
@@ -128,7 +119,7 @@ class RewardsManager[F[_]: Concurrent](
       .map(_.flatten.flatMap(_.checkpointBlock.observations))
 
   private def updateAddressBalances(rewards: Map[String, Long]): F[Unit] =
-    addressService.addBalances(rewards).void
+    addressService.transferRewards(rewards).void
 }
 
 object RewardsManager {
