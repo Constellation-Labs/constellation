@@ -425,11 +425,14 @@ class Cluster[F[_]](
         peer = p.get(nodeId).filter(pd => pd.peerMetadata.nodeState != NodeState.Offline)
         majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
         _ <- peer.traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
-        maxProposalHeight <- peer
-          .traverse(
-            peer => LiftIO[F].liftIO(dao.redownloadService.getPeerProposals().map(_.get(peer.client.id)))
-          )
-          .map(_.flatten.map(_.maxBy { case (height, _) => height }).map { case (height, _) => height })
+        maxProposalHeight <- peer.traverse { peer =>
+          LiftIO[F].liftIO(dao.redownloadService.getPeerProposals().map(_.get(peer.client.id)))
+        }.map(
+          _.flatten
+            .filter(_.nonEmpty)
+            .map { _.maxBy { case (height, _) => height } }
+            .map { case (height, _) => height }
+        )
         leavingHeight = maxProposalHeight
           .map(height => if (height > majorityHeight) majorityHeight else height)
           .getOrElse(majorityHeight)
