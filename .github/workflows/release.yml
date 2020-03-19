@@ -41,7 +41,7 @@ jobs:
         with:
           name: Release ${{ steps.tagName.outputs.tag }}
           draft: false
-          prerelease: true
+          prerelease: false
           body_path: CHANGELOG.md
           files: |
             docker/keytool/cl-keytool.jar
