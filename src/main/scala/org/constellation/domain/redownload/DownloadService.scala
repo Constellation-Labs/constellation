@@ -29,9 +29,9 @@ class DownloadService[F[_]](
       _ <- clearDataBeforeDownload()
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals()
+      _ <- redownloadService.checkForAlignmentWithMajoritySnapshot()
       majorityState <- redownloadService.lastMajorityState.get
-      _ <- if (majorityState.nonEmpty) redownloadService.checkForAlignmentWithMajoritySnapshot()
-      else fetchAndPersistBlocks()
+      _ <- if (majorityState.isEmpty) fetchAndPersistBlocks() else F.unit
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
     } yield ()
 

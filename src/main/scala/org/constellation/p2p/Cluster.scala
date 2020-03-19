@@ -98,6 +98,9 @@ class Cluster[F[_]](
   val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]] {
     if (dao.nodeConfig.isGenesisNode) Some(0L) else None
   }
+
+  def id = dao.id
+
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
@@ -421,15 +424,21 @@ class Cluster[F[_]](
         p <- peers.get
         peer = p.get(nodeId).filter(pd => pd.peerMetadata.nodeState != NodeState.Offline)
         majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
-        _ <- peer
-          .traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
-        _ <- peer
-          .traverse(peer => {
-            val peerData = peer
-              .updateLeavingHeight(majorityHeight)
-              .copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
-            peers.modify(p => (p + (peerData.client.id -> peerData), p))
-          })
+        _ <- peer.traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
+        maxProposalHeight <- peer
+          .traverse(
+            peer => LiftIO[F].liftIO(dao.redownloadService.getPeerProposals().map(_.get(peer.client.id)))
+          )
+          .map(_.flatten.map(_.maxBy { case (height, _) => height }).map { case (height, _) => height })
+        leavingHeight = maxProposalHeight
+          .map(height => if (height > majorityHeight) majorityHeight else height)
+          .getOrElse(majorityHeight)
+        _ <- peer.traverse(peer => {
+          val peerData = peer
+            .updateLeavingHeight(leavingHeight)
+            .copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
+          peers.modify(p => (p + (peerData.client.id -> peerData), p))
+        })
         _ <- updateMetrics()
         _ <- updatePersistentStore()
       } yield (),
