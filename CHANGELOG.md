@@ -2,8 +2,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.0.4-rc] - 2020-03-20
 ### Fixed
-- Fix joining inside the majority interval
+- Fix joining inside the majority interval #965
 
 ## [v2.0.3-rc] - 2020-03-19
 ### Fixed
