@@ -22,7 +22,7 @@ class RedownloadPeriodicCheckTest
     dao = TestHelpers.prepareMockedDAO()
 
     dao.redownloadService.fetchAndUpdatePeersProposals shouldReturnF Map.empty
-    dao.redownloadService.checkForAlignmentWithMajoritySnapshot() shouldReturnF Unit
+    dao.redownloadService.checkForAlignmentWithMajoritySnapshot(*) shouldReturnF Unit
   }
 
   "triggerRedownloadCheck" - {
@@ -45,7 +45,7 @@ class RedownloadPeriodicCheckTest
 
       trigger.guarantee(cancel).unsafeRunSync
 
-      dao.redownloadService.checkForAlignmentWithMajoritySnapshot().was(called)
+      dao.redownloadService.checkForAlignmentWithMajoritySnapshot(*).was(called)
     }
   }
 
