@@ -259,7 +259,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }.attemptT
     } yield ()
 
-  def checkForAlignmentWithMajoritySnapshot(): F[Unit] = {
+  def checkForAlignmentWithMajoritySnapshot(isDownload: Boolean = false): F[Unit] = {
     val wrappedCheck = for {
       _ <- logger.debug("Checking alignment with majority snapshot...")
       peersProposals <- getPeerProposals()
@@ -292,7 +292,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
 
-      _ <- if (shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)) {
+      _ <- if (isDownload || shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)) {
         val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
         val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
         for {
