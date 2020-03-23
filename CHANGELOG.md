@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Do not try to download snapshots if majority state is empty #935
 
 ## [v2.0.4-rc] - 2020-03-20
 ### Fixed

@@ -292,7 +292,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
 
-      _ <- if (isDownload || shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)) {
+      _ <- if (shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval, isDownload)) {
         val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
         val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
         for {
@@ -488,14 +488,15 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def shouldRedownload(
     acceptedSnapshots: SnapshotsAtHeight,
     majorityState: SnapshotsAtHeight,
-    redownloadInterval: Int
+    redownloadInterval: Int,
+    isDownload: Boolean = false
   ): Boolean =
     if (majorityState.isEmpty) false
     else
-      getAlignmentResult(acceptedSnapshots, majorityState, redownloadInterval) match {
+      isDownload || (getAlignmentResult(acceptedSnapshots, majorityState, redownloadInterval) match {
         case AlignedWithMajority => false
         case _                   => true
-      }
+      })
 
   private[redownload] def calculateRedownloadPlan(
     acceptedSnapshots: SnapshotsAtHeight,
