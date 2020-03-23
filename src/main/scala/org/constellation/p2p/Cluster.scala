@@ -160,34 +160,6 @@ class Cluster[F[_]](
     }
   }
 
-  def removePeerRequest(hp: Option[HostPort], id: Option[Id]): F[Unit] = {
-    def filter(p: Map[Id, PeerData]) = p.filter {
-      case (pid, d) =>
-        val badHost = hp.exists {
-          case HostPort(host, port) =>
-            d.client.hostName == host && d.client.apiPort == port
-        }
-        val badId = id.contains(pid)
-        !badHost && !badId
-    }
-
-    logThread(
-      for {
-        isRemoved <- peers.modify { p =>
-          val filtered = filter(p)
-          (filtered, filtered != p)
-        }
-        _ <- if (isRemoved) {
-          dao.metrics.incrementMetricAsync[F]("peerRemoved")
-        } else F.unit
-
-        _ <- updateMetrics()
-        _ <- updatePersistentStore()
-      } yield (),
-      "cluster_removePeerRequest"
-    )
-  }
-
   def setNodeStatus(id: Id, state: NodeState): F[Unit] =
     logThread(
       for {
@@ -231,26 +203,6 @@ class Cluster[F[_]](
         } yield ()
       }.void
     } yield registerResponse
-
-  def addPeerMetadata(pm: PeerMetadata): F[Unit] = {
-    val validHost = (pm.host != dao.externalHostString && pm.host != "127.0.0.1") || !dao.preventLocalhostAsPeer
-
-    if (pm.id == dao.id || !validHost) F.unit
-
-    logThread(
-      for {
-        adjustedHost <- (if (pm.auxHost.nonEmpty) pm.auxHost else pm.host).pure[F]
-        client = APIClient(adjustedHost, pm.httpPort)(dao.backend, dao)
-
-        _ <- peerDiscovery(client)
-
-        _ <- F.delay(client.id = pm.id)
-
-        _ <- updatePeerInfo(PeerData(pm, client, NonEmptyList.of[MajorityHeight](MajorityHeight(None)))) // TODO: mwadon
-      } yield (),
-      "cluster_addPeerMetadata"
-    )
-  }
 
   def pendingRegistration(ip: String, request: PeerRegistrationRequest): F[Unit] =
     logThread(
@@ -400,24 +352,6 @@ class Cluster[F[_]](
       F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
     }
 
-  // mwadon: Is it correct implementation?
-  // TODO: Unused method?
-  def forgetPeer(pd: PeerData): F[Unit] =
-    logThread(
-      for {
-        p <- peers.get
-        pm = pd.peerMetadata
-        _ <- ipManager.removeKnownIP(pm.host)
-        _ <- p.get(pm.id).traverse { peer =>
-          val peerData = peer.copy(notification = peer.notification ++ Seq(PeerNotification(pm.id, PeerState.Leave)))
-          peers.modify(p => (p + (peerData.client.id -> peerData), p))
-        }
-        _ <- updateMetrics()
-        _ <- updatePersistentStore()
-      } yield (),
-      "cluster_forgetPeer"
-    )
-
   def markOfflinePeer(nodeId: Id): F[Unit] =
     logThread(
       for {
@@ -448,6 +382,7 @@ class Cluster[F[_]](
       "cluster_markOfflinePeer"
     )
 
+  // TODO: not used but should be used for removing old peers
   def removePeer(pd: PeerData): F[Unit] =
     logThread(
       LiftIO[F]
@@ -468,19 +403,6 @@ class Cluster[F[_]](
           F.unit
         ),
       "cluster_removePeer"
-    )
-
-  def hostPort(hp: HostPort): F[Unit] =
-    logThread(
-      for {
-        peers <- peers.get
-        _ <- if (!peers.exists {
-                   case (_, data) => data.peerMetadata.host == hp.host && data.peerMetadata.httpPort == hp.port
-                 } && validWithLoopbackGuard(hp.host)) {
-          attemptRegisterPeer(hp).void
-        } else F.unit
-      } yield (),
-      "cluster_hostPort"
     )
 
   def internalHearthbeat(round: Long) =
@@ -523,20 +445,6 @@ class Cluster[F[_]](
         }
       } yield (),
       "cluster_initiatePeerReload"
-    )
-
-  def attemptRegisterSelfWithPeer(hp: HostPort): F[Unit] =
-    logThread(
-      for {
-        _ <- logger.info(s"Attempting to register with $hp")
-        prr <- pendingRegistrationRequest
-        _ <- withMetric(
-          APIClient(hp.host, hp.port)(dao.backend, dao)
-            .postNonBlockingUnitF("register", prr)(C),
-          "addPeerWithRegistration"
-        )
-      } yield (),
-      "cluster_attemptRegisterSelfWithPeer"
     )
 
   def pendingRegistrationRequest: F[PeerRegistrationRequest] =
@@ -616,39 +524,6 @@ class Cluster[F[_]](
       _ <- attemptRejoin(lastKnownPeers)
     } yield ()
   }
-
-  def attemptRollback(): F[Unit] =
-    LiftIO[F]
-      .liftIO(dao.rollbackService.validateAndRestore().value)
-      .flatMap(
-        _.fold(
-          { err =>
-            err match {
-              case CannotLoadSnapshotInfoFile(path) =>
-                logger.warn(s"Node has no SnapshotInfo backup in path: ${path}. Skipping the rollback.")
-              case CannotLoadSnapshotsFiles(path) =>
-                logger.warn(s"Node has no Snapshots backup in path: ${path}. Skipping the rollback.")
-              case CannotLoadGenesisObservationFile(path) =>
-                logger.warn(s"Node has no Genesis observation backup in path: ${path}. Skipping the rollback.")
-              case _ => logger.error(s"Rollback failed: ${err}")
-            }
-          },
-          _ => Logger[F].warn(s"Performed rollback.")
-        )
-      )
-
-  def addToPeer(hp: HostPort): F[Response[Unit]] =
-    logThread(
-      withMetric(
-        {
-          val client = APIClient(hp.host, hp.port)(dao.backend, dao)
-
-          client.postNonBlockingUnitF("peer/add", dao.peerHostPort)(C)
-        },
-        "addToPeer"
-      ),
-      "cluster_addToPeer"
-    )
 
   private def clearServicesBeforeJoin(): F[Unit] =
     for {
