@@ -24,6 +24,10 @@ object Wallet extends IOApp {
         displayAddress[F](keypair)
       case CliMethod.CreateTransaction =>
         createTransaction[F](cliParams, keypair).flatMap(storeTransaction[F](cliParams, _))
+      case CliMethod.ShowId =>
+        displayId[F](keypair)
+      case CliMethod.ShowPublicKey =>
+        displayPublicKey[F](keypair)
       case _ =>
         EitherT.leftT[F, Unit](new RuntimeException("Unknown command"))
     }
@@ -40,6 +44,12 @@ object Wallet extends IOApp {
 
   def displayAddress[F[_]](keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
     EitherT.liftF[F, Throwable, Unit] { F.delay { println(getAddress(keypair)) } }
+
+  def displayId[F[_]](keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
+    EitherT.liftF[F, Throwable, Unit] { F.delay { println(KeyUtils.publicKeyToHex(keypair.getPublic)) } }
+
+  def displayPublicKey[F[_]](keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
+    EitherT.liftF[F, Throwable, Unit] { F.delay { println(keypair.getPublic) } }
 
   def createTransaction[F[_]](cliParams: CliConfig, keypair: KeyPair)(
     implicit F: Sync[F]
@@ -115,7 +125,13 @@ object Wallet extends IOApp {
           ),
         cmd("show-address")
           .action((_, c) => c.copy(method = CliMethod.ShowAddress))
-          .text("show-address")
+          .text("show-address"),
+        cmd("show-id")
+          .action((_, c) => c.copy(method = CliMethod.ShowId))
+          .text("show-id"),
+        cmd("show-public-key")
+          .action((_, c) => c.copy(method = CliMethod.ShowPublicKey))
+          .text("show-public-key")
       )
     }
 

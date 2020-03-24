@@ -5,7 +5,7 @@ import org.constellation.wallet.CliMethod.CliMethod
 object CliMethod extends Enumeration {
   type CliMethod = Value
 
-  val ShowAddress, CreateTransaction = Value
+  val ShowAddress, ShowId, ShowPublicKey, CreateTransaction = Value
 
 }
 
