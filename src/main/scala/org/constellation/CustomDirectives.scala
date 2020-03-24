@@ -11,6 +11,8 @@ import cats.effect.IO
 import com.google.common.util.concurrent.RateLimiter
 import com.typesafe.scalalogging.{Logger, StrictLogging}
 import org.constellation.primitives.IPManager
+import org.constellation.primitives.IPManager.IP
+import org.constellation.schema.Id
 import org.constellation.util.APIDirective
 
 import scala.util.Try
@@ -72,6 +74,23 @@ object CustomDirectives {
         logger.info(s"Reject unknown ip: $ip")
         complete(
           StatusCodes.custom(403, "ip unknown. Need to register using the /register endpoint.")
+        )
+      }
+    }
+
+    def isWhitelistedIP(ip: IP, dao: DAO): Directive0 = {
+      val idOption = dao.cluster.getPeerInfo.map {
+        _.toList.find(_._2.peerMetadata.host == ip).map { case (id, _) => id }
+      }.unsafeRunSync
+
+      val isWhitelisted = idOption.exists(dao.nodeConfig.whitelisting.get(ip).contains)
+
+      if (isWhitelisted) {
+        pass
+      } else {
+        logger.info(s"Reject not whitelisted ip: $ip")
+        complete(
+          StatusCodes.custom(403, "ip not whitelisted.")
         )
       }
     }

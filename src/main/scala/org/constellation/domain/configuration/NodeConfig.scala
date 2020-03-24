@@ -4,6 +4,8 @@ import java.security.KeyPair
 
 import org.constellation.ProcessingConfig
 import org.constellation.keytool.KeyUtils
+import org.constellation.primitives.IPManager.IP
+import org.constellation.schema.Id
 import org.constellation.util.{AccountBalance, HostPort}
 
 case class NodeConfig(
@@ -22,5 +24,6 @@ case class NodeConfig(
   cliConfig: CliConfig = CliConfig(),
   processingConfig: ProcessingConfig = ProcessingConfig(),
   dataPollingManagerOn: Boolean = false,
-  allocAccountBalances: Seq[AccountBalance] = Seq.empty
+  allocAccountBalances: Seq[AccountBalance] = Seq.empty,
+  whitelisting: Map[IP, Id] = Map.empty
 )
