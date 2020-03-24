@@ -269,6 +269,7 @@ class ConstellationNode(
     logger.info(s"Genesis block hash ${dao.genesisBlock.map {
       _.soeHash
     }.getOrElse("")}")
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   } else if (nodeConfig.isRollbackNode) {
     logger.info("Performing rollback.")
     dao.rollbackService
@@ -276,9 +277,9 @@ class ConstellationNode(
       .rethrowT
       .handleError(e => logger.error(s"Rollback error: ${Logging.stringifyStackTrace(e)}"))
       .unsafeRunSync()
+    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   }
 
-  dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   dao.cluster.initiateRejoin().unsafeRunSync
 
 //  Keeping disabled for now -- going to only use midDb for the time being.
