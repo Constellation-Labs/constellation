@@ -21,6 +21,7 @@ import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
 import org.constellation.domain.rewards.StoredRewards
+import org.constellation.primitives.IPManager.IP
 import org.constellation.rewards.EigenTrustAgents
 
 import scala.collection.SortedMap
@@ -52,12 +53,14 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Map[String, TipData]])
     kryo.register(classOf[Map[String, LastTransactionRef]])
     kryo.register(classOf[Map[Id, Double]])
+    kryo.register(classOf[Map[IP, Id]])
     kryo.register(classOf[SortedMap[Id, Double]])
     kryo.register(classOf[TreeMap[Id, Double]])
     kryo.register(classOf[Seq[(String, AddressCacheData)]])
     kryo.register(classOf[Seq[(String, TipData)]])
     kryo.register(classOf[Seq[(String, LastTransactionRef)]])
     kryo.register(classOf[Seq[(Id, Double)]])
+    kryo.register(classOf[Seq[(IP, Id)]])
     kryo.register(classOf[Address])
     kryo.register(classOf[CheckpointEdge])
     kryo.register(classOf[AddressCacheData])

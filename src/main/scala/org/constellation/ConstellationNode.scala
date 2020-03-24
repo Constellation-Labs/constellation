@@ -23,12 +23,15 @@ import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.p2p.PeerAPI
+import org.constellation.primitives.IPManager.IP
 import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
 import org.constellation.primitives._
+import org.constellation.schema.Id
 import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
 import org.slf4j.MDC
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.io.Source
 import scala.util.Try
 
 /**
@@ -68,6 +71,18 @@ object ConstellationNode extends IOApp {
       .map(_.getHostAddress)
       .getOrElse(Try(File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP).getOrElse("127.0.0.1"))
   }
+
+  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Map[IP, Id]] =
+    for {
+      source <- Sync[F].delay { Source.fromFile(cliConfig.whitelisting) }
+      lines = source.getLines().filter(_.nonEmpty).toList
+      values = lines.map(_.split(",").map(_.trim).toList)
+      mappedValues = values.map {
+        case ip :: id :: Nil => Map(ip -> Id(id))
+        case _               => Map.empty[IP, Id]
+      }.reduce { _ ++ _ }
+      _ <- Sync[F].delay { source.close() }
+    } yield mappedValues
 
   private def getAllocAccountBalances[F[_]: Sync](cliConfig: CliConfig): F[Seq[AccountBalance]] = Sync[F].delay {
     Try(new AccountBalanceCSVReader(cliConfig.allocFilePath).read()).getOrElse(Seq.empty)
@@ -115,6 +130,8 @@ object ConstellationNode extends IOApp {
       constellationConfig = config.getConfig("constellation")
       processingConfig = ProcessingConfig(maxWidth = constellationConfig.getInt("max-width"))
 
+      whitelisting <- getWhitelisting(cliConfig)
+
       nodeConfig = NodeConfig(
         seeds = seeds,
         primaryKeyPair = keyPair,
@@ -131,7 +148,8 @@ object ConstellationNode extends IOApp {
         processingConfig =
           if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig,
         dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
-        allocAccountBalances = allocAccountBalances
+        allocAccountBalances = allocAccountBalances,
+        whitelisting = whitelisting
       )
     } yield nodeConfig
 }

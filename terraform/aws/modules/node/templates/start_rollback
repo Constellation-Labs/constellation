@@ -15,4 +15,4 @@ java "-Dcom.sun.management.jmxremote" \
 "-Xss256K" \
 -Djava.rmi.server.hostname=$(cat external_host_ip) \
 -agentlib:jdwp=transport=dt_socket,server=y,address=8000,suspend=n \
--jar dag.jar --ip=$(cat external_host_ip) --port=9000 -k key.p12 --alias alias -r
+-jar dag.jar --ip=$(cat external_host_ip) --port=9000 -k key.p12 --alias alias -r -w whitelisting

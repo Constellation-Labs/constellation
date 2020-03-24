@@ -42,7 +42,8 @@ case class PeerRegistrationRequest(
   majorityHeight: Option[Long],
   joinsToGenesisNode: Boolean,
   joinsToRollbackNode: Boolean,
-  joinsAsInitialFacilitator: Boolean
+  joinsAsInitialFacilitator: Boolean,
+  whitelistingHash: String
 )
 
 case class PeerUnregister(host: String, port: Int, id: Id, majorityHeight: Long)
@@ -304,7 +305,9 @@ class PeerAPI(override val ipManager: IPManager[IO])(
     signEndpoints(socketAddress) ~ commonEndpoints ~ batchEndpoints ~
       withSimulateTimeout(dao.simulateEndpointTimeout)(ConstellationExecutionContext.unbounded) {
         enforceKnownIP(ip) {
-          postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
+          isWhitelistedIP(ip, dao) {
+            postEndpoints(socketAddress) ~ mixedEndpoints(socketAddress) ~ blockBuildingRoundRoute
+          }
         }
       }
 

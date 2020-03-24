@@ -26,9 +26,13 @@ object CliConfigParser {
       opt[Int]('p', "port")
         .action((x, c) => c.copy(externalPort = x))
         .text("the port you can be reached from outside"),
-      opt[String]('f', "path to file with allocation account balances")
+      opt[String]('f', "alloc")
         .action((x, c) => c.copy(allocFilePath = x))
         .text("path to file with allocation account balances"),
+      opt[String]('w', "whitelisting")
+        .action((x, c) => c.copy(whitelisting = x))
+        .text("path to file with whitelisting")
+        .required(),
       opt[Unit]('d', "debug")
         .action((x, c) => c.copy(debug = true))
         .text("run the node in debug mode"),
