@@ -91,8 +91,6 @@ class RollbackService[F[_]: Concurrent](
   private def getHighest(): EitherT[F, Throwable, (Long, String)] =
     for {
       snapshotInfos <- snapshotInfoCloudStorage.list()
-      _ <- logger.debug("Fetched list of snapshotinfos:").attemptT
-      _ <- snapshotInfos.traverse(s => logger.debug(s"snapshotInfo: ${s}")).attemptT
       highest = snapshotInfos.map {
         _.split('-') match {
           case Array(height, hash) => (height.toLong, hash)
