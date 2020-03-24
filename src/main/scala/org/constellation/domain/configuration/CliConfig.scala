@@ -10,6 +10,7 @@ case class CliConfig(
   storePassword: String = null,
   keyPassword: String = null,
   alias: String = null,
+  whitelisting: String = null,
   debug: Boolean = false,
   startOfflineMode: Boolean = false,
   lightNode: Boolean = false,

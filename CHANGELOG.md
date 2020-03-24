@@ -4,7 +4,8 @@ All notable changes to this project will be documented in this file.
 ## [v2.1.0-rc] - 2020-03-24
 ### Added
 - Introduce rollback mode to start cluster (node) from specific point (snapshot) in time #820
-- Wallet commands to display id and public key
+- Wallet commands to display id and public key #976
+- PeerAPI whitelisting #931
 ### Fixed
 - Do not try to download snapshots if majority state is empty #935
 

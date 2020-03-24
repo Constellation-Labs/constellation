@@ -23,6 +23,7 @@ import org.constellation.rollback.{
   CannotLoadSnapshotsFiles
 }
 import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging._
 import org.constellation.util._
 
@@ -209,6 +210,7 @@ class Cluster[F[_]](
       for {
         pr <- PendingRegistration(ip, request).pure[F]
         _ <- logger.debug(s"Pending Registration request: $pr")
+
         validExternalHost = validWithLoopbackGuard(request.host)
         peers <- peers.get
         existsNotOffline = peers.exists {
@@ -218,12 +220,20 @@ class Cluster[F[_]](
             )
         }
 
+        isWhitelisted = dao.nodeConfig.whitelisting.get(ip).contains(request.id)
+        whitelistingHash = KryoSerializer.serializeAnyRef(dao.nodeConfig.whitelisting).sha256
+        validWhitelistingHash = whitelistingHash == request.whitelistingHash
+
         isSelfId = dao.id == request.id
-        badAttempt = isSelfId || !validExternalHost || existsNotOffline
+        badAttempt = !isWhitelisted || !validWhitelistingHash || isSelfId || !validExternalHost || existsNotOffline
         isValid <- joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
 
+        _ <- if (!isWhitelisted) {
+          dao.metrics.incrementMetricAsync[F]("notWhitelistedAdditionAttempt")
+        } else F.unit
+
         _ <- if (badAttempt) {
-          dao.metrics.incrementMetricAsync[F]("duplicatePeerAdditionAttempt")
+          dao.metrics.incrementMetricAsync[F]("badPeerAdditionAttempt")
         } else if (!isValid) {
           dao.metrics.incrementMetricAsync[F]("invalidPeerAdditionAttempt")
         } else {
@@ -459,6 +469,7 @@ class Cluster[F[_]](
       joinsToGenesisNode = dao.nodeConfig.isGenesisNode
       joinsToRollbackNode = dao.nodeConfig.isRollbackNode
       joinsAsInitialFacilitator = peersSize < minFacilitatorsSize
+      whitelistingHash = KryoSerializer.serializeAnyRef(dao.nodeConfig.whitelisting).sha256
 
       _ <- logger.debug(
         s"Pending registration request: ownHeight=$height peers=$peersSize joinsToGenesisNode=$joinsToGenesisNode joinsToRollbackNode=$joinsToRollbackNode joinsAsInitialFacilitator=$joinsAsInitialFacilitator"
@@ -475,7 +486,8 @@ class Cluster[F[_]](
           height,
           joinsToGenesisNode = joinsToGenesisNode && !joinsToRollbackNode,
           joinsToRollbackNode = joinsToRollbackNode && !joinsToGenesisNode,
-          joinsAsInitialFacilitator = joinsAsInitialFacilitator
+          joinsAsInitialFacilitator = joinsAsInitialFacilitator,
+          whitelistingHash
         )
       }
     } yield prr
