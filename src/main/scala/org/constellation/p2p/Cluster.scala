@@ -247,11 +247,11 @@ class Cluster[F[_]](
           }.flatMap {
             sig =>
               val updateJoiningHeight =
-                if (request.joinsToGenesisNode)
-                  ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining to genesis node")
-                else if (request.joinsToRollbackNode)
+                if (request.joinsToRollbackNode) {
                   logger.debug("Joining to rollback node")
-                else F.unit
+                } else if (request.joinsAsInitialFacilitator) {
+                  ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining as initial facilitator")
+                } else F.unit
 
               for {
                 state <- withMetric(
