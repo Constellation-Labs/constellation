@@ -1,7 +1,7 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [v2.1.1-rc]
+## [v2.1.1] - 2020-03-25
 ### Fixed
 - Do not store EigenTrust on disk and do not send it to cloud
 
