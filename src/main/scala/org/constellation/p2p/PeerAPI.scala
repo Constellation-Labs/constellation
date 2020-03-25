@@ -286,6 +286,29 @@ class PeerAPI(override val ipManager: IPManager[IO])(
 
     }
 
+  val batchEndpoints: Route = post {
+    pathPrefix("batch") {
+      path("transactions") {
+        entity(as[List[String]]) { ids =>
+          dao.metrics.incrementMetric(Metrics.batchTransactionsEndpoint)
+
+          APIDirective.handle(
+            ids.traverse(id => dao.transactionService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
+          )(complete(_))
+        }
+      } ~
+        path("observations") {
+          entity(as[List[String]]) { ids =>
+            dao.metrics.incrementMetric(Metrics.batchObservationsEndpoint)
+
+            APIDirective.handle(
+              ids.traverse(id => dao.observationService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
+            )(complete(_))
+          }
+        }
+    }
+  }
+
   def routes(socketAddress: InetSocketAddress): Route =
     APIDirective.extractIP(socketAddress) { ip =>
       decodeRequest {

@@ -229,12 +229,4 @@ class APIClient private (
       }(ConstellationExecutionContext.unbounded)
     })
 
-  def simpleDownload(): Seq[StoredSnapshot] = {
-    val hashes = getBlocking[Seq[String]]("snapshotHashes")
-    hashes.map(hash => getBlockingBytesKryo[StoredSnapshot]("storedSnapshot/" + hash))
-  }
-
-  def snapshotsInfoDownload(): SnapshotInfo =
-    getBlockingBytesKryo[SnapshotInfo]("info")
-
 }

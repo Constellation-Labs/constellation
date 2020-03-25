@@ -587,19 +587,6 @@ class Cluster[F[_]](
     } yield ()
   }
 
-  def addToPeer(hp: HostPort): F[Response[Unit]] =
-    logThread(
-      withMetric(
-        {
-          val client = APIClient(hp.host, hp.port)(dao.backend, dao)
-
-          client.postNonBlockingUnitF("peer/add", dao.peerHostPort)(C)
-        },
-        "addToPeer"
-      ),
-      "cluster_addToPeer"
-    )
-
   private def clearServicesBeforeJoin(): F[Unit] =
     for {
       _ <- clearOwnJoinedHeight()

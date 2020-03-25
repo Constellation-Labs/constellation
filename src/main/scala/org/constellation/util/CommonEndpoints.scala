@@ -46,9 +46,11 @@ trait CommonEndpoints extends Json4sSupport {
       path("id") {
         complete(dao.id)
       } ~
+      // TODO: Move to PeerAPI - Not used publicly
       path("tips") {
         APIDirective.handle(dao.concurrentTipService.toMap)(complete(_))
       } ~
+      // TODO: Move to PeerAPI - Not used publicly
       path("heights") {
         val calculateHeights = for {
           tips <- dao.concurrentTipService.toMap
@@ -57,79 +59,96 @@ trait CommonEndpoints extends Json4sSupport {
 
         APIDirective.handle(calculateHeights)(complete(_))
       } ~
+      // TODO: Move to PeerAPI - Used in HealthChecker so could be moved to PeerAPI as we have it already in UI.
       path("heights" / "min") {
         APIDirective.handle(dao.concurrentTipService.getMinTipHeight(None).map((dao.id, _)))(complete(_))
       } ~
-      path("snapshotHashes") {
-        APIDirective.handle(dao.snapshotStorage.list().rethrowT)(complete(_))
-      } ~
-      path("snapshot" / "stored") {
-        val storedSnapshots = dao.snapshotStorage.list().rethrowT
+      // TODO: Used in PeerAPI but also:
+      // TODO: Move to different port - Should be probably accessible by owner only.
+      pathPrefix("snapshot") {
+        // TODO: Used in PeerAPI but also:
+        // TODO: Move to different port - Should be probably accessible by owner only.
+        path("stored") {
+          val storedSnapshots = dao.snapshotStorage.list().rethrowT
 
-        APIDirective.handle(storedSnapshots)(complete(_))
-      } ~
-      path("snapshot" / "created") {
-        val snapshots = dao.redownloadService.getCreatedSnapshots()
+          APIDirective.handle(storedSnapshots)(complete(_))
+        } ~
+          // TODO: Used in PeerAPI but also:
+          // TODO: Move to different port - Should be probably accessible by owner only.
+          path("created") {
+            val snapshots = dao.redownloadService.getCreatedSnapshots()
 
-        APIDirective.handle(snapshots)(complete(_))
-      } ~
-      path("snapshot" / "accepted") {
-        val snapshots = dao.redownloadService.getAcceptedSnapshots()
+            APIDirective.handle(snapshots)(complete(_))
+          } ~
+          // TODO: Used in PeerAPI but also:
+          // TODO: Move to different port - Should be probably accessible by owner only.
+          path("accepted") {
+            val snapshots = dao.redownloadService.getAcceptedSnapshots()
 
-        APIDirective.handle(snapshots)(complete(_))
-      } ~
-      path("snapshot" / "nextHeight") {
-        APIDirective.handle(
-          dao.snapshotService.getNextHeightInterval.map((dao.id, _))
-        )(complete(_))
-      } ~
-      path("snapshot" / "info") {
-        val getSnapshotInfo = dao.snapshotService.getSnapshotInfoWithFullData
-          .map(KryoSerializer.serialize[SnapshotInfo])
+            APIDirective.handle(snapshots)(complete(_))
+          } ~
+          // TODO: Used in PeerAPI but also:
+          // TODO: Move to different port - Should be probably accessible by owner only.
+          path("nextHeight") {
+            APIDirective.handle(
+              dao.snapshotService.getNextHeightInterval.map((dao.id, _))
+            )(complete(_))
+          } ~
+          // TODO: Used in PeerAPI but also:
+          // TODO: Move to different port - Should be probably accessible by owner only.
+          path("info") {
+            val getSnapshotInfo = dao.snapshotService.getSnapshotInfoWithFullData
+              .map(KryoSerializer.serialize[SnapshotInfo])
 
-        val result = dao.cluster.getNodeState
-          .map(NodeState.canActAsRedownloadSource)
-          .ifM(
-            getSnapshotInfo.map(_.some),
-            None.pure[IO]
-          )
-
-        APIDirective.onHandle(result) { res =>
-          val httpResponse: HttpResponse = res match {
-            case Failure(_) => HttpResponse(StatusCodes.ServiceUnavailable)
-            case Success(Some(snapshotInfo)) =>
-              HttpResponse(
-                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(snapshotInfo))
+            val result = dao.cluster.getNodeState
+              .map(NodeState.canActAsRedownloadSource)
+              .ifM(
+                getSnapshotInfo.map(_.some),
+                None.pure[IO]
               )
-            case Success(None) => HttpResponse(StatusCodes.ServiceUnavailable)
+
+            APIDirective.onHandle(result) { res =>
+              val httpResponse: HttpResponse = res match {
+                case Failure(_) => HttpResponse(StatusCodes.ServiceUnavailable)
+                case Success(Some(snapshotInfo)) =>
+                  HttpResponse(
+                    entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(snapshotInfo))
+                  )
+                case Success(None) => HttpResponse(StatusCodes.ServiceUnavailable)
+              }
+
+              complete(httpResponse)
+            }
+          } ~
+          // TODO: Used in PeerAPI but also:
+          // TODO: Move to different port - Should be probably accessible by owner only.
+          path("info" / Segment) { s =>
+            val getSnapshotInfo = for {
+              exists <- dao.snapshotInfoStorage.exists(s)
+              bytes <- if (exists) {
+                dao.snapshotInfoStorage.readBytes(s).rethrowT.map(Some(_))
+              } else none[Array[Byte]].pure[IO]
+            } yield bytes
+
+            APIDirective.onHandle(getSnapshotInfo) { res =>
+              val httpResponse: HttpResponse = res match {
+                case Failure(_) =>
+                  HttpResponse(StatusCodes.NotFound)
+                case Success(None) =>
+                  HttpResponse(StatusCodes.NotFound)
+                case Success(Some(bytes)) =>
+                  HttpResponse(
+                    entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(bytes))
+                  )
+              }
+
+              complete(httpResponse)
+            }
           }
-
-          complete(httpResponse)
-        }
       } ~
-      path("snapshot" / "info" / Segment) { s =>
-        val getSnapshotInfo = for {
-          exists <- dao.snapshotInfoStorage.exists(s)
-          bytes <- if (exists) {
-            dao.snapshotInfoStorage.readBytes(s).rethrowT.map(Some(_))
-          } else none[Array[Byte]].pure[IO]
-        } yield bytes
-
-        APIDirective.onHandle(getSnapshotInfo) { res =>
-          val httpResponse: HttpResponse = res match {
-            case Failure(_) =>
-              HttpResponse(StatusCodes.NotFound)
-            case Success(None) =>
-              HttpResponse(StatusCodes.NotFound)
-            case Success(Some(bytes)) =>
-              HttpResponse(
-                entity = HttpEntity.Strict(MediaTypes.`application/octet-stream`, ByteString(bytes))
-              )
-          }
-
-          complete(httpResponse)
-        }
-      } ~
+      // TODO: Make it snapshot/stored/:hash and move under pathPrefix("snapshot")
+      // TODO: Used in PeerAPI but also:
+      // TODO: Move to different port - Should be probably accessible by owner only.
       path("storedSnapshot" / Segment) { s =>
         val getSnapshot = for {
           exists <- dao.snapshotStorage.exists(s)
@@ -153,61 +172,43 @@ trait CommonEndpoints extends Json4sSupport {
           complete(httpResponse)
         }
       } ~
+      // Move to PeerAPI - Used in Simulation so could be moved to PeerAPI as we have it in UI.
       path("genesis") {
         complete(dao.genesisObservation)
       } ~
       pathPrefix("address" / Segment) { a =>
         APIDirective.handle(dao.addressService.lookup(a))(complete(_))
       } ~
-      pathPrefix("balance" / Segment) { a =>
-        APIDirective.handle(dao.addressService.lookup(a).map(_.map(_.balanceByLatestSnapshot)))(complete(_))
-      } ~
+      // Move to PeerAPI - Used in Cluster so could be moved to PeerAPI as we have it in UI.
       path("state") {
         APIDirective.handle(dao.cluster.getNodeState)(res => complete(NodeStateInfo(res, dao.addresses, dao.nodeType)))
       } ~
+      // Move to PeerAPI - Used in Redownload so could be moved to PeerAPI
       path("latestMajorityHeight") {
         val height = (dao.redownloadService.lowestMajorityHeight, dao.redownloadService.latestMajorityHeight)
           .mapN(LatestMajorityHeight)
 
         APIDirective.handle(height)(complete(_))
       } ~
+      // Move to PeerAPI - Used in PeerDiscovery so could be moved to PeerAPI
       path("peers") {
         APIDirective.handle(dao.peerInfo.map(_.map(_._2.peerMetadata).toSeq))(complete(_))
       } ~
+      // Move to PeerAPI - Used in DataResolver so could be moved to PeerAPI
       path("transaction" / Segment) { h =>
         APIDirective.handle(dao.transactionService.lookup(h))(complete(_))
       } ~
+      // Move to PeerAPI - Used in DataResolver so could be moved to PeerAPI
       path("checkpoint" / Segment) { h =>
         APIDirective.handle(dao.checkpointService.fullData(h))(complete(_))
       } ~
+      // Move to PeerAPI - Used in DataResolver so could be moved to PeerAPI
       path("soe" / Segment) { h =>
         APIDirective.handle(dao.soeService.lookup(h))(complete(_))
       } ~
+      // Move to PeerAPI - Used in DataResolver so could be moved to PeerAPI
       path("observation" / Segment) { h =>
         APIDirective.handle(dao.observationService.lookup(h))(complete(_))
       }
-  }
-
-  val batchEndpoints: Route = post {
-    pathPrefix("batch") {
-      path("transactions") {
-        entity(as[List[String]]) { ids =>
-          dao.metrics.incrementMetric(Metrics.batchTransactionsEndpoint)
-
-          APIDirective.handle(
-            ids.traverse(id => dao.transactionService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
-          )(complete(_))
-        }
-      } ~
-        path("observations") {
-          entity(as[List[String]]) { ids =>
-            dao.metrics.incrementMetric(Metrics.batchObservationsEndpoint)
-
-            APIDirective.handle(
-              ids.traverse(id => dao.observationService.lookup(id).map((id, _))).map(_.filter(_._2.isDefined))
-            )(complete(_))
-          }
-        }
-    }
   }
 }
