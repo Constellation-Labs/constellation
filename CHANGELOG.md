@@ -1,7 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [v2.1.1] - 2020-03-25
+## [v2.1.2] - 2020-03-25
+### Fixed
+- Do not validate EigenTrust when doing the rollback
+
+## [v2.1.1-rc] - 2020-03-25
 ### Fixed
 - Do not store EigenTrust on disk and do not send it to cloud
 

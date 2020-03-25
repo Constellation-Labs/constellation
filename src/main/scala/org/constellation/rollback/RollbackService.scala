@@ -22,8 +22,7 @@ import org.constellation.util.AccountBalances.AccountBalances
 case class RollbackData(
   snapshotInfo: SnapshotInfo,
   storedSnapshot: StoredSnapshot,
-  genesisObservation: GenesisObservation,
-  storedRewards: StoredRewards
+  genesisObservation: GenesisObservation
 )
 
 class RollbackService[F[_]: Concurrent](
@@ -65,13 +64,12 @@ class RollbackService[F[_]: Concurrent](
       _ <- logger.debug(s"Validating rollback data for height $height and hash $hash").attemptT
       snapshot <- snapshotCloudStorage.read(height, hash)
       snapshotInfo <- snapshotInfoCloudStorage.read(height, hash)
-      rewards <- rewardsCloudStorage.read(height, hash)
       genesisObservation <- genesisObservationCloudStorage.read()
       addressData = snapshotInfo.addressCacheData.map {
         case (address, data) => (address, data.balance)
       }
       _ <- validateAccountBalance(addressData)
-    } yield RollbackData(snapshotInfo, snapshot, genesisObservation, rewards)
+    } yield RollbackData(snapshotInfo, snapshot, genesisObservation)
 
   private[rollback] def restore(rollbackData: RollbackData, height: Long): EitherT[F, Throwable, Unit] =
     for {
@@ -82,9 +80,6 @@ class RollbackService[F[_]: Concurrent](
       _ <- acceptSnapshot(rollbackData.storedSnapshot, height)
       _ <- logger.debug(s"Accepting SnapshotInfo").attemptT
       _ <- acceptSnapshotInfo(rollbackData.snapshotInfo)
-      // TODO: Enable if we want to restore EigenTrust as well
-      //      _ <- logger.debug(s"Accepting Rewards").attemptT
-      //      _ <- acceptRewards(rollbackData.storedRewards, height)
       _ <- logger.debug("Rollback finished succesfully").attemptT
     } yield ()
 
