@@ -72,7 +72,10 @@ class MultiNodeRegisterTest extends FunSpecLike with Matchers with BeforeAndAfte
                 a.dao.keyPair.getPublic.toId,
                 ResourceInfo(diskUsableBytes = 1073741824),
                 None,
-                false
+                false,
+                false,
+                false,
+                ""
               )
             val res = a.getAPIClientForNode(b).postSync("register", peerRegistrationRequest)
             assert(res.isSuccess)
