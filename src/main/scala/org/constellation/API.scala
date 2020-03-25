@@ -136,11 +136,13 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   val getEndpoints: Route =
     extractClientIP { clientIP =>
       get {
+        // Leave public - Used by load balancer
         pathPrefix("cluster") {
           path("info") {
             APIDirective.handle(dao.cluster.clusterNodes())(complete(_))
           }
         } ~
+          // Leave public - Used by UI
           pathPrefix("data") {
             path("blocks") {
 
@@ -162,6 +164,12 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               })
             }
           } ~
+          /*
+            Leave public?
+            According to pentesting requirements:
+            "Do not reveal the version of software used by application"
+            But it will be needed in PeerAPI to implement #713
+           */
           pathPrefix("buildInfo") {
             concat(
               pathEnd {
@@ -172,27 +180,24 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               }
             )
           } ~
+          // Leave public - Used by UI
           path("metrics") {
             val response = MetricsResult(
               dao.metrics.getMetrics
             )
             complete(response)
           } ~
+          // Leave public - Used by UI
           path("micrometer-metrics") {
             val writer: Writer = new StringWriter()
             TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
             complete(writer.toString)
           } ~
+          // TODO: Move to different port - Should be probably accessible by owner only.
           path("selfAddress") {
             complete(id.address)
           } ~
-          path("hasGenesis") {
-            if (dao.genesisObservation.isDefined) {
-              complete(StatusCodes.OK)
-            } else {
-              complete(StatusCodes.NotFound)
-            }
-          } ~
+          // TODO: Move to different port - Should be probably accessible by owner only.
           path("dashboard") {
             val txs = dao.transactionService.getLast20Accepted.unsafeRunSync()
             val self = Node(
@@ -214,107 +219,24 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
               )
             )
 
-          } ~
-          path("trust") {
-            APIDirective.handle(
-              dao.trustManager.getPredictedReputation.flatMap { predicted =>
-                if (predicted.isEmpty) dao.trustManager.getStoredReputation.map(TrustData)
-                else TrustData(predicted).pure[IO]
-              }
-            )(complete(_))
-          } ~
-          path("storedReputation") {
-            APIDirective.handle(
-              dao.trustManager.getStoredReputation.map(TrustData)
-            )(complete(_))
-          } ~
-          path("predictedReputation") {
-            APIDirective.handle(
-              dao.trustManager.getPredictedReputation.map(TrustData)
-            )(complete(_))
           }
       }
     }
 
   val postEndpoints =
     post {
-      pathPrefix("peer") {
-        path("add") {
-          entity(as[HostPort]) { hp =>
-            APIDirective.handle(
-              dao.cluster
-                .attemptRegisterPeer(hp)
-                .map(result => {
-                  logger.debug(s"Add Peer Request: $hp. Result: $result")
-                  StatusCode.int2StatusCode(result.code)
-                })
-            )(complete(_))
-          }
-        }
-      } ~
-        path("peerHealthCheck") {
-          val resetTimeout = 1.second
-          val breaker = new CircuitBreaker(system.scheduler, maxFailures = 1, callTimeout = 15.seconds, resetTimeout)(
-            ConstellationExecutionContext.unbounded
-          )
-
-          val response =
-            dao.cluster.broadcast(_.getStringIO("health")(IO.contextShift(ConstellationExecutionContext.bounded)))
-
-          onCompleteWithBreaker(breaker)(response.unsafeToFuture) {
-            case Success(idMap) =>
-              val res = idMap.map {
-                case (id, validatedResp) =>
-                  id -> validatedResp.exists(_.isSuccess)
-              }.toSeq
-
-              complete(res)
-
-            case Failure(e) =>
-              logger.warn("Failed to get peer health", e)
-              complete(StatusCodes.InternalServerError)
-          }
-        } ~
-        path("balance") {
-          entity(as[String]) { address =>
-            logger.info(s"balance lookup for address ${address}")
-            val io = addressService
-              .lookup(address)
-              .map(
-                res =>
-                  res
-                    .map(_.balance.toString)
-                    .getOrElse("0")
-              )
-
-            APIDirective.handle(io)(complete(_))
-          }
-        } ~
-        path("transaction") {
-          entity(as[Transaction]) { transaction =>
-            logger.info(s"send transaction to address ${transaction.hash}")
-            val io = checkpointBlockValidator
-              .singleTransactionValidation(transaction)
-              .flatMap {
-                case Invalid(e) => IO { e.toString() }
-                case Valid(tx)  => transactionService.put(TransactionCacheData(tx)).map(_.hash)
-              }
-            APIDirective.handle(io)(complete(_))
-          }
-        } ~
-        path("reputation") {
-          entity(as[Seq[UpdateReputation]]) { ur =>
-            ur.foreach { r =>
-              r.secretReputation.foreach {
-                dao.secretReputation(r.id) == _
-              }
-              r.publicReputation.foreach {
-                dao.publicReputation(r.id) == _
-              }
+      path("transaction") {
+        entity(as[Transaction]) { transaction =>
+          logger.info(s"send transaction to address ${transaction.hash}")
+          val io = checkpointBlockValidator
+            .singleTransactionValidation(transaction)
+            .flatMap {
+              case Invalid(e) => IO { e.toString() }
+              case Valid(tx)  => transactionService.put(TransactionCacheData(tx)).map(_.hash)
             }
-            complete(StatusCodes.OK)
-          }
+          APIDirective.handle(io)(complete(_))
         }
+      }
     }
 
   private val noAuthRoutes =
@@ -331,7 +253,7 @@ class API()(implicit system: ActorSystem, val timeout: Timeout, val dao: DAO)
   def mainRoutes(socketAddress: InetSocketAddress): Route = cors() {
     decodeRequest {
       encodeResponse {
-        getEndpoints ~ postEndpoints ~ configEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ batchEndpoints ~ serveMainPage
+        getEndpoints ~ postEndpoints ~ configEndpoints ~ jsRequest ~ imageRoute ~ commonEndpoints ~ serveMainPage
       }
     }
   }
