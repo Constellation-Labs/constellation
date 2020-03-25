@@ -114,7 +114,8 @@ class SnapshotService[F[_]: Concurrent](
       // TODO: pass stored snapshot to writeSnapshotToDisk
       _ <- writeSnapshotToDisk(snapshot.snapshot)
       _ <- writeSnapshotInfoToDisk()
-      _ <- writeEigenTrustToDisk(snapshot.snapshot)
+      // For now we do not restore EigenTrust model
+      //      _ <- writeEigenTrustToDisk(snapshot.snapshot)
 
       _ <- EitherT.liftF(markLeavingPeersAsOffline())
 

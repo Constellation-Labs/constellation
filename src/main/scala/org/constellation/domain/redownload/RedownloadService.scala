@@ -363,16 +363,18 @@ class RedownloadService[F[_]: NonEmptyParallel](
           }
       }
 
-      uploadRewards <- hashes.traverse {
-        case (height, hash) =>
-          rewardsStorage.getFile(hash).rethrowT.map {
-            rewardsCloudStorage.write(height, hash, _).rethrowT
-          }
-      }
+      // For now we do not restore EigenTrust model
+      //      uploadRewards <- hashes.traverse {
+      //        case (height, hash) =>
+      //          rewardsStorage.getFile(hash).rethrowT.map {
+      //            rewardsCloudStorage.write(height, hash, _).rethrowT
+      //          }
+      //      }
 
       _ <- uploadSnapshots.sequence
       _ <- uploadSnapshotInfos.sequence
-      _ <- uploadRewards.sequence
+      // For now we do not restore EigenTrust model
+      //      _ <- uploadRewards.sequence
 
       _ <- if (toSend.nonEmpty) {
         val max = maxHeight(toSend)
