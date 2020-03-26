@@ -48,16 +48,29 @@ object CliConfigParser {
       opt[Unit]('r', "rollback")
         .action((x, c) => c.copy(rollbackNode = true))
         .text("Start in rollback mode"),
-      opt[Unit]('t', "test-mode")
-        .action((x, c) => c.copy(testMode = true))
-        .text("Run with test settings"),
-      opt[String]('k', "keystore").required
-        .action((x, c) => c.copy(keyStorePath = x))
-        .text("Path to keystore file"),
-      opt[String]("alias").required
-        .action((x, c) => c.copy(alias = x))
-        .text("Alias for keypair in provided keystore file"),
-      help("help").text("prints this usage text"),
+      .children(
+        opt[Long]("height").required
+          .valueName("<height>")
+          .action((x, c) => c.copy(rollbackHeight = x)),
+        opt[String]("hash").required
+          .valueName("<hash>")
+          .action((x, c) => c.copy(rollbackHash = x))
+      )
+    ,
+    opt[Unit]('t', "test-mode")
+      .action((x, c) => c.copy(testMode = true))
+      .text("Run with test settings")
+    ,
+    opt[String]('k', "keystore").required
+      .action((x, c) => c.copy(keyStorePath = x))
+      .text("Path to keystore file")
+    ,
+    opt[String]("alias").required
+      .action((x, c) => c.copy(alias = x))
+      .text("Alias for keypair in provided keystore file")
+    ,
+    help("help").text("prints this usage text")
+    ,
       version("version").text(s"Constellation v${BuildInfo.version}"),
       checkConfig(
         c =>

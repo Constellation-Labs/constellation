@@ -16,5 +16,7 @@ case class CliConfig(
   lightNode: Boolean = false,
   genesisNode: Boolean = false,
   rollbackNode: Boolean = false,
+  rollbackHeight: Long = 0L,
+  rollbackHash: String = null,
   testMode: Boolean = false
 )
