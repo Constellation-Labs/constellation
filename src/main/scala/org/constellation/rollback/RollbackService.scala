@@ -73,6 +73,9 @@ class RollbackService[F[_]: Concurrent](
 
   private[rollback] def restore(rollbackData: RollbackData, height: Long): EitherT[F, Throwable, Unit] =
     for {
+      _ <- cluster.setParticipatedInRollbackFlow(true).attemptT
+      _ <- cluster.setParticipatedInGenesisFlow(false).attemptT
+      _ <- cluster.setJoinedAsInitialFacilitator(true).attemptT
       _ <- logger.debug("Applying the rollback.").attemptT
       _ <- logger.debug(s"Accepting GenesisObservation").attemptT
       _ <- acceptGenesis(rollbackData.genesisObservation)

@@ -40,8 +40,8 @@ case class PeerRegistrationRequest(
   id: Id,
   resourceInfo: ResourceInfo,
   majorityHeight: Option[Long],
-  joinsToGenesisNode: Boolean,
-  joinsToRollbackNode: Boolean,
+  participatesInGenesisFlow: Boolean,
+  participatesInRollbackFlow: Boolean,
   joinsAsInitialFacilitator: Boolean,
   whitelistingHash: String
 )
