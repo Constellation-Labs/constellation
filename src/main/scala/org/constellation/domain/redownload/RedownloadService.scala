@@ -281,7 +281,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       acceptedSnapshots <- getAcceptedSnapshots()
 
       peers <- cluster.getPeerInfo
-      ownPeer <- cluster.ownJoinedHeight.get
+      ownPeer <- cluster.getOwnJoinedHeight()
       peersCache = peers.map {
         case (id, peerData) => (id, peerData.majorityHeight)
       } ++ Map(cluster.id -> NonEmptyList.one(MajorityHeight(ownPeer, None)))
