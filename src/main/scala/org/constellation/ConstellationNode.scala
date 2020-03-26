@@ -138,6 +138,8 @@ object ConstellationNode extends IOApp {
         isGenesisNode = cliConfig.genesisNode,
         isLightNode = cliConfig.lightNode,
         isRollbackNode = cliConfig.rollbackNode,
+        rollbackHeight = cliConfig.rollbackHeight,
+        rollbackHash = cliConfig.rollbackHash,
         hostName = hostName,
         httpInterface = config.getString("http.interface"),
         httpPort = httpPort,
@@ -289,9 +291,9 @@ class ConstellationNode(
     }.getOrElse("")}")
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   } else if (nodeConfig.isRollbackNode) {
-    logger.info("Performing rollback.")
+    logger.info(s"Performing rollback for height: ${nodeConfig.rollbackHeight}, hash: ${nodeConfig.rollbackHash}")
     dao.rollbackService
-      .restore()
+      .restore(nodeConfig.rollbackHeight, nodeConfig.rollbackHash)
       .rethrowT
       .handleError(e => logger.error(s"Rollback error: ${Logging.stringifyStackTrace(e)}"))
       .unsafeRunSync()

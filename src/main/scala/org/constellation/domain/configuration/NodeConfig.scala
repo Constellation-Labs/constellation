@@ -14,6 +14,8 @@ case class NodeConfig(
   isGenesisNode: Boolean = false,
   isLightNode: Boolean = false,
   isRollbackNode: Boolean = false,
+  rollbackHeight: Long = 0L,
+  rollbackHash: String = "",
   hostName: String = "127.0.0.1",
   httpInterface: String = "0.0.0.0",
   httpPort: Int = 9000,

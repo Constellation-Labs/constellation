@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.1.4] - 2020-03-26
+### Fixed
+- Specify height and hash for rollback explicitly
+
 ## [v2.1.3] - 2020-03-26
 ### Added
 - Whitelisting file
