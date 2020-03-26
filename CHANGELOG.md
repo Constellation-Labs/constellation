@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [v2.1.3] - 2020-03-26
+
+### Fixed
+- Make sure that ownJoinedHeight can be set only once
+- Fix Docker releases in Github workflow
+
 ## [v2.1.2] - 2020-03-25
 ### Fixed
 - Do not validate EigenTrust when doing the rollback

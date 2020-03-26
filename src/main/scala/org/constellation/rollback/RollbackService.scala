@@ -110,7 +110,7 @@ class RollbackService[F[_]: Concurrent](
 
       ownJoinedHeight = height - snapshotHeightInterval
 
-      _ <- cluster.ownJoinedHeight.modify(_ => (Some(ownJoinedHeight), ())).attemptT
+      _ <- cluster.setOwnJoinedHeight(ownJoinedHeight).attemptT
 
       _ <- redownloadService
         .persistAcceptedSnapshot(height, storedSnapshot.snapshot.hash)

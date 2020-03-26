@@ -96,11 +96,11 @@ class Cluster[F[_]](
   T: Timer[F]
 ) {
 
-  val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]] {
+  def id = dao.id
+
+  private val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]] {
     if (dao.nodeConfig.isGenesisNode) Some(0L) else None
   }
-
-  def id = dao.id
 
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
@@ -113,6 +113,19 @@ class Cluster[F[_]](
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
   private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
+
+  def setOwnJoinedHeight(height: Long): F[Unit] =
+    ownJoinedHeight.modify { h =>
+      (Some(h.getOrElse(height)), ())
+    }
+
+  def getOwnJoinedHeight(): F[Option[Long]] =
+    ownJoinedHeight.get
+
+  def clearOwnJoinedHeight(): F[Unit] =
+    ownJoinedHeight.modify { _ =>
+      (None, ())
+    }
 
   // TODO: wkoszycki consider using complex structure of peers so the lookup has O(n) complexity
   def getPeerData(host: String): F[Option[PeerData]] =
@@ -260,7 +273,7 @@ class Cluster[F[_]](
                 if (request.joinsToRollbackNode) {
                   logger.debug("Joining to rollback node")
                 } else if (request.joinsAsInitialFacilitator) {
-                  ownJoinedHeight.modify(_ => (Some(0L), ())) >> logger.debug("Joining as initial facilitator")
+                  setOwnJoinedHeight(0L) >> logger.debug("Joining as initial facilitator")
                 } else F.unit
 
               for {
@@ -306,11 +319,11 @@ class Cluster[F[_]](
         .map(heights => if (heights.nonEmpty) heights.map(_.highest).max else 0L)
       delay = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
       ownHeight = maxMajorityHeight + delay
-      _ <- ownJoinedHeight.modify(_ => (Some(ownHeight), ()))
+      _ <- setOwnJoinedHeight(ownHeight)
     } yield ownHeight
 
     for {
-      height <- ownJoinedHeight.get
+      height <- getOwnJoinedHeight()
       _ <- logger.debug(s"Broadcasting own joined height - step1: height=$height")
       ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
@@ -461,7 +474,7 @@ class Cluster[F[_]](
 
   def pendingRegistrationRequest: F[PeerRegistrationRequest] =
     for {
-      height <- ownJoinedHeight.get
+      height <- getOwnJoinedHeight()
 
       peers <- peers.get
       peersSize = peers.size
@@ -558,7 +571,7 @@ class Cluster[F[_]](
 
   private def clearServicesBeforeJoin(): F[Unit] =
     for {
-      _ <- ownJoinedHeight.modify(_ => (None, ()))
+      _ <- clearOwnJoinedHeight()
       _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
       _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
       _ <- LiftIO[F].liftIO(dao.addressService.clear)
@@ -597,7 +610,7 @@ class Cluster[F[_]](
         ips <- ipManager.listKnownIPs
         _ <- ips.toList.traverse(ipManager.removeKnownIP)
         _ <- peers.modify(_ => (Map.empty, Map.empty))
-        _ <- ownJoinedHeight.modify(_ => (if (dao.nodeConfig.isGenesisNode) Some(0L) else None, ()))
+        _ <- if (dao.nodeConfig.isGenesisNode) setOwnJoinedHeight(0L) else clearOwnJoinedHeight()
         _ <- LiftIO[F].liftIO(dao.eigenTrust.clearAgents())
         _ <- updateMetrics()
         _ <- updatePersistentStore()
