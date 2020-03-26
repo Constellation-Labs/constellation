@@ -70,8 +70,18 @@ object Genesis extends StrictLogging {
   }.unsafeRunSync() // TODO: Get rid of unsafeRunSync and fix all the unit tests
 
   def start()(implicit dao: DAO): Unit = {
-    val genesisObservation = createGenesisObservation(dao.nodeConfig.allocAccountBalances)
-    acceptGenesis(genesisObservation)
+    val startIO = for {
+      _ <- dao.cluster.setParticipatedInGenesisFlow(true)
+      _ <- dao.cluster.setParticipatedInRollbackFlow(false)
+      _ <- dao.cluster.setJoinedAsInitialFacilitator(true)
+      _ <- dao.cluster.setOwnJoinedHeight(0L)
+      genesisObservation = createGenesisObservation(dao.nodeConfig.allocAccountBalances)
+      _ <- IO.delay {
+        acceptGenesis(genesisObservation)
+      }
+    } yield genesisObservation
+
+    startIO.unsafeRunSync()
   }
 
   // TODO: Make F[Unit]

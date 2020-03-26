@@ -98,9 +98,10 @@ class Cluster[F[_]](
 
   def id = dao.id
 
-  private val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]] {
-    if (dao.nodeConfig.isGenesisNode) Some(0L) else None
-  }
+  private val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]](None)
+  private val participatedInGenesisFlow: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
+  private val participatedInRollbackFlow: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
+  private val joinedAsInitialFacilitator: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
 
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
@@ -113,6 +114,21 @@ class Cluster[F[_]](
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
   private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
+
+  def setJoinedAsInitialFacilitator(joined: Boolean): F[Unit] =
+    joinedAsInitialFacilitator.modify { j =>
+      (Some(j.getOrElse(joined)), ())
+    }
+
+  def setParticipatedInGenesisFlow(participated: Boolean): F[Unit] =
+    participatedInGenesisFlow.modify { p =>
+      (Some(p.getOrElse(participated)), ())
+    }
+
+  def setParticipatedInRollbackFlow(participated: Boolean): F[Unit] =
+    participatedInRollbackFlow.modify { p =>
+      (Some(p.getOrElse(participated)), ())
+    }
 
   def setOwnJoinedHeight(height: Long): F[Unit] =
     ownJoinedHeight.modify { h =>
@@ -209,6 +225,7 @@ class Cluster[F[_]](
           .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
           .map((md, _))
       }
+
       _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
       registerResponse <- register.traverse { md =>
         for {
@@ -269,12 +286,11 @@ class Cluster[F[_]](
               logger.debug(s"Valid peer signature $request $authSignRequest $sig")
           }.flatMap {
             sig =>
-              val updateJoiningHeight =
-                if (request.joinsToRollbackNode) {
-                  logger.debug("Joining to rollback node")
-                } else if (request.joinsAsInitialFacilitator) {
-                  setOwnJoinedHeight(0L) >> logger.debug("Joining as initial facilitator")
-                } else F.unit
+              val updateJoiningHeight = for {
+                _ <- setParticipatedInGenesisFlow(request.participatesInGenesisFlow)
+                _ <- setParticipatedInRollbackFlow(request.participatesInRollbackFlow)
+                _ <- setJoinedAsInitialFacilitator(request.joinsAsInitialFacilitator)
+              } yield ()
 
               for {
                 state <- withMetric(
@@ -312,13 +328,21 @@ class Cluster[F[_]](
 
   def broadcastOwnJoinedHeight(): F[Unit] = {
     val discoverJoinedHeight = for {
-      p <- peers.get
+      p <- peers.get.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       clients = p.map(_._2.client).toList
       maxMajorityHeight <- clients
         .traverse(_.getNonBlockingF[F, LatestMajorityHeight]("latestMajorityHeight")(C))
         .map(heights => if (heights.nonEmpty) heights.map(_.highest).max else 0L)
       delay = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
-      ownHeight = maxMajorityHeight + delay
+
+      participatedInGenesisFlow <- participatedInGenesisFlow.get.map(_.getOrElse(false))
+      participatedInRollbackFlow <- participatedInRollbackFlow.get.map(_.getOrElse(false))
+      joinedAsInitialFacilitator <- joinedAsInitialFacilitator.get.map(_.getOrElse(false))
+
+      ownHeight = if (participatedInGenesisFlow && joinedAsInitialFacilitator) 0L
+      else if (participatedInRollbackFlow && joinedAsInitialFacilitator) maxMajorityHeight
+      else maxMajorityHeight + delay
+
       _ <- setOwnJoinedHeight(ownHeight)
     } yield ownHeight
 
@@ -472,20 +496,21 @@ class Cluster[F[_]](
       "cluster_initiatePeerReload"
     )
 
+  // Someone joins to me
   def pendingRegistrationRequest: F[PeerRegistrationRequest] =
     for {
       height <- getOwnJoinedHeight()
 
-      peers <- peers.get
+      peers <- peers.get.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       peersSize = peers.size
       minFacilitatorsSize = dao.processingConfig.numFacilitatorPeers
-      joinsToGenesisNode = dao.nodeConfig.isGenesisNode
-      joinsToRollbackNode = dao.nodeConfig.isRollbackNode
-      joinsAsInitialFacilitator = peersSize < minFacilitatorsSize
+      isInitialFacilitator = peersSize < minFacilitatorsSize
+      participatedInRollbackFlow <- participatedInRollbackFlow.get.map(_.getOrElse(false))
+      participatedInGenesisFlow <- participatedInGenesisFlow.get.map(_.getOrElse(false))
       whitelistingHash = KryoSerializer.serializeAnyRef(dao.nodeConfig.whitelisting).sha256
 
       _ <- logger.debug(
-        s"Pending registration request: ownHeight=$height peers=$peersSize joinsToGenesisNode=$joinsToGenesisNode joinsToRollbackNode=$joinsToRollbackNode joinsAsInitialFacilitator=$joinsAsInitialFacilitator"
+        s"Pending registration request: ownHeight=$height peers=$peersSize isInitialFacilitator=$isInitialFacilitator participatedInRollbackFlow=$participatedInRollbackFlow participatedInGenesisFlow=$participatedInGenesisFlow"
       )
 
       prr <- F.delay {
@@ -497,14 +522,15 @@ class Cluster[F[_]](
             diskUsableBytes = new java.io.File(dao.snapshotPath).getUsableSpace
           ),
           height,
-          joinsToGenesisNode = joinsToGenesisNode && !joinsToRollbackNode,
-          joinsToRollbackNode = joinsToRollbackNode && !joinsToGenesisNode,
-          joinsAsInitialFacilitator = joinsAsInitialFacilitator,
+          participatesInGenesisFlow = participatedInGenesisFlow,
+          participatesInRollbackFlow = participatedInRollbackFlow,
+          joinsAsInitialFacilitator = isInitialFacilitator,
           whitelistingHash
         )
       }
     } yield prr
 
+  // I join to someone
   def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
     logThread(
       withMetric(

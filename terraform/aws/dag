@@ -104,7 +104,7 @@ rollback() {
 
   ssh admin@$ip -o StrictHostKeyChecking=no 'sudo cp /home/admin/constellation/start_rollback /home/admin/constellation/start'
 
-  redeploy
+  restart
 
   ip=`head -1 $HOSTS_FILE`
   echo -e "${blu} Used: ${grn}$ip${blu} as a rollback node.${clr}"
