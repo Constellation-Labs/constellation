@@ -80,7 +80,7 @@ object ConstellationNode extends IOApp {
       mappedValues = values.map {
         case ip :: id :: Nil => Map(ip -> Id(id))
         case _               => Map.empty[IP, Id]
-      }.reduce { _ ++ _ }
+      }.fold(Map.empty[IP, Id])(_ ++ _)
       _ <- Sync[F].delay { source.close() }
     } yield mappedValues
 
