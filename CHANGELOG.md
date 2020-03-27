@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Changed
+- Double spend validation #1007
 ### Fixed
 - Transaction max value validation #994
 - Checking signature hash correctness #995
