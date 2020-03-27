@@ -183,7 +183,8 @@ class CheckpointBlockValidator[F[_]: Sync](
         val isNodeAddress = dao.id.address == address
         val necessaryAmount = if (isNodeAddress) stakingAmount else 0L
 
-        if (diff >= necessaryAmount) t.toList.validNel else InsufficientBalance(address, amount, diff).invalidNel
+        if (diff >= necessaryAmount && amount > 0) t.toList.validNel
+        else InsufficientBalance(address, amount, diff).invalidNel
       }
 
     t.groupBy(_.src.address)

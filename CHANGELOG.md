@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Transaction max value validation
 
 ## [v2.1.4] - 2020-03-27
 ### Changed
