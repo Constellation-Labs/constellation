@@ -29,7 +29,6 @@ class TransactionMaxValueTest
   "#994" - {
     "transaction with overflow" - {
       implicit val dao = TestHelpers.prepareMockedDAO()
-      val txValidator = new TransactionValidator[IO](dao.transactionService)
 
       implicit val keyPair = Fixtures.tempKey1
       val src = KeyUtils.publicKeyToAddressString(keyPair.getPublic)
