@@ -282,7 +282,7 @@ class Cluster[F[_]](
                 dao.metrics.incrementMetricAsync[F]("peerKeyMismatch")
             } else F.unit
           }.flatTap { sig =>
-            if (!sig.valid) {
+            if (!sig.valid(authSignRequest.salt.toString)) {
               logger.warn(s"Invalid peer signature $request $authSignRequest $sig") >>
                 dao.metrics.incrementMetricAsync[F]("invalidPeerRegistrationSignature")
             } else F.unit

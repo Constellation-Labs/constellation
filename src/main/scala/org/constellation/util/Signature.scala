@@ -21,7 +21,7 @@ trait Signable {
 
 case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 
-  def valid: Boolean = hashSignature.valid(hash)
+  def valid(expectedHash: String): Boolean = hash == expectedHash && hashSignature.valid(expectedHash)
 }
 
 case class HashSignature(
