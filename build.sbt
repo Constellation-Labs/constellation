@@ -1,4 +1,5 @@
 import E2E._
+import Regression._
 import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
@@ -157,7 +158,7 @@ lazy val testDependencies = Seq(
   "org.mockito" %% "mockito-scala-cats" % versions.mockito,
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
-).map(_ % "it,test,e2e")
+).map(_ % "it,test,e2e,regression")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-results/scalatest")
@@ -189,6 +190,7 @@ lazy val root = (project in file("."))
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
   .configs(E2ETest)
+  .configs(RegressionTest)
   .enablePlugins(BuildInfoPlugin)
   .settings(
     buildInfoKeys := Seq[BuildInfoKey](
@@ -204,6 +206,7 @@ lazy val root = (project in file("."))
     commonSettings,
     coreSettings,
     E2E.e2eSettings,
+    Regression.regressionSettings,
     Defaults.itSettings,
     libraryDependencies ++= (coreDependencies ++ testDependencies),
     mainClass := Some("org.constellation.ConstellationNode")
