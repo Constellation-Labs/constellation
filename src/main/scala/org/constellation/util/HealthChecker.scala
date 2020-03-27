@@ -6,7 +6,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.ConcurrentTipService
-import org.constellation.primitives.Schema.NodeType
+import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
@@ -85,7 +85,9 @@ class HealthChecker[F[_]: Concurrent](
 
   private def collectMinTipHeights(): F[Map[Id, Long]] =
     for {
-      peers <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Full))
+      peers <- LiftIO[F]
+        .liftIO(dao.cluster.getPeerInfo)
+        .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       minTipHeights <- peers.values.toList
         .map(_.client)
         .traverse(_.getNonBlockingF[F, (Id, Long)]("heights/min")(calculationContext))
