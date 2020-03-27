@@ -3,11 +3,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [v2.1.4] - 2020-03-26
+## [v2.1.4] - 2020-03-27
 ### Changed
 - Specify height and hash for rollback explicitly
 ### Fixed
 - Make sure that we can't set leaving height smaller than joining height
+- Broadcasting to and requesting only from ready peers
 
 ## [v2.1.3] - 2020-03-26
 ### Added

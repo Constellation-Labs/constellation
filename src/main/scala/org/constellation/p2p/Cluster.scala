@@ -410,7 +410,7 @@ class Cluster[F[_]](
     logThread(
       for {
         p <- peers.get
-        peer = p.get(nodeId).filter(pd => pd.peerMetadata.nodeState != NodeState.Offline)
+        peer = p.get(nodeId).filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
         majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
         _ <- peer.traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
         maxProposalHeight <- peer.traverse { peer =>
@@ -691,7 +691,7 @@ class Cluster[F[_]](
   ): F[Map[Id, Either[Throwable, T]]] =
     logThread(
       for {
-        peerInfo <- peers.get
+        peerInfo <- peers.get.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
         selected = if (subset.nonEmpty) {
           peerInfo.filterKeys(subset.contains)
         } else {
