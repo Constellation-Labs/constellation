@@ -44,10 +44,15 @@ case class PeerData(
       majorityHeight = NonEmptyList.one(majorityHeight.head.copy(joined = Some(height))) ++ majorityHeight.tail
     )
 
-  def updateLeavingHeight(height: Long): PeerData =
+  def updateLeavingHeight(leavingHeight: Long): PeerData = {
+    val joinedHeight = majorityHeight.head.joined
+
+    val leavingHeightToSet = if (joinedHeight.exists(_ <= leavingHeight)) Some(leavingHeight) else joinedHeight
+
     this.copy(
-      majorityHeight = NonEmptyList.one(majorityHeight.head.copy(left = Some(height))) ++ majorityHeight.tail
+      majorityHeight = NonEmptyList.one(majorityHeight.head.copy(left = leavingHeightToSet)) ++ majorityHeight.tail
     )
+  }
 
   def canBeRemoved(lowestMajorityHeight: Long): Boolean =
     majorityHeight.forall(_.left.exists(_ < lowestMajorityHeight))
