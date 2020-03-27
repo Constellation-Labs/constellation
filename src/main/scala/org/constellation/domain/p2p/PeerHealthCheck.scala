@@ -6,6 +6,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.APIClient
 
 import scala.concurrent.duration._
@@ -27,7 +28,7 @@ class PeerHealthCheck[F[_]: Concurrent: Timer](cluster: Cluster[F])(implicit C: 
   def check(): F[Unit] =
     for {
       _ <- logger.debug("Checking for dead peers")
-      peers <- cluster.getPeerInfo
+      peers <- cluster.getPeerInfo.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       statuses <- peers.values.toList.traverse(pd => checkPeer(pd.client).map(pd -> _))
       unresponsivePeers = statuses.count(_._2 == PeerUnresponsive)
       _ <- if (unresponsivePeers > 0) logger.info(s"Found dead peers: ${unresponsivePeers}") else Sync[F].unit
