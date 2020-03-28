@@ -13,9 +13,8 @@ import de.heikoseeberger.akkahttpjson4s.Json4sSupport
 import org.constellation.DAO
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.primitives.Schema.NodeState.NodeState
 import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.primitives.Schema.NodeType.NodeType
+import org.constellation.primitives.Schema.NodeType
 import org.constellation.serializer.KryoSerializer
 import org.json4s.native.Serialization
 
@@ -149,7 +148,7 @@ trait CommonEndpoints extends Json4sSupport {
       // TODO: Make it snapshot/stored/:hash and move under pathPrefix("snapshot")
       // TODO: Used in PeerAPI but also:
       // TODO: Move to different port - Should be probably accessible by owner only.
-      path("storedSnapshot" / Segment) { s =>
+      path("snapshot" / "stored" / Segment) { s =>
         val getSnapshot = for {
           exists <- dao.snapshotStorage.exists(s)
           bytes <- if (exists) {

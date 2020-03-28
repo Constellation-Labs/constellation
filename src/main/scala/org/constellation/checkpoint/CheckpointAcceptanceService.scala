@@ -7,7 +7,7 @@ import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
-import org.constellation.consensus.FinishedCheckpoint
+import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, SignatureResponse}
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
 import org.constellation.domain.observation.{CheckpointBlockInvalid, Observation, ObservationService}
@@ -17,7 +17,7 @@ import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.util.{Metrics, PeerApiClient}
+import org.constellation.util.{HashSignature, Metrics, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._
@@ -49,6 +49,13 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+
+  def handleSignatureRequest(sr: SignatureRequest): F[SignatureResponse] =
+    checkpointBlockValidator
+      .simpleValidation(sr.checkpointBlock)
+      .map(_.isValid)
+      .map(valid => if (valid) Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair)) else none[HashSignature])
+      .map(SignatureResponse(_))
 
   // TODO: For debugging only
   private def logConditions(cb: CheckpointBlock, correct: Boolean): F[Unit] =

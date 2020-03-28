@@ -1,7 +1,7 @@
 package org.constellation
 
 import cats.effect.IO
-import org.constellation.keytool.KeyStoreUtils
+import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.primitives.{Edge, Transaction}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.wallet.{KryoSerializer => WalletKryoSerializer}
