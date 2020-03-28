@@ -3,9 +3,10 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
+import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.schema.Id
 import org.constellation.util._
+import enumeratum._
 
 // This can't be a trait due to serialization issues.
 import scala.util.Random
@@ -26,47 +27,55 @@ object Schema {
     cbEdgeHash: Option[String]
   )
 
-  object NodeState extends Enumeration {
-    type NodeState = Value
+  sealed trait NodeState extends EnumEntry
 
-    val PendingDownload, ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync, SnapshotCreation,
-      Ready, Leaving, Offline =
-      Value
+  object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
-    val all: Set[NodeState.Value] = values.toSet
+    case object PendingDownload extends NodeState
+    case object ReadyForDownload extends NodeState
+    case object DownloadInProgress extends NodeState
+    case object DownloadCompleteAwaitingFinalSync extends NodeState
+    case object SnapshotCreation extends NodeState
+    case object Ready extends NodeState
+    case object Leaving extends NodeState
+    case object Offline extends NodeState
 
-    val readyStates: Set[NodeState.Value] = Set(NodeState.Ready, NodeState.SnapshotCreation)
+    val values = findValues
+
+    val all: Set[NodeState] = values.toSet
+
+    val readyStates: Set[NodeState] = Set(NodeState.Ready, NodeState.SnapshotCreation)
 
     val initial: Set[NodeState] = Set(Offline, PendingDownload)
 
-    val broadcastStates: Set[NodeState.Value] = Set(Ready, Leaving, Offline, PendingDownload, ReadyForDownload)
+    val broadcastStates: Set[NodeState] = Set(Ready, Leaving, Offline, PendingDownload, ReadyForDownload)
 
-    val offlineStates: Set[NodeState.Value] = Set(Offline)
+    val offlineStates: Set[NodeState] = Set(Offline)
 
-    val invalidForJoining: Set[NodeState.Value] = Set(Leaving, Offline)
+    val invalidForJoining: Set[NodeState] = Set(Leaving, Offline)
 
-    val validDuringDownload: Set[NodeState.Value] =
+    val validDuringDownload: Set[NodeState] =
       Set(ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
-    val validForDownload: Set[NodeState.Value] = Set(PendingDownload, Ready)
+    val validForDownload: Set[NodeState] = Set(PendingDownload, Ready)
 
-    val validForRedownload: Set[NodeState.Value] = Set(ReadyForDownload, Ready)
+    val validForRedownload: Set[NodeState] = Set(ReadyForDownload, Ready)
 
-    val validForSnapshotCreation: Set[NodeState.Value] = Set(Ready, Leaving)
+    val validForSnapshotCreation: Set[NodeState] = Set(Ready, Leaving)
 
-    val validForTransactionGeneration: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForTransactionGeneration: Set[NodeState] = Set(Ready, SnapshotCreation)
 
-    val validForOwnConsensus: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForOwnConsensus: Set[NodeState] = Set(Ready, SnapshotCreation)
 
-    val validForConsensusParticipation: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForConsensusParticipation: Set[NodeState] = Set(Ready, SnapshotCreation)
 
-    val validForLettingOthersDownload: Set[NodeState.Value] = Set(Ready, SnapshotCreation, Leaving)
+    val validForLettingOthersDownload: Set[NodeState] = Set(Ready, SnapshotCreation, Leaving)
 
-    val validForLettingOthersRedownload: Set[NodeState.Value] = Set(Ready, Leaving)
+    val validForLettingOthersRedownload: Set[NodeState] = Set(Ready, Leaving)
 
-    val validForCheckpointAcceptance: Set[NodeState.Value] = Set(Ready, SnapshotCreation)
+    val validForCheckpointAcceptance: Set[NodeState] = Set(Ready, SnapshotCreation)
 
-    val validForCheckpointPendingAcceptance: Set[NodeState.Value] = validDuringDownload
+    val validForCheckpointPendingAcceptance: Set[NodeState] = validDuringDownload
 
     def isNotOffline(current: NodeState): Boolean = !offlineStates.contains(current)
 
@@ -95,9 +104,13 @@ object Schema {
 
   }
 
-  object NodeType extends Enumeration {
-    type NodeType = Value
-    val Full, Light = Value
+  sealed trait NodeType extends EnumEntry
+
+  object NodeType extends Enum[NodeType] with CirceEnum[NodeType] {
+    case object Full extends NodeType
+    case object Light extends NodeType
+
+    val values = findValues
   }
 
   sealed trait ValidationStatus
@@ -145,11 +158,20 @@ object Schema {
   }
 
   /** Our basic set of allowed edge hash types */
-  object EdgeHashType extends Enumeration {
-    type EdgeHashType = Value
+  sealed trait EdgeHashType extends EnumEntry
 
-    val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash, ValidationHash,
-      BundleDataHash, ChannelMessageDataHash = Value
+  object EdgeHashType extends Enum[EdgeHashType] with CirceEnum[EdgeHashType] {
+
+    case object AddressHash extends EdgeHashType
+    case object CheckpointDataHash extends EdgeHashType
+    case object CheckpointHash extends EdgeHashType
+    case object TransactionDataHash extends EdgeHashType
+    case object TransactionHash extends EdgeHashType
+    case object ValidationHash extends EdgeHashType
+    case object BundleDataHash extends EdgeHashType
+    case object ChannelMessageDataHash extends EdgeHashType
+
+    val values = findValues
   }
 
   case class BundleEdgeData(rank: Double, hashes: Seq[String])

@@ -99,14 +99,10 @@ object MyStyles extends StyleSheet.Inline {
 
 trait ServeUI {
 
-  protected val logger: Logger
-
-  implicit val dao: DAO
-
   // Use for rebuilding UI quicker without a restart
   private val debugMode = Option(System.getenv("DAG_DEBUG")).nonEmpty
 
-  private val scalaJsSource = if (debugMode) "/ui-fastopt.js" else "/ui-opt.js"
+  private val scalaJsSource = if (debugMode) "/js/ui-fastopt.js" else "/js/ui-opt.js"
 
   private val jsApplicationMain = "org.constellation.ui.App().main()"
 
@@ -209,9 +205,8 @@ trait ServeUI {
     pathPrefix("ui") {
       get {
         extractUnmatchedPath { path =>
-          logger.info(s"UI Request $path")
           val resPath = "ui/ui" + path
-          logger.debug(s"Loading resource from $resPath")
+
           if (debugMode) getFromFile("./ui/target/scala-2.12/ui" + path) // For debugging more quickly
           else getFromResource(resPath)
         }
@@ -219,7 +214,7 @@ trait ServeUI {
     }
 
   def servePage(page: String, optPrimary: Option[TypedTag[String]] = None): StandardRoute = {
-    logger.info(s"Serving page $page")
+
     val html = defaultIndexPage(page, optPrimary)
     val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
     complete(entity)
@@ -240,7 +235,7 @@ trait ServeUI {
           Some(
             div(
               id := "message-view",
-              dao.messageService.lookup(msgHash).unsafeRunSync().prettyJson
+              ""
             )
           )
         )
