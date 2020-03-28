@@ -78,9 +78,9 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
     new IdSerializer +
     new SnapshotProposalSerializer +
     new InetSocketAddressSerializer +
-    new EnumNameSerializer(EdgeHashType) +
-    new EnumNameSerializer(NodeState) +
-    new EnumNameSerializer(NodeType) +
+//    new EnumNameSerializer(EdgeHashType) +
+//    new EnumNameSerializer(NodeState) +
+//    new EnumNameSerializer(NodeType) +
     ShortTypeHints(
       List(
         classOf[CheckpointBlockWithMissingParents],

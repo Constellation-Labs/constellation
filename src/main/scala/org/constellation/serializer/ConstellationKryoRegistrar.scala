@@ -15,7 +15,7 @@ import org.constellation.util.{HashSignature, SignatureBatch}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
-import org.constellation.primitives.Schema.EdgeHashType.EdgeHashType
+import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.rewards.EigenTrustAgents
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister

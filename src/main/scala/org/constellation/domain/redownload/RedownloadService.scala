@@ -184,7 +184,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   // TODO: Extract to HTTP layer
   private[redownload] def fetchSnapshot(hash: String)(client: APIClient): F[SnapshotSerialized] =
     client
-      .getNonBlockingArrayByteF("storedSnapshot/" + hash, timeout = 45.second)(C)
+      .getNonBlockingArrayByteF("snapshot/stored/" + hash, timeout = 45.second)(C)
 
   private def fetchAndStoreMissingSnapshots(
     snapshotsToDownload: SnapshotsAtHeight

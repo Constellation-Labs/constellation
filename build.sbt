@@ -1,11 +1,11 @@
 import E2E._
 import Regression._
-import com.typesafe.sbt.packager.docker.{Cmd, ExecCmd}
 import sbt.Keys.mainClass
 
 envVars in Test := Map("CL_STOREPASS" -> "storepass", "CL_KEYPASS" -> "keypass")
 enablePlugins(JavaAgent, JavaAppPackaging)
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
+addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
 scalacOptions :=
   Seq(
@@ -48,6 +48,8 @@ lazy val versions = new {
   val twitterChill = "0.9.3"
   val http4s = "0.21.2"
   val circe = "0.12.3"
+  val circeEnumeratum = "1.5.23"
+  val circeGenericExtras = "0.13.0"
 }
 
 lazy val sttpDependencies = Seq(
@@ -64,10 +66,12 @@ lazy val http4sDependencies = Seq(
 ).map(_ % versions.http4s)
 
 lazy val circeDependencies = Seq(
-  "io.circe" %% "circe-core",
-  "io.circe" %% "circe-generic",
-  "io.circe" %% "circe-parser"
-).map(_ % versions.circe)
+  "io.circe" %% "circe-core" % versions.circe,
+  "io.circe" %% "circe-generic" % versions.circe,
+  "io.circe" %% "circe-generic-extras" % versions.circeGenericExtras,
+  "io.circe" %% "circe-parser" % versions.circe,
+  "com.beachape" %% "enumeratum-circe" % versions.circeEnumeratum
+)
 
 lazy val sharedDependencies = Seq(
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
@@ -147,7 +151,7 @@ testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/te
 
 test in assembly := {}
 
-Test / fork := true // <-- comment out to attach debugger
+Test / fork := false // <-- comment out to attach debugger
 Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {

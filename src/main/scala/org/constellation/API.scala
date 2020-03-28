@@ -26,8 +26,8 @@ import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.trust.TrustData
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{ChangePeerState, SetStateResult}
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.NodeType.NodeType
+import org.constellation.primitives.Schema.NodeState
+import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.schema.Id

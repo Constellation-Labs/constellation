@@ -9,8 +9,9 @@ import akka.http.scaladsl.server.Directive0
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
-import better.files._
-import cats.effect.{ContextShift, ExitCode, IO, IOApp, Sync}
+import better.files.File
+import cats.Monad
+import cats.effect.{ConcurrentEffect, ContextShift, ExitCode, IO, IOApp, Resource, Sync, Timer}
 import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -21,14 +22,36 @@ import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
+import org.constellation.infrastructure.endpoints.{
+  BuildInfoEndpoints,
+  CheckpointEndpoints,
+  ClusterEndpoints,
+  ConsensusEndpoints,
+  MetricsEndpoints,
+  NodeMetadataEndpoints,
+  ObservationEndpoints,
+  SignEndpoints,
+  SnapshotEndpoints,
+  SoeEndpoints,
+  StatisticsEndpoints,
+  TipsEndpoints,
+  TransactionEndpoints,
+  UIEndpoints
+}
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.IPManager.IP
-import org.constellation.primitives.Schema.{NodeState, ValidPeerIPData}
+import org.constellation.primitives.Schema.{GenesisObservation, NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
+import org.http4s.HttpRoutes
 import org.slf4j.MDC
+import org.http4s.implicits._
+import org.http4s.syntax._
+import org.http4s.server.blaze.BlazeServerBuilder
+import org.http4s.server.{Router, middleware, Server => H4Server}
+import org.http4s.server.middleware.Logger
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.io.Source
@@ -49,22 +72,84 @@ object ConstellationNode extends IOApp {
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
 
-  def run(args: List[String]): IO[ExitCode] =
-    for {
-      _ <- logger.info(s"Main init with args $args")
+  def run(args: List[String]): IO[ExitCode] = {
+    val s = for {
+      _ <- Resource.liftF(logger.info(s"Main init with args $args"))
 
-      cliConfig <- CliConfigParser.parseCliConfig[IO](args)
-      _ <- logger.info(s"CliConfig: $cliConfig")
+      cliConfig <- Resource.liftF(CliConfigParser.parseCliConfig[IO](args))
+      _ <- Resource.liftF(logger.info(s"CliConfig: $cliConfig"))
 
       config = ConfigFactory.load() // TODO
 
-      _ <- createPreferencesPath[IO](preferencesPath)
+      _ <- Resource.liftF(createPreferencesPath[IO](preferencesPath))
 
-      nodeConfig <- getNodeConfig[IO](cliConfig, config)
-      _ = new ConstellationNode(nodeConfig)
+      nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
+      node = new ConstellationNode(nodeConfig)
 
-      exitCode = ExitCode.Success
-    } yield exitCode
+      server <- createServer(node.dao)
+    } yield server
+
+    s.use(_ => IO.never).as(ExitCode.Success)
+  }
+
+  def getGenesisObservation(dao: DAO): Option[GenesisObservation] =
+    dao.genesisObservation
+
+  def createServer(dao: DAO): cats.effect.Resource[IO, Unit] =
+    for {
+      _ <- Resource.liftF(IO.unit)
+
+      publicEndpoints = MetricsEndpoints.publicEndpoints[IO](dao.metrics) <+>
+        NodeMetadataEndpoints.publicEndpoints[IO](dao.addressService) <+>
+        TransactionEndpoints.publicEndpoints[IO](dao.transactionService, dao.checkpointBlockValidator) <+>
+        ClusterEndpoints.publicEndpoints[IO](dao.cluster)
+
+      peerEndpoints = BuildInfoEndpoints.peerEndpoints[IO]() <+>
+        MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
+        CheckpointEndpoints.peerEndpoints[IO](
+          getGenesisObservation(dao),
+          dao.checkpointService,
+          dao.checkpointAcceptanceService,
+          dao.metrics,
+          dao.snapshotService
+        ) <+>
+        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
+        ConsensusEndpoints
+          .peerEndpoints[IO](null, dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
+        NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType) <+>
+        ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
+        SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
+        SnapshotEndpoints.peerEndpoints[IO](
+          dao.id,
+          dao.snapshotStorage,
+          dao.snapshotInfoStorage,
+          dao.snapshotService,
+          dao.cluster,
+          dao.redownloadService
+        ) <+>
+        SoeEndpoints.peerEndpoints[IO](dao.soeService) <+>
+        TipsEndpoints.peerEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
+        TransactionEndpoints.peerEndpoints[IO](dao.transactionService, dao.metrics)
+
+      ownerEndpoints = BuildInfoEndpoints.ownerEndpoints[IO]() <+>
+        MetricsEndpoints.ownerEndpoints[IO](dao.metrics) <+>
+        UIEndpoints.ownerEndpoints[IO](dao.messageService) <+>
+        StatisticsEndpoints.ownerEndpoints[IO](dao.recentBlockTracker, dao.transactionService, dao.cluster) <+>
+        NodeMetadataEndpoints.ownerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType) <+>
+        SignEndpoints.ownerEndpoints[IO](dao.cluster)
+
+      publicRouter = Router("" -> publicEndpoints).orNotFound
+      peerRouter = Router("" -> peerEndpoints).orNotFound
+      ownerRouter = Router("" -> ownerEndpoints).orNotFound
+
+      publicRouterWithLogger = middleware.Logger.httpApp(true, false)(publicRouter)
+      peerRouterWithLogger = middleware.Logger.httpApp(true, false)(peerRouter)
+      ownerRouterWithLogger = middleware.Logger.httpApp(true, false)(ownerRouter)
+
+      _ <- BlazeServerBuilder[IO].bindHttp(9000, "0.0.0.0").withHttpApp(publicRouterWithLogger).withoutBanner.resource
+      _ <- BlazeServerBuilder[IO].bindHttp(9001, "0.0.0.0").withHttpApp(peerRouterWithLogger).withoutBanner.resource
+      _ <- BlazeServerBuilder[IO].bindHttp(9002, "localhost").withHttpApp(ownerRouterWithLogger).withoutBanner.resource
+    } yield ()
 
   private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = Sync[F].delay {
     Option(cliConfig.externalIp)
@@ -197,6 +282,7 @@ class ConstellationNode(
 
   logger.info("Binding API")
 
+  /*
   // Setup http server for internal API
   val apiBinding: Future[Http.ServerBinding] = Http()
     .bind(nodeConfig.httpInterface, nodeConfig.httpPort)
@@ -205,7 +291,7 @@ class ConstellationNode(
       conn.handleWith(api.routes(address))
     })
     .run()
-
+   */
   val peerAPI = new PeerAPI(dao.ipManager)
 
   def getIPData: ValidPeerIPData =
@@ -214,6 +300,7 @@ class ConstellationNode(
   def getInetSocketAddress: InetSocketAddress =
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
+  /*
   // Setup http server for peer API
   val peerApiBinding: Future[Http.ServerBinding] = Http()
     .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
@@ -223,6 +310,8 @@ class ConstellationNode(
     })
     .run()
 
+   */
+
   def shutdown(): Unit = {
 
     val unbindTimeout = ConfigUtil.getDurationFromConfig("akka.http.unbind-api-timeout")
@@ -231,8 +320,8 @@ class ConstellationNode(
     implicit val cs: ContextShift[IO] = IO.contextShift(ec)
 
     val gracefulShutdown = IO(logger.info("Shutdown procedure starts")) >>
-      IO.fromFuture(IO(peerApiBinding.flatMap(_.terminate(unbindTimeout)))) >>
-      IO.fromFuture(IO(apiBinding.flatMap(_.terminate(unbindTimeout)))) >>
+//      IO.fromFuture(IO(peerApiBinding.flatMap(_.terminate(unbindTimeout)))) >>
+//      IO.fromFuture(IO(apiBinding.flatMap(_.terminate(unbindTimeout)))) >>
       IO.fromFuture(IO(system.terminate())) >>
       IO(logger.info("Shutdown completed"))
 
@@ -304,9 +393,4 @@ class ConstellationNode(
 
 //  Keeping disabled for now -- going to only use midDb for the time being.
 //  private val txMigrator = new TransactionPeriodicMigration
-
-  var dataPollingManager: DataPollingManager = _
-  if (nodeConfig.dataPollingManagerOn) {
-    dataPollingManager = new DataPollingManager(60)
-  }
 }

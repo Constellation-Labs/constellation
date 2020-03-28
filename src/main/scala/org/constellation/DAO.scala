@@ -38,8 +38,8 @@ import org.constellation.infrastructure.snapshot.{
   SnapshotS3Storage
 }
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.NodeState.NodeState
-import org.constellation.primitives.Schema.NodeType.NodeType
+import org.constellation.primitives.Schema.NodeState
+import org.constellation.primitives.Schema.NodeType
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
@@ -352,8 +352,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     if (node != null) {
       implicit val ec = ConstellationExecutionContext.unbounded
 
-      node.peerApiBinding.flatMap(_.terminate(1.second))
-      node.apiBinding.flatMap(_.terminate(1.second))
+//      node.peerApiBinding.flatMap(_.terminate(1.second))
+//      node.apiBinding.flatMap(_.terminate(1.second))
       node.system.terminate()
     }
     if (actorMaterializer != null) actorMaterializer.shutdown()

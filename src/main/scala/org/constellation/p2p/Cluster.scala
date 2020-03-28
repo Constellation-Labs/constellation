@@ -8,15 +8,15 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.implicits._
 import com.softwaremill.sttp.Response
 import constellation._
+import enumeratum._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation._
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.p2p.Cluster.ClusterNode
-import org.constellation.p2p.PeerState.PeerState
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.Schema.NodeState.{NodeState, broadcastStates}
+import org.constellation.primitives.Schema.NodeState.broadcastStates
 import org.constellation.rollback.{
   CannotLoadGenesisObservationFile,
   CannotLoadSnapshotInfoFile,
@@ -85,9 +85,13 @@ object MajorityHeight {
     majorityHeights.exists(isHeightBetween(height, _))
 }
 
-object PeerState extends Enumeration {
-  type PeerState = Value
-  val Leave, Join = Value
+sealed trait PeerState extends EnumEntry
+
+object PeerState extends Enum[PeerState] with CirceEnum[PeerState] {
+  case object Join extends PeerState
+  case object Leave extends PeerState
+
+  val values = findValues
 }
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
@@ -255,12 +259,13 @@ class Cluster[F[_]](
             )
         }
 
+        isCorrectIP = ip == request.host && ip != ""
         isWhitelisted = dao.nodeConfig.whitelisting.get(ip).contains(request.id)
         whitelistingHash = KryoSerializer.serializeAnyRef(dao.nodeConfig.whitelisting).sha256
         validWhitelistingHash = whitelistingHash == request.whitelistingHash
 
         isSelfId = dao.id == request.id
-        badAttempt = !isWhitelisted || !validWhitelistingHash || isSelfId || !validExternalHost || existsNotOffline
+        badAttempt = !isCorrectIP || !isWhitelisted || !validWhitelistingHash || isSelfId || !validExternalHost || existsNotOffline
         isValid <- joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
 
         _ <- if (!isWhitelisted) {
@@ -719,6 +724,7 @@ object Cluster {
   ) = new Cluster(ipManager, joiningPeerValidator, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
+  case class TestClusterNode(aa: String)
 
   object ClusterNode {
     def apply(pm: PeerMetadata) = new ClusterNode(pm.id, HostPort(pm.host, pm.httpPort), pm.nodeState, 0L)
