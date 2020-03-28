@@ -23,7 +23,12 @@ scrape_configs:
   metrics_path: /micrometer-metrics
   scheme: http
   static_configs:
-  - targets:
-    - constellation:9000
-    labels:
-      alias: constellation
+    - targets:
+        - constellation:9000
+      labels:
+        alias: constellation
+- job_name: dynamic-targets
+  file_sd_configs:
+    - files:
+        - 'targets.json'
+
