@@ -1,0 +1,27 @@
+# docker-compose.yml
+version: '3'
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - '9090:9090'
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention=200h
+    volumes:
+      - ./grafana-dashboard/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./grafana-dashboard/prometheus/targets:/etc/prometheus/targets:ro
+  node-exporter:
+    image: prom/node-exporter:latest
+    ports:
+      - '9100:9100'
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-dashboard/grafana/provisioning/:/etc/grafana/provisioning/
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
