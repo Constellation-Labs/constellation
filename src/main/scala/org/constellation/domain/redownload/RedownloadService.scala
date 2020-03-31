@@ -18,6 +18,8 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.Cluster
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.FileStorage
+import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.rewards.RewardsManager
@@ -25,7 +27,7 @@ import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Logging.stringifyStackTrace
-import org.constellation.util.{APIClient, Metrics}
+import org.constellation.util.Metrics
 
 import scala.collection.SortedMap
 import scala.concurrent.duration._
@@ -46,6 +48,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
   rewardsCloudStorage: HeightHashFileStorage[F, StoredRewards],
   rewardsManager: RewardsManager[F],
+  apiClient: ClientInterpreter[F],
   metrics: Metrics
 )(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
 
@@ -130,7 +133,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       peers <- cluster.getPeerInfo.map(
         _.values.toList.filter(p => NodeState.isNotOffline(p.peerMetadata.nodeState))
       )
-      apiClients = peers.map(_.client)
+      apiClients = peers.map(_.peerMetadata.toPeerClientMetadata)
       responses <- apiClients.traverse { client =>
         fetchCreatedSnapshots(client).map(client.id -> _)
       }
@@ -141,10 +144,10 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }
     } yield proposals
 
-  private[redownload] def fetchStoredSnapshotsFromAllPeers(): F[Map[APIClient, Set[String]]] =
+  private[redownload] def fetchStoredSnapshotsFromAllPeers(): F[Map[PeerClientMetadata, Set[String]]] =
     for {
       peers <- cluster.getPeerInfo.map(_.values.toList)
-      apiClients = peers.map(_.client)
+      apiClients = peers.map(_.peerMetadata.toPeerClientMetadata)
       responses <- apiClients.traverse { client =>
         fetchStoredSnapshots(client)
           .map(client -> _.toSet)
@@ -152,39 +155,45 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield responses.toMap
 
   // TODO: Extract to HTTP layer
-  private[redownload] def fetchAcceptedSnapshots(client: APIClient): F[SnapshotsAtHeight] =
-    client
-      .getNonBlockingF[F, SnapshotsAtHeight]("snapshot/accepted")(C)
+  private[redownload] def fetchAcceptedSnapshots(client: PeerClientMetadata): F[SnapshotsAtHeight] =
+    apiClient.snapshot
+      .getAcceptedSnapshots()
+      .run(client)
       .handleErrorWith(_ => F.pure(Map.empty))
 
   // TODO: Extract to HTTP layer
-  private def fetchCreatedSnapshots(client: APIClient): F[SnapshotProposalsAtHeight] =
-    client
-      .getNonBlockingF[F, SnapshotProposalsAtHeight]("snapshot/created")(C)
+  private def fetchCreatedSnapshots(client: PeerClientMetadata): F[SnapshotProposalsAtHeight] =
+    apiClient.snapshot
+      .getCreatedSnapshots()
+      .run(client)
       .handleErrorWith { e =>
         logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
       }
 
   // TODO: Extract to HTTP layer
-  private def fetchStoredSnapshots(client: APIClient): F[Seq[String]] =
-    client
-      .getNonBlockingF[F, Seq[String]]("snapshot/stored")(C)
-      .handleErrorWith(_ => F.pure(Seq.empty))
+  private def fetchStoredSnapshots(client: PeerClientMetadata): F[List[String]] =
+    apiClient.snapshot
+      .getStoredSnapshots()
+      .run(client)
+      .handleErrorWith(_ => F.pure(List.empty))
 
   // TODO: Extract to HTTP layer
-  private[redownload] def fetchSnapshotInfo(client: APIClient): F[SnapshotInfoSerialized] =
-    client
-      .getNonBlockingArrayByteF("snapshot/info", timeout = 45.second)(C)
+  private[redownload] def fetchSnapshotInfo(client: PeerClientMetadata): F[SnapshotInfoSerialized] =
+    apiClient.snapshot
+      .getSnapshotInfo()
+      .run(client)
 
   // TODO: Extract to HTTP layer
-  private def fetchSnapshotInfo(hash: String)(client: APIClient): F[SnapshotInfoSerialized] =
-    client
-      .getNonBlockingArrayByteF("snapshot/info/" + hash, timeout = 45.second)(C)
+  private def fetchSnapshotInfo(hash: String)(client: PeerClientMetadata): F[SnapshotInfoSerialized] =
+    apiClient.snapshot
+      .getSnapshotInfo(hash)
+      .run(client)
 
   // TODO: Extract to HTTP layer
-  private[redownload] def fetchSnapshot(hash: String)(client: APIClient): F[SnapshotSerialized] =
-    client
-      .getNonBlockingArrayByteF("snapshot/stored/" + hash, timeout = 45.second)(C)
+  private[redownload] def fetchSnapshot(hash: String)(client: PeerClientMetadata): F[SnapshotSerialized] =
+    apiClient.snapshot
+      .getStoredSnapshot(hash)
+      .run(client)
 
   private def fetchAndStoreMissingSnapshots(
     snapshotsToDownload: SnapshotsAtHeight
@@ -210,8 +219,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }.void
     } yield ()
 
-  private[redownload] def useRandomClient[A](pool: Set[APIClient], attempts: Int = 3)(
-    fetchFn: APIClient => F[A]
+  private[redownload] def useRandomClient[A](pool: Set[PeerClientMetadata], attempts: Int = 3)(
+    fetchFn: PeerClientMetadata => F[A]
   ): F[A] =
     if (pool.isEmpty) {
       F.raiseError[A](new Throwable("Client pool is empty!"))
@@ -586,6 +595,7 @@ object RedownloadService {
     snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
     rewardsCloudStorage: HeightHashFileStorage[F, StoredRewards],
     rewardsManager: RewardsManager[F],
+    apiClient: ClientInterpreter[F],
     metrics: Metrics
   ): RedownloadService[F] =
     new RedownloadService[F](
@@ -603,6 +613,7 @@ object RedownloadService {
       snapshotInfoCloudStorage,
       rewardsCloudStorage,
       rewardsManager,
+      apiClient,
       metrics
     )
 

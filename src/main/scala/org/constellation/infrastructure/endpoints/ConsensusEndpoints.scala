@@ -2,7 +2,6 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.{Concurrent, ContextShift, IO}
 import cats.implicits._
-import com.softwaremill.sttp.SttpBackend
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
@@ -24,7 +23,6 @@ import org.constellation.domain.observation.ObservationEvent
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.PeerData
 import org.constellation.storage.SnapshotService
-import org.constellation.util.APIClient
 import org.http4s._
 import org.http4s.circe._
 
@@ -36,11 +34,11 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
 
   import ObservationEvent._
 
-  private def convert(r: RoundDataRemote, backend: SttpBackend[Future, Nothing]): RoundData =
+  private def convert(r: RoundDataRemote): RoundData =
     RoundData(
       r.roundId,
-      r.peers.map { case (p, m)      => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend), m) },
-      r.lightPeers.map { case (p, m) => PeerData(p, APIClient.apply(p.host, p.httpPort)(backend), m) },
+      r.peers.map { case (p, m)      => PeerData(p, m) },
+      r.lightPeers.map { case (p, m) => PeerData(p, m) },
       r.facilitatorId,
       r.transactions,
       r.tipsSOE,
@@ -72,7 +70,6 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
     }
 
   private def participateInNewRoundEndpoint(
-    backend: SttpBackend[Future, Nothing],
     consensusManager: ConsensusManager[F],
     snapshotService: SnapshotService[F]
   ): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -86,7 +83,7 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
                 last => if (last != 2 && last > min) throw SnapshotHeightAboveTip(cmd.roundId, last, min)
               )
           }
-          .flatMap(_ => consensusManager.participateInBlockCreationRound(convert(cmd, backend)))
+          .flatMap(_ => consensusManager.participateInBlockCreationRound(convert(cmd)))
         response <- participate.flatMap { res =>
           F.start(C.shift >> consensusManager.continueRoundParticipation(res._1, res._2)) >> Ok()
         }.handleErrorWith {
@@ -139,12 +136,11 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
   }
 
   def peerEndpoints(
-    backend: SttpBackend[Future, Nothing],
     consensusManager: ConsensusManager[F],
     snapshotService: SnapshotService[F],
     transactionService: TransactionService[F]
   ) =
-    participateInNewRoundEndpoint(backend, consensusManager, snapshotService) <+>
+    participateInNewRoundEndpoint(consensusManager, snapshotService) <+>
       addConsensusDataProposalEndpoint(consensusManager, transactionService) <+>
       addUnionBlockEndpoint(consensusManager, transactionService) <+>
       addSelectedUnionBlockEndpoint(consensusManager, transactionService)
@@ -154,10 +150,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
 object ConsensusEndpoints {
 
   def peerEndpoints[F[_]: Concurrent: ContextShift](
-    backend: SttpBackend[Future, Nothing],
     consensusManager: ConsensusManager[F],
     snapshotService: SnapshotService[F],
     transactionService: TransactionService[F]
   ): HttpRoutes[F] =
-    new ConsensusEndpoints[F]().peerEndpoints(backend, consensusManager, snapshotService, transactionService)
+    new ConsensusEndpoints[F]().peerEndpoints(consensusManager, snapshotService, transactionService)
 }

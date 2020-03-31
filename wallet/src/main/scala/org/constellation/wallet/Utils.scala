@@ -5,9 +5,9 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 import cats.Monoid
 import com.google.common.hash.Hashing
 import com.twitter.chill.{IKryoRegistrar, Kryo, KryoPool, ScalaKryoInstantiator}
+import enumeratum._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.{bytes2hex, hexToPublicKey, signData, verifySignature}
-import org.constellation.wallet.EdgeHashType.EdgeHashType
 
 import scala.util.Random
 
@@ -58,8 +58,15 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[String], 1014)
     kryo.register(classOf[Boolean], 1015)
 
-//    kryo.register(Class.forName("org.constellation.wallet.EdgeHashType$EdgeHashType$"))
-    kryo.register(EdgeHashType.getClass, 1016)
+    kryo.register(EdgeHashType.AddressHash.getClass, 1024)
+    kryo.register(EdgeHashType.CheckpointDataHash.getClass, 1025)
+    kryo.register(EdgeHashType.CheckpointHash.getClass, 1026)
+    kryo.register(EdgeHashType.TransactionDataHash.getClass, 1027)
+    kryo.register(EdgeHashType.TransactionHash.getClass, 1028)
+    kryo.register(EdgeHashType.ValidationHash.getClass, 1029)
+    kryo.register(EdgeHashType.BundleDataHash.getClass, 1030)
+    kryo.register(EdgeHashType.ChannelMessageDataHash.getClass, 1031)
+
     kryo.register(Class.forName("scala.Enumeration$Val"), 1017)
 
     kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"), 1018)
@@ -110,11 +117,20 @@ case class TransactionEdgeData(
   salt: Long = Random.nextLong()
 )
 
-object EdgeHashType extends Enumeration {
-  type EdgeHashType = Value
+sealed trait EdgeHashType extends EnumEntry
 
-  val AddressHash, CheckpointDataHash, CheckpointHash, TransactionDataHash, TransactionHash, ValidationHash,
-    BundleDataHash, ChannelMessageDataHash = Value
+object EdgeHashType extends Enum[EdgeHashType] with CirceEnum[EdgeHashType] {
+
+  case object AddressHash extends EdgeHashType
+  case object CheckpointDataHash extends EdgeHashType
+  case object CheckpointHash extends EdgeHashType
+  case object TransactionDataHash extends EdgeHashType
+  case object TransactionHash extends EdgeHashType
+  case object ValidationHash extends EdgeHashType
+  case object BundleDataHash extends EdgeHashType
+  case object ChannelMessageDataHash extends EdgeHashType
+
+  val values = findValues
 }
 
 case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)

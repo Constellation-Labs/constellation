@@ -50,6 +50,8 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
+  val dataResolver = new DataResolver(dao)
+
   def handleSignatureRequest(sr: SignatureRequest): F[SignatureResponse] =
     checkpointBlockValidator
       .simpleValidation(sr.checkpointBlock)
@@ -93,7 +95,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     val obtainPeers = cluster.getPeerInfo.map { allPeers =>
       val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))
       (if (filtered.isEmpty) allPeers else filtered)
-        .map(p => PeerApiClient(p._1, p._2.client))
+        .map(p => PeerApiClient(p._1, p._2.peerMetadata.toPeerClientMetadata))
         .toList
     }
 
@@ -300,7 +302,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 //          missing = txs.diff(stored.map(_.hash))
 //          resolved <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(missing)(contextShift))
 //          allTxs = stored ++ resolved
-          allTxs <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(txs)(contextShift))
+          allTxs <- LiftIO[F].liftIO(dataResolver.resolveBatchTransactionsDefaults(txs)(contextShift))
           _ <- logger.info(s"${Console.YELLOW}${allTxs.map(tx => (tx.hash, tx.cbBaseHash))}${Console.RESET}")
           cbs <- allTxs
             .flatMap(_.cbBaseHash)
@@ -311,7 +313,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
             }
             .flatMap {
               _.traverse { hash =>
-                LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash)(contextShift))
+                LiftIO[F].liftIO(dataResolver.resolveCheckpointDefaults(hash)(contextShift))
               }
             }
           _ <- cbs.traverse(accept(_))
@@ -342,7 +344,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       }
       .flatMap {
         _.traverse { hash =>
-          LiftIO[F].liftIO(DataResolver.resolveCheckpointDefaults(hash)(contextShift)(dao = dao))
+          LiftIO[F].liftIO(dataResolver.resolveCheckpointDefaults(hash)(contextShift)(dao = dao))
         }
       }
 
@@ -453,14 +455,16 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
                 }
               )
             } yield ()
-          } else { // Unsafe json extract
-            dao.channelService.put(
-              m.signedMessageData.hash,
-              ChannelMetadata(
-                m.signedMessageData.data.message.x[ChannelOpen],
-                channelMessageMetadata
-              )
-            )
+          } else {
+            IO.unit
+            // Unsafe json extract
+//            dao.channelService.put(
+//              m.signedMessageData.hash,
+//              ChannelMetadata(
+//                m.signedMessageData.data.message.x[ChannelOpen],
+//                channelMessageMetadata
+//              )
+//            )
           }
 
         for {

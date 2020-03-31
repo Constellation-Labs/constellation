@@ -1,7 +1,6 @@
 package org.constellation.wallet
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
-import org.json4s.native.Serialization
 import org.scalatest.FlatSpec
 
 import constellation._
@@ -12,14 +11,6 @@ case class SetSerialize(s: Set[String])
 class ValidateWalletFuncTest extends FlatSpec {
 
   val kp: KeyPair = makeKeyPair()
-
-  "Set serialize" should "test" in {
-
-    import constellation._
-    val s = SetSerialize(Set("a", "b", "c"))
-    assert(s.json.x[SetSerialize] == s)
-
-  }
 
   /*  "Wallet KeyStore" should "build a keystore properly" in {
 
@@ -57,28 +48,6 @@ class ValidateWalletFuncTest extends FlatSpec {
       assert(pk.contains("X:"))
       assert(pk.split("\n").length > 2)
     }
-  }
-
-  "KeyPair JSON" should "serialize to json4s using custom serializer" in {
-    //  implicit val formats: Formats = DefaultFormats +
-//      new PublicKeySerializer + new PrivateKeySerializer + new KeyPairSerializer
-    val ser = Serialization.write(kp.getPublic)
-    val deser = Serialization.read[PublicKey](ser)
-    assert(deser == kp.getPublic)
-    val ser2 = Serialization.write(kp.getPrivate)
-    val deser2 = Serialization.read[PrivateKey](ser2)
-    assert(deser2 == kp.getPrivate)
-    val ser3 = Serialization.write(kp)
-    val deser3 = Serialization.read[KeyPair](ser3)
-    assert(deser3.getPrivate == kp.getPrivate)
-    assert(deser3.getPublic == kp.getPublic)
-
-    assert(kp.getPublic.hashCode() == deser3.getPublic.hashCode())
-    assert(kp.getPrivate.getAlgorithm == deser3.getPrivate.getAlgorithm)
-    assert(kp.getPublic.getAlgorithm == deser3.getPublic.getAlgorithm)
-    assert(kp.getPublic.getFormat == deser3.getPublic.getFormat)
-    assert(kp.getPrivate.getFormat == deser3.getPrivate.getFormat)
-
   }
 
   "Signature" should "sign and verify output" in {

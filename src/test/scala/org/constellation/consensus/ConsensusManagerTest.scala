@@ -56,6 +56,7 @@ class ConsensusManagerTest
       dao.observationService,
       dao.consensusRemoteSender,
       dao.cluster,
+      dao.apiClient,
       dao,
       conf,
       Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),

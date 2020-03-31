@@ -18,13 +18,14 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.{Cluster, JoiningPeerValidator, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager
-import org.constellation.util.{APIClient, HostPort, Metrics}
+import org.constellation.util.{HostPort, Metrics}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 
@@ -61,16 +62,14 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         val hash = randomHash
         val facilitatorId1 = Id(hash)
         val peerData1: PeerData = mock[PeerData]
-        peerData1.peerMetadata shouldReturn mock[PeerMetadata]
-        peerData1.peerMetadata.id shouldReturn facilitatorId1
-        peerData1.peerMetadata.timeAdded shouldReturn System
-          .currentTimeMillis() - (ProcessingConfig().minPeerTimeAddedSeconds * 4000)
-        peerData1.peerMetadata.nodeType shouldReturn NodeType.Full
-        peerData1.peerMetadata.nodeState shouldReturn NodeState.Ready
-        peerData1.notification shouldReturn Seq()
-        peerData1.client shouldReturn mock[APIClient]
-        peerData1.client.hostPortForLogging shouldReturn HostPort(s"http://$hash", 9000)
-        peerData1.client.id shouldReturn facilitatorId1
+        peerData1.peerMetadata shouldReturn PeerMetadata(
+          "1.2.3.4",
+          9000,
+          facilitatorId1,
+          timeAdded = System
+            .currentTimeMillis() - (ProcessingConfig().minPeerTimeAddedSeconds * 4000),
+          resourceInfo = mock[ResourceInfo]
+        )
 
         facilitatorId1 -> peerData1
       }
@@ -86,6 +85,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     val dao: DAO = mock[DAO]
 
     dao.nodeConfig shouldReturn NodeConfig()
+
+    dao.apiClient shouldReturn mock[ClientInterpreter[IO]]
 
     val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
     f.createDirectoryIfNotExists()
@@ -199,7 +200,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     val ts = new TransactionService[IO](txChain, rl, dao)
     dao.transactionService shouldReturn ts
 
-    val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO]()
+    val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO](dao.apiClient)
     dao.joiningPeerValidator shouldReturn joiningPeerValidator
 
     val cts = mock[ConcurrentTipService[IO]]
@@ -222,7 +223,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     dao.metrics shouldReturn metrics
 
     val ipManager = IPManager[IO]()
-    val cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, dao)
+    val cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, dao.apiClient, dao)
     dao.cluster shouldReturn cluster
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
 

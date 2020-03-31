@@ -18,6 +18,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.Decoder
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
@@ -38,14 +39,16 @@ import org.constellation.infrastructure.endpoints.{
   TransactionEndpoints,
   UIEndpoints
 }
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.p2p.PeerAPI
 import org.constellation.primitives.IPManager.IP
 import org.constellation.primitives.Schema.{GenesisObservation, NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.schema.Id
-import org.constellation.util.{APIClient, AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
+import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
 import org.http4s.HttpRoutes
+import org.http4s.client.Client
+import org.http4s.client.blaze.BlazeClientBuilder
 import org.slf4j.MDC
 import org.http4s.implicits._
 import org.http4s.syntax._
@@ -54,6 +57,7 @@ import org.http4s.server.{Router, middleware, Server => H4Server}
 import org.http4s.server.middleware.Logger
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.Try
 
@@ -84,7 +88,14 @@ object ConstellationNode extends IOApp {
       _ <- Resource.liftF(createPreferencesPath[IO](preferencesPath))
 
       nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
-      node = new ConstellationNode(nodeConfig)
+
+      apiClient <- BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded)
+        .withConnectTimeout(5.seconds)
+        .resource
+
+      apiClientWithLogger = org.http4s.client.middleware.Logger(true, false)(apiClient)
+
+      node = new ConstellationNode(nodeConfig, apiClientWithLogger)
 
       server <- createServer(node.dao)
     } yield server
@@ -115,7 +126,7 @@ object ConstellationNode extends IOApp {
         ) <+>
         ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
         ConsensusEndpoints
-          .peerEndpoints[IO](null, dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
+          .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
         NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType) <+>
         ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
         SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
@@ -148,13 +159,26 @@ object ConstellationNode extends IOApp {
 
       _ <- BlazeServerBuilder[IO].bindHttp(9000, "0.0.0.0").withHttpApp(publicRouterWithLogger).withoutBanner.resource
       _ <- BlazeServerBuilder[IO].bindHttp(9001, "0.0.0.0").withHttpApp(peerRouterWithLogger).withoutBanner.resource
-      _ <- BlazeServerBuilder[IO].bindHttp(9002, "localhost").withHttpApp(ownerRouterWithLogger).withoutBanner.resource
+      _ <- BlazeServerBuilder[IO].bindHttp(9002, "0.0.0.0").withHttpApp(ownerRouterWithLogger).withoutBanner.resource
     } yield ()
 
-  private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = Sync[F].delay {
-    Option(cliConfig.externalIp)
-      .map(_.getHostAddress)
-      .getOrElse(Try(File(LocalConfigFile).lines.mkString.x[LocalNodeConfig].externalIP).getOrElse("127.0.0.1"))
+  private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = {
+    import io.circe.generic.semiauto._
+    import io.circe.parser.parse
+
+    implicit val localNodeConfigDecoder: Decoder[LocalNodeConfig] = deriveDecoder[LocalNodeConfig]
+
+    Sync[F].delay {
+      Option(cliConfig.externalIp)
+        .map(_.getHostAddress)
+        .getOrElse(
+          parse(File(LocalConfigFile).lines.mkString).toOption
+            .map(_.as[LocalNodeConfig])
+            .flatMap(_.toOption)
+            .map(_.externalIP)
+            .getOrElse("127.0.0.1")
+        )
+    }
   }
 
   private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Map[IP, Id]] =
@@ -242,14 +266,17 @@ object ConstellationNode extends IOApp {
 }
 
 class ConstellationNode(
-  val nodeConfig: NodeConfig = NodeConfig()
+  val nodeConfig: NodeConfig = NodeConfig(),
+  client: Client[IO]
 )(
   implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer
+  implicit val materialize: ActorMaterializer,
+  implicit val C: ContextShift[IO]
 //  implicit val executionContext: ExecutionContext
 ) extends StrictLogging {
 
   implicit val dao: DAO = new DAO()
+  dao.apiClient = ClientInterpreter[IO](client)
   dao.nodeConfig = nodeConfig
   dao.metrics = new Metrics(periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
   dao.initialize(nodeConfig)
@@ -277,51 +304,17 @@ class ConstellationNode(
     LoggingMagnet(printResponseTime(logger))
   )
 
-  // If we are exposing rpc then create routes
-  val api: API = new API()(system, constellation.standardTimeout, dao)
-
-  logger.info("Binding API")
-
-  /*
-  // Setup http server for internal API
-  val apiBinding: Future[Http.ServerBinding] = Http()
-    .bind(nodeConfig.httpInterface, nodeConfig.httpPort)
-    .to(Sink.foreach { conn =>
-      val address = conn.remoteAddress
-      conn.handleWith(api.routes(address))
-    })
-    .run()
-   */
-  val peerAPI = new PeerAPI(dao.ipManager)
-
   def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
   def getInetSocketAddress: InetSocketAddress =
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
-  /*
-  // Setup http server for peer API
-  val peerApiBinding: Future[Http.ServerBinding] = Http()
-    .bind(nodeConfig.httpInterface, nodeConfig.peerHttpPort)
-    .to(Sink.foreach { conn =>
-      val address = conn.remoteAddress
-      conn.handleWith(peerAPI.routes(address))
-    })
-    .run()
-
-   */
-
   def shutdown(): Unit = {
 
     val unbindTimeout = ConfigUtil.getDurationFromConfig("akka.http.unbind-api-timeout")
 
-    implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
-    implicit val cs: ContextShift[IO] = IO.contextShift(ec)
-
     val gracefulShutdown = IO(logger.info("Shutdown procedure starts")) >>
-//      IO.fromFuture(IO(peerApiBinding.flatMap(_.terminate(unbindTimeout)))) >>
-//      IO.fromFuture(IO(apiBinding.flatMap(_.terminate(unbindTimeout)))) >>
       IO.fromFuture(IO(system.terminate())) >>
       IO(logger.info("Shutdown completed"))
 
@@ -331,42 +324,6 @@ class ConstellationNode(
   }
 
   //////////////
-
-  // TODO : Move to separate test class - these are within jvm only but won't hurt anything
-  // We could also consider creating a 'Remote Proxy class' that represents a foreign
-  // ConstellationNode (i.e. the current Peer class) and have them under a common interface
-
-  def getAPIClient(host: String = nodeConfig.hostName, port: Int = nodeConfig.httpPort): APIClient = {
-    val api = APIClient(host, port)(dao.backend, dao)
-    api.id = dao.id
-    api
-  }
-
-  def getPeerAPIClient: APIClient = {
-    val api = APIClient(dao.nodeConfig.hostName, dao.nodeConfig.peerHttpPort)(dao.backend, dao)
-    api.id = dao.id
-    api
-  }
-
-  // TODO: Change E2E to not use this but instead rely on peer discovery, need to send addresses there too
-  def getAddPeerRequest: PeerMetadata =
-    PeerMetadata(
-      nodeConfig.hostName,
-      nodeConfig.peerHttpPort,
-      dao.id,
-      auxAddresses = dao.addresses,
-      nodeType = dao.nodeType,
-      resourceInfo = ResourceInfo(
-        diskUsableBytes = new java.io.File(dao.snapshotPath).getUsableSpace
-      )
-    )
-
-  def getAPIClientForNode(node: ConstellationNode): APIClient = {
-    val ipData = node.getIPData
-    val api = APIClient(host = ipData.canonicalHostName, port = ipData.port)(dao.backend, dao)
-    api.id = dao.id
-    api
-  }
 
   logger.info("Node started")
 

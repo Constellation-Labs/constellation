@@ -10,6 +10,8 @@ import org.constellation.DAO
 import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, RequestTimeoutOnResolving}
+import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.primitives.Schema.{CheckpointCache, NodeState, SignedObservationEdge}
 import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
 import org.constellation.util.Logging._
@@ -17,7 +19,9 @@ import org.constellation.util.{Distance, PeerApiClient}
 
 import scala.concurrent.duration._
 
-class DataResolver {
+class DataResolver(dao: DAO) {
+
+  val apiClient = dao.apiClient
 
   implicit val logger = Slf4jLogger.getLogger[IO]
 
@@ -36,17 +40,7 @@ class DataResolver {
   )(
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    logThread(
-      resolveDataByDistance[ChannelMessageMetadata](
-        List(hash),
-        "message",
-        pool,
-        priorityClient
-      )(contextToReturn).head
-        .flatTap(mcd => dao.messageService.memPool.put(mcd.channelMessage.signedMessageData.hash, mcd))
-        .flatTap(m => logger.debug(s"Resolving message=${m.channelMessage.signedMessageData.hash}")),
-      s"dataResolver_resolveMessage [$hash]"
-    )
+    IO.raiseError(new NotImplementedError())
 
   def resolveTransactionDefaults(
     hash: String,
@@ -87,7 +81,7 @@ class DataResolver {
       logger.debug(s"Start resolving transaction=${hash} for round $roundId") >>
         resolveDataByDistance[TransactionCacheData](
           List(hash),
-          "transaction",
+          apiClient.transaction.getTransaction,
           pool,
           priorityClient
         )(contextToReturn).sequence.flatMap { txs =>
@@ -114,17 +108,18 @@ class DataResolver {
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
     logger.debug(s"Start resolving transactions = ${hashes} for round = $roundId") *>
-      resolveBatchData[TransactionCacheData](hashes, "transactions", pool ++ priorityClient)(contextToReturn)
-        .flatMap(
-          txs =>
-            txs.traverse { tcd =>
-              dao.transactionService
-                .put(tcd, ConsensusStatus.Unknown)
-                .flatTap(
-                  _ => logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}")
-                )
-            }
-        )
+      resolveBatchData[TransactionCacheData](hashes, apiClient.transaction.getBatch, pool ++ priorityClient)(
+        contextToReturn
+      ).flatMap(
+        txs =>
+          txs.traverse { tcd =>
+            dao.transactionService
+              .put(tcd, ConsensusStatus.Unknown)
+              .flatTap(
+                _ => logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}")
+              )
+          }
+      )
 
   def resolveBatchObservations(
     hashes: List[String],
@@ -135,7 +130,7 @@ class DataResolver {
     contextToReturn: ContextShift[IO]
   )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Observation]] =
     logger.debug(s"Start resolving observations = ${hashes} for round = $roundId") *>
-      resolveBatchData[Observation](hashes, "observations", pool ++ priorityClient)(contextToReturn)
+      resolveBatchData[Observation](hashes, apiClient.observation.getBatch, pool ++ priorityClient)(contextToReturn)
         .flatMap(
           obs =>
             obs.traverse { o =>
@@ -161,7 +156,7 @@ class DataResolver {
     logThread(
       resolveDataByDistance[CheckpointCache](
         List(hash),
-        "checkpoint",
+        apiClient.checkpoint.getCheckpoint,
         pool,
         priorityClient
       )(contextToReturn).head
@@ -190,7 +185,7 @@ class DataResolver {
     logThread(
       resolveDataByDistanceFlat[SignedObservationEdge](
         hashes,
-        "soe",
+        apiClient.soe.getSoe,
         pool,
         priorityClient
       )(contextToReturn).flatTap(_.traverse(soe => dao.soeService.put(soe.hash, soe))),
@@ -205,7 +200,7 @@ class DataResolver {
     logThread(
       resolveDataByDistanceFlat[CheckpointCache](
         hashes,
-        "checkpoint",
+        apiClient.checkpoint.getCheckpoint,
         pool,
         priorityClient
       )(contextToReturn).flatTap(
@@ -228,7 +223,7 @@ class DataResolver {
     logThread(
       resolveDataByDistance[Observation](
         List(hash),
-        "observation",
+        apiClient.observation.getObservation,
         pool,
         priorityClient
       )(contextToReturn).head
@@ -239,7 +234,7 @@ class DataResolver {
 
   def resolveDataByDistance[T <: AnyRef](
     hashes: List[String],
-    endpoint: String,
+    endpoint: String => PeerResponse[IO, Option[T]],
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient] = None
   )(
@@ -253,7 +248,7 @@ class DataResolver {
 
   def resolveBatchDataByDistance[T <: AnyRef](
     hashes: List[String],
-    endpoint: String,
+    endpoint: List[String] => PeerResponse[IO, List[(String, Option[T])]],
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient] = None
   )(
@@ -269,7 +264,7 @@ class DataResolver {
 
   private[p2p] def resolveData[T <: AnyRef](
     hash: String,
-    endpoint: String,
+    endpoint: String => PeerResponse[IO, Option[T]],
     sortedPeers: List[PeerApiClient],
     maxErrors: Int = 100
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[T] = {
@@ -281,16 +276,16 @@ class DataResolver {
     ): IO[T] =
       innerPeers match {
         case _ if errorsSoFar >= maxErrors =>
-          IO.raiseError[T](DataResolutionMaxErrors(endpoint, hash))
+          IO.raiseError[T](DataResolutionMaxErrors(hash))
         case Nil =>
           IO.raiseError[T](
-            DataResolutionOutOfPeers(dao.id.short, endpoint, List(hash), allPeers.map(_.id.short))
+            DataResolutionOutOfPeers(dao.id.short, List(hash), allPeers.map(_.id.short))
           )
         case head :: tail =>
           getData[T](hash, endpoint, head)(contextToReturn).flatMap {
             case Some(a) => IO.pure(a)
             case None =>
-              IO.raiseError[T](DataResolutionNoneResponse(endpoint, hash, head))
+              IO.raiseError[T](DataResolutionNoneResponse(hash, head))
           }.handleErrorWith {
             case e: DataResolutionMaxErrors  => IO.raiseError[T](e)
             case e: DataResolutionOutOfPeers => IO.raiseError[T](e)
@@ -300,7 +295,7 @@ class DataResolver {
                 makeAttempt(tail, allPeers, errorsSoFar + 1)
             case e =>
               logger.error(
-                s"Unexpected error while resolving hash=${hash} on endpoint $endpoint with host=${head.client.hostPortForLogging}, and id ${head.client.id} trying next peer | ${e.getMessage}"
+                s"Unexpected error while resolving hash=${hash} with host=${head.client.host}, and id ${head.client.id} trying next peer | ${e.getMessage}"
               ) >>
                 makeAttempt(tail, allPeers, errorsSoFar + 1)
           }
@@ -315,7 +310,7 @@ class DataResolver {
 
   private[p2p] def resolveBatchData[T <: AnyRef](
     hashes: List[String],
-    endpoint: String,
+    endpoint: List[String] => PeerResponse[IO, List[(String, Option[T])]],
     sortedPeers: List[PeerApiClient]
   )(
     contextToReturn: ContextShift[IO]
@@ -329,7 +324,7 @@ class DataResolver {
     ): IO[List[T]] = {
 
       if (peers.isEmpty && innerHashes.size != allHashes.size) {
-        return IO.raiseError(DataResolutionOutOfPeers(dao.id.short, endpoint, hashes, sortedPeers.map(_.id.short)))
+        return IO.raiseError(DataResolutionOutOfPeers(dao.id.short, hashes, sortedPeers.map(_.id.short)))
       }
 
       if (innerHashes.size == allHashes.size) {
@@ -342,7 +337,7 @@ class DataResolver {
 
       getBatchData[T](requestHashes, endpoint, peer)(contextToReturn).flatMap { data =>
         logger.debug(
-          s"Requested : ${peer.client.hostPortForLogging} : to endpoint = $endpoint : for hashes = ${requestHashes
+          s"Requested : ${peer.client.host} : for hashes = ${requestHashes
             .mkString(",")} : and response hashes = ${data.size}"
         ) >>
           makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
@@ -356,39 +351,36 @@ class DataResolver {
 
   private[p2p] def getData[T <: AnyRef](
     hash: String,
-    endpoint: String,
+    endpoint: String => PeerResponse[IO, Option[T]],
     peerApiClient: PeerApiClient
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] =
-    peerApiClient.client
-      .getNonBlockingIO[Option[T]](s"$endpoint/$hash", timeout = apiTimeout)(contextToReturn)
-      .onError {
-        case _: SocketTimeoutException =>
-          dao.observationService
-            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(endpoint, List(hash)))(dao.keyPair))
-            .void
-      }
+    endpoint(hash).run(peerApiClient.client).onError {
+      case _: SocketTimeoutException =>
+        dao.observationService
+          .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(List(hash)))(dao.keyPair))
+          .void
+    }
 
   private[p2p] def getBatchData[T <: AnyRef](
     hashes: List[String],
-    endpoint: String,
+    endpoint: List[String] => PeerResponse[IO, List[(String, Option[T])]],
     peerApiClient: PeerApiClient
   )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
-    peerApiClient.client
-      .postNonBlockingIO[List[(String, T)]](
-        s"batch/$endpoint",
-        hashes,
-        timeout = apiTimeout
-      )(contextToReturn)
+    endpoint(hashes)
+      .run(peerApiClient.client)
+      .map(_.mapFilter {
+        case (hash, data) => data.map((hash, _))
+      })
       .onError {
         case _: SocketTimeoutException =>
           dao.observationService
-            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(endpoint, hashes))(dao.keyPair))
+            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(hashes))(dao.keyPair))
             .void
       }
 
   private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
     hashes: List[String],
-    endpoint: String,
+    endpoint: String => PeerResponse[IO, Option[T]],
     pool: List[PeerApiClient],
     priorityClient: Option[PeerApiClient] = None
   )(
@@ -402,23 +394,21 @@ class DataResolver {
       ready = all.filter { case (_, peer) => NodeState.isNotOffline(peer.peerMetadata.nodeState) }
       leaving <- dao.leavingPeers
     } yield (ready ++ leaving)
-    peers.map(_.map(p => PeerApiClient(p._1, p._2.client)).toList)
+    peers.map(_.map(p => PeerApiClient(p._1, p._2.peerMetadata.toPeerClientMetadata)).toList)
   }
 
 }
 
-object DataResolver extends DataResolver
-
-case class DataResolutionOutOfPeers(thisNode: String, endpoint: String, hashes: List[String], peers: Iterable[String])
+case class DataResolutionOutOfPeers(thisNode: String, hashes: List[String], peers: Iterable[String])
     extends Exception(
-      s"Node [$thisNode] run out of peers when resolving: $endpoint with hashes: $hashes following tried: $peers"
+      s"Node [$thisNode] run out of peers when resolving with hashes: $hashes following tried: $peers"
     )
 
-case class DataResolutionNoneResponse(endpoint: String, hash: String, client: PeerApiClient)
+case class DataResolutionNoneResponse(hash: String, client: PeerApiClient)
     extends Exception(
-      s"Failed to resolve hash=${hash} on endpoint $endpoint with host=${client.client.hostPortForLogging} and id ${client.id.short}, returned None"
+      s"Failed to resolve hash=${hash} with host=${client.client.host} and id ${client.id.short}, returned None"
     )
-case class DataResolutionMaxErrors(endpoint: String, hash: String)
+case class DataResolutionMaxErrors(hash: String)
     extends Exception(
-      s"Max errors threshold reached when resolving: $endpoint and hash: $hash aborting"
+      s"Max errors threshold reached when resolving hash: $hash aborting"
     )

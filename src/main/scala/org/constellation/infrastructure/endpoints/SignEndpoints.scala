@@ -6,7 +6,7 @@ import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.circe.generic.auto._
 import io.circe.syntax._
-import org.constellation.consensus.{EdgeProcessor, SignatureRequest}
+import org.constellation.consensus.SignatureRequest
 import org.constellation.p2p.{Cluster, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.util.{HostPort, SignHelp, SingleHashSignature}
 import org.http4s.{HttpRoutes, _}
@@ -16,7 +16,9 @@ import org.http4s.dsl.Http4sDsl
 class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 
   def publicPeerEndpoints(keyPair: KeyPair, cluster: Cluster[F]) =
-    signEndpoint(keyPair) <+> registerEndpoint(cluster) <+> getRegistrationRequest(cluster)
+    signEndpoint(keyPair) <+>
+      registerEndpoint(cluster) <+>
+      getRegistrationRequest(cluster)
 
   private def signEndpoint(keyPair: KeyPair): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "sign" =>

@@ -1,10 +1,12 @@
 package org.constellation.p2p
 
+import cats.data.Kleisli
 import cats.effect.{ContextShift, IO}
-import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.util.APIClient
+import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.infrastructure.p2p.client.BuildInfoClientInterpreter
 import org.constellation.{BuildInfo, ConstellationExecutionContext}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -18,29 +20,26 @@ class JoiningPeerValidatorTest
     with IdiomaticMockitoCats
     with Matchers {
 
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  private implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
-  private val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO]()
+  val apiClient = mock[ClientInterpreter[IO]]
+  val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO](apiClient)
 
-  private val joiningNode: APIClient = mock[APIClient]
-  joiningNode.hostName shouldReturn "1.1.1.1:9000"
-
-  private val node: APIClient = mock[APIClient]
-  node.hostName shouldReturn "0.0.0.0:9000"
+  private val joiningNode = PeerClientMetadata("1.1.1.1", 9000, null)
 
   private val wrongGitCommitHash = "abcd"
   private val goodGitCommitHash = BuildInfo.gitCommit
 
   before {
-    node.getStringF[IO]("buildInfo/gitCommit", *, *)(*)(*) shouldReturnF
-      Response.ok[String](goodGitCommitHash)
+    apiClient.buildInfo shouldReturn mock[BuildInfoClientInterpreter[IO]]
   }
 
   "validate joining peer" - {
     "should return false if peer is running from different hash commit" in {
-      joiningNode.getStringF[IO]("buildInfo/gitCommit", *, *)(*)(*) shouldReturnF
-        Response.ok[String](wrongGitCommitHash)
+      apiClient.buildInfo.getGitCommit() shouldReturn Kleisli.apply[IO, PeerClientMetadata, String] { _ =>
+        IO.pure(wrongGitCommitHash)
+      }
 
       val result = joiningPeerValidator.isValid(joiningNode).unsafeRunSync()
 
@@ -48,8 +47,9 @@ class JoiningPeerValidatorTest
     }
 
     "should return true if peer has passed all validation" in {
-      joiningNode.getStringF[IO]("buildInfo/gitCommit", *, *)(*)(*) shouldReturnF
-        Response.ok[String](goodGitCommitHash)
+      apiClient.buildInfo.getGitCommit() shouldReturn Kleisli.apply[IO, PeerClientMetadata, String] { _ =>
+        IO.pure(goodGitCommitHash)
+      }
 
       val result = joiningPeerValidator.isValid(joiningNode).unsafeRunSync()
 

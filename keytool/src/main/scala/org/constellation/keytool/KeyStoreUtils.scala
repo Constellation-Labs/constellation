@@ -37,12 +37,12 @@ object KeyStoreUtils {
       .use(bufferedWriter)
       .attemptT
 
-  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => T)(stream: FileInputStream) =
+  def parseFileOfTypeOp[F[_]: Sync, T](parser: String => Option[T])(stream: FileInputStream) =
     Resource
       .fromAutoCloseable(Sync[F].delay {
         new BufferedReader(new InputStreamReader(stream))
       })
-      .use(inStream => Option(inStream.readLine()).map(parser).pure[F])
+      .use(inStream => Option(inStream.readLine()).flatMap(parser).pure[F])
 
   def writeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) =
     Resource

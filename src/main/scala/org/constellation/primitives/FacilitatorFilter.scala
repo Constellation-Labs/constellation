@@ -5,12 +5,16 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.PeerData
 import org.constellation.schema.Id
 
 import scala.util.Random
 
-class FacilitatorFilter[F[_]: Concurrent](calculationContext: ContextShift[F], dao: DAO) {
+class FacilitatorFilter[F[_]: Concurrent](
+  apiClient: ClientInterpreter[F],
+  dao: DAO
+) {
 
   val logger = Slf4jLogger.getLogger[F]
 
@@ -47,5 +51,5 @@ class FacilitatorFilter[F[_]: Concurrent](calculationContext: ContextShift[F], d
     }
 
   private def getFacilitatorNextSnapshotHeights(facilitator: (Id, PeerData)): F[(Id, Long)] =
-    facilitator._2.client.getNonBlockingF[F, (Id, Long)]("snapshot/nextHeight")(calculationContext)
+    apiClient.snapshot.getNextSnapshotHeight().run(facilitator._2.peerMetadata.toPeerClientMetadata)
 }
