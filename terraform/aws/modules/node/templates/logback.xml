@@ -37,9 +37,13 @@
         </encoder>
     </appender>
 
-    <logger name="org.constellation" level="debug">
+    <logger name="org.constellation" level="warn">
         <appender-ref ref="rollingFile" />
         <appender-ref ref="jsonFile" />
+    </logger>
+
+    <logger name="org.http4s" level="info">
+        <appender-ref ref="rollingFile" />
     </logger>
 
     <root level="info">

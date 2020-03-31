@@ -18,6 +18,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
   observationService: MerkleStorageAlgebra[F, String, Observation]
 ) {
 
+  val dataResolver = new DataResolver(dao)
+
   val contextShift
     : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
@@ -89,7 +91,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveTransactionDefaults(s)(contextShift)(dao = dao))
+      (s: String) => LiftIO[F].liftIO(dataResolver.resolveTransactionDefaults(s)(contextShift)(dao = dao))
     )
 
   def fetchBatchTransactions(merkleRoot: String): F[List[Transaction]] =
@@ -97,7 +99,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: List[String]) => LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(s)(contextShift)(dao = dao))
+      (s: List[String]) => LiftIO[F].liftIO(dataResolver.resolveBatchTransactionsDefaults(s)(contextShift)(dao = dao))
     )
 
   def fetchBatchObservations(merkleRoot: String): F[List[Observation]] =
@@ -105,7 +107,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       observationService,
       (o: Observation) => o,
-      (s: List[String]) => LiftIO[F].liftIO(DataResolver.resolveBatchObservationsDefaults(s)(contextShift)(dao = dao))
+      (s: List[String]) => LiftIO[F].liftIO(dataResolver.resolveBatchObservationsDefaults(s)(contextShift)(dao = dao))
     )
 
   def fetchMessages(merkleRoot: String): F[List[ChannelMessage]] =
@@ -113,7 +115,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       messageService,
       (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(DataResolver.resolveMessageDefaults(s)(contextShift)(dao = dao))
+      (s: String) => LiftIO[F].liftIO(dataResolver.resolveMessageDefaults(s)(contextShift)(dao = dao))
     )
 
   def fetchNotifications(merkleRoot: String): F[List[PeerNotification]] =

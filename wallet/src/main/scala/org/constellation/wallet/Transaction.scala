@@ -3,11 +3,8 @@ package org.constellation.wallet
 import java.io.{FileInputStream, FileOutputStream}
 import java.security.KeyPair
 
-import cats.effect.{IO, Sync}
+import cats.effect.Sync
 import org.constellation.keytool.KeyStoreUtils
-import org.json4s.ext.EnumNameSerializer
-import org.json4s.{CustomKeySerializer, DefaultFormats, Extraction, Formats, JValue}
-import org.json4s.native.{Serialization, parseJsonOpt}
 
 case class Transaction(
   edge: Edge[TransactionEdgeData],
@@ -16,45 +13,18 @@ case class Transaction(
   isTest: Boolean
 )
 
-object SerializerFormats {
-
-  class IdSerializer
-      extends CustomKeySerializer[Id](
-        format =>
-          ({
-            case s: String =>
-              Id(s)
-          }, {
-            case id: Id =>
-              id.hex
-          })
-      )
-}
-
 object Transaction {
 
-  val formats: Formats = DefaultFormats + new SerializerFormats.IdSerializer + new EnumNameSerializer(EdgeHashType)
-
-  implicit class SerExt(jsonSerializable: Any) {
-    def compactRender(msg: JValue): String = Serialization.write(msg)(formats)
-
-    def caseClassToJson(message: Any): String =
-      compactRender(Extraction.decompose(message)(formats))
-    def json: String = caseClassToJson(jsonSerializable)
-  }
-
-  implicit class ParseExt(input: String) {
-    def parse4s(msg: String): JValue = parseJsonOpt(msg).get
-    def jValue: JValue = parse4s(input)
-    def x[T](implicit m: Manifest[T]): T = jValue.extract[T](formats, m)
-  }
+  import io.circe.generic.auto._
+  import io.circe.syntax._
+  import io.circe.parser.parse
 
   def transactionParser[F[_]](fis: FileInputStream)(implicit F: Sync[F]): F[Option[Transaction]] =
-    KeyStoreUtils.parseFileOfTypeOp[F, Transaction](ParseExt(_).x[Transaction])(fis)
+    KeyStoreUtils.parseFileOfTypeOp[F, Transaction](parse(_).map(_.as[Transaction]).toOption.flatMap(_.toOption))(fis)
 
   def transactionWriter[F[_]](t: Transaction)(implicit F: Sync[F]): FileOutputStream => F[Unit] = {
     (fos: FileOutputStream) =>
-      KeyStoreUtils.writeTypeToFileStream[F, Transaction](SerExt(_).json)(t)(fos)
+      KeyStoreUtils.writeTypeToFileStream[F, Transaction](_.asJson.noSpaces)(t)(fos)
   }
 
   def createTransaction(

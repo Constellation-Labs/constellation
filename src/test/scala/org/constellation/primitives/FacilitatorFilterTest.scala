@@ -1,5 +1,6 @@
 package org.constellation.primitives
 
+import cats.data.Kleisli
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
@@ -8,6 +9,9 @@ import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema.{CheckpointCacheMetadata, Height}
 import org.constellation.checkpoint.CheckpointService
+import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
 import org.constellation.schema.Id
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -36,16 +40,19 @@ class FacilitatorFilterTest
 
   val calculationContext: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
-  val facilitatorFilter = new FacilitatorFilter[IO](calculationContext, dao)
+  val apiClient = mock[ClientInterpreter[IO]]
+  val facilitatorFilter = new FacilitatorFilter[IO](apiClient, dao)
 
   describe("filter facilitators") {
     it("should return 2 facilitators") {
       val peers = TestHelpers.prepareFacilitators(5).toList
-      peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 3L)
-      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 2L)
-      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 4L)
-      peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 4L)
-      peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 4L)
+      val heights = peers.zip(List(3L, 2L, 4L, 4L, 4L))
+      apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+      apiClient.snapshot.getNextSnapshotHeight() shouldReturn Kleisli.apply[IO, PeerClientMetadata, (Id, Long)] { pm =>
+        IO.pure(heights.mapFilter {
+          case (pd, height) => if (pd._1 == pm.id) Some(pm.id, height) else None
+        }.head)
+      }
 
       val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2, TipSoe(Seq.empty, 2L.some)).unsafeRunSync()
 
@@ -54,11 +61,16 @@ class FacilitatorFilterTest
 
     it("should return 1 facilitator") {
       val peers = TestHelpers.prepareFacilitators(5).toList
-      peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 4L)
-      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 4L)
-      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 2L)
-      peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 5L)
-      peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 6L)
+      peers.zipWithIndex.foreach {
+        case (pd, i) => pd._2.peerMetadata.copy(id = Id(s"node$i"))
+      }
+      val heights = peers.zip(List(4L, 4L, 2L, 5L, 6L))
+      apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+      apiClient.snapshot.getNextSnapshotHeight() shouldReturn Kleisli.apply[IO, PeerClientMetadata, (Id, Long)] { pm =>
+        IO.pure(heights.mapFilter {
+          case (pd, height) => if (pd._1 == pm.id) Some(pm.id, height) else None
+        }.head)
+      }
 
       val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2, TipSoe(Seq.empty, 1L.some)).unsafeRunSync()
 
@@ -67,11 +79,16 @@ class FacilitatorFilterTest
 
     it("should return 0 facilitators") {
       val peers = TestHelpers.prepareFacilitators(5).toList
-      peers.get(0).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node0"), 5L)
-      peers.get(1).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node1"), 6L)
-      peers.get(2).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node2"), 7L)
-      peers.get(3).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node3"), 8L)
-      peers.get(4).get._2.client.getNonBlockingF[IO, (Id, Long)](*, *, *)(*)(*, *, *) shouldReturnF (Id("node4"), 9L)
+      peers.zipWithIndex.foreach {
+        case (pd, i) => pd._2.peerMetadata.copy(id = Id(s"node$i"))
+      }
+      val heights = peers.zip(List(5L, 6L, 7L, 8L, 9L))
+      apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+      apiClient.snapshot.getNextSnapshotHeight() shouldReturn Kleisli.apply[IO, PeerClientMetadata, (Id, Long)] { pm =>
+        IO.pure(heights.mapFilter {
+          case (pd, height) => if (pd._1 == pm.id) Some(pm.id, height) else None
+        }.head)
+      }
 
       val facilitators = facilitatorFilter.filterPeers(peers.toMap, 2, TipSoe(Seq.empty, 2L.some)).unsafeRunSync()
 

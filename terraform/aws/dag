@@ -116,15 +116,16 @@ restart() {
 
   pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/tmp && sudo rm -f /home/admin/constellation/logs/app.log && sudo systemctl restart constellation && sudo service filebeat restart'
 
-  sleep 10
+  sleep 15
 
   headIP=`head -1 $HOSTS_FILE`
   while read ip; do
     if [ "$ip" == "$headIP" ]; then
       echo "Skipping genesis node"
     else
-      curl -s -X POST http://"$ip":9001/join -H "Content-type: application/json" -d "{ \"host\": \"$headIP\", \"port\": 9001 }"
-      sleep 5
+      echo "Joining node: $ip"
+      ssh admin@$ip -o StrictHostKeyChecking=no -n "curl -s -X POST http://127.0.0.1:9002/join -H 'Content-type: application/json' -d '{ \"host\": \"$headIP\", \"port\": 9001 }'"
+      sleep 10
     fi
   done <$HOSTS_FILE
 }

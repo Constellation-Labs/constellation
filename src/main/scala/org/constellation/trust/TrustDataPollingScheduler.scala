@@ -6,6 +6,7 @@ import com.typesafe.config.Config
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.schema.Id
 import org.constellation.domain.trust.{TrustData, TrustDataInternal}
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.util.PeriodicIO
@@ -16,6 +17,7 @@ class TrustDataPollingScheduler(
   config: Config,
   trustManager: TrustManager[IO],
   cluster: Cluster[IO],
+  apiClient: ClientInterpreter[IO],
   dao: DAO
 ) extends PeriodicIO("TrustDataPollingScheduler") {
 
@@ -25,9 +27,11 @@ class TrustDataPollingScheduler(
       .flatMap(
         _.traverse(
           pd =>
-            pd.client
-              .getNonBlockingIO[TrustDataInternal]("trust")(IO.contextShift(taskPool))
-              .handleError(_ => TrustDataInternal(pd.client.id, Map.empty[Id, Double]))
+            apiClient.cluster
+              .getTrust()
+              .run(pd.peerMetadata.toPeerClientMetadata)
+              .map(trust => TrustDataInternal(pd.peerMetadata.id, trust.view))
+              .handleError(_ => TrustDataInternal(pd.peerMetadata.id, Map.empty[Id, Double]))
         )
       )
       .flatMap(trustManager.handleTrustScoreUpdate)
@@ -39,6 +43,12 @@ class TrustDataPollingScheduler(
 
 object TrustDataPollingScheduler {
 
-  def apply(config: Config, trustManager: TrustManager[IO], cluster: Cluster[IO], dao: DAO) =
-    new TrustDataPollingScheduler(config, trustManager, cluster, dao)
+  def apply(
+    config: Config,
+    trustManager: TrustManager[IO],
+    cluster: Cluster[IO],
+    apiClient: ClientInterpreter[IO],
+    dao: DAO
+  ) =
+    new TrustDataPollingScheduler(config, trustManager, cluster, apiClient, dao)
 }

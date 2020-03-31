@@ -122,7 +122,14 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("scala.Predef$$anon$2"))
     kryo.register(scala.math.Ordering.String.getClass)
 
-    kryo.register(EdgeHashType.getClass, 1016)
+    kryo.register(EdgeHashType.AddressHash.getClass, 1024)
+    kryo.register(EdgeHashType.CheckpointDataHash.getClass, 1025)
+    kryo.register(EdgeHashType.CheckpointHash.getClass, 1026)
+    kryo.register(EdgeHashType.TransactionDataHash.getClass, 1027)
+    kryo.register(EdgeHashType.TransactionHash.getClass, 1028)
+    kryo.register(EdgeHashType.ValidationHash.getClass, 1029)
+    kryo.register(EdgeHashType.BundleDataHash.getClass, 1030)
+    kryo.register(EdgeHashType.ChannelMessageDataHash.getClass, 1031)
 
     kryo.register(Class.forName("scala.Enumeration$Val"), 1017)
     kryo.register(Class.forName("scala.collection.immutable.HashSet$HashSet1"), 1018)

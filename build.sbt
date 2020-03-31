@@ -1,4 +1,3 @@
-import E2E._
 import Regression._
 import sbt.Keys.mainClass
 
@@ -52,12 +51,6 @@ lazy val versions = new {
   val circeGenericExtras = "0.13.0"
 }
 
-lazy val sttpDependencies = Seq(
-  "com.softwaremill.sttp" %% "okhttp-backend",
-  "com.softwaremill.sttp" %% "json4s",
-  "com.softwaremill.sttp" %% "prometheus-backend"
-).map(_ % versions.sttp)
-
 lazy val http4sDependencies = Seq(
   "org.http4s" %% "http4s-blaze-server",
   "org.http4s" %% "http4s-blaze-client",
@@ -80,7 +73,7 @@ lazy val sharedDependencies = Seq(
   ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
-)
+) ++ circeDependencies
 
 lazy val keyToolSharedDependencies = Seq(
   "com.google.cloud" % "google-cloud-storage" % "1.91.0",
@@ -88,17 +81,13 @@ lazy val keyToolSharedDependencies = Seq(
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
-  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle
-//  "org.bouncycastle" % "bcprov-jdk15on" % "1.63"
+  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.64"
 ) ++ sharedDependencies
 
 lazy val walletSharedDependencies = Seq(
   "com.twitter" %% "chill" % versions.twitterChill,
-  "com.twitter" %% "algebird-core" % "0.13.5",
-  "org.json4s" %% "json4s-native" % versions.json4s,
-  "org.json4s" %% "json4s-ext" % versions.json4s,
-  "org.json4s" %% "json4s-jackson" % versions.json4s,
-  "org.json4s" %% "json4s-ast" % versions.json4s
+  "com.twitter" %% "algebird-core" % "0.13.5"
 ) ++ sharedDependencies
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
@@ -132,7 +121,7 @@ lazy val coreDependencies = Seq(
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
   "org.perf4j" % "perf4j" % "0.9.16"
-) ++ sttpDependencies ++ http4sDependencies ++ circeDependencies ++ schemaSharedDependencies
+) ++ http4sDependencies ++ schemaSharedDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
@@ -144,14 +133,14 @@ lazy val testDependencies = Seq(
   "org.mockito" %% "mockito-scala-cats" % versions.mockito,
   "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-testkit" % versions.akka
-).map(_ % "it,test,e2e,regression")
+).map(_ % "it,test,regression")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-results/scalatest")
 
 test in assembly := {}
 
-Test / fork := false // <-- comment out to attach debugger
+Test / fork := true // <-- comment out to attach debugger
 Test / logBuffered := false
 
 assemblyMergeStrategy in assembly := {
@@ -167,7 +156,6 @@ lazy val root = (project in file("."))
   .dependsOn(schema)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
-  .configs(E2ETest)
   .configs(RegressionTest)
   .enablePlugins(BuildInfoPlugin)
   .settings(
@@ -184,7 +172,6 @@ lazy val root = (project in file("."))
     commonSettings,
     name := "constellation",
     coreSettings,
-    E2E.e2eSettings,
     Regression.regressionSettings,
     Defaults.itSettings,
     libraryDependencies ++= (coreDependencies ++ testDependencies),
@@ -203,8 +190,6 @@ lazy val keytool = (project in file("keytool"))
     buildInfoPackage := "org.constellation.keytool",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.keytool.KeyTool"),
-    unmanagedJars in Runtime += file("core-1.64.jar"),
-    unmanagedJars in Runtime += file("prov-1.64.jar"),
     libraryDependencies ++= keyToolSharedDependencies
   )
 

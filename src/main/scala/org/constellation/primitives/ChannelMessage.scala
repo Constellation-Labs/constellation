@@ -3,14 +3,10 @@ package org.constellation.primitives
 import java.security.KeyPair
 import java.util.concurrent.Semaphore
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.github.fge.jsonschema.core.report.ProcessingReport
-import com.github.fge.jsonschema.main.{JsonSchemaFactory, JsonValidator}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
-import org.json4s.jackson.JsonMethods.{asJsonNode, parse}
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -79,7 +75,7 @@ object ChannelMessage extends StrictLogging {
       .getOrElse {
         logger.info(s"Channel not in use")
 
-        val genesisMessageStr = channelOpenRequest.json
+        val genesisMessageStr = "" // TODO: channelOpenRequest.json
         val msg = create(genesisMessageStr, Genesis.Coinbase, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
@@ -184,48 +180,6 @@ case class ChannelSendResponse(
   errorMessage: String = "Success",
   messageHashes: Seq[String]
 )
-
-case class SensorData(
-  temperature: Int,
-  name: String
-)
-
-object SensorData {
-
-  val validNameChars: Seq[String] = ('A' to 'Z').map { _.toString }
-  val invalidNameChars: Seq[String] = validNameChars.map { _.toLowerCase }
-
-  def generateRandomValidMessage() = SensorData(
-    Random.nextInt(100),
-    Seq.fill(5) { Random.shuffle(validNameChars).head }.mkString
-  )
-
-  val jsonSchema: String = """{
-                             |  "title":"Sensors data",
-                             |  "type":"object",
-                             |  "properties":{
-                             |    "temperature": {
-                             |      "type": "integer",
-                             |      "minimum": -100,
-                             |      "maximum": 100
-                             |    },
-                             |    "name": {
-                             |      "type": "string",
-                             |      "pattern": "^[A-Z]{4,10}$"
-                             |    }
-                             |  },
-                             |  "required":["temperature", "name"]
-                             |}""".stripMargin
-
-  val schema: JsonNode = asJsonNode(parse(jsonSchema))
-  val validator: JsonValidator = JsonSchemaFactory.byDefault().getValidator
-
-  def validate(input: String): ProcessingReport =
-    validator.validate(schema, asJsonNode(parse(input)))
-
-  //def validate()
-
-}
 
 // TODO: Switch to Parent references?
 /*

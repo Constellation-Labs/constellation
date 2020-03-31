@@ -4,6 +4,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.ConcurrentTipService
 import org.constellation.primitives.Schema.{NodeState, NodeType}
@@ -22,6 +23,8 @@ case class InconsistentSnapshotHash(nodeId: String, hashes: Set[String])
 object HealthChecker {
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
+  // TODO: unused, consider removing
+  /*
   def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
     var hashes: Set[String] = Set.empty
     val it = apis.iterator
@@ -38,6 +41,7 @@ object HealthChecker {
     }
     lastCheck
   }
+   */
 
   def checkLocalMetrics(metrics: Map[String, String], nodeId: String): Either[MetricFailure, Unit] =
     hasEmptyHeight(metrics, nodeId)
@@ -55,7 +59,7 @@ case class RecentSync(hash: String, height: Long)
 class HealthChecker[F[_]: Concurrent](
   dao: DAO,
   concurrentTipService: ConcurrentTipService[F],
-  calculationContext: ContextShift[F]
+  apiClient: ClientInterpreter[F]
 )(implicit C: ContextShift[F]) {
 
   implicit val shadedDao: DAO = dao
@@ -89,8 +93,8 @@ class HealthChecker[F[_]: Concurrent](
         .liftIO(dao.cluster.getPeerInfo)
         .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       minTipHeights <- peers.values.toList
-        .map(_.client)
-        .traverse(_.getNonBlockingF[F, (Id, Long)]("heights/min")(calculationContext))
+        .map(_.peerMetadata.toPeerClientMetadata)
+        .traverse(apiClient.tips.getMinTipHeight().run)
     } yield minTipHeights.toMap
 
   def clearStaleTips(): F[Unit] =
