@@ -22,7 +22,9 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
     addresses: Seq[String],
     nodeType: NodeType
   ) =
-    getNodeState(cluster, addresses, nodeType) <+> getAddressBalance(addressService) <+> getNodePeers(cluster)
+    getNodeState(cluster, addresses, nodeType) <+>
+      getAddressBalance(addressService) <+>
+      getNodePeers(cluster)
 
   private def getNodeState(cluster: Cluster[F], addresses: Seq[String], nodeType: NodeType): HttpRoutes[F] =
     HttpRoutes.of[F] {

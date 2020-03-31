@@ -29,7 +29,7 @@ class MajorityStateChooser(id: Id) {
       .mapValues(getTheMostQuantity(_, peersCache))
       .mapValues(_.map(_.hash))
 
-    for ((k, Some(v)) <- flat) yield k -> v
+    flat.mapFilter(identity)
   }
 
   private def getTheMostQuantity(

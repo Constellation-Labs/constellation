@@ -67,7 +67,8 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
     }
 
   def peerEndpoints(transactionService: TransactionService[F], metrics: Metrics) =
-    getTransactionEndpoint(transactionService) <+> getBatchEndpoint(metrics, transactionService)
+    getTransactionEndpoint(transactionService) <+>
+      getBatchEndpoint(metrics, transactionService)
 
   private def getTransactionEndpoint(transactionService: TransactionService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "transaction" / hash =>

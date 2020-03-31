@@ -7,6 +7,7 @@ import org.constellation.DAO
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Genesis
 import org.constellation.primitives.Schema.{GenesisObservation, NodeState}
@@ -16,7 +17,8 @@ import org.constellation.storage.SnapshotService
 class DownloadService[F[_]](
   redownloadService: RedownloadService[F],
   cluster: Cluster[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F]
+  checkpointAcceptanceService: CheckpointAcceptanceService[F],
+  apiClient: ClientInterpreter[F]
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F]
@@ -48,7 +50,7 @@ class DownloadService[F[_]](
     for {
       peers <- cluster.getPeerInfo.map(_.values.toList)
       readyPeers = peers.filter(p => NodeState.canActAsDownloadSource(p.peerMetadata.nodeState))
-      clients = readyPeers.map(_.client).toSet
+      clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>
         for {
           accepted <- redownloadService.fetchAcceptedSnapshots(client)
@@ -89,7 +91,7 @@ class DownloadService[F[_]](
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
       _ <- cluster
-        .broadcast(_.getNonBlockingF[F, Option[GenesisObservation]]("genesis")(C))
+        .broadcast(apiClient.checkpoint.getGenesis().run)
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
         .flatTap(genesis => F.delay { Genesis.acceptGenesis(genesis) })
@@ -102,7 +104,8 @@ object DownloadService {
   def apply[F[_]: Concurrent: ContextShift](
     redownloadService: RedownloadService[F],
     cluster: Cluster[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F]
+    checkpointAcceptanceService: CheckpointAcceptanceService[F],
+    apiClient: ClientInterpreter[F]
   ): DownloadService[F] =
-    new DownloadService[F](redownloadService, cluster, checkpointAcceptanceService)
+    new DownloadService[F](redownloadService, cluster, checkpointAcceptanceService, apiClient)
 }

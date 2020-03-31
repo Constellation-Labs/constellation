@@ -1,13 +1,14 @@
 package org.constellation.domain.p2p
 
-import cats.data.NonEmptyList
+import cats.data.{Kleisli, NonEmptyList}
 import cats.effect.{ContextShift, IO, Timer}
-import com.softwaremill.sttp.Response
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.PeerMetadata
+import org.constellation.{PeerMetadata, ResourceInfo}
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
+import org.constellation.infrastructure.p2p.client.MetricsClientInterpreter
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
-import org.constellation.util.APIClient
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -27,29 +28,24 @@ class PeerHealthCheckTest
 
   var cluster: Cluster[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
+  var apiClient: ClientInterpreter[IO] = _
 
   val peer1 = PeerData(
-    mock[PeerMetadata],
-    mock[APIClient],
+    PeerMetadata("1.2.3.4", 9000, Id("node1"), resourceInfo = mock[ResourceInfo]),
     NonEmptyList.one(MajorityHeight.genesis),
     Seq.empty
   )
 
   val peer2 = PeerData(
-    mock[PeerMetadata],
-    mock[APIClient],
+    PeerMetadata("2.3.4.5", 9000, Id("node2"), resourceInfo = mock[ResourceInfo]),
     NonEmptyList.one(MajorityHeight.genesis),
     Seq.empty
   )
 
-  peer1.client.id shouldReturn Id("node1")
-  peer2.client.id shouldReturn Id("node2")
-  peer1.client.hostName shouldReturn "1.2.3.4"
-  peer2.client.hostName shouldReturn "2.3.4.5"
-
   before {
+    apiClient = mock[ClientInterpreter[IO]]
     cluster = mock[Cluster[IO]]
-    peerHealthCheck = PeerHealthCheck(cluster)
+    peerHealthCheck = PeerHealthCheck(cluster, apiClient)
     cluster.removePeer(*) shouldReturnF Unit
     cluster.markOfflinePeer(*) shouldReturnF Unit
     cluster.broadcastOfflineNodeState(*) shouldReturnF Unit
@@ -57,9 +53,12 @@ class PeerHealthCheckTest
 
   "check" - {
     "should not remove peers if all are available" in {
+      apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
+      apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { _ =>
+        IO.unit
+      }
+
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
-      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
 
       peerHealthCheck.check().unsafeRunSync
 
@@ -68,19 +67,12 @@ class PeerHealthCheckTest
 
     "should mark peer as offline if peer is unhealthy" in {
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("ERROR")
-      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
-
-      peerHealthCheck.check().unsafeRunSync
-
-      cluster.markOfflinePeer(*).was(called)
-    }
-
-    "should mark peer as offline if peer returned error" in {
-      cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
-      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response
-        .error[String]("ERROR", 400, "400")
+      apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
+      apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { pm =>
+        if (pm.id == Id("node1")) {
+          IO.raiseError(new Throwable("error"))
+        } else IO.unit
+      }
 
       peerHealthCheck.check().unsafeRunSync
 
@@ -89,8 +81,12 @@ class PeerHealthCheckTest
 
     "should broadcast offline state if peer is unhealthy" in {
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("ERROR")
-      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
+      apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
+      apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { pm =>
+        if (pm.id == Id("node1")) {
+          IO.raiseError(new Throwable("error"))
+        } else IO.unit
+      }
 
       peerHealthCheck.check().unsafeRunSync
 
@@ -99,9 +95,12 @@ class PeerHealthCheckTest
 
     "should broadcast offline state if peer returned error" in {
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      peer1.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response.ok[String]("OK")
-      peer2.client.getStringF[IO](*, *, *)(*)(*) shouldReturnF Response
-        .error[String]("ERROR", 400, "400")
+      apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
+      apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { pm =>
+        if (pm.id == Id("node1")) {
+          IO.raiseError(new Throwable("error"))
+        } else IO.unit
+      }
 
       peerHealthCheck.check().unsafeRunSync
 

@@ -6,22 +6,17 @@ import cats.data.NonEmptyList
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.implicits._
-import com.softwaremill.sttp.Response
 import constellation._
 import enumeratum._
-import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
 import org.constellation._
-import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
+import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.primitives.IPManager
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeState.broadcastStates
-import org.constellation.rollback.{
-  CannotLoadGenesisObservationFile,
-  CannotLoadSnapshotInfoFile,
-  CannotLoadSnapshotsFiles
-}
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging._
@@ -29,12 +24,14 @@ import org.constellation.util._
 
 import scala.concurrent.duration._
 import scala.util.Random
+import io.circe.generic.auto._
+import io.circe.syntax._
+import io.circe.parser._
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
-  client: APIClient,
   majorityHeight: NonEmptyList[MajorityHeight],
   notification: Seq[PeerNotification] = Seq.empty
 ) {
@@ -98,6 +95,7 @@ case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 class Cluster[F[_]](
   ipManager: IPManager[F],
   joiningPeerValidator: JoiningPeerValidator[F],
+  apiClient: ClientInterpreter[F],
   dao: DAO
 )(
   implicit F: Concurrent[F],
@@ -220,9 +218,9 @@ class Cluster[F[_]](
       "cluster_setNodeStatus"
     )
 
-  def peerDiscovery(client: APIClient): F[Unit] =
+  def peerDiscovery(peerMetadata: PeerMetadata): F[Unit] =
     for {
-      peersMetadata <- client.getNonBlockingF[F, Seq[PeerMetadata]]("peers")(C).handleErrorWith { err =>
+      peersMetadata <- apiClient.nodeMetadata.getPeers().run(peerMetadata.toPeerClientMetadata).handleErrorWith { err =>
         dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") >> err.raiseError[F, Seq[PeerMetadata]]
       }
       peers <- getPeerInfo
@@ -230,16 +228,14 @@ class Cluster[F[_]](
         p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers)
       }
       register <- filteredPeers.toList.traverse { md =>
-        APIClient(md.host, md.httpPort)(dao.backend, dao)
-          .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
-          .map((md, _))
+        apiClient.sign.getRegistrationRequest().run(md.toPeerClientMetadata).map((md, _))
       }
 
       _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
       registerResponse <- register.traverse { md =>
         for {
           prr <- pendingRegistrationRequest
-          _ <- APIClient(md._1.host, md._1.httpPort)(dao.backend, dao).postNonBlockingUnitF[F]("register", prr)(C)
+          _ <- apiClient.sign.register(prr).run(md._1.toPeerClientMetadata)
         } yield ()
       }.void
     } yield registerResponse
@@ -254,9 +250,10 @@ class Cluster[F[_]](
         peers <- peers.get
         existsNotOffline = peers.exists {
           case (_, d) =>
-            d.client.hostName == request.host && d.client.apiPort == request.port && NodeState.canActAsJoiningSource(
-              d.peerMetadata.nodeState
-            )
+            d.peerMetadata.host == request.host && d.peerMetadata.httpPort == request.port && NodeState
+              .canActAsJoiningSource(
+                d.peerMetadata.nodeState
+              )
         }
 
         isCorrectIP = ip == request.host && ip != ""
@@ -266,7 +263,7 @@ class Cluster[F[_]](
 
         isSelfId = dao.id == request.id
         badAttempt = !isCorrectIP || !isWhitelisted || !validWhitelistingHash || isSelfId || !validExternalHost || existsNotOffline
-        isValid <- joiningPeerValidator.isValid(APIClient(request.host, request.port - 1)(dao.backend, dao))
+        isValid <- joiningPeerValidator.isValid(PeerClientMetadata(request.host, request.port, request.id))
 
         _ <- if (!isWhitelisted) {
           dao.metrics.incrementMetricAsync[F]("notWhitelistedAdditionAttempt")
@@ -277,9 +274,9 @@ class Cluster[F[_]](
         } else if (!isValid) {
           dao.metrics.incrementMetricAsync[F]("invalidPeerAdditionAttempt")
         } else {
-          val client = APIClient(request.host, request.port)(dao.backend, dao)
           val authSignRequest = PeerAuthSignRequest(Random.nextLong())
-          val req = client.postNonBlockingF[F, SingleHashSignature]("sign", authSignRequest)(C)
+          val peerClientMetadata = PeerClientMetadata(request.host, request.port, request.id)
+          val req = apiClient.sign.sign(authSignRequest).run(peerClientMetadata)
 
           req.flatTap { sig =>
             if (sig.hashSignature.id != request.id) {
@@ -304,7 +301,7 @@ class Cluster[F[_]](
 
               for {
                 state <- withMetric(
-                  client.getNonBlockingF[F, NodeStateInfo]("state")(C),
+                  apiClient.nodeMetadata.getNodeState().run(peerClientMetadata),
                   "nodeState"
                 )
                 id = sig.hashSignature.id
@@ -319,13 +316,12 @@ class Cluster[F[_]](
                   auxAddresses = state.addresses,
                   resourceInfo = request.resourceInfo
                 )
-                _ <- F.delay { client.id = id }
                 majorityHeight = MajorityHeight(request.majorityHeight)
                 majorityHeights = existingMajorityHeight
                   .map(_.prepend(majorityHeight))
                   .getOrElse(NonEmptyList.one(majorityHeight))
-                peerData = PeerData(peerMetadata, client, majorityHeights)
-                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(client))
+                peerData = PeerData(peerMetadata, majorityHeights)
+                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(peerMetadata))
               } yield ()
           }.handleErrorWith { err =>
             logger.warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
@@ -339,9 +335,9 @@ class Cluster[F[_]](
   def broadcastOwnJoinedHeight(): F[Unit] = {
     val discoverJoinedHeight = for {
       p <- peers.get.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
-      clients = p.map(_._2.client).toList
+      clients = p.map(_._2.peerMetadata).toList
       maxMajorityHeight <- clients
-        .traverse(_.getNonBlockingF[F, LatestMajorityHeight]("latestMajorityHeight")(C))
+        .traverse(pm => apiClient.snapshot.getLatestMajorityHeight().run(pm.toPeerClientMetadata))
         .map(heights => if (heights.nonEmpty) heights.map(_.highest).max else 0L)
       delay = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
@@ -361,7 +357,7 @@ class Cluster[F[_]](
       _ <- logger.debug(s"Broadcasting own joined height - step1: height=$height")
       ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
-      _ <- broadcast(_.postNonBlockingUnitF("joinedHeight", JoinedHeight(dao.id, ownHeight))(C))
+      _ <- broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
     } yield ()
   }
 
@@ -383,8 +379,8 @@ class Cluster[F[_]](
   def updatePeerInfo(peerData: PeerData): F[Unit] =
     logThread(
       for {
-        _ <- peers.modify(p => (p + (peerData.client.id -> peerData), p))
-        ip = peerData.client.hostName
+        _ <- peers.modify(p => (p + (peerData.peerMetadata.id -> peerData), p))
+        ip = peerData.peerMetadata.host
         _ <- ipManager.addKnownIP(ip)
         _ <- logger.debug(s"Added $ip to known peers.")
         _ <- LiftIO[F].liftIO(dao.registerAgent(peerData.peerMetadata.id))
@@ -400,7 +396,7 @@ class Cluster[F[_]](
         "peers",
         p.map {
           case (idI, clientI) =>
-            val addr = s"http://${clientI.client.hostName}:${clientI.client.apiPort - 1}"
+            val addr = s"http://${clientI.peerMetadata.host}:${clientI.peerMetadata.httpPort - 1}"
             s"${idI.short} API: $addr"
         }.mkString(" --- ")
       )
@@ -408,7 +404,7 @@ class Cluster[F[_]](
 
   private def updatePersistentStore(): F[Unit] =
     peers.get.flatMap { p =>
-      F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).json))
+      F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).asJson.noSpaces))
     }
 
   def markOfflinePeer(nodeId: Id): F[Unit] =
@@ -419,7 +415,7 @@ class Cluster[F[_]](
         majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
         _ <- peer.traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
         maxProposalHeight <- peer.traverse { peer =>
-          LiftIO[F].liftIO(dao.redownloadService.getPeerProposals().map(_.get(peer.client.id)))
+          LiftIO[F].liftIO(dao.redownloadService.getPeerProposals().map(_.get(peer.peerMetadata.id)))
         }.map(
           _.flatten
             .filter(_.nonEmpty)
@@ -433,7 +429,7 @@ class Cluster[F[_]](
           val peerData = peer
             .updateLeavingHeight(leavingHeight)
             .copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
-          peers.modify(p => (p + (peerData.client.id -> peerData), p))
+          peers.modify(p => (p + (peerData.peerMetadata.id -> peerData), p))
         })
         _ <- updateMetrics()
         _ <- updatePersistentStore()
@@ -470,21 +466,23 @@ class Cluster[F[_]](
         peers <- peers.get
 
         _ <- if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
-          peers.values.toList.traverse { d =>
-            d.client.getStringF("health")(C).flatTap { x =>
-              if (x.isSuccess) {
+          peers.values.toList.traverse { pd =>
+            apiClient.metrics
+              .checkHealth()
+              .run(pd.peerMetadata.toPeerClientMetadata)
+              .flatTap { _ =>
                 dao.metrics.incrementMetricAsync[F]("peerHealthCheckPassed")
-              } else {
-                dao.metrics.incrementMetricAsync[F]("peerHealthCheckFailed") >>
-                  setNodeStatus(d.peerMetadata.id, NodeState.Offline)
               }
-            }
+              .handleErrorWith { _ =>
+                dao.metrics.incrementMetricAsync[F]("peerHealthCheckFailed") >>
+                  setNodeStatus(pd.peerMetadata.id, NodeState.Offline)
+              }
           }.void
         } else F.unit
 
         _ <- if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
-          peers.values.toList.traverse { d =>
-            peerDiscovery(d.client)
+          peers.values.toList.traverse { pd =>
+            peerDiscovery(pd.peerMetadata)
           }.void
         } else F.unit
       } yield (),
@@ -541,25 +539,26 @@ class Cluster[F[_]](
     } yield prr
 
   // I join to someone
-  def attemptRegisterPeer(hp: HostPort): F[Response[Unit]] =
+  def attemptRegisterPeer(hp: HostPort): F[Unit] =
     logThread(
       withMetric(
         {
-          val client = APIClient(hp.host, hp.port)(dao.backend, dao)
+          val client = PeerClientMetadata(hp.host, hp.port, null)
 
-          client
-            .getNonBlockingF[F, PeerRegistrationRequest]("registration/request")(C)
+          apiClient.sign
+            .getRegistrationRequest()
+            .run(client)
             .flatMap { registrationRequest =>
               for {
                 _ <- pendingRegistration(hp.host, registrationRequest)
                 prr <- pendingRegistrationRequest
-                response <- client.postNonBlockingUnitF("register", prr)(C)
+                response <- apiClient.sign.register(prr).run(client)
               } yield response
             }
             .handleErrorWith { err =>
               logger.error(s"registration request failed: $err") >>
                 dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
-                err.raiseError[F, Response[Unit]]
+                err.raiseError[F, Unit]
             }
         },
         "addPeerWithRegistrationSymmetric"
@@ -584,8 +583,11 @@ class Cluster[F[_]](
     for {
       _ <- logger.warn("Trying to rejoin the cluster...")
 
-      lastKnownPeers = dao.peersInfoPath.lines.mkString
-        .x[Seq[PeerMetadata]]
+      lastKnownPeers = parse(dao.peersInfoPath.lines.mkString)
+        .map(_.as[Seq[PeerMetadata]])
+        .toOption
+        .flatMap(_.toOption)
+        .getOrElse(Seq.empty[PeerMetadata])
         .map(pm => HostPort(pm.host, pm.httpPort))
 
       _ <- attemptRejoin(lastKnownPeers)
@@ -659,8 +661,9 @@ class Cluster[F[_]](
       }
 
   private def broadcastLeaveRequest(majorityHeight: Long): F[Unit] = {
-    def peerUnregister(c: APIClient) = PeerUnregister(c.hostName, c.apiPort, dao.id, majorityHeight)
-    broadcast(c => c.postNonBlockingUnitF("deregister", peerUnregister(c))(C)).void
+    def peerUnregister(c: PeerClientMetadata) =
+      PeerUnregister(dao.peerHostPort.host, dao.peerHostPort.port, dao.id, majorityHeight)
+    broadcast(c => apiClient.cluster.deregister(peerUnregister(c)).run(c)).void
   }
 
   def broadcastOfflineNodeState(nodeId: Id = dao.id): F[Unit] =
@@ -668,7 +671,7 @@ class Cluster[F[_]](
 
   private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
     logThread(
-      broadcast(_.postNonBlockingUnitF("status", SetNodeStatus(nodeId, nodeState))(C)).flatTap {
+      broadcast(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)).run).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
         }
@@ -677,7 +680,7 @@ class Cluster[F[_]](
     )
 
   def broadcast[T](
-    f: APIClient => F[T],
+    f: PeerClientMetadata => F[T],
     skip: Set[Id] = Set.empty,
     subset: Set[Id] = Set.empty
   ): F[Map[Id, Either[Throwable, T]]] =
@@ -691,7 +694,7 @@ class Cluster[F[_]](
         }
         (keys, values) = selected.toList.unzip
         res <- values
-          .map(_.client)
+          .map(_.peerMetadata.toPeerClientMetadata)
           .map(f)
           .traverse { fa =>
             fa.map(_.asRight[Throwable]).handleErrorWith(_.asLeft[T].pure[F])
@@ -706,7 +709,7 @@ class Cluster[F[_]](
 
   private def validPeerAddition(hp: HostPort, peerInfo: Map[Id, PeerData]): Boolean = {
     val hostAlreadyExists = peerInfo.exists {
-      case (_, data) => data.client.hostName == hp.host && data.client.apiPort == hp.port
+      case (_, data) => data.peerMetadata.host == hp.host && data.peerMetadata.httpPort == hp.port
     }
     validWithLoopbackGuard(hp.host) && !hostAlreadyExists
   }
@@ -720,8 +723,9 @@ object Cluster {
     metrics: () => Metrics,
     ipManager: IPManager[F],
     joiningPeerValidator: JoiningPeerValidator[F],
+    apiClient: ClientInterpreter[F],
     dao: DAO
-  ) = new Cluster(ipManager, joiningPeerValidator, dao)
+  ) = new Cluster(ipManager, joiningPeerValidator, apiClient, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
   case class TestClusterNode(aa: String)

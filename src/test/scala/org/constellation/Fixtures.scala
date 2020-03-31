@@ -13,7 +13,7 @@ import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.primitives.Transaction
 import org.constellation.schema.Id
-import org.constellation.util.{APIClient, SignHelp}
+import org.constellation.util.SignHelp
 
 import scala.concurrent.ExecutionContext
 
@@ -27,24 +27,6 @@ object Fixtures {
 
   def tx: Transaction =
     TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
-
-  def createAndStoreTx(
-    amount: Long,
-    destination: String,
-    lastTxRef: LastTransactionRef,
-    storePath: String,
-    kp: KeyPair = KeyUtils.makeKeyPair()
-  ) = {
-    val transactionEdge = TransactionService.createTransactionEdge( //todo, we need to sign on Ordinal + lastTxRef
-      KeyUtils.publicKeyToAddressString(kp.getPublic),
-      destination,
-      lastTxRef,
-      amount,
-      kp
-    )
-    val transaction = Transaction(transactionEdge, LastTransactionRef.empty)
-    transaction.jsonSave(storePath)
-  }
 
   def loadKeyPairUnsafe(
     keystorePath: String,
@@ -137,11 +119,5 @@ object Fixtures {
 
   def makeDummyTransaction(src: String, dst: String, keyPair: KeyPair) =
     TransactionService.createDummyTransaction(src, dst, keyPair)(TransactionChainService[IO]).unsafeRunSync
-
-  def getAPIClient(hostName: String, httpPort: Int)(implicit dao: DAO, executionContext: ExecutionContext) = {
-    val api = APIClient(host = hostName, port = httpPort)(dao.backend, dao)
-    api.id = id
-    api
-  }
 
 }

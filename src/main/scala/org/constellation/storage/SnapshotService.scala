@@ -59,6 +59,8 @@ class SnapshotService[F[_]: Concurrent](
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
+  val dataResolver = new DataResolver(dao)
+
   def exists(hash: String): F[Boolean] =
     for {
       last <- storedSnapshot.get
@@ -494,7 +496,7 @@ class SnapshotService[F[_]: Concurrent](
           dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") >>
             LiftIO[F]
               .liftIO(
-                DataResolver
+                dataResolver
                   .resolveMessageDefaults(msgHash)(IO.contextShift(ConstellationExecutionContext.bounded))
                   .map(_.channelMessage)
               )
@@ -525,7 +527,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private def markLeavingPeersAsOffline(): F[Unit] =
     LiftIO[F]
-      .liftIO(dao.leavingPeers.flatMap(_.values.toList.map(_.client.id).traverse(dao.cluster.markOfflinePeer)))
+      .liftIO(dao.leavingPeers.flatMap(_.values.toList.map(_.peerMetadata.id).traverse(dao.cluster.markOfflinePeer)))
       .void
 }
 

@@ -3,10 +3,7 @@ package org.constellation
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
 import better.files.File
-import cats.effect.{Blocker, ContextShift, IO, Timer}
-import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
-import com.softwaremill.sttp.prometheus.PrometheusBackend
-import com.softwaremill.sttp.{SttpBackend, SttpBackendOptions}
+import cats.effect.{Blocker, Concurrent, ConcurrentEffect, ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -28,7 +25,7 @@ import org.constellation.domain.transaction.{
 }
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
-import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
 import org.constellation.infrastructure.snapshot.{
@@ -48,18 +45,15 @@ import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
+import org.http4s.client.Client
+import org.http4s.client.blaze.BlazeClientBuilder
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
-  val backend: SttpBackend[Future, Nothing] =
-    PrometheusBackend[Future, Nothing](
-      OkHttpFutureBackend(
-        SttpBackendOptions.connectionTimeout(ConfigUtil.getDurationFromConfig("connection-timeout", 5.seconds))
-      )(ConstellationExecutionContext.unbounded)
-    )
+  var apiClient: ClientInterpreter[IO] = _
 
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
@@ -126,10 +120,10 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionChainService = TransactionChainService[IO]
     transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
-    joiningPeerValidator = JoiningPeerValidator[IO]
+    joiningPeerValidator = JoiningPeerValidator[IO](apiClient)
 
     ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, this)
+    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, apiClient, this)
 
     trustManager = TrustManager[IO](id, cluster)
 
@@ -152,13 +146,13 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       checkpointParentService,
       this,
       new FacilitatorFilter[IO](
-        IO.contextShift(ConstellationExecutionContext.bounded),
+        apiClient,
         this
       )
     )
     addressService = new AddressService[IO]()
 
-    peerHealthCheck = PeerHealthCheck[IO](cluster)
+    peerHealthCheck = PeerHealthCheck[IO](cluster, apiClient)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
     snapshotTrigger = new SnapshotTrigger(
@@ -174,8 +168,12 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       this
     )
 
-    consensusRemoteSender =
-      new ConsensusRemoteSender[IO](IO.contextShift(ConstellationExecutionContext.bounded), observationService, keyPair)
+    consensusRemoteSender = new ConsensusRemoteSender[IO](
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      observationService,
+      apiClient,
+      keyPair
+    )
 
     snapshotStorage = SnapshotLocalStorage(snapshotPath)
     snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
@@ -292,15 +290,16 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       snapshotInfoCloudStorage,
       rewardsCloudStorage,
       rewardsManager,
+      apiClient,
       metrics
     )
 
-    downloadService = DownloadService[IO](redownloadService, cluster, checkpointAcceptanceService)
+    downloadService = DownloadService[IO](redownloadService, cluster, checkpointAcceptanceService, apiClient)
 
     val healthChecker = new HealthChecker[IO](
       this,
       concurrentTipService,
-      IO.contextShift(ConstellationExecutionContext.bounded)
+      apiClient
     )
 
     snapshotWatcher = new SnapshotWatcher(healthChecker)
@@ -315,6 +314,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       observationService,
       consensusRemoteSender,
       cluster,
+      apiClient,
       this,
       ConfigUtil.config,
       Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
@@ -322,7 +322,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
 
-    trustDataPollingScheduler = TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, this)
+    trustDataPollingScheduler = TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, apiClient, this)
 
     transactionGenerator =
       TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)

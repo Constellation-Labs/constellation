@@ -21,7 +21,7 @@ case class CheckpointBlockWithMissingSoe(checkpointBaseHash: String) extends Obs
 case class RequestTimeoutOnConsensus(roundId: RoundId) extends ObservationEvent {
   val kind = "RequestTimeoutOnConsensus"
 }
-case class RequestTimeoutOnResolving(endpoint: String, hashes: List[String]) extends ObservationEvent {
+case class RequestTimeoutOnResolving(hashes: List[String]) extends ObservationEvent {
   val kind = "RequestTimeoutOnResolving"
 }
 case class CheckpointBlockInvalid(checkpointBaseHash: String, reason: ValidationResult[CheckpointBlock])
@@ -31,11 +31,11 @@ case class CheckpointBlockInvalid(checkpointBaseHash: String, reason: Validation
 
 object ObservationEvent {
   implicit val encodeEvent: Encoder[ObservationEvent] = Encoder.instance {
-    case foo @ CheckpointBlockWithMissingParents(_) => foo.asJson
-    case bar @ CheckpointBlockWithMissingSoe(_)     => bar.asJson
-    case baz @ RequestTimeoutOnConsensus(_)         => baz.asJson
-    case qux @ RequestTimeoutOnResolving(_, _)      => qux.asJson
-    case xyz @ CheckpointBlockInvalid(_, _)         => xyz.asJson
+    case a @ CheckpointBlockWithMissingParents(_) => a.asJson
+    case a @ CheckpointBlockWithMissingSoe(_)     => a.asJson
+    case a @ RequestTimeoutOnConsensus(_)         => a.asJson
+    case a @ RequestTimeoutOnResolving(_)         => a.asJson
+    case a @ CheckpointBlockInvalid(_, _)         => a.asJson
   }
 
   implicit val decodeEvent: Decoder[ObservationEvent] =

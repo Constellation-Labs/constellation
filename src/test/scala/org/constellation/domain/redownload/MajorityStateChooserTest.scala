@@ -80,7 +80,7 @@ class MajorityStateChooserTest
 
     "if there is only one height" - {
       "and not all peers made snapshot" - {
-        "returns empty Map without majority snapshot at this height" - {
+        "returns empty Map without majority snapshot at this height" in {
           val peersCache =
             List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val createdSnapshots = Map(2L -> "aa").toSnapshotProposals

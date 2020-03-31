@@ -7,27 +7,21 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import better.files.File
 import cats.effect.Sync
 import cats.implicits._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
-import org.constellation.domain.observation._
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{KeySerializeJSON, POWExt, SignHelpExt}
-import org.json4s.JsonAST.{JInt, JString}
-import org.json4s.ext.EnumNameSerializer
-import org.json4s.native.{Serialization, parseJsonOpt}
-import org.json4s.{CustomSerializer, DefaultFormats, Extraction, Formats, JObject, JValue, ShortTypeHints}
+import org.constellation.util.{POWExt, SignHelpExt}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Random, Success, Try}
 
-package object constellation extends POWExt with SignHelpExt with KeySerializeJSON {
+package object constellation extends POWExt with SignHelpExt {
 
   implicit var standardTimeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
@@ -57,74 +51,9 @@ package object constellation extends POWExt with SignHelpExt with KeySerializeJS
   implicit def socketToAddress(peerAddress: InetSocketAddress): String =
     peerAddress.getHostString + ":" + peerAddress.getPort
 
-  class InetSocketAddressSerializer
-      extends CustomSerializer[InetSocketAddress](
-        format =>
-          ({
-            case jstr: JObject =>
-              val host = (jstr \ "host").extract[String]
-              val port = (jstr \ "port").extract[Int]
-              new InetSocketAddress(host, port)
-          }, {
-            case key: InetSocketAddress =>
-              JObject("host" -> JString(key.getHostString), "port" -> JInt(key.getPort))
-          })
-      )
-
-  implicit val constellationFormats: Formats = DefaultFormats +
-    new PublicKeySerializer +
-    new PrivateKeySerializer +
-    new KeyPairSerializer +
-    new IdSerializer +
-    new SnapshotProposalSerializer +
-    new InetSocketAddressSerializer +
-//    new EnumNameSerializer(EdgeHashType) +
-//    new EnumNameSerializer(NodeState) +
-//    new EnumNameSerializer(NodeType) +
-    ShortTypeHints(
-      List(
-        classOf[CheckpointBlockWithMissingParents],
-        classOf[CheckpointBlockWithMissingSoe],
-        classOf[RequestTimeoutOnConsensus],
-        classOf[RequestTimeoutOnResolving],
-        classOf[CheckpointBlockInvalid]
-      )
-    )
-
-  def caseClassToJson(message: Any): String =
-    compactRender(Extraction.decompose(message))
-
-  def decompose(message: Any): JValue = Extraction.decompose(message)
-
-  def parse4s(msg: String): JValue = parseJsonOpt(msg).get
-
-  def compactRender(msg: JValue): String = Serialization.write(msg)
-
-  implicit class SerExt(jsonSerializable: Any) {
-
-    def json: String = caseClassToJson(jsonSerializable)
-
-    def prettyJson: String = Serialization.writePretty(Extraction.decompose(jsonSerializable))
-
-    def tryJson: Try[String] = Try { caseClassToJson(jsonSerializable) }
-
-    def j: String = json
-
-    def jsonSave(f: String): Unit = File(f).writeText(json)
-  }
-
   implicit class KryoSerExt(anyRef: AnyRef) {
 
     def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
-  }
-
-  implicit class ParseExt(input: String) {
-
-    def jValue: JValue = parse4s(input)
-
-    def jv: JValue = jValue
-
-    def x[T](implicit m: Manifest[T]): T = jv.extract[T](constellationFormats, m)
   }
 
   implicit class SHA256Ext(s: String) {

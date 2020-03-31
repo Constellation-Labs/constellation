@@ -29,7 +29,7 @@ class DownloadServiceTest
     cluster = dao.cluster
     redownloadService = dao.redownloadService
     checkpointAcceptanceService = dao.checkpointAcceptanceService
-    downloadService = new DownloadService(redownloadService, cluster, checkpointAcceptanceService)
+    downloadService = new DownloadService(redownloadService, cluster, checkpointAcceptanceService, dao.apiClient)
 
     dao.blacklistedAddresses.clear shouldReturnF Unit
     dao.transactionChainService.clear shouldReturnF Unit

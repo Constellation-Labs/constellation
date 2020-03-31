@@ -85,25 +85,6 @@ class TransactionGenerator[F[_]: Concurrent](
     List.range(1, numberOfTransaction).traverse(_ => createTransaction())
   }
 
-  private def broadcastLightNode(lightPeers: Map[Id, PeerData], tx: Transaction) = {
-    val broadcastLightNode: F[Either[String, String]] = Async[F].async { cb =>
-      lightPeers
-        .minBy(p ⇒ Distance.calculate(p._1, dao.id))
-        ._2
-        .client
-        .put("transaction", TransactionGossip(tx))
-        .onComplete {
-          case Success(value) => cb(Right(value.body))
-          case Failure(error) => cb(Left(error))
-        }(ConstellationExecutionContext.unbounded)
-    }
-    for {
-      _ <- broadcastLightNode
-      _ <- dao.metrics.incrementMetricAsync("transactionPut")
-      _ <- dao.metrics.incrementMetricAsync("transactionPutToLightNode")
-    } yield ()
-  }
-
   private def generateTransaction(peers: Seq[(Id, PeerData)]): F[Transaction] =
     if (multiAddressGenerationMode) generateMultipleAddressTransaction(peers)
     else generateSingleAddressTransaction(peers)
@@ -153,11 +134,6 @@ class TransactionGenerator[F[_]: Concurrent](
 
   private def peerDataNodeTypeLight(): F[Map[Id, PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Light))
-
-  private def broadcastTransaction(tcd: TransactionCacheData, peerData: List[PeerData]) =
-    LiftIO[F].liftIO(
-      peerData.traverse(_.client.putAsync("transaction", TransactionGossip(tcd)))
-    )
 
   private def peerData(peers: Set[Id]): F[List[PeerData]] =
     LiftIO[F].liftIO(dao.peerInfo(NodeType.Full).map(_.filterKeys(peers.contains).values.toList))

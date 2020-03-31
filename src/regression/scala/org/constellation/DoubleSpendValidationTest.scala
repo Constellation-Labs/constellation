@@ -84,6 +84,25 @@ class DoubleSpendValidationTest
 
         isValidCb.unsafeRunSync shouldBe false
       }
+
+      "the checkpoint block with dummy transaction should be still valid" in {
+        val txs = Seq(
+          Fixtures.makeDummyTransaction(src, dst, keyPair),
+          Fixtures.makeDummyTransaction(src, dst, keyPair),
+          Fixtures.makeDummyTransaction(src, dst, keyPair)
+        )
+
+        as.lookup(*) shouldReturnF None
+        dao.transactionService.isAccepted(*) shouldReturnF false
+
+        val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+
+        val isValidCb = cbv.simpleValidation(cb).map(_.isValid)
+        isValidCb.unsafeRunSync shouldBe true
+
+        val isValidTx = cbv.singleTransactionValidation(txs.head).map(_.isValid)
+        isValidTx.unsafeRunSync shouldBe true
+      }
     }
   }
 }

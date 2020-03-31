@@ -3,7 +3,6 @@ package org.constellation.consensus
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Blocker, Bracket, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
 import cats.implicits._
-import com.softwaremill.sttp.Response
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -21,6 +20,7 @@ import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.storage._
@@ -39,6 +39,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
   consensusManager: ConsensusManager[F],
+  apiClient: ClientInterpreter[F],
   dao: DAO,
   config: Config,
   remoteCall: Blocker,
@@ -282,7 +283,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         }
 
       _ <- if (finalResult.cb.isEmpty) {
-        List.empty[Response[Unit]].pure[F]
+        List.empty[Boolean].pure[F]
       } else {
         calculationContext.blockOn(remoteCall)(
           broadcastSignedBlockToNonFacilitators(
@@ -326,7 +327,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
-  ): F[List[Response[Unit]]] = {
+  ): F[List[Boolean]] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     for {
       nonFacilitators <- LiftIO[F]
@@ -335,12 +336,9 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash}"
       )
-      responses <- nonFacilitators.traverse(
-        pd =>
-          pd.client.postNonBlockingUnitF("finished/checkpoint", finishedCheckpoint, timeout = 30.seconds)(
-            calculationContext
-          )
-      )
+      responses <- nonFacilitators.traverse { pd =>
+        apiClient.checkpoint.sendFinishedCheckpoint(finishedCheckpoint).run(pd.peerMetadata.toPeerClientMetadata)
+      }
     } yield responses
   }
 
@@ -376,98 +374,14 @@ class Consensus[F[_]: Concurrent: ContextShift](
     } yield ()
   }
 
-  private[consensus] def prepareConsensusBatchData[A, T <: AnyRef](
-    dataType: String,
-    proposals: Map[FacilitatorId, ConsensusDataProposal],
-    readyPeers: Map[Id, PeerApiClient],
-    mapHashes: ConsensusDataProposal => Seq[String],
-    startingHashes: Traversable[String],
-    lookupService: String => F[Option[A]],
-    resolvedMapper: T => A
-  )(implicit m: Manifest[T]): F[List[A]] =
-    for {
-      _ <- logger.debug(s" ${roundData.roundId} preparing $dataType ")
-      hashes = proposals.mapValues(mapHashes)
-      combined <- (hashes + (roundData.facilitatorId -> (hashes
-        .getOrElse(roundData.facilitatorId, Seq.empty) ++ startingHashes)))
-        .map(x => x._2.map(t => (t, x._1)))
-        .flatten
-        .toList
-        .distinct
-        .traverse(x => lookupService(x._1).map((x, _)))
-      toResolve = combined.filter(_._2.isEmpty)
-      _ <- logger.debug(
-        s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
-      )
-      hashesToResolve = toResolve.map(_._1._1)
-      _ <- logger.debug(s"Hashes to resolve: ${hashesToResolve}")
-      resolved <- LiftIO[F].liftIO(
-        dataResolver.resolveBatchDataByDistance[T](
-          hashesToResolve,
-          dataType,
-          readyPeers.values.toList
-        )(contextShift)
-      )
-      _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
-    } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
-
-  private[consensus] def prepareConsensusData[A, T <: AnyRef](
-    dataType: String,
-    proposals: Map[FacilitatorId, ConsensusDataProposal],
-    readyPeers: Map[Id, PeerApiClient],
-    mapHashes: ConsensusDataProposal => Seq[String],
-    startingHashes: Traversable[String],
-    lookupService: String => F[Option[A]],
-    resolvedMapper: T => A
-  )(implicit m: Manifest[T]): F[List[A]] =
-    for {
-      _ <- logger.debug(s" ${roundData.roundId} preparing $dataType ")
-      hashes = proposals.mapValues(mapHashes)
-      combined <- (hashes + (roundData.facilitatorId -> (hashes
-        .getOrElse(roundData.facilitatorId, Seq.empty) ++ startingHashes)))
-        .map(x => x._2.map(t => (t, x._1)))
-        .flatten
-        .toList
-        .distinct
-        .traverse(x => lookupService(x._1).map((x, _)))
-      toResolve = combined.filter(_._2.isEmpty)
-      _ <- logger.debug(
-        s"Consensus with id ${roundData.roundId} $dataType to resolve size ${toResolve.size} total size ${combined.size}"
-      )
-      resolved <- toResolve
-        .traverse(
-          t =>
-            LiftIO[F].liftIO(
-              dataResolver
-                .resolveDataByDistance[T](
-                  List(t._1._1),
-                  dataType,
-                  readyPeers.values.toList,
-                  readyPeers.get(t._1._2.id)
-                )(contextShift)
-                .head
-            )
-        )
-      _ <- logger.debug(s" ${roundData.roundId} $dataType resolved size ${resolved.size}")
-    } yield resolved.map(resolvedMapper) ++ combined.flatMap(_._2)
-
   private[consensus] def mergeConsensusDataProposalsAndBroadcastBlock(): F[Unit] =
     for {
-      allPeers <- LiftIO[F].liftIO(dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.client))))
+      allPeers <- LiftIO[F].liftIO(
+        dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.peerMetadata.toPeerClientMetadata)))
+      )
       proposals <- withLock(consensusDataProposals.get)
 
-      messages <- prepareConsensusData[ChannelMessage, ChannelMessageMetadata](
-        "message",
-        proposals,
-        allPeers, { p =>
-          p.messages
-        },
-        Seq.empty[String], { s =>
-          messageService.lookup(s).map(_.map(_.channelMessage))
-        }, { cmm =>
-          cmm.channelMessage
-        }
-      ).map(_.union(roundData.messages)) // TODO: wkoszycki include messages to resolve them
+      messages = List.empty[ChannelMessage]
 
       notifications = proposals
         .flatMap(_._2.notifications)
