@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.p2p
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.{
   BuildInfoClientAlgebra,
   CheckpointClientAlgebra,
@@ -31,7 +31,7 @@ import org.constellation.infrastructure.p2p.client.{
 }
 import org.http4s.client.Client
 
-class ClientInterpreter[F[_]: Concurrent](client: Client[F]) {
+class ClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) {
   val buildInfo: BuildInfoClientAlgebra[F] = BuildInfoClientInterpreter[F](client)
   val checkpoint: CheckpointClientAlgebra[F] = CheckpointClientInterpreter[F](client)
   val cluster: ClusterClientAlgebra[F] = ClusterClientInterpreter[F](client)
@@ -48,6 +48,6 @@ class ClientInterpreter[F[_]: Concurrent](client: Client[F]) {
 
 object ClientInterpreter {
 
-  def apply[F[_]: Concurrent](client: Client[F]): ClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): ClientInterpreter[F] =
     new ClientInterpreter[F](client)
 }

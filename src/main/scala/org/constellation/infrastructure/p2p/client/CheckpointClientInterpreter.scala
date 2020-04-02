@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.p2p.client
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, SignatureResponse}
 import org.constellation.domain.p2p.client.CheckpointClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
@@ -13,7 +13,8 @@ import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
 
-class CheckpointClientInterpreter[F[_]: Concurrent](client: Client[F]) extends CheckpointClientAlgebra[F] {
+class CheckpointClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F])
+    extends CheckpointClientAlgebra[F] {
   import ObservationEvent._
 
   def getGenesis(): PeerResponse[F, Option[GenesisObservation]] =
@@ -23,18 +24,18 @@ class CheckpointClientInterpreter[F[_]: Concurrent](client: Client[F]) extends C
     PeerResponse[F, Option[CheckpointCache]](s"checkpoint/$hash")(client)
 
   def requestBlockSignature(signatureRequest: SignatureRequest): PeerResponse[F, SignatureResponse] =
-    PeerResponse(s"request/signature", POST) { req =>
-      client.expect[SignatureResponse](req.withEntity(signatureRequest))
+    PeerResponse(s"request/signature", client, POST) { (req, c) =>
+      c.expect[SignatureResponse](req.withEntity(signatureRequest))
     }
 
   def sendFinishedCheckpoint(checkpoint: FinishedCheckpoint): PeerResponse[F, Boolean] =
-    PeerResponse(s"finished/checkpoint", POST) { req =>
-      client.successful(req.withEntity(checkpoint))
+    PeerResponse(s"finished/checkpoint", client, POST) { (req, c) =>
+      c.successful(req.withEntity(checkpoint))
     }
 }
 
 object CheckpointClientInterpreter {
 
-  def apply[F[_]: Concurrent](client: Client[F]): CheckpointClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): CheckpointClientInterpreter[F] =
     new CheckpointClientInterpreter[F](client)
 }

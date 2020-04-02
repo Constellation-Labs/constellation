@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.p2p.client
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.NodeMetadataClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
@@ -11,7 +11,8 @@ import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.util.NodeStateInfo
 import org.http4s.circe.CirceEntityDecoder._
 
-class NodeMetadataClientInterpreter[F[_]: Concurrent](client: Client[F]) extends NodeMetadataClientAlgebra[F] {
+class NodeMetadataClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F])
+    extends NodeMetadataClientAlgebra[F] {
 
   def getNodeState(): PeerResponse[F, NodeStateInfo] =
     PeerResponse[F, NodeStateInfo]("state")(client)
@@ -25,6 +26,6 @@ class NodeMetadataClientInterpreter[F[_]: Concurrent](client: Client[F]) extends
 
 object NodeMetadataClientInterpreter {
 
-  def apply[F[_]: Concurrent](client: Client[F]): NodeMetadataClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): NodeMetadataClientInterpreter[F] =
     new NodeMetadataClientInterpreter[F](client)
 }

@@ -1,0 +1,23 @@
+on: pull_request
+
+name: Pull request tests
+
+jobs:
+  test:
+    name: Pull request tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - name: Install haveged for entropy
+        run: sudo apt-get install haveged
+
+      - name: Test
+        run: |
+          sbt -J-Xss128m -J-Xmx3200m keytool/test wallet/test regression:test test:test

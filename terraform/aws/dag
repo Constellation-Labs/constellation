@@ -50,7 +50,7 @@ assemble() {
   echo -e "${blu} Assembling${clr}"
 
   pushd $DIR/../../ > /dev/null
-  ./assemble.sh
+  sbt "++ 2.12.10" assembly
   popd > /dev/null
 }
 
