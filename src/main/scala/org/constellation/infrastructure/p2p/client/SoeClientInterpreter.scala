@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.p2p.client
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.http4s.client.Client
@@ -11,7 +11,7 @@ import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
 
-class SoeClientInterpreter[F[_]: Concurrent](client: Client[F]) extends SoeClientAlgebra[F] {
+class SoeClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) extends SoeClientAlgebra[F] {
 
   def getSoe(hash: String): PeerResponse[F, Option[SignedObservationEdge]] =
     PeerResponse[F, Option[SignedObservationEdge]](s"soe/$hash")(client)
@@ -20,6 +20,6 @@ class SoeClientInterpreter[F[_]: Concurrent](client: Client[F]) extends SoeClien
 
 object SoeClientInterpreter {
 
-  def apply[F[_]: Concurrent](client: Client[F]): SoeClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): SoeClientInterpreter[F] =
     new SoeClientInterpreter[F](client)
 }

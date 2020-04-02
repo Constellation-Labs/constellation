@@ -543,23 +543,29 @@ class Cluster[F[_]](
     logThread(
       withMetric(
         {
-          val client = PeerClientMetadata(hp.host, hp.port, null)
+          dao.nodeConfig.whitelisting
+            .get(hp.host)
+            .map(PeerClientMetadata(hp.host, hp.port, _))
+            .map {
+              client =>
+                apiClient.sign
+                  .getRegistrationRequest()
+                  .run(client)
+                  .flatMap { registrationRequest =>
+                    for {
+                      _ <- pendingRegistration(hp.host, registrationRequest)
+                      prr <- pendingRegistrationRequest
+                      response <- apiClient.sign.register(prr).run(client)
+                    } yield response
+                  }
+                  .handleErrorWith { err =>
+                    logger.error(s"registration request failed: $err") >>
+                      dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
+                      err.raiseError[F, Unit]
+                  }
+            }
+            .getOrElse(logger.error(s"unknown peer, not whitelisted"))
 
-          apiClient.sign
-            .getRegistrationRequest()
-            .run(client)
-            .flatMap { registrationRequest =>
-              for {
-                _ <- pendingRegistration(hp.host, registrationRequest)
-                prr <- pendingRegistrationRequest
-                response <- apiClient.sign.register(prr).run(client)
-              } yield response
-            }
-            .handleErrorWith { err =>
-              logger.error(s"registration request failed: $err") >>
-                dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
-                err.raiseError[F, Unit]
-            }
         },
         "addPeerWithRegistrationSymmetric"
       ),

@@ -30,7 +30,8 @@ lazy val coreSettings = Seq(
   parallelExecution in Test := false,
   resolvers += "Artima Maven Repository".at("https://repo.artima.com/releases"),
   resolvers += "Typesafe Releases".at("https://repo.typesafe.com/typesafe/maven-releases/"),
-  resolvers += "jitpack".at("https://jitpack.io")
+  resolvers += "jitpack".at("https://jitpack.io"),
+  resolvers += Resolver.bintrayRepo("abankowski", "maven")
 )
 
 lazy val versions = new {
@@ -120,7 +121,9 @@ lazy val coreDependencies = Seq(
   "com.h2database" % "h2" % "1.4.199",
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
-  "org.perf4j" % "perf4j" % "0.9.16"
+  "org.perf4j" % "perf4j" % "0.9.16",
+  "pl.abankowski" %% "http-request-signer-core" % "0.3.1",
+  "pl.abankowski" %% "http4s-request-signer" % "0.3.1"
 ) ++ http4sDependencies ++ schemaSharedDependencies
 
 //Test dependencies

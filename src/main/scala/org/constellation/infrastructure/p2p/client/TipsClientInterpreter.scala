@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.p2p.client
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.http4s.client.Client
@@ -13,7 +13,7 @@ import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
 
-class TipsClientInterpreter[F[_]: Concurrent](client: Client[F]) extends TipsClientAlgebra[F] {
+class TipsClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) extends TipsClientAlgebra[F] {
 
   def getTips(): PeerResponse[F, Map[String, TipData]] =
     PeerResponse[F, Map[String, TipData]]("tips")(client)
@@ -27,6 +27,6 @@ class TipsClientInterpreter[F[_]: Concurrent](client: Client[F]) extends TipsCli
 
 object TipsClientInterpreter {
 
-  def apply[F[_]: Concurrent](client: Client[F]): TipsClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): TipsClientInterpreter[F] =
     new TipsClientInterpreter[F](client)
 }
