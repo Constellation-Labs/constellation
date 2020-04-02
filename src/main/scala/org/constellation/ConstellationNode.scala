@@ -23,6 +23,7 @@ import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.infrastructure.configuration.CliConfigParser
+import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.infrastructure.endpoints.{
   BuildInfoEndpoints,
   CheckpointEndpoints,
@@ -40,13 +41,13 @@ import org.constellation.infrastructure.endpoints.{
   UIEndpoints
 }
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.keytool.KeyStoreUtils
+import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import org.constellation.primitives.IPManager.IP
 import org.constellation.primitives.Schema.{GenesisObservation, NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
-import org.http4s.HttpRoutes
+import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.slf4j.MDC
@@ -55,6 +56,8 @@ import org.http4s.syntax._
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.{Router, middleware, Server => H4Server}
 import org.http4s.server.middleware.Logger
+import pl.abankowski.httpsigner.http4s.{Http4sRequestSigner, Http4sResponseSigner}
+import pl.abankowski.httpsigner.signature.generic.GenericGenerator
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration._
@@ -90,12 +93,18 @@ object ConstellationNode extends IOApp {
       nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
 
       apiClient <- BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded)
-        .withConnectTimeout(5.seconds)
+        .withConnectTimeout(30.seconds)
+        .withIdleTimeout(120.seconds)
         .resource
 
-      apiClientWithLogger = org.http4s.client.middleware.Logger(true, false)(apiClient)
+      logger = org.http4s.client.middleware.Logger[IO](logHeaders = true, logBody = false)(_)
 
-      node = new ConstellationNode(nodeConfig, apiClientWithLogger)
+      crypto = GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, nodeConfig.primaryKeyPair.getPrivate)
+      signer = new Http4sRequestSigner(crypto)
+
+      signedApiClient = PeerAuthMiddleware.requestSignerMiddleware(logger(apiClient), signer)
+
+      node = new ConstellationNode(nodeConfig, signedApiClient)
 
       server <- createServer(node.dao)
     } yield server
@@ -115,21 +124,21 @@ object ConstellationNode extends IOApp {
         TransactionEndpoints.publicEndpoints[IO](dao.transactionService, dao.checkpointBlockValidator) <+>
         ClusterEndpoints.publicEndpoints[IO](dao.cluster)
 
-      peerEndpoints = BuildInfoEndpoints.peerEndpoints[IO]() <+>
-        MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
-        CheckpointEndpoints.peerEndpoints[IO](
-          getGenesisObservation(dao),
-          dao.checkpointService,
-          dao.checkpointAcceptanceService,
-          dao.metrics,
-          dao.snapshotService
-        ) <+>
+      peerPublicEndpoints = SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
+        BuildInfoEndpoints.peerEndpoints[IO]() <+> MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
+        NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType)
+
+      peerWhitelistedEndpoints = CheckpointEndpoints.peerEndpoints[IO](
+        getGenesisObservation(dao),
+        dao.checkpointService,
+        dao.checkpointAcceptanceService,
+        dao.metrics,
+        dao.snapshotService
+      ) <+>
         ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
         ConsensusEndpoints
           .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
-        NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType) <+>
         ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
-        SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
         SnapshotEndpoints.peerEndpoints[IO](
           dao.id,
           dao.snapshotStorage,
@@ -149,17 +158,47 @@ object ConstellationNode extends IOApp {
         NodeMetadataEndpoints.ownerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType) <+>
         SignEndpoints.ownerEndpoints[IO](dao.cluster)
 
+      getKnownPeerId = { (ip: IP) =>
+        dao.cluster.getPeerData(ip).map(_.map(_.peerMetadata.id))
+      }
+      getWhitelistedPeerId = { (ip: IP) =>
+        dao.nodeConfig.whitelisting.get(ip).pure[IO]
+      }
+      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId)(peerPublicEndpoints) <+>
+        PeerAuthMiddleware
+          .requestVerifierMiddleware(getKnownPeerId)(
+            PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
+              peerWhitelistedEndpoints
+            )
+          )
+
+      crypto = GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, dao.keyPair.getPrivate)
+      responseSigner = new Http4sResponseSigner(crypto)
+      signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(responseSigner)(peerEndpoints)
+
       publicRouter = Router("" -> publicEndpoints).orNotFound
-      peerRouter = Router("" -> peerEndpoints).orNotFound
+      peerRouter = Router("" -> signedPeerEndpoints).orNotFound
       ownerRouter = Router("" -> ownerEndpoints).orNotFound
 
-      publicRouterWithLogger = middleware.Logger.httpApp(true, false)(publicRouter)
-      peerRouterWithLogger = middleware.Logger.httpApp(true, false)(peerRouter)
-      ownerRouterWithLogger = middleware.Logger.httpApp(true, false)(ownerRouter)
+      responseLogger = middleware.Logger.httpApp[IO](logHeaders = true, logBody = false)(_)
 
-      _ <- BlazeServerBuilder[IO].bindHttp(9000, "0.0.0.0").withHttpApp(publicRouterWithLogger).withoutBanner.resource
-      _ <- BlazeServerBuilder[IO].bindHttp(9001, "0.0.0.0").withHttpApp(peerRouterWithLogger).withoutBanner.resource
-      _ <- BlazeServerBuilder[IO].bindHttp(9002, "0.0.0.0").withHttpApp(ownerRouterWithLogger).withoutBanner.resource
+      _ <- BlazeServerBuilder[IO]
+        .bindHttp(9000, "0.0.0.0")
+        .withHttpApp(responseLogger(publicRouter))
+        .withoutBanner
+        .resource
+
+      _ <- BlazeServerBuilder[IO]
+        .bindHttp(9001, "0.0.0.0")
+        .withHttpApp(responseLogger(peerRouter))
+        .withoutBanner
+        .resource
+
+      _ <- BlazeServerBuilder[IO]
+        .bindHttp(9002, "0.0.0.0")
+        .withHttpApp(responseLogger(ownerRouter))
+        .withoutBanner
+        .resource
     } yield ()
 
   private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = {

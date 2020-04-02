@@ -1,6 +1,6 @@
 package org.constellation.infrastructure.p2p.client
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.BuildInfoClientAlgebra
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.http4s.client.Client
@@ -8,7 +8,7 @@ import io.circe.generic.auto._
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.http4s.circe.CirceEntityDecoder._
 
-class BuildInfoClientInterpreter[F[_]: Concurrent](client: Client[F]) extends BuildInfoClientAlgebra[F] {
+class BuildInfoClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) extends BuildInfoClientAlgebra[F] {
 
   def getBuildInfo() = PeerResponse[F, BuildInfoJson]("buildInfo")(client)
 
@@ -17,6 +17,6 @@ class BuildInfoClientInterpreter[F[_]: Concurrent](client: Client[F]) extends Bu
 
 object BuildInfoClientInterpreter {
 
-  def apply[F[_]: Concurrent](client: Client[F]): BuildInfoClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): BuildInfoClientInterpreter[F] =
     new BuildInfoClientInterpreter[F](client)
 }

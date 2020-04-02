@@ -39,8 +39,9 @@ class DownloadService[F[_]](
 
     cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
       if (state.isNewSet) {
-        wrappedDownload.handleErrorWith { _ =>
-          cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void
+        wrappedDownload.handleErrorWith { error =>
+          logger.error(s"Error during download process: ${error.getMessage}") >>
+            cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void
         }
       } else F.unit
     }

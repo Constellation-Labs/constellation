@@ -1,15 +1,14 @@
 package org.constellation.infrastructure.p2p
 
-import cats.{Applicative, ApplicativeError, FlatMap}
+import cats.ApplicativeError
 import cats.data.Kleisli
-import org.constellation.infrastructure.p2p.PeerResponse.{PeerClientMetadata, PeerResponse}
+import cats.effect.{Concurrent, ContextShift, Sync}
+import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.schema.Id
-import org.http4s.{EntityDecoder, Header, Headers, MediaType, Method, Request, Response, Uri}
+import org.http4s.{EntityDecoder, Method, Request, Uri}
 import org.http4s.Uri.{Authority, Path, RegName, Scheme}
 import org.http4s.Method._
 import org.http4s.client.Client
-import org.http4s.headers.`Content-Type`
-import org.http4s.implicits._
 
 object PeerResponse {
   type PeerResponse[F[_], A] = Kleisli[F, PeerClientMetadata, A]
@@ -24,24 +23,30 @@ object PeerResponse {
     Uri(scheme = Some(Scheme.http), authority = Some(Authority(host = RegName(pm.host), port = Some(pm.port.toInt))))
       .addPath(path)
 
-  def apply[F[_], A](path: Path, method: Method = GET)(f: Request[F] => F[A]): PeerResponse[F, A] = Kleisli.apply {
-    pm =>
-      val req = Request[F](method = method, uri = getUri(pm, path))
-      f(req)
-  }
-
-  def apply[F[_], A](path: Path)(client: Client[F])(implicit decoder: EntityDecoder[F, A]): PeerResponse[F, A] =
+  def apply[F[_]: Concurrent: ContextShift, A](path: Path, client: Client[F], method: Method = GET)(
+    f: (Request[F], Client[F]) => F[A]
+  ): PeerResponse[F, A] =
     Kleisli.apply { pm =>
-      client.expect[A](getUri(pm, path))
+      val req = Request[F](method = method, uri = getUri(pm, path))
+      f(req, PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client))
     }
 
-  def successful[F[_]: FlatMap](path: Path, errorMsg: String, method: Method = GET)(
+  def apply[F[_]: Concurrent: ContextShift, A](
+    path: Path
+  )(client: Client[F])(implicit decoder: EntityDecoder[F, A]): PeerResponse[F, A] =
+    Kleisli.apply { pm =>
+      val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
+      verified.expect[A](getUri(pm, path))
+    }
+
+  def successful[F[_]: Concurrent: ContextShift](path: Path, errorMsg: String, method: Method = GET)(
     client: Client[F]
   )(implicit F: ApplicativeError[F, Throwable]): PeerResponse[F, Unit] =
     Kleisli
       .apply[F, PeerClientMetadata, Boolean] { pm =>
         val req = Request[F](method = method, uri = getUri(pm, path))
-        client.successful(req)
+        val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
+        verified.successful(req)
       }
       .flatMapF(a => if (a) F.unit else F.raiseError(new Throwable(errorMsg)))
 }

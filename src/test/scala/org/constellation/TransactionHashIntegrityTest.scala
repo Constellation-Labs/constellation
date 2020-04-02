@@ -1,42 +1,47 @@
 package org.constellation
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
-import org.constellation.primitives.{Edge, Transaction}
+import org.constellation.primitives.Transaction
 import org.constellation.serializer.KryoSerializer
 import org.constellation.wallet.{KryoSerializer => WalletKryoSerializer}
 import org.constellation.wallet.{Hashable, Transaction => WalletTransaction}
 import org.scalatest.{FreeSpec, Matchers}
-import constellation._
-import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
-import org.constellation.schema.Id
-import org.http4s.Uri
-import org.http4s.implicits._
-import org.http4s.Uri.{Authority, RegName, Scheme}
-import org.http4s.client.blaze.BlazeClientBuilder
 import io.circe.generic.auto._
-import io.circe.syntax._
 import io.circe.parser.parse
+import org.constellation.schema.Id
+import org.http4s.{Header, Headers, Request, Uri}
+import org.http4s.client.dsl.io._
+import org.http4s.client.dsl._
+import org.http4s.Method._
+import pl.abankowski.httpsigner.http4s.Http4sRequestVerifier
+import pl.abankowski.httpsigner.signature.generic.GenericVerifier
 
 class TransactionHashIntegrityTest extends FreeSpec with Matchers {
+  implicit val cc: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   "check" in {
-    val url = "http://54.215.210.171:9000/registration/request"
-    val uri = Uri.unsafeFromString(url)
-
-    implicit val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
-
-    val prr = BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded).resource.use { client =>
-      val api = ClientInterpreter[IO](client)
-      val pm = PeerClientMetadata("54.215.210.171", 9001, Id("foo"))
-      api.snapshot.getLatestMajorityHeight().run(pm)
-    }.unsafeRunSync()
-
-    println(prr)
-
+    val id = Id(
+      "b6fb191d9d053de138fec00ac1edf7e615769f6b687a831dafb653f9b1e6a0d4637cfe4380ff78d2763e8072a7d75021193de78d4325d7a701e8db6352edd39f"
+    )
+    val req = Request[IO](
+      method = GET,
+      uri = Uri.unsafeFromString("http://54.215.210.171:9001/registration/request"),
+      headers = Headers.of(
+        Header("Host", "54.215.210.171:9001"),
+        Header(
+          "Request-Signature",
+          "MEUCIGT2oKxufSbAd88UpqmEeHS1Fj0VVDl90pqmVRxAsMWuAiEA6VWn5ScU5oduFHw4N0mcyavs2+fdMm/azb8UwbXOPrk="
+        ),
+        Header("Accept", "application/json"),
+        Header("User-Agent", "http4s-blaze/0.21.2"),
+        Header("Content-Length", "0")
+      )
+    )
+    val c = GenericVerifier(KeyUtils.DefaultSignFunc, KeyUtils.provider, id.toPublicKey)
+    val h = new Http4sRequestVerifier[IO](c)
+    println(h.verify(req).unsafeRunSync())
   }
 
   "transaction read by wallet and node should have consistent hash" in {
