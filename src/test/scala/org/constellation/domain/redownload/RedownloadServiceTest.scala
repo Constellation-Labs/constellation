@@ -1,40 +1,37 @@
 package org.constellation.domain.redownload
 
 import better.files.File
-import cats.data.{EitherT, Kleisli}
+import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
-import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
+import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.domain.cloud.{CloudStorage, CloudStorageOld, HeightHashFileStorage}
+import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
-import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
+import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
-import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
-import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.NodeState
+import org.constellation.p2p.Cluster
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
-import org.constellation.util.{Logging, Metrics}
+import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfterEach, FreeSpec, Matchers}
+import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.collection.SortedMap
 
 class RedownloadServiceTest
     extends FreeSpec
-    with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats
-    with BeforeAndAfterEach
-    with ArgumentMatchersSugar {
+    with Matchers
+    with ArgumentMatchersSugar
+    with BeforeAndAfter {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
@@ -58,8 +55,10 @@ class RedownloadServiceTest
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
 
-  override def beforeEach(): Unit = {
+  before {
     cluster = mock[Cluster[IO]]
+    // TODO: Mock methods!
+    metrics = mock[Metrics]
     majorityStateChooser = mock[MajorityStateChooser]
     snapshotStorage = mock[LocalFileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[LocalFileStorage[IO, SnapshotInfo]]
@@ -70,6 +69,10 @@ class RedownloadServiceTest
     cloudStorage = mock[CloudStorageOld[IO]]
     rewardsManager = mock[RewardsManager[IO]]
     apiClient = mock[ClientInterpreter[IO]]
+
+    metrics.incrementMetricAsync[IO](*)(*) shouldReturnF Unit
+    metrics.updateMetricAsync[IO](*, any[Long])(*) shouldReturnF Unit
+
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,

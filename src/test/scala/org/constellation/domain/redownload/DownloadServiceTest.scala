@@ -4,6 +4,7 @@ import cats.effect.{ContextShift, IO}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.constellation.p2p.Cluster
+import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfterEach, FreeSpec, Matchers}
@@ -20,6 +21,7 @@ class DownloadServiceTest
 
   var cluster: Cluster[IO] = _
   var downloadService: DownloadService[IO] = _
+  var metrics: Metrics = _
   var redownloadService: RedownloadService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   implicit var dao: DAO = _
@@ -29,7 +31,9 @@ class DownloadServiceTest
     cluster = dao.cluster
     redownloadService = dao.redownloadService
     checkpointAcceptanceService = dao.checkpointAcceptanceService
-    downloadService = new DownloadService(redownloadService, cluster, checkpointAcceptanceService, dao.apiClient)
+    metrics = dao.metrics
+    downloadService =
+      new DownloadService(redownloadService, cluster, checkpointAcceptanceService, dao.apiClient, metrics)
 
     dao.blacklistedAddresses.clear shouldReturnF Unit
     dao.transactionChainService.clear shouldReturnF Unit

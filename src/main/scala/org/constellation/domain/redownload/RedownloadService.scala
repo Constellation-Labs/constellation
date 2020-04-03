@@ -78,12 +78,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
   def setLastSentHeight(height: Long): F[Unit] =
     lastSentHeight.modify { _ =>
       (height, ())
-    }
+    } >> metrics.updateMetricAsync[F]("redownload_lastSentHeight", height)
 
   def setLastMajorityState(majorityState: SnapshotsAtHeight): F[Unit] =
     lastMajorityState.modify { _ =>
-      (majorityState, ())
-    }
+      (majorityState, maxHeight(majorityState))
+    }.flatMap(metrics.updateMetricAsync[F]("redownload_lastMajorityStateHeight", _))
 
   def latestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
     (s, maxHeight(s))
@@ -100,7 +100,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       val removalPoint = getRemovalPoint(max)
       val limited = takeHighestUntilKey(updated, removalPoint)
       (limited, ())
-    }
+    } >> metrics.updateMetricAsync[F]("redownload_maxCreatedSnapshotHeight", height)
 
   def persistAcceptedSnapshot(height: Long, hash: String): F[Unit] =
     acceptedSnapshots.modify { m =>
@@ -109,7 +109,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       val removalPoint = getRemovalPoint(max)
       val limited = takeHighestUntilKey(updated, removalPoint)
       (limited, ())
-    }
+    } >> metrics.updateMetricAsync[F]("redownload_maxAcceptedSnapshotHeight", height)
 
   def getCreatedSnapshots(): F[SnapshotProposalsAtHeight] = createdSnapshots.get
 
@@ -122,8 +122,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- createdSnapshots.modify(_ => (Map.empty, ()))
       _ <- acceptedSnapshots.modify(_ => (Map.empty, ()))
       _ <- peersProposals.modify(_ => (Map.empty, ()))
-      _ <- lastMajorityState.modify(_ => (Map.empty, ()))
-      _ <- lastSentHeight.modify(_ => (-1L, ()))
+      _ <- setLastMajorityState(Map.empty)
+      _ <- setLastSentHeight(-1)
       _ <- rewardsManager.clearLastRewardedHeight()
     } yield ()
 
@@ -311,7 +311,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
       meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint)
 
-      _ <- lastMajorityState.modify(_ => (meaningfulMajorityState, ()))
+      _ <- setLastMajorityState(meaningfulMajorityState)
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
 
@@ -387,12 +387,13 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- if (toSend.nonEmpty) {
         val max = maxHeight(toSend)
-        lastSentHeight.modify(_ => (max, ()))
+        setLastSentHeight(max)
       } else F.unit
 
     } yield ()
 
-    if (isEnabledCloudStorage) send else F.unit
+    if (isEnabledCloudStorage) send.handleErrorWith(_ => metrics.incrementMetricAsync("sendToCloud_failure"))
+    else F.unit
   }
 
   private[redownload] def rewardMajoritySnapshots(): EitherT[F, Throwable, Unit] =

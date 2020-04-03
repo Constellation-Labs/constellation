@@ -152,7 +152,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     )
     addressService = new AddressService[IO]()
 
-    peerHealthCheck = PeerHealthCheck[IO](cluster, apiClient)
+    peerHealthCheck = PeerHealthCheck[IO](cluster, apiClient, metrics)
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
 
     snapshotTrigger = new SnapshotTrigger(
@@ -294,7 +294,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       metrics
     )
 
-    downloadService = DownloadService[IO](redownloadService, cluster, checkpointAcceptanceService, apiClient)
+    downloadService = DownloadService[IO](redownloadService, cluster, checkpointAcceptanceService, apiClient, metrics)
 
     val healthChecker = new HealthChecker[IO](
       this,

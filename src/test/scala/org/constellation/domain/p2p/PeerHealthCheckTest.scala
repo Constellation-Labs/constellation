@@ -9,6 +9,7 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.client.MetricsClientInterpreter
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
+import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -29,6 +30,7 @@ class PeerHealthCheckTest
   var cluster: Cluster[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
   var apiClient: ClientInterpreter[IO] = _
+  var metrics: Metrics = _
 
   val peer1 = PeerData(
     PeerMetadata("1.2.3.4", 9000, Id("node1"), resourceInfo = mock[ResourceInfo]),
@@ -45,10 +47,12 @@ class PeerHealthCheckTest
   before {
     apiClient = mock[ClientInterpreter[IO]]
     cluster = mock[Cluster[IO]]
-    peerHealthCheck = PeerHealthCheck(cluster, apiClient)
+    metrics = mock[Metrics]
+    peerHealthCheck = PeerHealthCheck(cluster, apiClient, metrics)
     cluster.removePeer(*) shouldReturnF Unit
     cluster.markOfflinePeer(*) shouldReturnF Unit
     cluster.broadcastOfflineNodeState(*) shouldReturnF Unit
+    metrics.updateMetricAsync[IO](*, any[String])(*) shouldReturnF Unit
   }
 
   "check" - {
