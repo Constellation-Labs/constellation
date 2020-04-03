@@ -6,6 +6,8 @@ import java.security.KeyPair
 import cats.effect.Sync
 import org.constellation.keytool.KeyStoreUtils
 
+import scala.util.{Failure, Success}
+
 case class Transaction(
   edge: Edge[TransactionEdgeData],
   lastTxRef: LastTransactionRef,
@@ -26,6 +28,15 @@ object Transaction {
     (fos: FileOutputStream) =>
       KeyStoreUtils.writeTypeToFileStream[F, Transaction](_.asJson.noSpaces)(t)(fos)
   }
+
+  def transactionToJsonString(transaction: Transaction): String =
+    transaction.asJson.noSpaces
+
+  def transactionFromJsonString(data: String): Transaction =
+    parse(data).map(_.as[Transaction]).toOption.flatMap(_.toOption) match {
+      case Some(tx) => tx
+      case None     => throw new Error("Cannot parse transaction data")
+    }
 
   def createTransaction(
     prevTx: Option[Transaction] = None,
