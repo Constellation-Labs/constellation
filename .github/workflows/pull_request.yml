@@ -16,7 +16,7 @@ jobs:
           java-version: 1.8
 
       - name: Install haveged for entropy
-        run: sudo apt-get install haveged
+        run: sudo apt-get install -y haveged
 
       - name: Test
         run: |
