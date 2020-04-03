@@ -139,8 +139,9 @@ class Cluster[F[_]](
 
   def setOwnJoinedHeight(height: Long): F[Unit] =
     ownJoinedHeight.modify { h =>
-      (Some(h.getOrElse(height)), ())
-    }
+      val updated = Some(h.getOrElse(height))
+      (updated, updated.get)
+    }.flatMap(dao.metrics.updateMetricAsync("cluster_ownJoinedHeight", _))
 
   def getOwnJoinedHeight(): F[Option[Long]] =
     ownJoinedHeight.get

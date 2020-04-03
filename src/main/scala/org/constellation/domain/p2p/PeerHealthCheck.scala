@@ -9,10 +9,11 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
+import org.constellation.util.Metrics
 
 import scala.concurrent.duration._
 
-class PeerHealthCheck[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: ClientInterpreter[F])(
+class PeerHealthCheck[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: ClientInterpreter[F], metrics: Metrics)(
   implicit C: ContextShift[F]
 ) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -51,6 +52,7 @@ class PeerHealthCheck[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: C
             _ <- cluster.markOfflinePeer(pd.peerMetadata.id)
             _ <- logger.info(s"Broadcasting dead peer: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host})")
             _ <- cluster.broadcastOfflineNodeState(pd.peerMetadata.id)
+            _ <- metrics.updateMetricAsync("deadPeer", pd.peerMetadata.host)
           } yield ()
       })
       .void
@@ -58,9 +60,9 @@ class PeerHealthCheck[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: C
 
 object PeerHealthCheck {
 
-  def apply[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: ClientInterpreter[F])(
+  def apply[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: ClientInterpreter[F], metrics: Metrics)(
     implicit C: ContextShift[F]
-  ) = new PeerHealthCheck[F](cluster, apiClient)
+  ) = new PeerHealthCheck[F](cluster, apiClient, metrics)
 
   sealed trait PeerHealthCheckStatus
   object PeerAvailable extends PeerHealthCheckStatus
