@@ -94,7 +94,6 @@ object ConstellationNode extends IOApp {
 
       apiClient <- BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded)
         .withConnectTimeout(30.seconds)
-        .withIdleTimeout(120.seconds)
         .resource
 
       logger = org.http4s.client.middleware.Logger[IO](logHeaders = true, logBody = false)(_)
