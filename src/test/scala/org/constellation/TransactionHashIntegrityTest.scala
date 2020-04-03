@@ -21,29 +21,6 @@ import pl.abankowski.httpsigner.signature.generic.GenericVerifier
 class TransactionHashIntegrityTest extends FreeSpec with Matchers {
   implicit val cc: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
-  "check" in {
-    val id = Id(
-      "b6fb191d9d053de138fec00ac1edf7e615769f6b687a831dafb653f9b1e6a0d4637cfe4380ff78d2763e8072a7d75021193de78d4325d7a701e8db6352edd39f"
-    )
-    val req = Request[IO](
-      method = GET,
-      uri = Uri.unsafeFromString("http://54.215.210.171:9001/registration/request"),
-      headers = Headers.of(
-        Header("Host", "54.215.210.171:9001"),
-        Header(
-          "Request-Signature",
-          "MEUCIGT2oKxufSbAd88UpqmEeHS1Fj0VVDl90pqmVRxAsMWuAiEA6VWn5ScU5oduFHw4N0mcyavs2+fdMm/azb8UwbXOPrk="
-        ),
-        Header("Accept", "application/json"),
-        Header("User-Agent", "http4s-blaze/0.21.2"),
-        Header("Content-Length", "0")
-      )
-    )
-    val c = GenericVerifier(KeyUtils.DefaultSignFunc, KeyUtils.provider, id.toPublicKey)
-    val h = new Http4sRequestVerifier[IO](c)
-    println(h.verify(req).unsafeRunSync())
-  }
-
   "transaction read by wallet and node should have consistent hash" in {
     val txPath = "src/test/resources/valid-tx.txt"
     val readTx =
@@ -83,5 +60,23 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
 
     walletHash1 shouldBe walletHash2
     nodeHash1 shouldBe nodeHash2
+  }
+
+  "transaction can be json encoded and decoded" in {
+    val txPath = "src/test/resources/valid-tx.txt"
+    val readTx =
+      KeyStoreUtils
+        .readFromFileStream[IO, Option[WalletTransaction]](txPath, WalletTransaction.transactionParser[IO])
+        .value
+        .unsafeRunSync()
+        .right
+        .get
+        .get
+
+    val jsonString = WalletTransaction.transactionToJsonString(readTx)
+
+    val transaction = WalletTransaction.transactionFromJsonString(jsonString)
+
+    Hashable.hash(readTx.edge.signedObservationEdge) shouldBe Hashable.hash(transaction.edge.signedObservationEdge)
   }
 }

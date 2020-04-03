@@ -22,10 +22,12 @@ object CliConfigParser {
       opt[java.net.InetAddress]("ip")
         .action((x, c) => c.copy(externalIp = x))
         .valueName("<ip address>")
-        .text("the ip you can be reached from outside"),
+        .text("the ip you can be reached from outside")
+        .required,
       opt[Int]('p', "port")
         .action((x, c) => c.copy(externalPort = x))
-        .text("the port you can be reached from outside"),
+        .text("the port you can be reached from outside")
+        .required,
       opt[String]('f', "alloc")
         .action((x, c) => c.copy(allocFilePath = x))
         .text("path to file with allocation account balances"),
@@ -71,10 +73,6 @@ object CliConfigParser {
         c =>
           for {
             _ <- checkConfigOption(
-              c.externalIp == null ^ c.externalPort == 0,
-              "ip and port must either both be set, or neither."
-            )
-            _ <- checkConfigOption(
               c.genesisNode && c.rollbackNode,
               "can't start in rollback mode and genesis mode at the same time"
             )
@@ -92,16 +90,7 @@ object CliConfigParser {
       case _       => new RuntimeException("Invalid set of cli options").raiseError[F, CliConfig]
     }
 
+  // TODO: Remove because of the whitelisting
   def loadSeedsFromConfig[F[_]: Sync](config: Config): F[Seq[HostPort]] =
-    config
-      .hasPath("seedPeers")
-      .pure[F]
-      .ifM(
-        config.getStringList("seedPeers").pure[F].map {
-          _.asScala
-            .map(_.split(":"))
-            .map(arr => HostPort(arr(0), arr(1).toInt))
-        },
-        Seq.empty[HostPort].pure[F]
-      )
+    Sync[F].pure { Seq.empty[HostPort] }
 }

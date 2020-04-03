@@ -334,10 +334,6 @@ class ConstellationNode(
   val ipManager: IPManager[IO] =
     IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
 
-  nodeConfig.seeds.foreach { peer =>
-    dao.ipManager.addKnownIP(peer.host)
-  }
-
   // TODO: Unused, can be used for timing information but adds a lot to logs
   private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
     LoggingMagnet(printResponseTime(logger))
