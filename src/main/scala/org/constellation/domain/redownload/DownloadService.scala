@@ -13,12 +13,14 @@ import org.constellation.primitives.Genesis
 import org.constellation.primitives.Schema.{GenesisObservation, NodeState}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
+import org.constellation.util.Metrics
 
 class DownloadService[F[_]](
   redownloadService: RedownloadService[F],
   cluster: Cluster[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  apiClient: ClientInterpreter[F]
+  apiClient: ClientInterpreter[F],
+  metrics: Metrics
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F]
@@ -35,6 +37,7 @@ class DownloadService[F[_]](
       majorityState <- redownloadService.lastMajorityState.get
       _ <- if (majorityState.isEmpty) fetchAndPersistBlocks() else F.unit
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+      _ <- metrics.incrementMetricAsync("downloadFinished_total")
     } yield ()
 
     cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
@@ -106,7 +109,8 @@ object DownloadService {
     redownloadService: RedownloadService[F],
     cluster: Cluster[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
-    apiClient: ClientInterpreter[F]
+    apiClient: ClientInterpreter[F],
+    metrics: Metrics
   ): DownloadService[F] =
-    new DownloadService[F](redownloadService, cluster, checkpointAcceptanceService, apiClient)
+    new DownloadService[F](redownloadService, cluster, checkpointAcceptanceService, apiClient, metrics)
 }

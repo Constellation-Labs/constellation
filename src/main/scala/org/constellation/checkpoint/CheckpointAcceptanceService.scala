@@ -269,7 +269,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         logger.info(
           s"[${dao.id.short}] CheckpointBlock with hash=${cb.baseHash} : contains double spend transactions=${doubleSpendTxs
             .map(_.hash)} : from address : ${doubleSpendTxs.map(_.src.address)}"
-        )
+        ) >> dao.metrics.updateMetricAsync[F]("doubleSpendTransactions", doubleSpendTxs.size)
       else Sync[F].unit
       _ <- if (doubleSpendTxs.nonEmpty) blacklistedAddresses.addAll(doubleSpendTxs.map(_.src.address)) else Sync[F].unit
     } yield doubleSpendTxs
@@ -365,7 +365,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           logger.debug(s"[Accept checkpoint][2-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(Timer[F].sleep(3.seconds) >> resolveMissingParents(cb)) >>
           Concurrent[F].start(Timer[F].sleep(20.seconds) >> resolveMissingParents(cb)) >>
-          error.raiseError[F, Unit]
+          error.raiseError[F, Unit] >> dao.metrics.incrementMetricAsync("missingParents")
 
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>

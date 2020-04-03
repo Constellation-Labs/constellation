@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Owner API (located on port 9002)
 - Request and response signing #992
 - Transaction json (de)serialization methods in wallet
+- New metrics for Grafana alerting #734
 ### Changed
 - Double spend validation #1007
 - Dropped support for json4s, used circe instead
