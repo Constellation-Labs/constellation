@@ -2,11 +2,25 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.2.0] - 2020-04-04
+### Breaking changes
+- Changed API endpoints visibility and security
+- Owner API and dashboard available on port 9002
+- Joining and leaving available only from owner API
+### Added
+- Http4s API and APIClient instead of akka-http #1020
+- Owner API (located on port 9002)
+- Request and response signing #992
+- Transaction json (de)serialization methods in wallet
 ### Changed
 - Double spend validation #1007
+- Dropped support for json4s, used circe instead
+- Changed API endpoints visiblity (ie. joining and leaving available only for node owner)
 ### Fixed
 - Transaction max value validation #994
-- Checking signature hash correctness #995
+- Checking joining signature hash correctness #995
+- Docker w/ whitelisting
 
 ## [v2.1.4] - 2020-03-27
 ### Changed
