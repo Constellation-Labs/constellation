@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Compile body to Array[Byte] only if request succeeded
 
 ## [v2.3.0] - 2020-04-14
 ### Added
