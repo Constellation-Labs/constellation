@@ -1,23 +1,21 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import io.circe.{Decoder, KeyDecoder}
-import org.constellation.infrastructure.p2p.PeerResponse
-import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.http4s.client.Client
 import io.circe.generic.auto._
-import org.constellation.domain.observation.ObservationEvent
+import io.circe.{Decoder, KeyDecoder}
 import org.constellation.domain.p2p.client.SnapshotClientAlgebra
 import org.constellation.domain.redownload.RedownloadService.{
   LatestMajorityHeight,
   SnapshotProposalsAtHeight,
   SnapshotsAtHeight
 }
+import org.constellation.infrastructure.p2p.PeerResponse
+import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
-import org.http4s.{EntityDecoder, MediaType}
-import org.http4s.circe.CirceEntityDecoder._
-import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
+import org.http4s.Status.Successful
+import org.http4s.circe.CirceEntityDecoder._
+import org.http4s.client.Client
 
 import scala.collection.SortedMap
 
@@ -32,7 +30,10 @@ class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F
 
   def getStoredSnapshot(hash: String): PeerResponse[F, Array[Byte]] =
     PeerResponse[F, Vector[Byte]](s"snapshot/stored/$hash", client, GET) { (req, c) =>
-      c.get(req.uri)(_.body.compile.toVector)
+      c.get(req.uri) {
+        case Successful(response) => response.body.compile.toVector
+        case response             => Concurrent[F].raiseError(new Throwable(response.status.reason))
+      }
     }.map(_.toArray)
 
   def getCreatedSnapshots(): PeerResponse[F, SnapshotProposalsAtHeight] =
@@ -46,17 +47,22 @@ class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F
 
   def getSnapshotInfo(): PeerResponse[F, Array[Byte]] = // TODO: 45s timeout
     PeerResponse[F, Vector[Byte]](s"snapshot/info", client, GET) { (req, c) =>
-      c.get(req.uri)(_.body.compile.toVector)
+      c.get(req.uri) {
+        case Successful(response) => response.body.compile.toVector
+        case response             => Concurrent[F].raiseError(new Throwable(response.status.reason))
+      }
     }.map(_.toArray)
 
   def getSnapshotInfo(hash: String): PeerResponse[F, Array[Byte]] =
     PeerResponse[F, Vector[Byte]](s"snapshot/info/$hash", client, GET) { (req, c) =>
-      c.get(req.uri)(_.body.compile.toVector)
+      c.get(req.uri) {
+        case Successful(response) => response.body.compile.toVector
+        case response             => Concurrent[F].raiseError(new Throwable(response.status.reason))
+      }
     }.map(_.toArray)
 
   def getLatestMajorityHeight(): PeerResponse[F, LatestMajorityHeight] =
     PeerResponse[F, LatestMajorityHeight](s"latestMajorityHeight")(client)
-
 }
 
 object SnapshotClientInterpreter {
