@@ -163,9 +163,9 @@ object ConstellationNode extends IOApp {
       getWhitelistedPeerId = { (ip: IP) =>
         dao.nodeConfig.whitelisting.get(ip).pure[IO]
       }
-      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId)(peerPublicEndpoints) <+>
+      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId, false)(peerPublicEndpoints) <+>
         PeerAuthMiddleware
-          .requestVerifierMiddleware(getKnownPeerId)(
+          .requestVerifierMiddleware(getKnownPeerId, true)(
             PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
               peerWhitelistedEndpoints
             )
