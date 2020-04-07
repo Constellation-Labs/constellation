@@ -14,7 +14,7 @@ case class Edge[+D <: Signable](
 
   def baseHash: String = signedObservationEdge.signatureBatch.hash
 
-  def parentHashes: Seq[String] = observationEdge.parents.map(_.hash)
+  def parentHashes: Seq[String] = observationEdge.parents.map(_.hashReference)
 
   def parents: Seq[TypedEdgeHash] = observationEdge.parents
 
