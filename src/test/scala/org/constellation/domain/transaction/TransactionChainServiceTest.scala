@@ -66,7 +66,7 @@ class TransactionChainServiceTest
 
     for {
       last <- service.getLastTransactionRef(src)
-      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.hash, last.ordinal))
+      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.prevHash, last.ordinal))
     } yield tx
   }
 

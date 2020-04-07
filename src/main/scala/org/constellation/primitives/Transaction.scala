@@ -49,9 +49,9 @@ case class Transaction(
   isTest: Boolean = false
 ) {
 
-  def src: Address = Address(edge.parents.head.hash)
+  def src: Address = Address(edge.parents.head.hashReference)
 
-  def dst: Address = Address(edge.parents.last.hash)
+  def dst: Address = Address(edge.parents.last.hashReference)
 
   def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
 
