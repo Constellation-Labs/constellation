@@ -135,5 +135,5 @@ case class PreviousTransactionHasNotBeenAccepted(txHash: String, previousHash: S
 }
 
 object PreviousTransactionHasNotBeenAccepted {
-  def apply(tx: Transaction) = new PreviousTransactionHasNotBeenAccepted(tx.hash, tx.lastTxRef.hash)
+  def apply(tx: Transaction) = new PreviousTransactionHasNotBeenAccepted(tx.hash, tx.lastTxRef.prevHash)
 }

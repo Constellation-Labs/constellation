@@ -117,13 +117,12 @@ object TransactionService {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
 
     val txData = TransactionEdgeData(amountToUse, lastTxRef, fee)
-
     val oe = ObservationEdge(
       Seq(
         TypedEdgeHash(src, EdgeHashType.AddressHash),
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
-      TypedEdgeHash(txData.hash, EdgeHashType.TransactionDataHash)
+      TypedEdgeHash(txData.getRunLengthEncoding, EdgeHashType.TransactionDataHash)
     )
 
     val soe = signedObservationEdge(oe)(keyPair)

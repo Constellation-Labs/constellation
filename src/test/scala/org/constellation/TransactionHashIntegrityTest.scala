@@ -1,8 +1,7 @@
 package org.constellation
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
-import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
+import org.constellation.keytool.KeyStoreUtils
 import org.constellation.primitives.Transaction
 import org.constellation.serializer.KryoSerializer
 import org.constellation.wallet.{KryoSerializer => WalletKryoSerializer}
@@ -10,17 +9,9 @@ import org.constellation.wallet.{Hashable, Transaction => WalletTransaction}
 import org.scalatest.{FreeSpec, Matchers}
 import io.circe.generic.auto._
 import io.circe.parser.parse
-import org.constellation.schema.Id
-import org.http4s.{Header, Headers, Request, Uri}
-import org.http4s.client.dsl.io._
-import org.http4s.client.dsl._
-import org.http4s.Method._
-import pl.abankowski.httpsigner.http4s.Http4sRequestVerifier
-import pl.abankowski.httpsigner.signature.generic.GenericVerifier
 
 class TransactionHashIntegrityTest extends FreeSpec with Matchers {
   implicit val cc: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
-
   "transaction read by wallet and node should have consistent hash" in {
     val txPath = "src/test/resources/valid-tx.txt"
     val readTx =
