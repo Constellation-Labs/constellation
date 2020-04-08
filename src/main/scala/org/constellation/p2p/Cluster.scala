@@ -27,13 +27,15 @@ import scala.util.Random
 import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.parser._
+import org.constellation.Handshake.HandshakeStatus
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
   majorityHeight: NonEmptyList[MajorityHeight],
-  notification: Seq[PeerNotification] = Seq.empty
+  notification: Seq[PeerNotification] = Seq.empty,
+  handshakeStatus: HandshakeStatus = HandshakeStatus.NoHandshake
 ) {
 
   def updateJoiningHeight(height: Long): PeerData =
@@ -114,6 +116,7 @@ class Cluster[F[_]](
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
+  private val handshake: Ref[F, Map[String, HandshakeStatus]] = Ref.unsafe(Map.empty)
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
@@ -219,6 +222,11 @@ class Cluster[F[_]](
       "cluster_setNodeStatus"
     )
 
+  def setHandshakeStatus(ip: String, status: HandshakeStatus): F[Unit] =
+    handshake.modify { m =>
+      (m + (ip -> status), status)
+    }.flatMap(s => logger.debug(s"Setting handshake status: $ip -> $s"))
+
   def peerDiscovery(peerMetadata: PeerMetadata): F[Unit] =
     for {
       peersMetadata <- apiClient.nodeMetadata.getPeers().run(peerMetadata.toPeerClientMetadata).handleErrorWith { err =>
@@ -235,7 +243,7 @@ class Cluster[F[_]](
       _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
       registerResponse <- register.traverse { md =>
         for {
-          prr <- pendingRegistrationRequest
+          prr <- pendingRegistrationRequest(md._2.host)
           _ <- apiClient.sign.register(prr).run(md._1.toPeerClientMetadata)
         } yield ()
       }.void
@@ -322,6 +330,7 @@ class Cluster[F[_]](
                   .map(_.prepend(majorityHeight))
                   .getOrElse(NonEmptyList.one(majorityHeight))
                 peerData = PeerData(peerMetadata, majorityHeights)
+                _ <- setHandshakeStatus(request.host, HandshakeStatus.OneWayHandshake)
                 _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(peerMetadata))
               } yield ()
           }.handleErrorWith { err =>
@@ -506,11 +515,14 @@ class Cluster[F[_]](
     )
 
   // Someone joins to me
-  def pendingRegistrationRequest: F[PeerRegistrationRequest] =
+  def pendingRegistrationRequest(callerIP: String): F[PeerRegistrationRequest] =
     for {
       height <- getOwnJoinedHeight()
 
       peers <- peers.get.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
+
+      _ <- logger.debug("Handshake") >> logger.debug(handshake.toString)
+
       peersSize = peers.size
       minFacilitatorsSize = dao.processingConfig.numFacilitatorPeers
       isInitialFacilitator = peersSize < minFacilitatorsSize
@@ -534,7 +546,8 @@ class Cluster[F[_]](
           participatesInGenesisFlow = participatedInGenesisFlow,
           participatesInRollbackFlow = participatedInRollbackFlow,
           joinsAsInitialFacilitator = isInitialFacilitator,
-          whitelistingHash
+          whitelistingHash,
+          HandshakeStatus.OneWayHandshake
         )
       }
     } yield prr
@@ -555,8 +568,9 @@ class Cluster[F[_]](
                   .flatMap { registrationRequest =>
                     for {
                       _ <- pendingRegistration(hp.host, registrationRequest)
-                      prr <- pendingRegistrationRequest
+                      prr <- pendingRegistrationRequest(registrationRequest.host)
                       response <- apiClient.sign.register(prr).run(client)
+                      _ <- setHandshakeStatus(registrationRequest.host, HandshakeStatus.TwoWayHandshake)
                     } yield response
                   }
                   .handleErrorWith { err =>

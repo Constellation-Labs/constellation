@@ -6,6 +6,7 @@ import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.circe.generic.auto._
 import io.circe.syntax._
+import org.constellation.Handshake.HandshakeStatus
 import org.constellation.consensus.SignatureRequest
 import org.constellation.p2p.{Cluster, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.util.{HostPort, SignHelp, SingleHashSignature}
@@ -37,6 +38,7 @@ class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends
         registrationRequest <- req.decodeJson[PeerRegistrationRequest]
         ip = req.remoteAddr.getOrElse("")
         _ <- cluster.pendingRegistration(ip, registrationRequest)
+        _ <- cluster.setHandshakeStatus(ip, HandshakeStatus.TwoWayHandshake)
       } yield ()) >> Ok()
   }
 
@@ -54,8 +56,10 @@ class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends
   }
 
   private def getRegistrationRequest(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "registration" / "request" =>
-      cluster.pendingRegistrationRequest.map(_.asJson).flatMap(Ok(_))
+    case req @ GET -> Root / "registration" / "request" => {
+      val ip = req.remoteAddr.getOrElse("")
+      cluster.pendingRegistrationRequest(ip).map(_.asJson).flatMap(Ok(_))
+    }
   }
 
 }

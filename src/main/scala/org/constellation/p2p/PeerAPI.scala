@@ -1,5 +1,6 @@
 package org.constellation.p2p
 
+import org.constellation.Handshake.HandshakeStatus
 import org.constellation.schema.Id
 import org.constellation.ResourceInfo
 case class PeerAuthSignRequest(salt: Long)
@@ -13,7 +14,8 @@ case class PeerRegistrationRequest(
   participatesInGenesisFlow: Boolean,
   participatesInRollbackFlow: Boolean,
   joinsAsInitialFacilitator: Boolean,
-  whitelistingHash: String
+  whitelistingHash: String,
+  handshakeStatus: HandshakeStatus
 )
 
 case class PeerUnregister(host: String, port: Int, id: Id, majorityHeight: Long)
