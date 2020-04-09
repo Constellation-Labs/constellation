@@ -2,10 +2,11 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList, OptionT}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.implicits._
+import cats.kernel.Order
 import constellation._
 import enumeratum._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -27,6 +28,8 @@ import scala.util.Random
 import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.parser._
+import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
+import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
@@ -392,31 +395,59 @@ class Cluster[F[_]](
 
   def markOfflinePeer(nodeId: Id): F[Unit] =
     logThread(
-      for {
-        p <- peers.get
-        peer = p.get(nodeId).filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
-        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
-        _ <- peer.traverse(peer => ipManager.removeKnownIP(peer.peerMetadata.host))
-        maxProposalHeight <- peer.traverse { peer =>
-          LiftIO[F].liftIO(dao.redownloadService.getPeerProposals().map(_.get(peer.peerMetadata.id)))
-        }.map(
-          _.flatten
-            .filter(_.nonEmpty)
-            .map { _.maxBy { case (height, _) => height } }
-            .map { case (height, _) => height }
-        )
-        leavingHeight = maxProposalHeight
-          .map(height => if (height > majorityHeight) majorityHeight else height)
-          .getOrElse(majorityHeight)
-        _ <- peer.traverse(peer => {
-          val peerData = peer
+      {
+        implicit val snapOrder: Order[SnapshotProposalsAtHeight] =
+          Order.by[SnapshotProposalsAtHeight, List[Long]](a => a.keySet.toList)
+
+        val leavingFlow = for {
+          p <- OptionT.liftF(peers.get)
+          leavingPeer <- OptionT.fromOption[F] {
+            p.get(nodeId).filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
+          }
+          leavingPeerId = leavingPeer.peerMetadata.id
+          majorityHeight <- OptionT.liftF(LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight))
+          _ <- OptionT.liftF(ipManager.removeKnownIP(leavingPeer.peerMetadata.host))
+
+          proposals <- OptionT.liftF {
+            p.toList.traverse {
+              case (_, pd) =>
+                apiClient.snapshot
+                  .getPeerProposals(leavingPeerId)
+                  .run(pd.peerMetadata.toPeerClientMetadata)
+                  .handleErrorWith(_ => F.pure(None))
+            }.flatMap { list =>
+              LiftIO[F]
+                .liftIO(dao.redownloadService.getPeerProposals().map(_.get(leavingPeerId)))
+                .map(list.::)
+            }.map(_.flatten)
+          }
+
+          maxProposal = proposals.maximumOption
+          _ <- OptionT.liftF {
+            maxProposal
+              .map(proposal => LiftIO[F].liftIO(dao.redownloadService.updatePeerProposal(leavingPeerId, proposal)))
+              .getOrElse(F.unit)
+          }
+
+          maxProposalHeight = maxProposal.flatMap(_.keySet.toList.maximumOption)
+          joiningHeight = leavingPeer.majorityHeight.head.joined
+
+          leavingHeight = maxProposalHeight
+            .map(height => if (height > majorityHeight) majorityHeight else height)
+            .orElse(joiningHeight)
+            .getOrElse(majorityHeight)
+
+          newPeerData = leavingPeer
             .updateLeavingHeight(leavingHeight)
-            .copy(peerMetadata = peer.peerMetadata.copy(nodeState = NodeState.Offline))
-          peers.modify(p => (p + (peerData.peerMetadata.id -> peerData), p))
-        })
-        _ <- updateMetrics()
-        _ <- updatePersistentStore()
-      } yield (),
+            .copy(peerMetadata = leavingPeer.peerMetadata.copy(nodeState = NodeState.Offline))
+
+          _ <- OptionT.liftF {
+            peers.modify(p => (p + (leavingPeerId -> newPeerData), p)) >> updateMetrics >> updatePersistentStore
+          }
+        } yield ()
+
+        leavingFlow.getOrElseF(F.unit)
+      },
       "cluster_markOfflinePeer"
     )
 

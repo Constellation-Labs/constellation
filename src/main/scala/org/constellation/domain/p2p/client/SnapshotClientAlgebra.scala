@@ -17,6 +17,8 @@ trait SnapshotClientAlgebra[F[_]] {
 
   def getAcceptedSnapshots(): PeerResponse[F, SnapshotsAtHeight]
 
+  def getPeerProposals(id: Id): PeerResponse[F, Option[SnapshotProposalsAtHeight]]
+
   def getNextSnapshotHeight(): PeerResponse[F, (Id, Long)]
 
   def getSnapshotInfo(): PeerResponse[F, Array[Byte]]

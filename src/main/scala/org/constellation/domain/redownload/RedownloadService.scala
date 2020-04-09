@@ -93,6 +93,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
     (s, minHeight(s))
   }
 
+  def updatePeerProposal(peer: Id, proposal: SnapshotProposalsAtHeight): F[Unit] =
+    peersProposals.modify { m =>
+      val updated = m.updated(peer, proposal)
+      (updated, ())
+    }
+
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
       val updated = if (m.contains(height)) m else m.updated(height, SnapshotProposal(hash, reputation))
