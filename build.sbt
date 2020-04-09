@@ -83,7 +83,7 @@ lazy val keyToolSharedDependencies = Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.64"
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.65"
 ) ++ sharedDependencies
 
 lazy val walletSharedDependencies = Seq(
