@@ -2,9 +2,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.2.1] - 2020-04-09
+### Added
+- Updated whitelisting for batch0
+- Temporarily added batch1 to whitelisting
 ### Fixed
 - Compile body to Array[Byte] only if request succeeded
-### Breaking changes
+- Updated BouncyCastle to 1.65 which fixes "algorithm not found" issue of keystore
 - Temporarily turn off request signer
 
 ## [v2.2.0] - 2020-04-04
