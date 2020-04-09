@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Fixed
 - Compile body to Array[Byte] only if request succeeded
+### Breaking changes
+- Temporarily turn off request signer
 
 ## [v2.2.0] - 2020-04-04
 ### Breaking changes
