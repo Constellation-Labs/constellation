@@ -163,13 +163,15 @@ object ConstellationNode extends IOApp {
       getWhitelistedPeerId = { (ip: IP) =>
         dao.nodeConfig.whitelisting.get(ip).pure[IO]
       }
-      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId, false)(peerPublicEndpoints) <+>
-        PeerAuthMiddleware
-          .requestVerifierMiddleware(getKnownPeerId, true)(
-            PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
-              peerWhitelistedEndpoints
-            )
-          )
+      peerEndpoints =
+      //      PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId, false)(peerPublicEndpoints) <+>
+      peerPublicEndpoints <+>
+        //        PeerAuthMiddleware
+        //          .requestVerifierMiddleware(getKnownPeerId, true)(
+        PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
+          peerWhitelistedEndpoints
+        )
+      //          )
 
       crypto = GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, dao.keyPair.getPrivate)
       responseSigner = new Http4sResponseSigner(crypto)
