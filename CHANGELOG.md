@@ -2,8 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.3.0] - 2020-04-09
 ### Fixed
 - Compile body to Array[Byte] only if request succeeded
+- Updated BouncyCastle to 1.65 which fixes "algorithm not found" issue of keystore
 ### Breaking changes
 - Temporarily turn off request signer
 
