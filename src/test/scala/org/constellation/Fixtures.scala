@@ -8,14 +8,10 @@ import java.util.Random
 import cats.effect.{ContextShift, IO}
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema.SendToAddress
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
+import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Transaction
 import org.constellation.schema.Id
-import org.constellation.util.SignHelp
-
-import scala.concurrent.ExecutionContext
 
 object Fixtures {
 

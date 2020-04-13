@@ -122,7 +122,7 @@ object TransactionService {
         TypedEdgeHash(src, EdgeHashType.AddressHash),
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
-      TypedEdgeHash(txData.getRunLengthEncoding, EdgeHashType.TransactionDataHash)
+      TypedEdgeHash(txData.getEncoding, EdgeHashType.TransactionDataHash)
     )
 
     val soe = signedObservationEdge(oe)(keyPair)

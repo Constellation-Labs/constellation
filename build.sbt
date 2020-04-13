@@ -180,7 +180,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= (coreDependencies ++ testDependencies),
     mainClass := Some("org.constellation.ConstellationNode")
     // other settings here
-  ).aggregate(wallet, keytool)
+  )
 
 lazy val keytool = (project in file("keytool"))
   .enablePlugins(BuildInfoPlugin)
