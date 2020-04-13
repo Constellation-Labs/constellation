@@ -11,7 +11,7 @@ object TransactionValidator {
 
   def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] = {
     val isValid = tx.signatures.exists { hs ⇒
-      hs.publicKey.address == tx.src.address && hs.valid(tx.signaturesHash)
+      hs.publicKey.address == tx.src.address && hs.valid(tx.signaturesHash) && tx.hash == tx.signaturesHash //todo use a recalculation of get run length for OE and edge.signedObservationEdge.signatureBatch.hash
     }
 
     if (isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel

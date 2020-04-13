@@ -1,14 +1,20 @@
 package org.constellation.domain.transaction
-import org.constellation.wallet.Signable
+import org.constellation.util.Signable
 
 case class LastTransactionRef(
   prevHash: String,
   ordinal: Long
-) extends Signable  {
-  override def getRunLengthEncoding = {
+) extends Signable {
+  override def getEncoding = {
     val hashLengthString = prevHash.length.toString
     val ordinalLengthString = prevHash.length.toString
-    hashLengthString :: prevHash :: ordinalLengthString :: ordinal.toString :: Nil mkString ""
+    val args = Seq(
+      hashLengthString,
+      prevHash,
+      ordinalLengthString,
+      ordinal.toString
+    )
+    runLengthEncoding(args: _*)
   }
 }
 

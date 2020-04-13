@@ -13,17 +13,20 @@ trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
 
-  def hash: String = hashSerialized(getRunLengthEncoding)
+  def hash: String = hashSerialized(getEncoding)
 
   def short: String = hash.slice(0, 5)
 
-  def getRunLengthEncoding: String = hashSerialized(this)
+  def getEncoding: String = hashSerialized(this)
+
+  def runLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
 
 }
 
 case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 
-  def valid(expectedHash: String): Boolean = hash == expectedHash && hashSignature.valid(expectedHash)
+  def valid(expectedHash: String): Boolean =
+    hash == expectedHash && hashSignature.valid(expectedHash) //todo use thid in Transaction and CB/Snap
 }
 
 case class HashSignature(

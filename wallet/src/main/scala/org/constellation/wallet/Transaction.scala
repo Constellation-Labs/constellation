@@ -6,20 +6,20 @@ import java.security.KeyPair
 import cats.effect.Sync
 import org.constellation.keytool.KeyStoreUtils
 
-import scala.util.{Failure, Success}
-
 case class Transaction(
   edge: Edge[TransactionEdgeData],
   lastTxRef: LastTransactionRef,
   isDummy: Boolean,
   isTest: Boolean
-)
+) {
+  def hash: String = edge.observationEdge.hash
+}
 
 object Transaction {
 
   import io.circe.generic.auto._
-  import io.circe.syntax._
   import io.circe.parser.parse
+  import io.circe.syntax._
 
   def transactionParser[F[_]](fis: FileInputStream)(implicit F: Sync[F]): F[Option[Transaction]] =
     KeyStoreUtils.parseFileOfTypeOp[F, Transaction](parse(_).map(_.as[Transaction]).toOption.flatMap(_.toOption))(fis)

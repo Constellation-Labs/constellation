@@ -34,7 +34,7 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
       .get
       .get
 
-    val walletHash1 = Hashable.hash(readTx.edge.signedObservationEdge)
+    val walletHash1 = readTx.hash
     val nodeHash1 = readTx2.hash
 
     val serializedWalletTx = WalletKryoSerializer.serializeAnyRef(readTx)
@@ -43,7 +43,7 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
     val deserializedWalletTx = WalletKryoSerializer.deserializeCast[WalletTransaction](serializedWalletTx)
     val deserializedNodeTx = KryoSerializer.deserializeCast[Transaction](serializedNodeTx)
 
-    val walletHash2 = Hashable.hash(deserializedWalletTx.edge.signedObservationEdge)
+    val walletHash2 = deserializedWalletTx.hash
     val nodeHash2 = deserializedNodeTx.hash
 
     walletHash1 shouldBe nodeHash1
