@@ -2,11 +2,10 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
+import enumeratum._
 import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.primitives.Schema.EdgeHashType
 import org.constellation.schema.Id
 import org.constellation.util._
-import enumeratum._
 
 // This can't be a trait due to serialization issues.
 import scala.util.Random
@@ -182,8 +181,11 @@ object Schema {
     * @param hashReference : String of hashed value or reference to be signed
     * @param hashType : Strictly typed from set of allowed edge formats
     */ // baseHash Temporary to debug heights missing
-  case class TypedEdgeHash(hashReference: String, //todo we should pass in runLengthEncodings for all Signable here and rely on hashSignBatchZeroTyped for hashing
-                           hashType: EdgeHashType, baseHash: Option[String] = None)
+  case class TypedEdgeHash(
+    hashReference: String, //todo we should pass in runLengthEncodings for all Signable here and rely on hashSignBatchZeroTyped for hashing
+    hashType: EdgeHashType,
+    baseHash: Option[String] = None
+  )
 
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
@@ -193,16 +195,10 @@ object Schema {
     * @param data : Optional hash reference to attached information
     */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
-    parents: Seq[TypedEdgeHash],
-    data: TypedEdgeHash
-  ) extends Signable {
-
-    override def getRunLengthEncoding = {
-      val numParentsLengthString = parents.length.toString
-      val parentValuesString = parents.flatMap(parent => parent.hashReference.length :: parent.hashReference :: Nil).mkString("")
-      val runEncodedTxData = data.hashReference//todo call this something else? Payload?
-        numParentsLengthString :: parentValuesString :: runEncodedTxData :: Nil mkString ""
-    }
+                             parents: Seq[TypedEdgeHash],
+                             data: TypedEdgeHash)
+      extends Signable {
+    override def getEncoding = runLengthEncoding(parents.map(_.hashReference) ++ Seq(data.hashReference): _*)
   }
 
   /**
@@ -225,6 +221,9 @@ object Schema {
       this.copy(signatureBatch = signatureBatch.plus(other.signatureBatch))
 
     def baseHash: String = signatureBatch.hash
+
+    override def hash = signatureBatch.hash //todo use ObservationEdge to override encoding here and hash
+
   }
 
   /**
@@ -240,12 +239,20 @@ object Schema {
     salt: Long = Random.nextLong()
   ) extends Signable {
 
-    override def getRunLengthEncoding = {
+    override def getEncoding = {
       val amountLengthString = amount.toString.length.toString
       val feeLengthString = fee.getOrElse(0L).toString.length
       val saltLengthString = amount.toString.length.toString
-      amountLengthString :: amount.toString :: lastTxRef.getRunLengthEncoding :: feeLengthString ::
-        fee.getOrElse(0L).toString :: saltLengthString :: salt.toString :: Nil mkString ""
+      val args = Seq(
+        amountLengthString,
+        amount.toString,
+        lastTxRef.getEncoding,
+        feeLengthString.toString,
+        fee.getOrElse(0L).toString,
+        saltLengthString.toString,
+        salt.toString
+      )
+      runLengthEncoding(args: _*)
     }
   }
 

@@ -108,19 +108,22 @@ trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
 
-  def hash: String = Hashable.hash(getRunLengthEncoding)
+  def hash: String = Hashable.hash(getEncoding)
 
   def short: String = hash.slice(0, 5)
 
-  def getRunLengthEncoding: String = Hashable.hash(this)
+  def getEncoding: String = Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(this)).toString
+
+  def runLengthEncoding(hashes: String*) : String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
 
 }
 
 case class LastTransactionRef(prevHash: String, ordinal: Long) extends Signable {
-  override def getRunLengthEncoding = {
+  override def getEncoding = {
     val hashLengthString = prevHash.length.toString
     val ordinalLengthString = prevHash.length.toString
-    hashLengthString :: prevHash :: ordinalLengthString :: ordinal.toString :: Nil mkString ""
+    val args = hashLengthString :: prevHash :: ordinalLengthString :: ordinal.toString :: Nil
+    runLengthEncoding(args : _*)
   }
 }
 
@@ -134,12 +137,20 @@ case class TransactionEdgeData(//todo need to duplicate with Schema
   fee: Option[Long] = None,
   salt: Long = Random.nextLong()
 ) extends Signable  {
-  override def getRunLengthEncoding = {
+  override def getEncoding = {
     val amountLengthString = amount.toString.length.toString
-    val feeLengthString = fee.getOrElse(0L).toString.length
+    val feeLengthString = fee.getOrElse(0L).toString.length.toString
     val saltLengthString = amount.toString.length.toString
-    amountLengthString :: amount.toString :: lastTxRef.getRunLengthEncoding :: feeLengthString ::
-      fee.getOrElse(0L).toString :: saltLengthString :: salt.toString :: Nil mkString ""
+    val args = List(
+      amountLengthString,
+      amount.toString,
+      lastTxRef.getEncoding,
+      feeLengthString,
+      fee.getOrElse(0L).toString,
+      saltLengthString,
+      salt.toString
+    )
+    runLengthEncoding(args : _*)
   }
 }
 
@@ -159,18 +170,13 @@ object EdgeHashType extends Enum[EdgeHashType] with CirceEnum[EdgeHashType] {
   val values = findValues
 }
 
-case class TypedEdgeHash(hash: String, hashType: EdgeHashType, baseHash: Option[String] = None)
+case class TypedEdgeHash(hashReference: String, hashType: EdgeHashType, baseHash: Option[String] = None)
 
 case class ObservationEdge(
   parents: Seq[TypedEdgeHash],
   data: TypedEdgeHash
 ) extends Signable {
-  override def getRunLengthEncoding = {
-    val numParentsLengthString = parents.length.toString
-    val parentValuesString = parents.flatMap(parent => parent.hash.length :: parent.hash :: Nil).mkString("")
-    val runEncodedTxData = data.hash //todo call this something else? Payload?
-    (numParentsLengthString :: parentValuesString :: runEncodedTxData :: Nil).mkString("")
-  }
+  override def getEncoding = runLengthEncoding(parents.map(_.hashReference) ++ List(data.hashReference): _*)
 }
 
 case class HashSignature(
@@ -199,7 +205,7 @@ case class SignatureBatch(
     x.copy(signatures = (x.signatures ++ y.signatures).distinct.sorted)
 }
 
-case class SignedObservationEdge(signatureBatch: SignatureBatch) {
+case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signable {
   def baseHash: String = signatureBatch.hash
 }
 
@@ -252,7 +258,7 @@ object TransactionEdge {
         TypedEdgeHash(src, EdgeHashType.AddressHash),
         TypedEdgeHash(dst, EdgeHashType.AddressHash)
       ),
-      TypedEdgeHash(txData.getRunLengthEncoding, EdgeHashType.TransactionDataHash)
+      TypedEdgeHash(txData.getEncoding, EdgeHashType.TransactionDataHash)
     )
     val soe = SignHelp.signedObservationEdge(oe)(keyPair)
     Edge(oe, soe, txData)

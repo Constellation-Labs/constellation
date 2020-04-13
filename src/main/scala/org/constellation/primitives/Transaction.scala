@@ -63,7 +63,7 @@ case class Transaction(
 
   def baseHash: String = edge.signedObservationEdge.baseHash
 
-  def hash: String = edge.signedObservationEdge.hash
+  def hash: String = edge.observationEdge.hash//todo recalculate ObservationEdge Hash here from TX contents and use it to compare signaturesHash
 
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
