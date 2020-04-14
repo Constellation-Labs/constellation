@@ -52,15 +52,20 @@ object PeerAuthMiddleware {
     }
 
   def responseSignerMiddleware[F[_]: Sync](signer: Http4sResponseSigner[F])(http: HttpRoutes[F]): HttpRoutes[F] =
+    http
+  /*
     Kleisli { (req: Request[F]) =>
       http(req).flatMap { res =>
         OptionT.liftF(signer.sign(res))
       }
     }
+   */
 
   def responseVerifierMiddleware[F[_]](peerId: Id)(
     client: Client[F]
   )(implicit F: Concurrent[F], C: ContextShift[F]): Client[F] =
+    client
+  /*
     Client { (req: Request[F]) =>
       val crypto = GenericVerifier(KeyUtils.DefaultSignFunc, KeyUtils.provider, peerId.toPublicKey)
       val verifier = new Http4sResponseVerifier[F](crypto)
@@ -95,16 +100,43 @@ object PeerAuthMiddleware {
         }
       }
     }
+   */
 
-  def requestSignerMiddleware[F[_]: Sync](client: Client[F], signer: Http4sRequestSigner[F]): Client[F] = Client {
-    (req: Request[F]) =>
-      Resource.liftF(signer.sign(req)) >>= client.run
-  }
+  def requestSignerMiddleware[F[_]](
+    client: Client[F],
+    signer: Http4sRequestSigner[F]
+  )(implicit F: Concurrent[F], C: ContextShift[F]): Client[F] =
+    client
+  /*
+    Client { (req: Request[F]) =>
+      import fs2._
+
+      Resource.suspend {
+        Ref[F].of(Vector.empty[Chunk[Byte]]).map { vec =>
+          Resource.liftF {
+
+            val newBody = Stream
+              .eval(vec.get)
+              .flatMap(v => Stream.emits(v).covary[F])
+              .flatMap(c => Stream.chunk(c).covary[F])
+
+            val newReq = req.withBodyStream(req.body.observe(_.chunks.flatMap(s => Stream.eval_(vec.update(_ :+ s)))))
+
+            signer.sign(newReq).map { r =>
+              req.withBodyStream(newBody).withHeaders(r.headers)
+            }
+          }
+        }
+      } >>= client.run
+    }
+   */
 
   def requestVerifierMiddleware[F[_]: Sync](
     knownPeer: IP => F[Option[Id]],
     usingKnownPeers: Boolean
   )(http: HttpRoutes[F])(implicit C: ContextShift[F]): HttpRoutes[F] =
+    http
+  /*
     Kleisli { (req: Request[F]) =>
       val ip = req.remoteAddr.getOrElse("unknown")
       val responseOnError = Response[F](status = Unauthorized)
@@ -140,4 +172,5 @@ object PeerAuthMiddleware {
           )
       }
     }
+ */
 }

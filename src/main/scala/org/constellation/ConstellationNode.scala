@@ -11,7 +11,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import better.files.File
 import cats.Monad
-import cats.effect.{ConcurrentEffect, ContextShift, ExitCode, IO, IOApp, Resource, Sync, Timer}
+import cats.effect.{Blocker, Clock, ConcurrentEffect, ContextShift, ExitCode, IO, IOApp, Resource, Sync, Timer}
 import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -19,6 +19,7 @@ import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Decoder
+import io.prometheus.client.CollectorRegistry
 import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
@@ -47,11 +48,13 @@ import org.constellation.primitives.Schema.{GenesisObservation, NodeState, Valid
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
-import org.http4s.{HttpApp, HttpRoutes}
+import org.http4s.{HttpApp, HttpRoutes, Request}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
+import org.http4s.client.okhttp.OkHttpBuilder
 import org.slf4j.MDC
 import org.http4s.implicits._
+import org.http4s.metrics.prometheus.Prometheus
 import org.http4s.syntax._
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.{Router, middleware, Server => H4Server}
@@ -78,6 +81,7 @@ object ConstellationNode extends IOApp {
   implicit val system: ActorSystem = ActorSystem("Constellation")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
+  implicit val clock: Clock[IO] = Clock.create[IO]
 
   def run(args: List[String]): IO[ExitCode] = {
     val s = for {
@@ -92,9 +96,17 @@ object ConstellationNode extends IOApp {
 
       nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
 
+      requestMethodClassifier = (r: Request[IO]) => Some(r.method.toString.toLowerCase)
+
+      registry <- Prometheus.collectorRegistry[IO]
+      metrics <- Prometheus.metricsOps[IO](registry, "org_http4s_client")
+
       apiClient <- BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded)
         .withConnectTimeout(30.seconds)
+        .withMaxTotalConnections(1024)
+        .withMaxWaitQueueLimit(512)
         .resource
+        .map(org.http4s.client.middleware.Metrics[IO](metrics, requestMethodClassifier))
 
       logger = org.http4s.client.middleware.Logger[IO](logHeaders = true, logBody = false)(_)
 
@@ -103,9 +115,9 @@ object ConstellationNode extends IOApp {
 
       signedApiClient = PeerAuthMiddleware.requestSignerMiddleware(logger(apiClient), signer)
 
-      node = new ConstellationNode(nodeConfig, signedApiClient)
+      node = new ConstellationNode(nodeConfig, signedApiClient, registry)
 
-      server <- createServer(node.dao)
+      server <- createServer(node.dao, registry)
     } yield server
 
     s.use(_ => IO.never).as(ExitCode.Success)
@@ -114,7 +126,7 @@ object ConstellationNode extends IOApp {
   def getGenesisObservation(dao: DAO): Option[GenesisObservation] =
     dao.genesisObservation
 
-  def createServer(dao: DAO): cats.effect.Resource[IO, Unit] =
+  def createServer(dao: DAO, registry: CollectorRegistry): cats.effect.Resource[IO, Unit] =
     for {
       _ <- Resource.liftF(IO.unit)
 
@@ -163,23 +175,25 @@ object ConstellationNode extends IOApp {
       getWhitelistedPeerId = { (ip: IP) =>
         dao.nodeConfig.whitelisting.get(ip).pure[IO]
       }
-      peerEndpoints =
-      //      PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId, false)(peerPublicEndpoints) <+>
-      peerPublicEndpoints <+>
-        //        PeerAuthMiddleware
-        //          .requestVerifierMiddleware(getKnownPeerId, true)(
-        PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
-          peerWhitelistedEndpoints
-        )
-      //          )
+      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId, false)(peerPublicEndpoints) <+>
+        peerPublicEndpoints <+>
+        PeerAuthMiddleware
+          .requestVerifierMiddleware(getKnownPeerId, true)(
+            PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
+              peerWhitelistedEndpoints
+            )
+          )
 
       crypto = GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, dao.keyPair.getPrivate)
       responseSigner = new Http4sResponseSigner(crypto)
       signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(responseSigner)(peerEndpoints)
 
-      publicRouter = Router("" -> publicEndpoints).orNotFound
-      peerRouter = Router("" -> signedPeerEndpoints).orNotFound
-      ownerRouter = Router("" -> ownerEndpoints).orNotFound
+      metrics <- Prometheus.metricsOps[IO](registry)
+      metricsMiddleware = middleware.Metrics[IO](metrics)(_)
+
+      publicRouter = Router("" -> metricsMiddleware(publicEndpoints)).orNotFound
+      peerRouter = Router("" -> metricsMiddleware(signedPeerEndpoints)).orNotFound
+      ownerRouter = Router("" -> metricsMiddleware(ownerEndpoints)).orNotFound
 
       responseLogger = middleware.Logger.httpApp[IO](logHeaders = true, logBody = false)(_)
 
@@ -307,7 +321,8 @@ object ConstellationNode extends IOApp {
 
 class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig(),
-  client: Client[IO]
+  client: Client[IO],
+  registry: CollectorRegistry
 )(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
@@ -318,7 +333,7 @@ class ConstellationNode(
   implicit val dao: DAO = new DAO()
   dao.apiClient = ClientInterpreter[IO](client)
   dao.nodeConfig = nodeConfig
-  dao.metrics = new Metrics(periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
+  dao.metrics = new Metrics(registry, periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
   dao.initialize(nodeConfig)
 
   dao.node = this
