@@ -115,6 +115,8 @@ class Cluster[F[_]](
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
 
+  private val peerDiscovery = PeerDiscovery[F](apiClient, this, dao.id)
+
   implicit val logger = Slf4jLogger.getLogger[F]
 
   implicit val shadedDao: DAO = dao
@@ -219,28 +221,6 @@ class Cluster[F[_]](
       "cluster_setNodeStatus"
     )
 
-  def peerDiscovery(peerMetadata: PeerMetadata): F[Unit] =
-    for {
-      peersMetadata <- apiClient.nodeMetadata.getPeers().run(peerMetadata.toPeerClientMetadata).handleErrorWith { err =>
-        dao.metrics.incrementMetricAsync[F]("peerDiscoveryQueryFailed") >> err.raiseError[F, Seq[PeerMetadata]]
-      }
-      peers <- getPeerInfo
-      filteredPeers = peersMetadata.filter { p =>
-        p.id != dao.id && validPeerAddition(HostPort(p.host, p.httpPort), peers)
-      }
-      register <- filteredPeers.toList.traverse { md =>
-        apiClient.sign.getRegistrationRequest().run(md.toPeerClientMetadata).map((md, _))
-      }
-
-      _ <- register.traverse(r => pendingRegistration(r._1.host, r._2))
-      registerResponse <- register.traverse { md =>
-        for {
-          prr <- pendingRegistrationRequest
-          _ <- apiClient.sign.register(prr).run(md._1.toPeerClientMetadata)
-        } yield ()
-      }.void
-    } yield registerResponse
-
   def pendingRegistration(ip: String, request: PeerRegistrationRequest): F[Unit] =
     logThread(
       for {
@@ -322,7 +302,9 @@ class Cluster[F[_]](
                   .map(_.prepend(majorityHeight))
                   .getOrElse(NonEmptyList.one(majorityHeight))
                 peerData = PeerData(peerMetadata, majorityHeights)
-                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(peerDiscovery(peerMetadata))
+                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(
+                  peerDiscovery.discoverFrom(peerMetadata)
+                )
               } yield ()
           }.handleErrorWith { err =>
             logger.warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
@@ -483,7 +465,7 @@ class Cluster[F[_]](
 
         _ <- if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
           peers.values.toList.traverse { pd =>
-            peerDiscovery(pd.peerMetadata)
+            peerDiscovery.discoverFrom(pd.peerMetadata)
           }.void
         } else F.unit
       } yield (),
