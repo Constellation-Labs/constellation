@@ -3,7 +3,7 @@ import cats.effect.{ContextShift, IO}
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
-import org.constellation.trust.TrustManager
+import org.constellation.trust.{DataGeneration, SelfAvoidingWalk, TrustManager, TrustNode}
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -50,5 +50,17 @@ class TrustManagerTest
     val scores = TrustDataInternal(id, Map()) :: Nil
     val res = Try { trustManager.handleTrustScoreUpdate(scores) }
     assert(res.isSuccess)
+  }
+
+  "walk" should "handle edges to peers not yet joined or have left local node" in {
+    val reputation = Map.empty[Id, Double]
+    val scores = peerTrustScores :+ TrustDataInternal(id, reputation)
+    val (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
+    val dummyTrustNodes = DataGeneration.generateTestData(3)
+    val nodeMap = dummyTrustNodes.zipWithIndex.toMap.map{ case (k, v) => (v, k)}
+    val doWalk = Try { SelfAvoidingWalk.walk(1, 2,
+      nodeMap,
+      1, 0,  Set.empty[Int], 1d) }
+    assert(doWalk.isSuccess)
   }
 }
