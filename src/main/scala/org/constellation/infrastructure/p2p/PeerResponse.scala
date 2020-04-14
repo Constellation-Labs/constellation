@@ -28,16 +28,14 @@ object PeerResponse {
   ): PeerResponse[F, A] =
     Kleisli.apply { pm =>
       val req = Request[F](method = method, uri = getUri(pm, path))
-      //      f(req, PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client))
-      f(req, client)
+      f(req, PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client))
     }
 
   def apply[F[_]: Concurrent: ContextShift, A](
     path: Path
   )(client: Client[F])(implicit decoder: EntityDecoder[F, A]): PeerResponse[F, A] =
     Kleisli.apply { pm =>
-      //      val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
-      val verified = client
+      val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
       verified.expect[A](getUri(pm, path))
     }
 
@@ -47,8 +45,7 @@ object PeerResponse {
     Kleisli
       .apply[F, PeerClientMetadata, Boolean] { pm =>
         val req = Request[F](method = method, uri = getUri(pm, path))
-        //        val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
-        val verified = client
+        val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
         verified.successful(req)
       }
       .flatMapF(a => if (a) F.unit else F.raiseError(new Throwable(errorMsg)))
