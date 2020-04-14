@@ -110,10 +110,8 @@ object ConstellationNode extends IOApp {
 
       logger = org.http4s.client.middleware.Logger[IO](logHeaders = true, logBody = false)(_)
 
-      crypto = GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, nodeConfig.primaryKeyPair.getPrivate)
-      signer = new Http4sRequestSigner(crypto)
-
-      signedApiClient = PeerAuthMiddleware.requestSignerMiddleware(logger(apiClient), signer)
+      signedApiClient = PeerAuthMiddleware
+        .requestSignerMiddleware(logger(apiClient), nodeConfig.primaryKeyPair.getPrivate, nodeConfig.hostName)
 
       node = new ConstellationNode(nodeConfig, signedApiClient, registry)
 
@@ -176,18 +174,14 @@ object ConstellationNode extends IOApp {
       getWhitelistedPeerId = { (ip: IP) =>
         dao.nodeConfig.whitelisting.get(ip).pure[IO]
       }
-      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId, false)(peerPublicEndpoints) <+>
-        peerPublicEndpoints <+>
-        PeerAuthMiddleware
-          .requestVerifierMiddleware(getKnownPeerId, true)(
-            PeerAuthMiddleware.whitelistingMiddleware(dao.nodeConfig.whitelisting, getKnownPeerId)(
-              peerWhitelistedEndpoints
-            )
-          )
 
-      crypto = GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, dao.keyPair.getPrivate)
-      responseSigner = new Http4sResponseSigner(crypto)
-      signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(responseSigner)(peerEndpoints)
+      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId)(
+        peerPublicEndpoints <+> PeerAuthMiddleware.enforceKnownPeersMiddleware(getWhitelistedPeerId, getKnownPeerId)(
+          peerWhitelistedEndpoints
+        )
+      )
+
+      signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(dao.keyPair.getPrivate)(peerEndpoints)
 
       metrics <- Prometheus.metricsOps[IO](registry)
       metricsMiddleware = middleware.Metrics[IO](metrics)(_)
