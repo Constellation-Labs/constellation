@@ -222,7 +222,7 @@ object Schema {
 
     def baseHash: String = signatureBatch.hash
 
-    override def hash = signatureBatch.hash //todo use ObservationEdge to override encoding here and hash
+    override def hash = signatureBatch.hash
 
   }
 
@@ -240,16 +240,10 @@ object Schema {
   ) extends Signable {
 
     override def getEncoding = {
-      val amountLengthString = amount.toString.length.toString
-      val feeLengthString = fee.getOrElse(0L).toString.length
-      val saltLengthString = amount.toString.length.toString
       val args = Seq(
-        amountLengthString,
         amount.toString,
         lastTxRef.getEncoding,
-        feeLengthString.toString,
         fee.getOrElse(0L).toString,
-        saltLengthString.toString,
         salt.toString
       )
       runLengthEncoding(args: _*)

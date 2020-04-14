@@ -120,10 +120,11 @@ trait Signable {
 
 case class LastTransactionRef(prevHash: String, ordinal: Long) extends Signable {
   override def getEncoding = {
-    val hashLengthString = prevHash.length.toString
-    val ordinalLengthString = prevHash.length.toString
-    val args = hashLengthString :: prevHash :: ordinalLengthString :: ordinal.toString :: Nil
-    runLengthEncoding(args : _*)
+    val args = Seq(
+      prevHash,
+      ordinal.toString
+    )
+    runLengthEncoding(args: _*)
   }
 }
 
@@ -138,16 +139,10 @@ case class TransactionEdgeData(//todo need to duplicate with Schema
   salt: Long = Random.nextLong()
 ) extends Signable  {
   override def getEncoding = {
-    val amountLengthString = amount.toString.length.toString
-    val feeLengthString = fee.getOrElse(0L).toString.length.toString
-    val saltLengthString = amount.toString.length.toString
     val args = List(
-      amountLengthString,
       amount.toString,
       lastTxRef.getEncoding,
-      feeLengthString,
       fee.getOrElse(0L).toString,
-      saltLengthString,
       salt.toString
     )
     runLengthEncoding(args : _*)
