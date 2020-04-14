@@ -6,7 +6,7 @@ import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.TransactionValidator
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.primitives.Schema.{CheckpointCache, ObservationEdge, SignedObservationEdge}
 import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.{HashSignature, Metrics}
@@ -36,6 +36,9 @@ object CheckpointBlockValidator {
       diff.map(toError(_).map(List(_))).combineAll
     }
   }
+
+  def validateHashIntegrity(c: CheckpointBlock): ValidationResult[CheckpointBlock] =
+    if (c.validHash) c.validNel else InvalidCheckpointHash(c).invalidNel
 
   def validateSignatureIntegrity(s: HashSignature, baseHash: String): ValidationResult[HashSignature] =
     if (s.valid(baseHash)) s.validNel else InvalidSignature(s).invalidNel
@@ -131,7 +134,7 @@ class CheckpointBlockValidator[F[_]: Sync](
             _ =>
               logger.warn(
                 s"Checkpoint block with baseHash: ${cb.baseHash} is invalid ${validation.leftMap(_.map(_.errorMessage))}"
-              )
+            )
           )
     } yield validation
 
@@ -241,8 +244,9 @@ class CheckpointBlockValidator[F[_]: Sync](
           validateEmptySignatures(cb.signatures)
             .product(validateSignatures(cb.signatures, cb.baseHash))
         )
+        hashValidation <- Sync[F].delay(validateHashIntegrity(cb))
         transactionValidation <- validateCheckpointBlockTransactions(cb)
-      } yield staticValidation.product(transactionValidation)
+      } yield staticValidation.product(transactionValidation).product(hashValidation)
 
     snapshotService.lastSnapshotHeight.get
       .map(_ == 0)
@@ -288,7 +292,7 @@ class CheckpointBlockValidator[F[_]: Sync](
                       tail ++ parents,
                       accu ++ cb.transactions.map(_.hash),
                       isIn
-                    )
+                  )
                 )
             }
 
@@ -348,6 +352,18 @@ object InvalidSignature {
 case class InvalidTransaction(txHash: String, cause: String) extends CheckpointBlockValidation {
 
   def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid, cause: $cause"
+}
+
+object InvalidCheckpointHash {
+
+  def apply(c: CheckpointBlock) =
+    new InvalidCheckpointHash(c.checkpoint.edge.observationEdge, c.checkpoint.edge.signedObservationEdge)
+}
+
+case class InvalidCheckpointHash(oe: ObservationEdge, soe: SignedObservationEdge) extends CheckpointBlockValidation {
+
+  def errorMessage: String =
+    s"CheckpointBlock received has incompatible hashes with ObservationEdge=$oe and SignedObservationEdge=$soe"
 }
 
 object InvalidTransaction {
