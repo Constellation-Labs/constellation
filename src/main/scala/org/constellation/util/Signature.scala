@@ -26,7 +26,7 @@ trait Signable {
 case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
 
   def valid(expectedHash: String): Boolean =
-    hash == expectedHash && hashSignature.valid(expectedHash) //todo use thid in Transaction and CB/Snap
+    hash == expectedHash && hashSignature.valid(expectedHash)
 }
 
 case class HashSignature(

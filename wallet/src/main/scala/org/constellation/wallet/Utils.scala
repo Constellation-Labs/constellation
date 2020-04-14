@@ -132,7 +132,7 @@ object LastTransactionRef {
   val empty = LastTransactionRef("", 0L)
 }
 
-case class TransactionEdgeData(//todo need to duplicate with Schema
+case class TransactionEdgeData(
   amount: Long,
   lastTxRef: LastTransactionRef,
   fee: Option[Long] = None,
