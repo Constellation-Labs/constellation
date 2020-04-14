@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import org.constellation.datastore.Datastore
 import org.constellation.primitives.Schema._
 import org.constellation.util.{HashSignature, Signable}
 
