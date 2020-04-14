@@ -12,7 +12,24 @@ case class Transaction(
   isDummy: Boolean,
   isTest: Boolean
 ) {
-  def hash: String = edge.observationEdge.hash
+  def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
+
+  // TODO: Add proper exception on empty option
+
+  def amount: Long = edge.data.amount
+
+  def fee: Option[Long] = edge.data.fee
+
+  def baseHash: String = edge.signedObservationEdge.baseHash
+
+  def hash: String =
+    edge.observationEdge.hash //todo recalculate ObservationEdge Hash here from TX contents and use it to compare signaturesHash
+
+  def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
+
+  def isValid = signatures.exists { hs ⇒
+    hs.address == edge.parents.head.hashReference && hs.valid(signaturesHash) && hash == signaturesHash
+  }
 }
 
 object Transaction {

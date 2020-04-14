@@ -3,13 +3,10 @@ package org.constellation.primitives
 import java.security.KeyPair
 import java.time.Instant
 
-import cats.data.ValidatedNel
-import cats.implicits._
 import constellation._
-import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusObject
-import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.schema.Id
 import org.constellation.util.HashSignature
 
@@ -63,13 +60,18 @@ case class Transaction(
 
   def baseHash: String = edge.signedObservationEdge.baseHash
 
-  def hash: String = edge.observationEdge.hash//todo recalculate ObservationEdge Hash here from TX contents and use it to compare signaturesHash
+  def hash: String =
+    edge.observationEdge.hash
 
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
     edge = edge.withSignatureFrom(keyPair)
   )
+
+  def isValid = signatures.exists { hs ⇒
+    hs.publicKey.address == src.address && hs.valid(signaturesHash) && hash == signaturesHash
+  }
 
   val ordinal: Long = lastTxRef.ordinal + 1L
 }
