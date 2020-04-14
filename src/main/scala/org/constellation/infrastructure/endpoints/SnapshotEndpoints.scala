@@ -40,9 +40,21 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       getStoredSnapshotByHash(snapshotStorage) <+>
       getCreatedSnapshotsEndpoint(redownloadService) <+>
       getAcceptedSnapshotsEndpoint(redownloadService) <+>
+      getPeerProposals(redownloadService) <+>
       getNextSnapshotHeight(nodeId, snapshotService) <+>
       getSnapshotInfo(snapshotService, cluster) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
+      getLatestMajorityHeight(redownloadService)
+
+  def ownerEndpoints(
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    redownloadService: RedownloadService[F]
+  ) =
+    getStoredSnapshotsEndpoint(snapshotStorage) <+>
+      getStoredSnapshotByHash(snapshotStorage) <+>
+      getCreatedSnapshotsEndpoint(redownloadService) <+>
+      getAcceptedSnapshotsEndpoint(redownloadService) <+>
+      getPeerProposals(redownloadService) <+>
       getLatestMajorityHeight(redownloadService)
 
   private def getStoredSnapshotsEndpoint(snapshotStorage: LocalFileStorage[F, StoredSnapshot]): HttpRoutes[F] =
@@ -78,6 +90,12 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "accepted" =>
         redownloadService.getAcceptedSnapshots().map(_.asJson).flatMap(Ok(_))
+    }
+
+  private def getPeerProposals(redownloadService: RedownloadService[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "peer" / id / "snapshot" / "created" =>
+        redownloadService.getPeerProposals().map(_.get(Id(id))).map(_.asJson).flatMap(Ok(_))
     }
 
   private def getNextSnapshotHeight(nodeId: Id, snapshotService: SnapshotService[F]): HttpRoutes[F] =
@@ -145,4 +163,11 @@ object SnapshotEndpoints {
   ): HttpRoutes[F] =
     new SnapshotEndpoints[F]()
       .peerEndpoints(nodeId, snapshotStorage, snapshotInfoStorage, snapshotService, cluster, redownloadService)
+
+  def ownerEndpoints[F[_]: Concurrent](
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    redownloadService: RedownloadService[F]
+  ): HttpRoutes[F] =
+    new SnapshotEndpoints[F]()
+      .ownerEndpoints(snapshotStorage, redownloadService)
 }

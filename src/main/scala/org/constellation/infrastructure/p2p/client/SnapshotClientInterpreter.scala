@@ -42,6 +42,9 @@ class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F
   def getAcceptedSnapshots(): PeerResponse[F, SnapshotsAtHeight] =
     PeerResponse[F, SnapshotsAtHeight]("snapshot/accepted")(client)
 
+  def getPeerProposals(id: Id): PeerResponse[F, Option[SnapshotProposalsAtHeight]] =
+    PeerResponse[F, Option[SnapshotProposalsAtHeight]](s"peer/${id.hex}/snapshot/created")(client)
+
   def getNextSnapshotHeight(): PeerResponse[F, (Id, Long)] =
     PeerResponse[F, (Id, Long)]("snapshot/nextHeight")(client)
 

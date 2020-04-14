@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Compile body to Array[Byte] only if request succeeded
 
+## [v2.3.0] - 2020-04-14
+### Added
+- http4s metrics and grafana dashboard
+### Changed
+- Peer discovery flow
+- Marking peer as offline /w latest proposals
+- Total connections and queue limit for http4s client
+
+## [v2.2.1] - 2020-04-09
+### Added
+- Updated whitelisting for batch0
+- Temporarily added batch1 to whitelisting
+### Fixed
+- Compile body to Array[Byte] only if request succeeded
+- Updated BouncyCastle to 1.65 which fixes "algorithm not found" issue of keystore
+- Temporarily turn off request signer
+
 ## [v2.2.0] - 2020-04-04
 ### Breaking changes
 - Changed API endpoints visibility and security

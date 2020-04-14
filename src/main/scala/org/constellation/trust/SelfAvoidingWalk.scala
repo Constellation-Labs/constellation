@@ -20,7 +20,7 @@ object SelfAvoidingWalk {
       if (accum >= p)
         return item // return so that we don't have to search through the whole distribution
     }
-    println(dist)
+//    println(dist)
     sys.error(f"this should never happen") // needed so it will compile
   }
 
@@ -59,7 +59,9 @@ object SelfAvoidingWalk {
         // neighbors as well? This is where Jaccard distance is important
         // We need to discard walks where large distance exists from previous
         // (i.e. discard information from distant nodes if they distrust nearby nodes that you trust in general)
-        if (nodeMap(transitionDst).edges.exists(edge => edge.trust < 0 && edge.dst == selfId)) {
+        val useInLocalCalculation = nodeMap.get(transitionDst)
+          .exists(trustNode => trustNode.edges.exists(edge => edge.trust < 0 && edge.dst == selfId))
+        if (useInLocalCalculation) {
           currentId -> currentTrust
         } else {
 

@@ -9,6 +9,7 @@ import cats.implicits._
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.prometheus.client.CollectorRegistry
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.domain.blacklist.BlacklistedAddresses
@@ -25,7 +26,7 @@ import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager
-import org.constellation.util.{HostPort, Metrics}
+import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 
@@ -48,7 +49,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     }
 
     dao.nodeConfig = nodeConfig
-    dao.metrics = new Metrics(nodeConfig.processingConfig.metricCheckInterval)(dao)
+    dao.metrics = new Metrics(CollectorRegistry.defaultRegistry, nodeConfig.processingConfig.metricCheckInterval)(dao)
     dao.initialize(nodeConfig)
 
     (dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready) >>
@@ -138,7 +139,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     dao.cluster shouldReturn mock[Cluster[IO]]
     dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
-    val metrics = new Metrics(1)(dao)
+    val metrics = new Metrics(CollectorRegistry.defaultRegistry, 1)(dao)
     dao.metrics shouldReturn metrics
 
     val cluster = mock[Cluster[IO]]
@@ -219,7 +220,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     dao.cluster shouldReturn mock[Cluster[IO]]
     dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
-    val metrics = new Metrics(1)(dao)
+    val metrics = new Metrics(CollectorRegistry.defaultRegistry, 1)(dao)
     dao.metrics shouldReturn metrics
 
     val ipManager = IPManager[IO]()

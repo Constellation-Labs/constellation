@@ -18,7 +18,7 @@ scalacOptions :=
   )
 javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
-lazy val _version = "2.2.0"
+lazy val _version = "2.3.0"
 
 lazy val commonSettings = Seq(
   version := _version,
@@ -56,7 +56,9 @@ lazy val http4sDependencies = Seq(
   "org.http4s" %% "http4s-blaze-server",
   "org.http4s" %% "http4s-blaze-client",
   "org.http4s" %% "http4s-circe",
-  "org.http4s" %% "http4s-dsl"
+  "org.http4s" %% "http4s-dsl",
+  "org.http4s" %% "http4s-prometheus-metrics",
+  "org.http4s" %% "http4s-okhttp-client"
 ).map(_ % versions.http4s)
 
 lazy val circeDependencies = Seq(
@@ -83,7 +85,7 @@ lazy val keyToolSharedDependencies = Seq(
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.64"
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.65"
 ) ++ sharedDependencies
 
 lazy val walletSharedDependencies = Seq(
