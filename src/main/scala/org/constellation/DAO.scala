@@ -363,7 +363,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       trustDataPollingScheduler,
       consensusScheduler,
       consensusWatcher,
-      peerHealthCheckWatcher,
       snapshotTrigger,
       redownloadPeriodicCheck,
       transactionGeneratorTrigger
