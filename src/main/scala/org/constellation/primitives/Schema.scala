@@ -182,7 +182,7 @@ object Schema {
     * @param hashType : Strictly typed from set of allowed edge formats
     */ // baseHash Temporary to debug heights missing
   case class TypedEdgeHash(
-    hashReference: String, //todo we should pass in runLengthEncodings for all Signable here and rely on hashSignBatchZeroTyped for hashing
+    hashReference: String,
     hashType: EdgeHashType,
     baseHash: Option[String] = None
   )
