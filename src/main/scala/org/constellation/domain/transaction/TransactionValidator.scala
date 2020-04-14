@@ -9,13 +9,8 @@ import org.constellation.primitives.Transaction
 object TransactionValidator {
   type ValidationResult[A] = ValidatedNel[TransactionValidationError, A]
 
-  def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] = {
-    val isValid = tx.signatures.exists { hs ⇒
-      hs.publicKey.address == tx.src.address && hs.valid(tx.signaturesHash) && tx.hash == tx.signaturesHash
-    }
-
-    if (isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel
-  }
+  def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] =
+    if (tx.isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel
 
   def validateEmptyDestinationAddress(tx: Transaction): ValidationResult[Transaction] =
     if (tx.dst.address.nonEmpty) tx.validNel else EmptyDestinationAddress(tx).invalidNel

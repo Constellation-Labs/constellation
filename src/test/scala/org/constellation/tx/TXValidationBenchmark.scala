@@ -1,10 +1,12 @@
 package org.constellation.tx
 
 import com.typesafe.scalalogging.Logger
+import org.constellation.Fixtures
 import org.constellation.Fixtures._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.util.{SignHelp, SingleHashSignature}
 import org.scalatest.FlatSpec
 
 class TXValidationBenchmark extends FlatSpec {
@@ -46,5 +48,4 @@ class TXValidationBenchmark extends FlatSpec {
     assert(delta2 < 30000)
 
   }
-
 }
