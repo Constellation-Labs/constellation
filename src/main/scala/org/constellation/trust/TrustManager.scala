@@ -18,8 +18,6 @@ import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
 
-import scala.collection.SortedMap
-
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
