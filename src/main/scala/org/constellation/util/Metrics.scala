@@ -42,12 +42,16 @@ object Metrics {
   val failure = "_failure"
 
   val cacheMetrics = new CacheMetricsCollector()
-  cacheMetrics.register()
+  var isCacheRegistered = false
 
-  def prometheusSetup(keyHash: String): PrometheusMeterRegistry = {
+  def prometheusSetup(keyHash: String, collectorRegistry: CollectorRegistry): PrometheusMeterRegistry = {
     val prometheusMeterRegistry =
-      new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, CollectorRegistry.defaultRegistry, Clock.SYSTEM)
+      new PrometheusMeterRegistry(PrometheusConfig.DEFAULT, collectorRegistry, Clock.SYSTEM)
 
+    if (!isCacheRegistered) { // TODO: use cacheMetrics as a dependency
+      collectorRegistry.register(cacheMetrics)
+      isCacheRegistered = true
+    }
     prometheusMeterRegistry.config().commonTags("application", "Constellation")
     globalRegistry.add(prometheusMeterRegistry)
     prometheusMeterRegistry.config().commonTags("application", s"Constellation_$keyHash")
@@ -61,8 +65,7 @@ object Metrics {
     new FileDescriptorMetrics().bindTo(prometheusMeterRegistry)
     new LogbackMetrics().bindTo(prometheusMeterRegistry)
     new ClassLoaderMetrics().bindTo(prometheusMeterRegistry)
-    new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava)
-      .bindTo(prometheusMeterRegistry)
+    new DiskSpaceMetrics(File(System.getProperty("user.dir")).toJava).bindTo(prometheusMeterRegistry)
     // new DatabaseTableMetrics().bindTo(prometheusMeterRegistry)
 
     prometheusMeterRegistry
@@ -107,7 +110,8 @@ class TransactionRateTracker()(implicit dao: DAO) {
   * @param periodSeconds: How often to recalculate moving window metrics (e.g. TPS)
   * @param dao: Data access object
   */
-class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit]("Metrics", periodSeconds) {
+class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(implicit dao: DAO)
+    extends Periodic[Unit]("Metrics", periodSeconds) {
 
   val logger = Logger("Metrics")
 
@@ -121,7 +125,7 @@ class Metrics(periodSeconds: Int = 1)(implicit dao: DAO) extends Periodic[Unit](
 
   // Init
 
-  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash)
+  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash, collectorRegistry)
 
   implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 

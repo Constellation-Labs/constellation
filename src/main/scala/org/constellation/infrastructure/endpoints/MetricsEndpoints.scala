@@ -19,7 +19,7 @@ class MetricsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   def endpoints(metrics: Metrics) =
     healthEndpoint() <+>
       metricsEndpoint(metrics) <+>
-      micrometerMetricsEndpoint()
+      micrometerMetricsEndpoint(metrics)
 
   private def healthEndpoint(): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -31,12 +31,12 @@ class MetricsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       case GET -> Root / "metrics" => Ok(MetricsResult(metrics.getMetrics).asJson)
     }
 
-  private def micrometerMetricsEndpoint(): HttpRoutes[F] =
+  private def micrometerMetricsEndpoint(metrics: Metrics): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "micrometer-metrics" =>
         F.delay {
           val writer: Writer = new StringWriter()
-          TextFormat.write004(writer, CollectorRegistry.defaultRegistry.metricFamilySamples())
+          TextFormat.write004(writer, metrics.collectorRegistry.metricFamilySamples())
           writer.toString
         }.flatMap(Ok(_))
     }
