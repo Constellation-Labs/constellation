@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import cats.effect.IO
 import cats.implicits._
 import constellation.signedObservationEdge
 import org.constellation.DAO
@@ -65,11 +64,11 @@ case class CheckpointBlock(
     checkpoint.edge.signedObservationEdge.signatureBatch.signatures
 
   def baseHash: String = checkpoint.edge.baseHash
-  def hash: String = checkpoint.edge.observationEdge.hash//todo use ObservationEdge.hash i.e. checkpoint.edge.ObservationEdge.Hash
+  def hash: String = checkpoint.edge.observationEdge.hash
   // TODO: Optimize call, should store this value instead of recalculating every time.
   def soeHash: String = checkpoint.edge.signedObservationEdge.hash
   def signaturesHash: String = checkpoint.edge.signedObservationEdge.signatureBatch.hash
-  
+
   def validHash = hash == signaturesHash
 
   def plus(keyPair: KeyPair): CheckpointBlock =
