@@ -2,8 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.4.0] - 2020-04-16
+### Fixed
+- Response signer turned on again with proper middleware order #1061
 ### Changed
 - Validate hash of whole BuildInfo #713
+- Update pl.abankowski.http4s-request-signer to 0.3.2
 
 ## [v2.3.0] - 2020-04-14
 ### Added
