@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.5.0] - 2020-04-16
+### Changed
+- Update whitelisting
+
 ## [v2.4.0] - 2020-04-16
 ### Fixed
 - Response signer turned on again with proper middleware order #1061
