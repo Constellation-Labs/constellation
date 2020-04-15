@@ -21,6 +21,7 @@ import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
 import org.constellation.domain.rewards.StoredRewards
+import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.primitives.IPManager.IP
 import org.constellation.rewards.EigenTrustAgents
 
@@ -117,6 +118,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[StoredRewards])
 
     kryo.register(classOf[AddressMetaData])
+    kryo.register(classOf[BuildInfoJson])
 
     kryo.register(Class.forName("scala.math.LowPriorityOrderingImplicits$$anon$3"))
     kryo.register(Class.forName("scala.Predef$$anon$2"))
