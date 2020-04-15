@@ -2,8 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-### Fixed
-- Compile body to Array[Byte] only if request succeeded
+### Changed
+- Validate hash of whole BuildInfo #713
 
 ## [v2.3.0] - 2020-04-14
 ### Added
