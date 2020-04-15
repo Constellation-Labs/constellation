@@ -4,9 +4,12 @@ import cats.data.ValidatedNel
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.serializer.KryoSerializer
 import org.constellation.{BuildInfo, ConfigUtil, PeerMetadata}
+import constellation._
 
 class JoiningPeerValidator[F[_]: Concurrent](apiClient: ClientInterpreter[F]) {
 
@@ -18,25 +21,27 @@ class JoiningPeerValidator[F[_]: Concurrent](apiClient: ClientInterpreter[F]) {
     validation(peerClientMetadata).map(_.isValid)
 
   def validation(peerClientMetadata: PeerClientMetadata): F[ValidationResult[String]] =
-    validateGitCommitHash(peerClientMetadata)
+    validateBuildInfo(peerClientMetadata)
 
-  private def validateGitCommitHash(peerClientMetadata: PeerClientMetadata): F[ValidationResult[String]] = {
+  private def validateBuildInfo(peerClientMetadata: PeerClientMetadata): F[ValidationResult[String]] = {
     val validate: F[ValidationResult[String]] = for {
-      peerGitCommitBuild <- apiClient.buildInfo.getGitCommit().run(peerClientMetadata)
-      _ <- logger.debug(s"Joining peer git commit hash=$peerGitCommitBuild")
+      peerBuildInfo <- apiClient.buildInfo.getBuildInfo().run(peerClientMetadata)
+      buildInfo = BuildInfoJson()
 
-      nodeGitCommitBuild = BuildInfo.gitCommit
-      _ <- logger.debug(s"Node peer git commit hash=$nodeGitCommitBuild")
+      peerBuildInfoSerialized = KryoSerializer.serializeAnyRef(peerBuildInfo).sha256
+      _ <- logger.debug(s"Joining peer build info hash=$peerBuildInfoSerialized")
 
-      isValid = peerGitCommitBuild == nodeGitCommitBuild
-      _ <- logger.info(s"Checking commit hash for joining peer=${peerClientMetadata.host} : is valid=$isValid")
+      buildInfoSerialized = KryoSerializer.serializeAnyRef(buildInfo).sha256
+      _ <- logger.debug(s"Node build info hash=$buildInfoSerialized")
+
+      isValid = peerBuildInfoSerialized == buildInfoSerialized
     } yield
       if (!isValid) JoiningPeerHasDifferentVersion(peerClientMetadata.host).invalidNel
       else peerClientMetadata.host.validNel
 
     validate.handleErrorWith(
       error =>
-        logger.info(s"Cannot get git commit hash from joining peer : ${peerClientMetadata.host} : $error") >>
+        logger.info(s"Cannot get build info of joining peer : ${peerClientMetadata.host} : $error") >>
           Sync[F].delay(JoiningPeerUnavailable(peerClientMetadata.host).invalidNel)
     )
   }
