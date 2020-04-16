@@ -7,7 +7,7 @@ import org.constellation.consensus._
 import org.constellation.domain.observation._
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.p2p.{PeerNotification, SerializedUDPMessage}
+import org.constellation.p2p.{PeerNotification}
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{SignedData, _}
 import org.constellation.schema.Id
@@ -98,7 +98,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Set[String]])
     kryo.register(classOf[Seq[String]])
 
-    kryo.register(classOf[SerializedUDPMessage])
     kryo.register(classOf[Id], 1011)
 
     kryo.register(classOf[Array[Byte]], 1012)
