@@ -7,7 +7,6 @@ import com.esotericsoftware.kryo.io.{Input, InputChunked, Output, OutputChunked}
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 
 import scala.util.Random
-import org.constellation.p2p.SerializedUDPMessage
 
 object KryoSerializer {
 
@@ -23,26 +22,6 @@ object KryoSerializer {
       .setRegistrationRequired(true)
       .withRegistrar(new ConstellationKryoRegistrar())
   )
-
-  def serializeGrouped[T](data: T, groupSize: Int = 45000): Seq[SerializedUDPMessage] = {
-
-    val bytes: Array[Byte] = kryoPool.toBytesWithClass(data)
-
-    val idx: Seq[(Array[Byte], Int)] = bytes.grouped(groupSize).zipWithIndex.toSeq
-
-    val pg: Long = Random.nextLong()
-
-    idx.map {
-      case (b: Array[Byte], i: Int) =>
-        SerializedUDPMessage(ByteString(b), packetGroup = pg, packetGroupSize = idx.length, packetGroupId = i)
-    }
-  }
-
-  def deserializeGrouped(messages: List[SerializedUDPMessage]): AnyRef = {
-    val sortedBytes = messages.sortBy(f => f.packetGroupId).flatMap(_.data).toArray
-
-    deserialize(sortedBytes)
-  }
 
   def serialize[T](data: T): Array[Byte] =
     kryoPool.toBytesWithClass(data)
