@@ -6,10 +6,7 @@ case class LastTransactionRef(
   ordinal: Long
 ) extends Signable {
   override def getEncoding = {
-    val args = Seq(
-      prevHash,
-      ordinal.toString
-    )
+    val args = Seq(prevHash, ordinal.toString)
     runLengthEncoding(args: _*)
   }
 }

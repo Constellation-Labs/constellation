@@ -8,7 +8,7 @@ import org.constellation.primitives.Schema.EdgeHashType.TransactionDataHash
 import org.constellation.primitives.Schema.{ObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.Transaction
 import org.constellation.serializer.KryoSerializer
-import org.constellation.wallet.{Hashable, KryoSerializer => WalletKryoSerializer, Transaction => WalletTransaction}
+import org.constellation.wallet.{Hashable, LastTransactionRef, KryoSerializer => WalletKryoSerializer, Transaction => WalletTransaction}
 import org.scalatest.{FreeSpec, Matchers}
 
 class TransactionHashIntegrityTest extends FreeSpec with Matchers {
