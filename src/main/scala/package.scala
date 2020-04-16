@@ -106,6 +106,7 @@ package object constellation extends POWExt with SignHelpExt {
   }
 
   def hashSerialized(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256
+  def hashSerializedBytes(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256Bytes
 
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))

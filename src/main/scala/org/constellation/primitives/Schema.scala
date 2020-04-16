@@ -197,8 +197,12 @@ object Schema {
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
                              parents: Seq[TypedEdgeHash],
                              data: TypedEdgeHash)
-      extends Signable {
-    override def getEncoding = runLengthEncoding(parents.map(_.hashReference) ++ Seq(data.hashReference): _*)
+    extends Signable {
+    override def getEncoding = {
+      val numParents = parents.length//note, we should not use magick number 2 here, state channels can have multiple
+      val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
+      numParents + encodedParentHashRefs + data.hashReference
+    }
   }
 
   /**
@@ -238,15 +242,10 @@ object Schema {
     fee: Option[Long] = None,
     salt: Long = Random.nextLong()
   ) extends Signable {
-
     override def getEncoding = {
-      val args = Seq(
-        amount.toString,
-        lastTxRef.getEncoding,
-        fee.getOrElse(0L).toString,
-        salt.toString
-      )
-      runLengthEncoding(args: _*)
+      val encodedAmount = runLengthEncoding(Seq(amount.toHexString): _*)
+      val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString) : _*)
+      encodedAmount + lastTxRef.getEncoding + encodedFeeSalt
     }
   }
 

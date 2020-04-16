@@ -115,7 +115,6 @@ object TransactionService {
     normalized: Boolean = true
   ): Edge[TransactionEdgeData] = {
     val amountToUse = if (normalized) amount * Schema.NormalizationFactor else amount
-
     val txData = TransactionEdgeData(amountToUse, lastTxRef, fee)
     val oe = ObservationEdge(
       Seq(

@@ -19,6 +19,8 @@ trait Signable {
 
   def getEncoding: String = hashSerialized(this)
 
+  def getHexEncoding = KeyUtils.bytes2hex(hashSerializedBytes(this))
+
   def runLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
 
 }

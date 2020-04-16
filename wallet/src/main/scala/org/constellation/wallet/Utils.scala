@@ -114,16 +114,15 @@ trait Signable {
 
   def getEncoding: String = Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(this)).toString
 
+  def getHexEncoding = KeyUtils.bytes2hex(Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(this)).asBytes())
+
   def runLengthEncoding(hashes: String*) : String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
 
 }
 
 case class LastTransactionRef(prevHash: String, ordinal: Long) extends Signable {
   override def getEncoding = {
-    val args = Seq(
-      prevHash,
-      ordinal.toString
-    )
+    val args = Seq(prevHash, ordinal.toString)
     runLengthEncoding(args: _*)
   }
 }
@@ -139,13 +138,9 @@ case class TransactionEdgeData(
   salt: Long = Random.nextLong()
 ) extends Signable  {
   override def getEncoding = {
-    val args = List(
-      amount.toString,
-      lastTxRef.getEncoding,
-      fee.getOrElse(0L).toString,
-      salt.toString
-    )
-    runLengthEncoding(args : _*)
+    val encodedAmount = runLengthEncoding(Seq(amount.toHexString): _*)
+    val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString) : _*)
+    encodedAmount + lastTxRef.getEncoding + encodedFeeSalt
   }
 }
 
@@ -171,7 +166,11 @@ case class ObservationEdge(
   parents: Seq[TypedEdgeHash],
   data: TypedEdgeHash
 ) extends Signable {
-  override def getEncoding = runLengthEncoding(parents.map(_.hashReference) ++ List(data.hashReference): _*)
+  override def getEncoding = {
+    val numParents = parents.length//note, we should not use magick number 2 here, state channels can have multiple
+    val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
+    numParents + encodedParentHashRefs + data.hashReference
+  }
 }
 
 case class HashSignature(
