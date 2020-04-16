@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Remove old UDP code
 
 ## [v2.5.0] - 2020-04-16
 ### Changed

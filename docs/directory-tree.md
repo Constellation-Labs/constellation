@@ -35,7 +35,6 @@ root
 		PeerAuth.scala
 		ProbabilisticGossip.scala
 		TCPServer.scala
-		UDPActor.scala
         ├── primitives
 		ActiveDAGManager.scala
 		BundleDataExt.scala
@@ -80,7 +79,6 @@ root
 		ConsensusTest.scala
         ├── p2p
 		PeerToPeerTest.scala
-		UDPTest.scala
         ├── rpc
 		APIClientTest.scala
         ├── util
