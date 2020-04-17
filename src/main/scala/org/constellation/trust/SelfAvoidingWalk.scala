@@ -102,7 +102,7 @@ object SelfAvoidingWalk {
     for (_ <- 0 to numIterations) {
       val (id, trust) = walkFromOrigin()
 //        println(s"Returning $id with trust $trust")
-      if (id != n1.id) {
+      if (id != n1.id && walkScores.length < id) {
         walkScores(id) += trust
       }
     }
@@ -159,7 +159,7 @@ object SelfAvoidingWalk {
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      println(s"runWalkBatches - Batch number $iterationNum with delta $delta")
+//      println(s"runWalkBatches - Batch number $iterationNum with delta $delta")
     }
 
     reweightEdges(walkProbability, nodes.map { n =>
@@ -192,7 +192,7 @@ object SelfAvoidingWalk {
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      println(s"runWalkBatchesFeedback - Batch number $iterationNum with delta $delta")
+//      println(s"runWalkBatchesFeedback - Batch number $iterationNum with delta $delta")
     }
 
     val selfNode = nodes.filter { _.id == selfId }.head

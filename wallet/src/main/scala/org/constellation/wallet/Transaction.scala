@@ -29,6 +29,7 @@ case class Transaction(
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
   def isValid = signatures.exists { hs ⇒
+  val test = hs.address == edge.parents.head.hashReference && hs.valid(signaturesHash) && hash == signaturesHash
     hs.address == edge.parents.head.hashReference && hs.valid(signaturesHash) && hash == signaturesHash
   }
 }
