@@ -48,6 +48,9 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
     val walletHash2 = deserializedWalletTx.hash
     val nodeHash2 = deserializedNodeTx.hash
 
+    readTx2.isValid shouldBe true
+    readTx.isValid shouldBe true
+
     walletHash1 shouldBe nodeHash1
     walletHash2 shouldBe nodeHash2
 
@@ -66,11 +69,11 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
       .right
       .get
       .get
-    val dummyTypedEdgeHash = TypedEdgeHash("", TransactionDataHash)
-    val dummyOE = ObservationEdge(Seq(), dummyTypedEdgeHash)
-
-    readTx.edge.copy(observationEdge = dummyOE)
-    assert(!readTx.isValid)
+      val dummyTypedEdgeHash = TypedEdgeHash("dummyTypedEdgeHash", TransactionDataHash)
+      val dummyOE = ObservationEdge(Seq(dummyTypedEdgeHash, dummyTypedEdgeHash), dummyTypedEdgeHash)
+      val forgedEdge = readTx.edge.copy(observationEdge = dummyOE)
+      val forgedTx = readTx.copy(edge = forgedEdge)
+      assert(!forgedTx.isValid)
   }
 
   "transaction can be json encoded and decoded" in {

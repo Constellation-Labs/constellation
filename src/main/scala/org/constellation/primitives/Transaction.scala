@@ -60,8 +60,7 @@ case class Transaction(
 
   def baseHash: String = edge.signedObservationEdge.baseHash
 
-  def hash: String =
-    edge.observationEdge.hash
+  def hash: String = edge.observationEdge.hash
 
   def getPrevTxHash = edge.signedObservationEdge.getHexEncoding
 
