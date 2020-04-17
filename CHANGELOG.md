@@ -2,8 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.5.1] - 2020-04-17
 ### Fixed
 - Remove old UDP code
+- Transaction validator now validates signature properly
 
 ## [v2.5.0] - 2020-04-16
 ### Changed
