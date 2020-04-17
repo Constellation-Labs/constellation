@@ -50,6 +50,7 @@ lazy val versions = new {
   val circe = "0.12.3"
   val circeEnumeratum = "1.5.23"
   val circeGenericExtras = "0.13.0"
+  val http4sRequestSigner = "0.3.3"
 }
 
 lazy val http4sDependencies = Seq(
@@ -124,8 +125,7 @@ lazy val coreDependencies = Seq(
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
   "org.perf4j" % "perf4j" % "0.9.16",
-  "pl.abankowski" %% "http-request-signer-core" % "0.3.2",
-  "pl.abankowski" %% "http4s-request-signer" % "0.3.2"
+  "pl.abankowski" %% "http4s-request-signer" % versions.http4sRequestSigner
 ) ++ http4sDependencies ++ schemaSharedDependencies
 
 //Test dependencies
