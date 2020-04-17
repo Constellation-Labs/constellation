@@ -209,7 +209,7 @@ object SignHelp {
     bytes2hex(signData(hash.getBytes())(privateKey))
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge =
-    SignedObservationEdge(hashSignBatchZeroTyped(Hashable.hash(oe), kp))
+    SignedObservationEdge(hashSignBatchZeroTyped(Hashable.hash(oe.getEncoding), kp))
 
   def hashSignBatchZeroTyped(hash: String, keyPair: KeyPair): SignatureBatch =
     SignatureBatch(hash, Seq(hashSign(hash, keyPair)))
