@@ -33,6 +33,8 @@ class TransactionMaxValueTest
       implicit val keyPair = Fixtures.tempKey1
       val src = KeyUtils.publicKeyToAddressString(keyPair.getPublic)
       val dst = KeyUtils.publicKeyToAddressString(Fixtures.tempKey2.getPublic)
+      val dst2 = KeyUtils.publicKeyToAddressString(Fixtures.tempKey3.getPublic)
+      val dst3 = KeyUtils.publicKeyToAddressString(Fixtures.tempKey4.getPublic)
 
       dao.transactionService.isAccepted(*) shouldReturnF false
       dao.transactionService.createDummyTransaction(*, *, *) shouldAnswer { (a: String, b: String, c: KeyPair) =>
@@ -84,6 +86,34 @@ class TransactionMaxValueTest
 
           val isValid = cbv.simpleValidation(cb).map(_.isValid)
 
+          isValid.unsafeRunSync shouldBe false
+        }
+      }
+
+      "when many overflowing transactions are sent" - {
+        "should not pass validation with single overflow" in {
+          val txs = Seq(
+            Fixtures.makeTransaction(src, dst, 10L, keyPair),
+            Fixtures.makeTransaction(src, dst, 10L, keyPair),
+            Fixtures.makeTransaction(src, dst2, Long.MaxValue, keyPair),
+            Fixtures.makeTransaction(src, dst3, Long.MaxValue, keyPair)
+          )
+          as.lookup(*) shouldReturnF AddressCacheData(20L, 20L, balanceByLatestSnapshot = 20L).some
+          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+          val isValid = cbv.simpleValidation(cb).map(_.isValid)
+          isValid.unsafeRunSync shouldBe false
+        }
+
+        "should not pass validation without single overflow" in {
+          val txs = Seq(
+            Fixtures.makeTransaction(src, dst, 10L, keyPair),
+            Fixtures.makeTransaction(src, dst, 10L, keyPair),
+            Fixtures.makeTransaction(src, dst2, Long.MaxValue - 1, keyPair),
+            Fixtures.makeTransaction(src, dst3, Long.MaxValue - 1, keyPair)
+          )
+          as.lookup(*) shouldReturnF AddressCacheData(20L, 20L, balanceByLatestSnapshot = 20L).some
+          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+          val isValid = cbv.simpleValidation(cb).map(_.isValid)
           isValid.unsafeRunSync shouldBe false
         }
       }
