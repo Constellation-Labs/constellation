@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.5.2] - 2020-04-20
 ### Added
 - Additional logs for joining peer validator
 
