@@ -1,6 +1,7 @@
 package org.constellation.trust
 
-import scala.collection.immutable
+import com.typesafe.scalalogging.StrictLogging
+
 import scala.util.Random
 
 /**
@@ -8,7 +9,7 @@ import scala.util.Random
   * https://en.wikipedia.org/wiki/Self-avoiding_walk
   *
   */
-object SelfAvoidingWalk {
+object SelfAvoidingWalk extends StrictLogging {
 
   final def sample[A](dist: Map[A, Double]): A = {
     val p = scala.util.Random.nextDouble
@@ -38,7 +39,7 @@ object SelfAvoidingWalk {
       currentId -> currentTrust
     } else {
 
-      val n1 = nodeMap(currentId)
+      val n1: TrustNode = nodeMap(currentId)
 
       // TODO: Visited should have a 'direction' associated to bias the walk not just in terms of trust
       // but also trust derivatives in order to move 'outward' as effectively as possible (to discourage loop formation)
@@ -48,6 +49,7 @@ object SelfAvoidingWalk {
       val visitedNext = visited + currentId
 
       val normalEdges = n1.normalizedPositiveEdges(visitedNext)
+      logger.debug(s"walk for normalEdges: ${normalEdges.toString()}")
 
       if (normalEdges.isEmpty) {
         currentId -> currentTrust
@@ -59,15 +61,20 @@ object SelfAvoidingWalk {
         // neighbors as well? This is where Jaccard distance is important
         // We need to discard walks where large distance exists from previous
         // (i.e. discard information from distant nodes if they distrust nearby nodes that you trust in general)
-        val useInLocalCalculation = nodeMap.get(transitionDst)
+        val useInLocalCalculation = nodeMap
+          .get(transitionDst)
           .exists(trustNode => trustNode.edges.exists(edge => edge.trust < 0 && edge.dst == selfId))
+        logger.debug(s"walk for useInLocalCalculation: ${useInLocalCalculation.toString()}")
+
         if (useInLocalCalculation) {
           currentId -> currentTrust
         } else {
 
           val transitionTrust = normalEdges(transitionDst)
+          logger.debug(s"walk for transitionTrust: ${transitionTrust.toString()}")
 
           val productTrust = currentTrust * transitionTrust
+          logger.debug(s"walk for productTrust: ${productTrust.toString()}")
 
           walk(
             selfId,
@@ -88,24 +95,28 @@ object SelfAvoidingWalk {
       n.id -> n
     }.toMap
 
+//    logger.debug(s"runWalkRaw nodeMap: ${nodeMap}")
+
     val n1 = nodes.head
 
     val maxPathLength = nodes.size - 1
 
     def walkFromOrigin() = {
-      val totalPathLength = Random.nextInt(maxPathLength - 1) + 1//note, need min of 3 nodes
+      val totalPathLength = Random.nextInt(maxPathLength - 1) + 1 //note, need min of 3 nodes
       walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1d)
     }
-
-    val walkScores = Array.fill(nodes.size)(0d)
+    val numNodes = nodes.maxBy(_.id).id
+    val walkScores = Array.fill(numNodes)(0d)
 
     for (_ <- 0 to numIterations) {
       val (id, trust) = walkFromOrigin()
-//        println(s"Returning $id with trust $trust")
+      logger.debug(s"Returning $id with trust $trust")
       if (id != n1.id) {
         walkScores(id) += trust
       }
     }
+    logger.debug(s"walkFromOrigin for walkScores ${walkScores.toString()}")
+
     walkScores
   }
 
@@ -184,15 +195,27 @@ object SelfAvoidingWalk {
     var iterationNum = 0
 
     while (delta > epsilon && iterationNum < maxIterations) {
+      logger.debug(s"runWalkBatchesFeedback walkProbability: ${walkScores.toList.toString()}")
+      logger.debug(s"runWalkBatchesFeedback walkScores: ${walkProbability.toList.toString()}")
 
       val batchScores = runWalkRaw(selfId, nodes, batchIterationSize)
+
+      logger.debug(s"runWalkBatchesFeedback batchScores: ${batchScores.toList.toString()}")
+
       merged = walkScores.zip(batchScores).map { case (s1, s2) => s1 + s2 }
+      logger.debug(s"runWalkBatchesFeedback merged: ${merged.toList.toString()}")
+
       val renormalized = normalizeScores(merged)
+      logger.debug(s"runWalkBatchesFeedback renormalized: ${renormalized.toList.toString()}")
+
       delta = renormalized.zip(walkProbability).map { case (s1, s2) => Math.pow(Math.abs(s1 - s2), 2) }.sum
+      logger.debug(s"runWalkBatchesFeedback delta: ${delta.toString()}")
+
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      println(s"runWalkBatchesFeedback - Batch number $iterationNum with delta $delta")
+      logger.debug(s"runWalkBatchesFeedback walkProbability: ${walkProbability.toList.toString()}")
+//      println(s"runWalkBatchesFeedback - Batch number $iterationNum with delta $delta")
     }
 
     val selfNode = nodes.filter { _.id == selfId }.head
@@ -203,7 +226,7 @@ object SelfAvoidingWalk {
     val negativeScores = merged.zipWithIndex.filterNot { _._2 == selfId }.flatMap {
       case (score, id) =>
         val negativeEdges = others.get(id).map(_.negativeEdges).getOrElse(Seq())
-        println(s"selfId: $selfId - negativeEdges: $negativeEdges")
+        logger.debug(s"runWalkBatchesFeedback - negativeScores - selfId: $selfId - negativeEdges: $negativeEdges")
         negativeEdges.filterNot { _.dst == selfId }.map { ne =>
           val nanTest = (ne.trust * score / negativeEdges.size)
 //        println("nanTest =>" + nanTest)
@@ -218,20 +241,32 @@ object SelfAvoidingWalk {
 
     val labelEdges = selfNode.edges.filter(_.isLabel)
     val labelDst = labelEdges.map { _.dst }
+    logger.debug(s"runWalkBatchesFeedback - labelDst ${labelDst.toList.toString()}")
 
-    val renormalizedAfterNegative = normalizeScoresWithNegative(merged).zipWithIndex.filterNot {
+    val doNormalizeScoresWithNegative = normalizeScoresWithNegative(merged)
+    logger.debug(
+      s"runWalkBatchesFeedback - renormalizedAfterNegative ${doNormalizeScoresWithNegative.toList.toString()}"
+    )
+
+    val renormalizedAfterNegative = doNormalizeScoresWithNegative.zipWithIndex.filterNot {
       case (score, id) => labelDst.contains(id)
     }
+    logger.debug(s"runWalkBatchesFeedback - renormalizedAfterNegative ${renormalizedAfterNegative.toList.toString()}")
 
     val newEdges = renormalizedAfterNegative.map {
       case (score, id) =>
         TrustEdge(selfId, id, score)
     }
+    logger.debug(s"runWalkBatchesFeedback - newEdges ${newEdges.toList.toString()}")
 
     val updatedSelfNode = selfNode.copy(
       edges = labelEdges ++ newEdges
     )
-    others.values.toSeq :+ updatedSelfNode
+    logger.debug(s"runWalkBatchesFeedback - updatedSelfNode ${updatedSelfNode.toString()}")
+    val res = others.values.toSeq :+ updatedSelfNode
+    logger.debug(s"runWalkBatchesFeedback - res ${res.toList.toString()}")
+
+    res
   }
 
   def reweightEdges(
@@ -314,7 +349,7 @@ object SelfAvoidingWalk {
   ): TrustNode = {
 
     var nodesCycle = nodes
-    if (nodesCycle.size > 2){//note, need min of 3 nodes
+    if (nodesCycle.size > 2) { //note, need min of 3 nodes
       println(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
       (0 until feedbackCycles).foreach { cycle =>
         println(s"feedback cycle $cycle for node $selfId")
