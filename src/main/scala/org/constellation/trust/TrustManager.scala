@@ -4,15 +4,7 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.{
-  CheckpointBlockInvalid,
-  CheckpointBlockWithMissingParents,
-  CheckpointBlockWithMissingSoe,
-  Observation,
-  ObservationEvent,
-  RequestTimeoutOnConsensus,
-  RequestTimeoutOnResolving
-}
+import org.constellation.domain.observation._
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.primitives.Schema.NodeState
@@ -28,22 +20,33 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
     cluster.getPeerInfo.flatMap { peers =>
-      logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
       if (peers.nonEmpty) {
         for {
           reputation <- getStoredReputation
+          _ <- logger.info(s"Begin handleTrustScoreUpdate for peerTrustScores: ${peerTrustScores.toString()}")
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
           (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
+          _ <- logger.debug(s"Begin handleTrustScoreUpdate for scores: ${scores.toString()}")
+          _ <- logger.info(
+            s"Begin handleTrustScoreUpdate for distinct allNodeIds: ${scores.flatMap(_.view.keySet).distinct}"
+          )
+          _ <- logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
+          _ <- logger.debug(s"TrustManager.calculateIdxMaps for idxMap: ${idxMap.toString()}")
+          _ <- logger.debug(s"TrustManager.scoringMap for scoringMap: ${scoringMap.toString()}")
+          selfNodeId = scoringMap(nodeId)
+          trustNodes = TrustManager.calculateTrustNodes(scores, nodeId, scoringMap)
+          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
 
           idMappedScores = SelfAvoidingWalk
             .runWalkFeedbackUpdateSingleNode(
-              scoringMap(nodeId),
-              TrustManager.calculateTrustNodes(scores, nodeId, scoringMap)
+              selfNodeId,
+              trustNodes
             )
             .edges
-            .map(e => idxMap(e.dst) -> e.trust)
+            .map(e => idxMap(e.dst) -> e.trust) //.flatMap(e => idxMap.get(e.dst).map(i => i -> e.trust) )//todo bug here
             .toMap
 
+          _ <- logger.info(s"TrustManager.idMappedScores: ${idMappedScores.toString()}")
           _ <- storedReputation.modify(_ => (idMappedScores, ()))
           _ <- predictedReputation.modify(_ => (idMappedScores, ()))
         } yield ()
@@ -95,9 +98,11 @@ object TrustManager {
 
   def calculateScoringMap(scores: List[Id]): Map[Id, Int] =
     scores.sortBy { _.hex }.zipWithIndex.toMap
+  //todo need UUID Int for ID, since when nodes join/leave they will "take" on old score.
+  // Instead, make fixed-size cache of all Full nodes, update when nodes join/leave. Clear the old data too
 
   def calculateIdxMaps(scores: List[TrustDataInternal]): (Map[Id, Int], Map[Int, Id]) = {
-    val allNodeIds = scores.flatMap(_.view.keySet)
+    val allNodeIds = scores.flatMap(_.view.keySet).distinct
     val scoringMap = TrustManager.calculateScoringMap(allNodeIds)
     val idxMap = scoringMap.map(_.swap)
     (scoringMap, idxMap)
