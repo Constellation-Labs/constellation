@@ -134,7 +134,7 @@ class CheckpointBlockValidator[F[_]: Sync](
             _ =>
               logger.warn(
                 s"Checkpoint block with baseHash: ${cb.baseHash} is invalid ${validation.leftMap(_.map(_.errorMessage))}"
-            )
+              )
           )
     } yield validation
 
@@ -185,14 +185,14 @@ class CheckpointBlockValidator[F[_]: Sync](
 
     def validateBalance(address: String, t: Iterable[Transaction]): F[ValidationResult[List[Transaction]]] =
       lookup(address).map { balance =>
-        val amount = t.map(_.amount).sum
+        val amount = t.map(_.amount).map(BigInt(_)).sum
         val diff = balance - amount
 
         val isNodeAddress = dao.id.address == address
         val necessaryAmount = if (isNodeAddress) stakingAmount else 0L
 
         if (diff >= necessaryAmount && amount >= 0) t.toList.validNel
-        else InsufficientBalance(address, amount, diff).invalidNel
+        else InsufficientBalance(address).invalidNel
       }
 
     t.groupBy(_.src.address)
@@ -292,7 +292,7 @@ class CheckpointBlockValidator[F[_]: Sync](
                       tail ++ parents,
                       accu ++ cb.transactions.map(_.hash),
                       isIn
-                  )
+                    )
                 )
             }
 
@@ -393,7 +393,7 @@ object NoAddressCacheFound {
   def apply(t: Transaction) = new NoAddressCacheFound(t.hash, t.src.address)
 }
 
-case class InsufficientBalance(address: String, amount: Long, diff: Long) extends CheckpointBlockValidation {
+case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
 
   def errorMessage: String =
     s"CheckpointBlock includes transaction from address=$address which has insufficient balance"

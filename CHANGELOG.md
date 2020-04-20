@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Validator for many overflowing transactions
 
 ## [v2.5.2] - 2020-04-20
 ### Added

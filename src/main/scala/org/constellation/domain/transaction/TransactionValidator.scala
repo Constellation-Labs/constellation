@@ -25,7 +25,9 @@ object TransactionValidator {
     if (tx.isDummy) {
       if (tx.amount == 0) tx.validNel else NonZeroAmount(tx).invalidNel
     } else {
-      if (tx.amount > 0) tx.validNel else NonPositiveAmount(tx).invalidNel
+      if (tx.amount <= 0) NonPositiveAmount(tx).invalidNel
+      else if (BigInt(tx.amount) >= BigInt(Long.MaxValue)) OverflowAmount(tx).invalidNel
+      else tx.validNel
     }
 
   def validateFee(tx: Transaction): ValidationResult[Transaction] =
@@ -96,6 +98,14 @@ case class NonPositiveAmount(txHash: String, amount: Long) extends TransactionVa
 
 object NonPositiveAmount {
   def apply(tx: Transaction) = new NonPositiveAmount(tx.hash, tx.amount)
+}
+
+case class OverflowAmount(txHash: String) extends TransactionValidationError {
+  def errorMessage: String = s"Transaction tx=$txHash has overflow amount"
+}
+
+object OverflowAmount {
+  def apply(tx: Transaction) = new OverflowAmount(tx.hash)
 }
 
 case class NonZeroAmount(txHash: String, amount: Long) extends TransactionValidationError {

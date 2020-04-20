@@ -256,8 +256,8 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     validation
       .fold(
         _.toList.flatMap {
-          case InsufficientBalance(address, _, _) => List(address)
-          case _                                  => List.empty
+          case InsufficientBalance(address) => List(address)
+          case _                            => List.empty
         },
         _ => List.empty
       )
