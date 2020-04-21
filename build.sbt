@@ -118,22 +118,39 @@ lazy val pureconfigDependencies = Seq(
 )
 
 // -----------------
+lazy val twitterChillDependencies = Seq(
+  "com.twitter" %% "chill" % versions.twitterChill
+)
 
-lazy val sharedDependencies = Seq(
-  "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  "joda-time" % "joda-time" % "1.6"
-) ++ circeDependencies ++ catsDependencies ++ loggingDependencies
-
-lazy val keyToolSharedDependencies = Seq(
-  "com.google.cloud" % "google-cloud-storage" % "1.91.0"
-) ++ spongyCastleDependencies ++ sharedDependencies
-
-lazy val walletSharedDependencies = Seq(
-  "com.twitter" %% "chill" % versions.twitterChill,
+lazy val twitterAlgebirdDependencies = Seq(
   "com.twitter" %% "algebird-core" % "0.13.5"
-) ++ sharedDependencies
+)
 
-lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
+lazy val scoptDependencies = Seq(
+  "com.github.scopt" %% "scopt" % "4.0.0-RC2"
+)
+
+lazy val jodaTimeDependencies = Seq(
+  "joda-time" % "joda-time" % "1.6"
+)
+
+lazy val googleCloudStorageDependencies = Seq(
+  "com.google.cloud" % "google-cloud-storage" % "1.91.0"
+)
+
+lazy val bitcoinjDependencies = Seq(
+  "org.bitcoinj" % "bitcoinj-core" % "0.15.8"
+)
+
+// -----------------
+
+lazy val sharedDependencies = scoptDependencies ++ jodaTimeDependencies ++ circeDependencies ++ catsDependencies ++ loggingDependencies
+
+lazy val keyToolSharedDependencies = googleCloudStorageDependencies ++ spongyCastleDependencies ++ sharedDependencies
+
+lazy val walletSharedDependencies = bitcoinjDependencies ++ sharedDependencies
+
+lazy val schemaSharedDependencies = keyToolSharedDependencies ++ twitterChillDependencies
 
 lazy val integrationTestsSharedDependencies = spongyCastleDependencies ++ sharedDependencies ++ fs2Dependencies ++ http4sClientDependencies ++ pureconfigDependencies
 
@@ -147,7 +164,7 @@ lazy val coreDependencies = Seq(
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
   "io.chrisdavenport" %% "fuuid" % "0.4.0"
-) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ pureconfigDependencies
+) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ twitterAlgebirdDependencies ++ pureconfigDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
@@ -212,6 +229,7 @@ lazy val schema = (project in file("schema"))
 lazy val wallet = (project in file("wallet"))
   .enablePlugins(BuildInfoPlugin)
   .dependsOn(schema)
+  .configs(IntegrationTest)
   .settings(
     commonSettings,
     name := "wallet",
@@ -221,7 +239,12 @@ lazy val wallet = (project in file("wallet"))
     buildInfoPackage := "org.constellation.wallet",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.wallet.Wallet"),
-    libraryDependencies ++= (walletSharedDependencies ++ testDependencies)
+    libraryDependencies ++= (walletSharedDependencies ++ testDependencies),
+    assemblyExcludedJars in assembly := {
+      val cp = (fullClasspath in assembly).value
+      // comes with bitcoinj which we only use for a bip44 reference implementation and it causes assembly issues
+      cp filter {_.data.getName == "bcprov-jdk15to18-1.63.jar"}
+    }
   )
 
 lazy val integrationTests = (project in file("integration-tests"))
