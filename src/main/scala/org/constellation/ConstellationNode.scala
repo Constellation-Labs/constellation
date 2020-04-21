@@ -243,7 +243,7 @@ object ConstellationNode extends IOApp {
     } yield mappedValues
 
   private def getAllocAccountBalances[F[_]: Sync](cliConfig: CliConfig): F[Seq[AccountBalance]] = Sync[F].delay {
-    Try(new AccountBalanceCSVReader(cliConfig.allocFilePath).read()).getOrElse(Seq.empty)
+    Try(new AccountBalanceCSVReader(cliConfig.allocFilePath, cliConfig.allocFileNormalized).read()).getOrElse(Seq.empty)
   }
 
   private def createPreferencesPath[F[_]: Sync](path: String) = Sync[F].delay {

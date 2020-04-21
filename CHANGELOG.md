@@ -2,6 +2,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Config option to tell that allocated balances have been already normalized
+
 ### Fixed
 - Validator for many overflowing transactions
 

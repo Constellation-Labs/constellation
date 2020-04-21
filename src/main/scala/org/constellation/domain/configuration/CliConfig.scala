@@ -6,6 +6,7 @@ case class CliConfig(
   externalIp: java.net.InetAddress = null,
   externalPort: Int = 0,
   allocFilePath: String = null,
+  allocFileNormalized: Boolean = false,
   keyStorePath: String = null,
   storePassword: String = null,
   keyPassword: String = null,

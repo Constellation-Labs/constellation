@@ -30,7 +30,12 @@ object CliConfigParser {
         .required,
       opt[String]('f', "alloc")
         .action((x, c) => c.copy(allocFilePath = x))
-        .text("path to file with allocation account balances"),
+        .text("path to file with allocation account balances")
+        .children(
+          opt[Unit]("normalized")
+            .action((x, c) => c.copy(allocFileNormalized = true))
+            .text("are allocation balances already normalized in file")
+        ),
       opt[String]('w', "whitelisting")
         .action((x, c) => c.copy(whitelisting = x))
         .text("path to file with whitelisting")
