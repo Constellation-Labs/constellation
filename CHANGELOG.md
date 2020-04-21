@@ -7,6 +7,11 @@ All notable changes to this project will be documented in this file.
 - Skip removing genesis tips
 ### Added
 - Reference implementation of concise transaction data format
+- Reference implementation of bip44
+
+### Changed
+- Removed twitter chill and algebird from wallet dependencies and moved them to schema and core
+- Small rearrangement of dependencies in build file
 
 ## [v2.19.0] 2020-11-16
 ### Added
