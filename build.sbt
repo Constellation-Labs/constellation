@@ -90,7 +90,9 @@ lazy val keyToolSharedDependencies = Seq(
 
 lazy val walletSharedDependencies = Seq(
   "com.twitter" %% "chill" % versions.twitterChill,
-  "com.twitter" %% "algebird-core" % "0.13.5"
+  "com.twitter" %% "algebird-core" % "0.13.5",
+  "org.bitcoinj" % "bitcoinj-core" % "0.15.8",
+  "org.web3j" % "core" % "4.5.17"
 ) ++ sharedDependencies
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
