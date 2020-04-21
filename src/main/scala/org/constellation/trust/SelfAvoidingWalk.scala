@@ -49,7 +49,7 @@ object SelfAvoidingWalk extends StrictLogging {
       val visitedNext = visited + currentId
 
       val normalEdges = n1.normalizedPositiveEdges(visitedNext)
-      logger.debug(s"walk for normalEdges: ${normalEdges.toString()}")
+//      logger.debug(s"walk for normalEdges: ${normalEdges.toString()}")
 
       if (normalEdges.isEmpty) {
         currentId -> currentTrust
@@ -64,17 +64,17 @@ object SelfAvoidingWalk extends StrictLogging {
         val useInLocalCalculation = nodeMap
           .get(transitionDst)
           .exists(trustNode => trustNode.edges.exists(edge => edge.trust < 0 && edge.dst == selfId))
-        logger.debug(s"walk for useInLocalCalculation: ${useInLocalCalculation.toString()}")
+//        logger.debug(s"walk for useInLocalCalculation: ${useInLocalCalculation.toString()}")
 
         if (useInLocalCalculation) {
           currentId -> currentTrust
         } else {
 
           val transitionTrust = normalEdges(transitionDst)
-          logger.debug(s"walk for transitionTrust: ${transitionTrust.toString()}")
+//          logger.debug(s"walk for transitionTrust: ${transitionTrust.toString()}")
 
           val productTrust = currentTrust * transitionTrust
-          logger.debug(s"walk for productTrust: ${productTrust.toString()}")
+//          logger.debug(s"walk for productTrust: ${productTrust.toString()}")
 
           walk(
             selfId,
@@ -89,7 +89,7 @@ object SelfAvoidingWalk extends StrictLogging {
       }
     }
 
-  def runWalkRaw(selfId: Int, nodes: Seq[TrustNode], numIterations: Int = 100000): Array[Double] = {
+  def runWalkRaw(selfId: Int, nodes: Seq[TrustNode], numIterations: Int = 100): Array[Double] = {
 
     val nodeMap = nodes.map { n =>
       n.id -> n
@@ -106,11 +106,12 @@ object SelfAvoidingWalk extends StrictLogging {
       walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1d)
     }
     val numNodes = nodes.maxBy(_.id).id
-    val walkScores = Array.fill(numNodes)(0d)
+    val walkScores = Array.fill(numNodes + 1)(0d)
+//    logger.debug(s"walkFromOrigin for walkScores ${walkScores.toString()}")
 
     for (_ <- 0 to numIterations) {
       val (id, trust) = walkFromOrigin()
-      logger.debug(s"Returning $id with trust $trust")
+//      logger.debug(s"Returning $id with trust $trust")
       if (id != n1.id) {
         walkScores(id) += trust
       }
@@ -181,9 +182,9 @@ object SelfAvoidingWalk extends StrictLogging {
   def runWalkBatchesFeedback(
     selfId: Int,
     nodes: Seq[TrustNode],
-    batchIterationSize: Int = 10000,
+    batchIterationSize: Int = 100,
     epsilon: Double = 1e-6,
-    maxIterations: Int = 100
+    maxIterations: Int = 10
   ): Seq[TrustNode] = {
 
     var walkScores = runWalkRaw(selfId, nodes, batchIterationSize)
@@ -195,26 +196,26 @@ object SelfAvoidingWalk extends StrictLogging {
     var iterationNum = 0
 
     while (delta > epsilon && iterationNum < maxIterations) {
-      logger.debug(s"runWalkBatchesFeedback walkProbability: ${walkScores.toList.toString()}")
-      logger.debug(s"runWalkBatchesFeedback walkScores: ${walkProbability.toList.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback walkProbability: ${walkScores.toList.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback walkScores: ${walkProbability.toList.toString()}")
 
       val batchScores = runWalkRaw(selfId, nodes, batchIterationSize)
 
-      logger.debug(s"runWalkBatchesFeedback batchScores: ${batchScores.toList.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback batchScores: ${batchScores.toList.toString()}")
 
       merged = walkScores.zip(batchScores).map { case (s1, s2) => s1 + s2 }
-      logger.debug(s"runWalkBatchesFeedback merged: ${merged.toList.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback merged: ${merged.toList.toString()}")
 
       val renormalized = normalizeScores(merged)
-      logger.debug(s"runWalkBatchesFeedback renormalized: ${renormalized.toList.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback renormalized: ${renormalized.toList.toString()}")
 
       delta = renormalized.zip(walkProbability).map { case (s1, s2) => Math.pow(Math.abs(s1 - s2), 2) }.sum
-      logger.debug(s"runWalkBatchesFeedback delta: ${delta.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback delta: ${delta.toString()}")
 
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      logger.debug(s"runWalkBatchesFeedback walkProbability: ${walkProbability.toList.toString()}")
+//      logger.debug(s"runWalkBatchesFeedback walkProbability: ${walkProbability.toList.toString()}")
 //      println(s"runWalkBatchesFeedback - Batch number $iterationNum with delta $delta")
     }
 
@@ -241,30 +242,30 @@ object SelfAvoidingWalk extends StrictLogging {
 
     val labelEdges = selfNode.edges.filter(_.isLabel)
     val labelDst = labelEdges.map { _.dst }
-    logger.debug(s"runWalkBatchesFeedback - labelDst ${labelDst.toList.toString()}")
+//    logger.debug(s"runWalkBatchesFeedback - labelDst ${labelDst.toList.toString()}")
 
     val doNormalizeScoresWithNegative = normalizeScoresWithNegative(merged)
-    logger.debug(
-      s"runWalkBatchesFeedback - renormalizedAfterNegative ${doNormalizeScoresWithNegative.toList.toString()}"
-    )
+//    logger.debug(
+//      s"runWalkBatchesFeedback - renormalizedAfterNegative ${doNormalizeScoresWithNegative.toList.toString()}"
+//    )
 
     val renormalizedAfterNegative = doNormalizeScoresWithNegative.zipWithIndex.filterNot {
       case (score, id) => labelDst.contains(id)
     }
-    logger.debug(s"runWalkBatchesFeedback - renormalizedAfterNegative ${renormalizedAfterNegative.toList.toString()}")
+//    logger.debug(s"runWalkBatchesFeedback - renormalizedAfterNegative ${renormalizedAfterNegative.toList.toString()}")
 
     val newEdges = renormalizedAfterNegative.map {
       case (score, id) =>
         TrustEdge(selfId, id, score)
     }
-    logger.debug(s"runWalkBatchesFeedback - newEdges ${newEdges.toList.toString()}")
+//    logger.debug(s"runWalkBatchesFeedback - newEdges ${newEdges.toList.toString()}")
 
     val updatedSelfNode = selfNode.copy(
       edges = labelEdges ++ newEdges
     )
-    logger.debug(s"runWalkBatchesFeedback - updatedSelfNode ${updatedSelfNode.toString()}")
+//    logger.debug(s"runWalkBatchesFeedback - updatedSelfNode ${updatedSelfNode.toString()}")
     val res = others.values.toSeq :+ updatedSelfNode
-    logger.debug(s"runWalkBatchesFeedback - res ${res.toList.toString()}")
+//    logger.debug(s"runWalkBatchesFeedback - res ${res.toList.toString()}")
 
     res
   }
@@ -342,9 +343,9 @@ object SelfAvoidingWalk extends StrictLogging {
   def runWalkFeedbackUpdateSingleNode(
     selfId: Int,
     nodes: Seq[TrustNode],
-    batchIterationSize: Int = 5000,
+    batchIterationSize: Int = 100,
     epsilon: Double = 1e-5,
-    maxIterations: Int = 100,
+    maxIterations: Int = 10,
     feedbackCycles: Int = 3
   ): TrustNode = {
 
