@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Make stored node proposals immutable
 - Check for highest proposal when leaving #1096
+- Last transaction reference hash
+- Index oob error and reduce cpu utilization of SelfAvoidingWalk
 
 ## [v2.5.4] - 2020-04-22
 ### Added

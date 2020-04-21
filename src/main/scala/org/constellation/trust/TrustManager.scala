@@ -26,16 +26,16 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           _ <- logger.info(s"Begin handleTrustScoreUpdate for peerTrustScores: ${peerTrustScores.toString()}")
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
           (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
-          _ <- logger.debug(s"Begin handleTrustScoreUpdate for scores: ${scores.toString()}")
-          _ <- logger.info(
-            s"Begin handleTrustScoreUpdate for distinct allNodeIds: ${scores.flatMap(_.view.keySet).distinct}"
-          )
-          _ <- logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
-          _ <- logger.debug(s"TrustManager.calculateIdxMaps for idxMap: ${idxMap.toString()}")
-          _ <- logger.debug(s"TrustManager.scoringMap for scoringMap: ${scoringMap.toString()}")
+//          _ <- logger.debug(s"Begin handleTrustScoreUpdate for scores: ${scores.toString()}")
+//          _ <- logger.info(
+//            s"Begin handleTrustScoreUpdate for distinct allNodeIds: ${scores.flatMap(_.view.keySet).distinct}"
+//          )
+//          _ <- logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
+//          _ <- logger.debug(s"TrustManager.calculateIdxMaps for idxMap: ${idxMap.toString()}")
+//          _ <- logger.debug(s"TrustManager.scoringMap for scoringMap: ${scoringMap.toString()}")
           selfNodeId = scoringMap(nodeId)
           trustNodes = TrustManager.calculateTrustNodes(scores, nodeId, scoringMap)
-          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
+//          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
 
           idMappedScores = SelfAvoidingWalk
             .runWalkFeedbackUpdateSingleNode(
