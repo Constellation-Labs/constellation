@@ -42,7 +42,7 @@ class JoiningPeerValidatorTest
     builtAtString = "123"
   )
   private val validBuildInfo =
-    BuildInfoJson()
+    BuildInfoJson().copy()
 
   before {
     apiClient.buildInfo shouldReturn mock[BuildInfoClientInterpreter[IO]]
