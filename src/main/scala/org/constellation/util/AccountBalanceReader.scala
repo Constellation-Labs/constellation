@@ -16,13 +16,20 @@ class AccountBalanceCSVReader(val filePath: String, normalized: Boolean) extends
     val normalizationFactor = if (normalized) 1 else Schema.NormalizationFactor
 
     val values = for {
-      line <- source.getLines().filter(_.nonEmpty).toVector
+      line <- source.getLines().filter(_.nonEmpty).toList
       values = line.split(",").map(_.trim)
-      // Data needs to be provided in non-normalized manner
     } yield AccountBalance(values(0), (values(1).toDouble * normalizationFactor).toLong)
 
     source.close()
-    values
+
+    val addresses = values.map(_.accountHash).toSet
+
+    addresses.map { address =>
+      (address -> values.filter(_.accountHash == address).map(_.balance).sum)
+    }.map {
+      case (a, b) => AccountBalance(a, b)
+    }.toSeq
+
   }
 }
 

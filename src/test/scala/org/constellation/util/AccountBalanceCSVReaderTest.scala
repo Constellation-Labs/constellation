@@ -6,6 +6,7 @@ class AccountBalanceCSVReaderTest extends FreeSpec with Matchers {
 
   private val nonNormalizedCSV = getClass.getResource("/test.csv")
   private val normalizedCSV = getClass.getResource("/test_normalized.csv")
+  private val withDuplicationsCSV = getClass.getResource("/test_with_duplications.csv")
 
   "Loads normalized file" in {
     val values = new AccountBalanceCSVReader(nonNormalizedCSV.getPath, false).read()
@@ -29,5 +30,17 @@ class AccountBalanceCSVReaderTest extends FreeSpec with Matchers {
 
     values.last.accountHash shouldBe "efgh"
     values.last.balance shouldBe 187654321L
+  }
+
+  "Combines duplicated values" in {
+    val values = new AccountBalanceCSVReader(withDuplicationsCSV.getPath, false).read()
+
+    values.size shouldBe 2
+
+    values.head.accountHash shouldBe "abcd"
+    values.head.balance shouldBe 600000000L
+
+    values.last.accountHash shouldBe "efgh"
+    values.last.balance shouldBe 18700000000L
   }
 }

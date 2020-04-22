@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Sum balances for duplicated addresses in genesis data csv
 
 ## [v2.5.3] - 2020-04-22
 ### Added
