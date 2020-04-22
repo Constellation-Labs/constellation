@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Validator for many overflowing transactions
+- JVM metrics on alerting grafana
 
 ## [v2.5.2] - 2020-04-20
 ### Added
