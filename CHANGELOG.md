@@ -2,9 +2,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.5.3] - 2020-04-22
 ### Added
 - Config option to tell that allocated balances have been already normalized
-
 ### Fixed
 - Validator for many overflowing transactions
 - JVM metrics on alerting grafana
