@@ -40,7 +40,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           name: Release ${{ steps.tagName.outputs.tag }}
-          draft: false
+          draft: true
           prerelease: false
           body_path: CHANGELOG.md
           files: |
