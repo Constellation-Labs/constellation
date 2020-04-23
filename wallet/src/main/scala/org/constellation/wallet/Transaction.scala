@@ -24,8 +24,6 @@ case class Transaction(
 
   def hash: String = edge.observationEdge.hash
 
-  def getPrevTxHash = edge.signedObservationEdge.getHexEncoding
-
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
   def isValid = signatures.exists { hs ⇒
@@ -67,7 +65,7 @@ object Transaction {
 
     val lastTxRef =
       prevTx
-        .map(tx => LastTransactionRef(tx.getPrevTxHash, tx.lastTxRef.ordinal + 1))
+        .map(tx => LastTransactionRef(tx.hash, tx.lastTxRef.ordinal + 1))
         .getOrElse(LastTransactionRef.empty)
     val edge = TransactionEdge.createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
     Transaction(edge, lastTxRef, false, false)

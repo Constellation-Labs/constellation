@@ -49,7 +49,7 @@ class TransactionChainService[F[_]: Concurrent] {
       val ref = m.getOrElse(src, LastTransactionRef.empty)
       val edge = createTransactionEdge(src, dst, ref, amount, keyPair, fee, normalized)
       val tx = Transaction(edge, ref, isDummy)
-      (m + (tx.src.address -> LastTransactionRef(tx.getPrevTxHash, tx.ordinal)), tx)
+      (m + (tx.src.address -> LastTransactionRef(tx.hash, tx.ordinal)), tx)
     }
 
   def applySnapshotInfo(snapshotInfo: SnapshotInfo): F[Unit] =

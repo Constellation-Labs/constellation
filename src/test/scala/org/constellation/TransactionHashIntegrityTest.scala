@@ -8,7 +8,7 @@ import org.constellation.primitives.Schema.EdgeHashType.TransactionDataHash
 import org.constellation.primitives.Schema.{ObservationEdge, TypedEdgeHash}
 import org.constellation.primitives.Transaction
 import org.constellation.serializer.KryoSerializer
-import org.constellation.wallet.{Hashable, LastTransactionRef, KryoSerializer => WalletKryoSerializer, Transaction => WalletTransaction}
+import org.constellation.wallet.{Hashable, KryoSerializer => WalletKryoSerializer, Transaction => WalletTransaction}
 import org.scalatest.{FreeSpec, Matchers}
 
 class TransactionHashIntegrityTest extends FreeSpec with Matchers {
@@ -58,6 +58,17 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
     nodeHash1 shouldBe nodeHash2
   }
 
+  "transaction created by wallet should keep proper tx chain" in {
+    val src = "DAGaaa"
+    val dst = "DAGbbb"
+    val kp = Fixtures.tempKey
+
+    val firstTx = WalletTransaction.createTransaction(None, src, dst, 2L, kp, None)
+    val secondTx = WalletTransaction.createTransaction(Some(firstTx), src, dst, 2L, kp, None)
+
+    secondTx.lastTxRef.prevHash shouldBe firstTx.hash
+  }
+
   "Forged Transaction should be detected" in {
     val readTx = KeyStoreUtils
       .readFromFileStream[IO, Option[Transaction]](
@@ -69,11 +80,11 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
       .right
       .get
       .get
-      val dummyTypedEdgeHash = TypedEdgeHash("dummyTypedEdgeHash", TransactionDataHash)
-      val dummyOE = ObservationEdge(Seq(dummyTypedEdgeHash, dummyTypedEdgeHash), dummyTypedEdgeHash)
-      val forgedEdge = readTx.edge.copy(observationEdge = dummyOE)
-      val forgedTx = readTx.copy(edge = forgedEdge)
-      assert(!forgedTx.isValid)
+    val dummyTypedEdgeHash = TypedEdgeHash("dummyTypedEdgeHash", TransactionDataHash)
+    val dummyOE = ObservationEdge(Seq(dummyTypedEdgeHash, dummyTypedEdgeHash), dummyTypedEdgeHash)
+    val forgedEdge = readTx.edge.copy(observationEdge = dummyOE)
+    val forgedTx = readTx.copy(edge = forgedEdge)
+    assert(!forgedTx.isValid)
   }
 
   "transaction can be json encoded and decoded" in {

@@ -62,8 +62,6 @@ case class Transaction(
 
   def hash: String = edge.observationEdge.hash
 
-  def getPrevTxHash = edge.signedObservationEdge.getHexEncoding
-
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
   def withSignatureFrom(keyPair: KeyPair): Transaction = this.copy(
