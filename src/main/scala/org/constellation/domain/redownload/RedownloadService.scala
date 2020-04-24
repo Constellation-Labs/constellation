@@ -143,8 +143,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
       responses <- apiClients.traverse { client =>
         fetchCreatedSnapshots(client).map(client.id -> _)
       }
+      newProposals = responses.toMap
       proposals <- peersProposals.modify { m =>
-        val updated = m ++ responses.toMap
+        val updated = m.map { case (id, proposalsAtHeight) =>
+          val diff = newProposals.getOrElse(id, Map.empty) -- proposalsAtHeight.keySet
+
+          id -> (proposalsAtHeight ++ diff)
+        } ++ (newProposals -- m.keySet)
+
         val ignored = updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a))))
         (ignored, ignored)
       }
