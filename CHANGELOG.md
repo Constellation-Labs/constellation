@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Fixed
 - Make stored node proposals immutable
+- Check for highest proposal when leaving #1096
 
 ## [v2.5.4] - 2020-04-22
 ### Added
