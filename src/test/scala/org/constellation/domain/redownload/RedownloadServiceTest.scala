@@ -1,20 +1,22 @@
 package org.constellation.domain.redownload
 
 import better.files.File
-import cats.data.EitherT
+import cats.data.{EitherT, Kleisli, NonEmptyList}
 import cats.effect.{ContextShift, IO, Timer}
 import cats.implicits._
-import org.constellation.ConstellationExecutionContext
+import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
-import org.constellation.domain.redownload.RedownloadService.SnapshotsAtHeight
+import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.p2p.Cluster
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
+import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.storage.SnapshotService
@@ -323,6 +325,80 @@ class RedownloadServiceTest
   }
 
   "fetchAndUpdatePeersProposals" - {
+    val peer1 = Id("p1")
+    val peer2 = Id("p2")
+    val peer1Data = PeerData(
+      PeerMetadata("host1", 9999, peer1, resourceInfo = mock[ResourceInfo]),
+      NonEmptyList(mock[MajorityHeight], Nil)
+    )
+    val peer2Data = PeerData(
+      PeerMetadata("host2", 9999, peer2, resourceInfo = mock[ResourceInfo]),
+      NonEmptyList(mock[MajorityHeight], Nil)
+    )
+    val initialPeersProposals = Map(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty)))
+    val peer1Proposals = Map(1L -> SnapshotProposal("hash2p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty))
+    val peer2Proposals = Map(1L -> SnapshotProposal("hash1p2", SortedMap.empty), 2L -> SnapshotProposal("hash2p2", SortedMap.empty))
+
+    "for empty proposals Map" - {
+      "should not override previously stored proposals" in {
+        // preparing mocks and initial state
+        redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
+        cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
+        apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+          IO.pure(Map.empty)
+        }
+
+        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        val expected = initialPeersProposals
+
+        result shouldEqual expected
+      }
+    }
+
+    "for non empty proposals Map" - {
+      "should add proposals when there are no proposals stored yet" in {
+        cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
+        apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+          IO.pure(peer1Proposals)
+        }
+
+        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        val expected = Map(peer1 -> peer1Proposals)
+
+        result shouldEqual expected
+      }
+
+      "should not override peers proposals at already specified heights" in {
+        redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
+        cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
+        apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+          IO.pure(peer1Proposals)
+        }
+
+        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        val expected = Map(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty)))
+
+        result shouldEqual expected
+      }
+
+      "should add proposals for new node" in {
+        redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
+        cluster.getPeerInfo shouldReturnF Map(peer2 -> peer2Data)
+        apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+          IO.pure(peer2Proposals)
+        }
+
+        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        val expected = initialPeersProposals ++ Map(peer2 -> peer2Proposals)
+
+        result shouldEqual expected
+      }
+    }
+
     /*
     "should fetch created proposals of all the peers" in {
       val peerInfo = Map(Id("node1") -> mock[PeerData], Id("node2") -> mock[PeerData])
@@ -380,11 +456,6 @@ class RedownloadServiceTest
       )
     }
      */
-    /**
-      * TODO: Consider as a feature.
-      * If proposals are immutable, it can be a sanity check that nodes are not changing the proposals.
-      */
-    "should not override previously stored proposals" ignore {}
     /*
     "should not fail if at least one peer did not respond" in {
       val peer1 = mock[PeerData]
