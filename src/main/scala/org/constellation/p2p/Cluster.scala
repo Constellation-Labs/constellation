@@ -397,7 +397,7 @@ class Cluster[F[_]](
     logThread(
       {
         implicit val snapOrder: Order[SnapshotProposalsAtHeight] =
-          Order.by[SnapshotProposalsAtHeight, List[Long]](a => a.keySet.toList)
+          Order.by[SnapshotProposalsAtHeight, List[Long]](a => a.keySet.toList.sorted)
 
         val leavingFlow = for {
           p <- OptionT.liftF(peers.get)
