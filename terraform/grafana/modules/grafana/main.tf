@@ -11,9 +11,8 @@ resource "aws_instance" "node" {
   user_data = file("user_data.sh")
 
   tags = {
-    Name = "grafana-mainnet"
+    Name = "grafana"
     Env = var.env
-    Cluster = "mainnet"
     Workspace = var.workspace
   }
 

@@ -8,6 +8,11 @@ variable "instance_type" {
   default = "t3.xlarge"
 }
 
+variable "env" {
+  type = string
+  default = "dev"
+}
+
 variable "grafana_disk_size" {
   type = number
   default = 50
