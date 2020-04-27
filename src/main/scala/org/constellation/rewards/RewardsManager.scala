@@ -134,11 +134,10 @@ object RewardsManager {
   val epochThree = 1314000 // = 3 * epochOne (7.5 years)
   val epochFour = 1752000 // = 4 * epochOne (10 years)
   val rewardsPool = epochFour
-
   /*
   10,000 units per month.
    */
-  val epochOneRewards = 0.68493150684 // = 10,000 / 14,600
+  val epochOneRewards = 4870.62404795 // = 28,444,444.44 per month @ ~45 seconds per snapshot
   val epochTwoRewards = 0.34246575342 // = epochOneRewards / 2
   val epochThreeRewards = 0.17123287671 // = epochTwoRewards / 2
   val epochFourRewards = 0.08561643835 // = epochThreeRewards / 2
