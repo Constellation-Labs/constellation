@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+
+red='\033[1;31m'
+grn='\033[1;32m'
+yel='\033[1;33m'
+blu='\033[1;36m'
+pnk='\033[1;35m'
+clr='\033[0m'
+
+load_balancer="http://lb.constellationnetwork.io:9000"
+block_explorer="https://xju69fets2.execute-api.us-west-1.amazonaws.com/cl-block-explorer-mainnet"
+
+stats() {
+    getClusterInfo
+
+    echo -e ""
+    echo -e "${blu}Total:   $(echo $output | jq '. | length')${clr}"
+    echo -e "***"
+    echo -e "${grn}Ready:   $(echo $output | jq '[ .[] | select(.status=="Ready") ] | length')${clr}"
+    echo -e "${red}Offline: $(echo $output | jq '[ .[] | select(.status=="Offline") ] | length')${clr}"
+    echo -e ""
+}
+
+info() {
+  getClusterInfo
+
+  echo $output | jq '[ .[] | { "ip": "\(.ip.host)", "port": "\(.ip.port)", "status":"\(.status)", "id": "\(.id.hex)", "metrics":"http://\(.ip.host):9000/metrics"} ]'
+}
+
+detailedStats() {
+  getClusterInfo
+
+  echo "$output" | jq -r '.[] | "\(.ip.host):\(.ip.port - 1)"' |
+  while IFS=$"\n" read -r ip; do
+      nodeOutput=$(curl -sS $ip/metrics)
+      nodeState=$(echo $nodeOutput | jq -r '. | .metrics.nodeState')
+      majorityHeight=$(echo $nodeOutput | jq -r '. | .metrics.redownload_lastMajorityStateHeight')
+      lastSnapshotHeight=$(echo $nodeOutput | jq -r '. | .metrics.lastSnapshotHeight')
+      minTipHeight=$(echo $nodeOutput | jq -r '. | .metrics.minTipHeight')
+      awaitingForAcceptance=$(echo $nodeOutput | jq -r '. | .metrics.awaitingForAcceptance')
+      redownloads=$(echo $nodeOutput | jq -r '. | .metrics.reDownloadFinished_total')
+
+      echo -e ""
+      echo -e ""
+      echo -e "${grn}$ip${clr}"
+      if [ $nodeState == "Offline" ]; then
+        echo -e "${yel}State: ${red}$nodeState${clr}"
+      else
+        echo -e "${yel}State: ${grn}$nodeState${clr}"
+
+        echo -e ""
+        echo -e "Majority height:\t${grn}$majorityHeight${clr}"
+        echo -e "Last snapshot height:\t${grn}$lastSnapshotHeight${clr}"
+        echo -e ""
+        echo -e "Min tip height:\t\t${blu}$minTipHeight${clr}"
+        echo -e "Awaiting blocks:\t${blu}$awaitingForAcceptance${clr}"
+        echo -e ""
+        echo -e "Redownloads:\t${blu}$redownloads${clr}"
+      fi
+  done
+}
+
+majorityHeight() {
+  getClusterInfo
+
+  echo "$output" | jq -r '.[] | "\(.ip.host):\(.ip.port - 1)"' |
+  while IFS=$"\n" read -r ip; do
+      height=$(curl -sS $ip/metrics | jq -r '. | .metrics.redownload_lastMajorityStateHeight')
+      echo -e "${grn}$ip${clr}:\t${blu}$height${clr}"
+  done
+}
+
+redownloads() {
+  getClusterInfo
+
+  echo "$output" | jq -r '.[] | "\(.ip.host):\(.ip.port - 1)"' |
+  while IFS=$"\n" read -r ip; do
+      count=$(curl -sS $ip/metrics | jq -r '. | .metrics.reDownloadFinished_total')
+      echo -e "${grn}$ip${clr}:\t${blu}$count${clr}"
+  done
+}
+
+getClusterInfo() {
+  output=$(curl -sS -X GET $load_balancer/cluster/info -q)
+}
+
+
+############
+
+usage=$(cat <<-EOF
+Usage: $(basename $0) <command> [args]
+
+Common commands:
+    stats \t\t Check statistics from load balancer
+    info \t\t Check details from load balancer
+    majorityHeight \t Check majority height on all cluster nodes
+    redownloads \t Check redownloads count on all cluster nodes
+EOF)
+
+if [[ $1 == "" ]]; then
+  echo -e "$usage"
+  exit 1
+fi
+
+case "$1" in
+  stats)
+    stats
+    ;;
+  info)
+    info
+    ;;
+  majorityHeight)
+    majorityHeight
+    ;;
+  redownloads)
+    redownloads
+    ;;
+  detailedStats)
+    detailedStats
+    ;;
+  *)
+    echo -e "$usage"
+    exit 1
+esac
+
+exit 0
