@@ -3,6 +3,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.5.7] - 2020-04-28
+- Rewards amount
+
 ## [v2.5.6] - 2020-04-28
 ### Fixed
 - Rewards distribution
