@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 ## [v2.5.6] - 2020-04-28
 ### Fixed
 - Rewards distribution
+- Observation and Transaction batch endpoints
 
 ## [v2.5.5] - 2020-04-27
 ### Fixed

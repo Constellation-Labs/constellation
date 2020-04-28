@@ -18,7 +18,7 @@ class ObservationClientInterpreter[F[_]: Concurrent: ContextShift](client: Clien
     PeerResponse[F, Option[Observation]](s"observation/$hash")(client)
 
   def getBatch(hashes: List[String]): PeerResponse[F, List[(String, Option[Observation])]] =
-    PeerResponse(s"batch/observation", client, POST) { (req, c) =>
+    PeerResponse(s"batch/observations", client, POST) { (req, c) =>
       c.expect[List[(String, Option[Observation])]](req.withEntity(hashes))
     }
 

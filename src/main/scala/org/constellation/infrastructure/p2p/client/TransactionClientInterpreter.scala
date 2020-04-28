@@ -18,7 +18,7 @@ class TransactionClientInterpreter[F[_]: Concurrent: ContextShift](client: Clien
     PeerResponse(s"transaction/$hash")(client)
 
   def getBatch(hashes: List[String]): PeerResponse[F, List[(String, Option[TransactionCacheData])]] =
-    PeerResponse("transaction", client, POST) { (req, c) =>
+    PeerResponse("batch/transactions", client, POST) { (req, c) =>
       c.expect[List[(String, Option[TransactionCacheData])]](req.withEntity(hashes))
     }
 }
