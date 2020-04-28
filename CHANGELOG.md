@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.5.6] - 2020-04-28
+### Fixed
+- Rewards distribution
+
 ## [v2.5.5] - 2020-04-27
 ### Fixed
 - Make stored node proposals immutable
