@@ -96,6 +96,9 @@ object ConstellationNode extends IOApp {
 
       nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
 
+      _ <- Resource.liftF(IO { File(s"tmp/${nodeConfig.primaryKeyPair.toId.medium}/peers").nonEmpty }
+        .ifM(IO.raiseError(new Throwable("Cannot start, tmp not cleared")), IO.unit))
+
       requestMethodClassifier = (r: Request[IO]) => Some(r.method.toString.toLowerCase)
 
       registry <- Prometheus.collectorRegistry[IO]
