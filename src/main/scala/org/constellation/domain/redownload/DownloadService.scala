@@ -36,7 +36,7 @@ class DownloadService[F[_]](
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(isDownload = true)
       majorityState <- redownloadService.lastMajorityState.get
       _ <- if (majorityState.isEmpty)
-        fetchAndPersistBlocks().handleErrorWith(e => logger.error(s"fetchAndPersistBlocks error: ${e}"))
+        fetchAndPersistBlocks()
       else F.unit
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       _ <- metrics.incrementMetricAsync("downloadFinished_total")
@@ -75,15 +75,7 @@ class DownloadService[F[_]](
           blocksMap = blocksToAccept.map(b => b.checkpointBlock.soeHash -> b).toMap
 
           blocksToAcceptHashes = blocksToAccept.map(_.checkpointBlock.soeHash)
-          _ <- logger.debug("Before sorting hashes: ")
-          _ <- blocksToAcceptHashes.traverse(h => logger.debug(s"Before sorting: $h"))
           sortedHashes = TopologicalSort.sortBlocksTopologically(blocksToAccept)
-
-          _ <- logger.debug("After sorting hashes: ")
-          _ <- sortedHashes.traverse(h => logger.debug(s"After sorting: $h"))
-
-          _ <- logger.debug("Sorting diff hashes: ")
-          _ <- blocksToAcceptHashes.diff(sortedHashes).traverse(h => logger.debug(s"Sorting diff: $h"))
 
           _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)

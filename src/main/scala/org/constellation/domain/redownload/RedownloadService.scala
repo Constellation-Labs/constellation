@@ -477,9 +477,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- updateAcceptedSnapshots(plan)
 
       _ <- EitherT.liftF(logger.debug("Fetching and persisting blocks above majority."))
-      _ <- fetchAndPersistBlocksAboveMajority(majorityState).handleErrorWith(
-        e => logger.error(s"fetchAndPersistBlocksAboveMajority error: ${e}").attemptT
-      )
+      _ <- fetchAndPersistBlocksAboveMajority(majorityState)
 
       _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
       _ <- acceptCheckpointBlocks()
