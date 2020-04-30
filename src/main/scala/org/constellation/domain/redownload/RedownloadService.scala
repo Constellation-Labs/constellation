@@ -145,10 +145,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }
       newProposals = responses.toMap
       proposals <- peersProposals.modify { m =>
-        val updated = m.map { case (id, proposalsAtHeight) =>
-          val diff = newProposals.getOrElse(id, Map.empty) -- proposalsAtHeight.keySet
+        val updated = m.map {
+          case (id, proposalsAtHeight) =>
+            val diff = newProposals.getOrElse(id, Map.empty) -- proposalsAtHeight.keySet
 
-          id -> (proposalsAtHeight ++ diff)
+            id -> (proposalsAtHeight ++ diff)
         } ++ (newProposals -- m.keySet)
 
         val ignored = updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a))))
@@ -282,6 +283,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
             .sortBy(_.height)
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
+
+          _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
+            val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
+            (updated, ())
+          }
 
           _ <- blocksToAccept.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService

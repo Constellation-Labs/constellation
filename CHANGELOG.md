@@ -2,8 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Missing parents will not be resolved if present locally and waiting for acceptance
 
 ## [v2.5.7] - 2020-04-28
+### Fixed
 - Rewards amount
 
 ## [v2.5.6] - 2020-04-28
