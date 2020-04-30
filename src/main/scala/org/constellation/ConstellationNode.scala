@@ -395,7 +395,8 @@ class ConstellationNode(
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   }
 
-  dao.cluster.initiateRejoin().unsafeRunSync
+  // We're disabling auto rejoin after node start.
+  // dao.cluster.initiateRejoin().unsafeRunSync
 
 //  Keeping disabled for now -- going to only use midDb for the time being.
 //  private val txMigrator = new TransactionPeriodicMigration

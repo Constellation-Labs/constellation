@@ -2,9 +2,6 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-### Fixed
-- Don't broadcast finished block to offline peers
-- Can start only with no tmp directory
 
 ## [v2.5.7] - 2020-04-28
 - Rewards amount
