@@ -68,8 +68,10 @@ class DownloadService[F[_]](
             .map(KryoSerializer.deserializeCast[SnapshotInfo])
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
+
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
+
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
           _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>

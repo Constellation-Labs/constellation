@@ -275,9 +275,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
           snapshotInfoFromMemPool <- fetchSnapshotInfo(client)
             .map(KryoSerializer.deserializeCast[SnapshotInfo])
+          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet -- majoritySnapshotInfo.acceptedCBSinceSnapshotCache.toSet
+          awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs -- majoritySnapshotInfo.awaitingCbs
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
-          blocksToAccept = blocksFromSnapshots
+          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
