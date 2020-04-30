@@ -71,20 +71,13 @@ class DownloadService[F[_]](
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
-          // I need to get blocks back ;/ Not sure if it is efficient enough
-          blocksMap = blocksToAccept.map(b => b.checkpointBlock.soeHash -> b).toMap
-
-          blocksToAcceptHashes = blocksToAccept.map(_.checkpointBlock.soeHash)
-          sortedHashes = TopologicalSort.sortBlocksTopologically(blocksToAccept)
 
           _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
             (updated, ())
           }
 
-          toAccept = sortedHashes.filter(blocksMap.contains).map(blocksMap(_))
-
-          _ <- toAccept.traverse { b =>
+          _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
               .handleErrorWith(
