@@ -71,6 +71,11 @@ class DownloadService[F[_]](
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
             .sortBy(_.height)
 
+          _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
+            val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
+            (updated, ())
+          }
+
           _ <- blocksToAccept.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
