@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Disabled auto rejoin after node restart
 
 ## [v2.5.7] - 2020-04-28
 - Rewards amount
