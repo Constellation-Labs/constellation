@@ -3,7 +3,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.5.8] - 2020-05-01
+### Fixed
+- Missing parents will not be resolved if present locally and waiting for acceptance
+- Don't broadcast finished blocks to offline peers
+- Sort blocks topologically after redownload
+- Remove unnecessary blocks from acceptance
+- Remove unnecessary error from peer discovery 
+- Disabled auto rejoin after node restart
+- Can start only with no tmp directory
+
 ## [v2.5.7] - 2020-04-28
+### Fixed
 - Rewards amount
 
 ## [v2.5.6] - 2020-04-28
