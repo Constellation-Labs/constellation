@@ -277,9 +277,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
             .map(KryoSerializer.deserializeCast[SnapshotInfo])
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
-          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
-          awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
+          blocksToAccept = blocksFromSnapshots
 
           // I need to get blocks back ;/ Not sure if it is efficient enough
           blocksMap = blocksToAccept.map(b => b.checkpointBlock.soeHash -> b).toMap

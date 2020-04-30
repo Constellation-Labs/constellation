@@ -45,7 +45,7 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
   implicit val logger = Slf4jLogger.getLogger[F]
 
   def clearStaleTips(min: Long): F[Unit] =
-    tipsRef.get.map(tips => tips.filter(_._2.height.min < min)).flatMap { toRemove =>
+    tipsRef.get.map(tips => tips.filter(_._2.height.min <= min)).flatMap { toRemove =>
       Logger[F]
         .debug(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
         .flatMap(_ => tipsRef.modify(curr => (curr -- toRemove.keySet, ())))
