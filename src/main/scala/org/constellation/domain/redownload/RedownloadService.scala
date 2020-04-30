@@ -7,7 +7,7 @@ import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
-import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
 import org.constellation.domain.cloud.HeightHashFileStorage
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
@@ -279,8 +279,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
-            .sortBy(_.height)
+          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
@@ -289,7 +288,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
             (updated, ())
           }
 
-          _ <- blocksToAccept.traverse { b =>
+          _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
               .handleErrorWith(
