@@ -52,8 +52,11 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
         _ <- apiClient.sign.register(prr).run(peer)
       } yield ()
 
-      (join >> F.start(C.shift >> joinNextPeer).void)
-        .handleErrorWith(err => logger.error(s"Error in joining next peer: ${err.getMessage}"))
+      if (nextPeer.isDefined) {
+        (join >> F.start(C.shift >> joinNextPeer).void).handleErrorWith { err =>
+          logger.error(s"Error in joining next peer: ${err.getMessage}")
+        }
+      } else F.unit
     }
 
   def hasNextPeer: F[Boolean] =
