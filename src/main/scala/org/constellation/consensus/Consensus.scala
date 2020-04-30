@@ -18,7 +18,7 @@ import org.constellation.consensus.ConsensusManager.{
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, TypedEdgeHash}
+import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, NodeState, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.primitives._
@@ -332,7 +332,12 @@ class Consensus[F[_]: Concurrent: ContextShift](
     for {
       nonFacilitators <- LiftIO[F]
         .liftIO(dao.peerInfo)
-        .map(info => info.values.toList.filterNot(pd => allFacilitators.contains(pd.peerMetadata.id)))
+        .map(
+          info =>
+            info.values.toList
+              .filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
+              .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
+        )
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash}"
       )
