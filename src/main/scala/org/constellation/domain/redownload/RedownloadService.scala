@@ -279,7 +279,21 @@ class RedownloadService[F[_]: NonEmptyParallel](
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
+          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
+
+          // I need to get blocks back ;/ Not sure if it is efficient enough
+          blocksMap = blocksToAccept.map(b => b.checkpointBlock.soeHash -> b).toMap
+
+          blocksToAcceptHashes = blocksToAccept.map(_.checkpointBlock.soeHash)
+          _ <- logger.debug("Before sorting hashes: ")
+          _ <- blocksToAcceptHashes.traverse(h => logger.debug(s"Before sorting: $h"))
+          sortedHashes = TopologicalSort.sortBlocksTopologically(blocksToAccept)
+
+          _ <- logger.debug("After sorting hashes: ")
+          _ <- sortedHashes.traverse(h => logger.debug(s"After sorting: $h"))
+
+          _ <- logger.debug("Sorting diff hashes: ")
+          _ <- blocksToAcceptHashes.diff(sortedHashes).traverse(h => logger.debug(s"Sorting diff: $h"))
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
@@ -288,7 +302,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
             (updated, ())
           }
 
-          _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).traverse { b =>
+          toAccept = sortedHashes.filter(blocksMap.contains).map(blocksMap(_))
+
+          _ <- toAccept.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
               .handleErrorWith(
@@ -463,7 +479,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- updateAcceptedSnapshots(plan)
 
       _ <- EitherT.liftF(logger.debug("Fetching and persisting blocks above majority."))
-      _ <- fetchAndPersistBlocksAboveMajority(majorityState)
+      _ <- fetchAndPersistBlocksAboveMajority(majorityState).handleErrorWith(
+        e => logger.error(s"fetchAndPersistBlocksAboveMajority error: ${e}").attemptT
+      )
 
       _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
       _ <- acceptCheckpointBlocks()
