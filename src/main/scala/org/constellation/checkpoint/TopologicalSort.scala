@@ -6,9 +6,7 @@ import scala.annotation.tailrec
 
 object TopologicalSort {
 
-  def sortBlocksTopologically(blocks: List[CheckpointCache]): List[CheckpointCache] = {
-    // I need to get blocks back ;/ Not sure if it is efficient enough
-    val blocksMap = blocks.map(b => b.checkpointBlock.soeHash -> b).toMap
+  def sortBlocksTopologically(blocks: Seq[CheckpointCache]): List[String] = {
 
     val edges = blocks.flatMap { b =>
       val dst = b.checkpointBlock.soeHash
@@ -17,7 +15,7 @@ object TopologicalSort {
 
     val sorted = TopologicalSort.sortTopologically(edges)
 
-    sorted.map(blocksMap(_)).toList
+    sorted.toList
   }
 
   def sortTopologically[A](edges: Traversable[(A, A)]): Seq[A] = {

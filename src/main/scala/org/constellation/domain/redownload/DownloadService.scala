@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.infrastructure.p2p.ClientInterpreter
@@ -35,7 +35,9 @@ class DownloadService[F[_]](
       _ <- redownloadService.fetchAndUpdatePeersProposals()
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(isDownload = true)
       majorityState <- redownloadService.lastMajorityState.get
-      _ <- if (majorityState.isEmpty) fetchAndPersistBlocks() else F.unit
+      _ <- if (majorityState.isEmpty)
+        fetchAndPersistBlocks().handleErrorWith(e => logger.error(s"fetchAndPersistBlocks error: ${e}"))
+      else F.unit
       _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       _ <- metrics.incrementMetricAsync("downloadFinished_total")
     } yield ()
@@ -68,19 +70,33 @@ class DownloadService[F[_]](
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
-            .sortBy(_.height)
+          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
+          // I need to get blocks back ;/ Not sure if it is efficient enough
+          blocksMap = blocksToAccept.map(b => b.checkpointBlock.soeHash -> b).toMap
+
+          blocksToAcceptHashes = blocksToAccept.map(_.checkpointBlock.soeHash)
+          _ <- logger.debug("Before sorting hashes: ")
+          _ <- blocksToAcceptHashes.traverse(h => logger.debug(s"Before sorting: $h"))
+          sortedHashes = TopologicalSort.sortBlocksTopologically(blocksToAccept)
+
+          _ <- logger.debug("After sorting hashes: ")
+          _ <- sortedHashes.traverse(h => logger.debug(s"After sorting: $h"))
+
+          _ <- logger.debug("Sorting diff hashes: ")
+          _ <- blocksToAcceptHashes.diff(sortedHashes).traverse(h => logger.debug(s"Sorting diff: $h"))
 
           _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
             (updated, ())
           }
 
-          _ <- blocksToAccept.traverse { b =>
+          toAccept = sortedHashes.filter(blocksMap.contains).map(blocksMap(_))
+
+          _ <- toAccept.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
               .handleErrorWith(
-                error => logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+                error => logger.warn(s"Error during blocks acceptance after download: ${error.getMessage}") >> F.unit
               )
           }
         } yield ()
