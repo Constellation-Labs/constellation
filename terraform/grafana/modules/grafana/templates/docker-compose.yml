@@ -25,3 +25,4 @@ services:
       - ./grafana-dashboard/grafana/provisioning/:/etc/grafana/provisioning/
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_SECURITY_ALLOW_EMBEDDING=true
