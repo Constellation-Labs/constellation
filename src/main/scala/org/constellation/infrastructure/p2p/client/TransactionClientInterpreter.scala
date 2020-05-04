@@ -6,6 +6,7 @@ import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.http4s.client.Client
 import io.circe.generic.auto._
 import org.constellation.domain.p2p.client.TransactionClientAlgebra
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.TransactionCacheData
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
@@ -21,6 +22,9 @@ class TransactionClientInterpreter[F[_]: Concurrent: ContextShift](client: Clien
     PeerResponse("batch/transactions", client, POST) { (req, c) =>
       c.expect[List[(String, Option[TransactionCacheData])]](req.withEntity(hashes))
     }
+
+  def getLastTransactionRef(address: String): PeerResponse[F, LastTransactionRef] =
+    PeerResponse(s"transaction/last-ref/$address")(client)
 }
 
 object TransactionClientInterpreter {
