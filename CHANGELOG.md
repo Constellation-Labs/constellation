@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Endpoint returning last transaction reference for a given address
 
 ## [v2.6.0] - 2020-05-08
 ### Changed
