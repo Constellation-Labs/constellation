@@ -95,6 +95,11 @@ lazy val walletSharedDependencies = Seq(
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
 
+lazy val playgroundDependencies = Seq(
+  "io.higherkindness" %% "droste-core" % "0.8.0"
+) ++
+  sharedDependencies
+
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "org.scala-lang.modules" %% "scala-async" % "0.10.0",
@@ -224,4 +229,9 @@ lazy val schema = (project in file("schema"))
     buildInfoPackage := "org.constellation.schema",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     libraryDependencies ++= schemaSharedDependencies
+  )
+
+lazy val playground = (project in file("playground"))
+  .settings(
+    libraryDependencies ++= playgroundDependencies ++ testDependencies
   )
