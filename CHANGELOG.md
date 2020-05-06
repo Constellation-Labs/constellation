@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Rewards metrics
+
+### Changed
+- Rewards adjusted to 4 snapshots per minute
 
 ## [v2.6.0] - 2020-05-08
 ### Changed
