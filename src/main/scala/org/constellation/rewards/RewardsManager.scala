@@ -7,9 +7,12 @@ import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Snapshot
 import org.constellation.domain.observation.Observation
-import org.constellation.p2p.PeerNotification
+import org.constellation.domain.redownload.MajorityStateChooser
+import org.constellation.domain.redownload.RedownloadService.PeersProposals
+import org.constellation.p2p.{Cluster, MajorityHeight, PeerData, PeerNotification}
 import org.constellation.primitives.Schema.CheckpointEdge
 import org.constellation.primitives.{ChannelMessage, Schema, Transaction}
+import org.constellation.schema.Id
 import org.constellation.storage.AddressService
 import org.constellation.trust.TrustEdge
 import org.constellation.util.Metrics
@@ -25,7 +28,8 @@ class RewardsManager[F[_]: Concurrent](
   checkpointService: CheckpointService[F],
   addressService: AddressService[F],
   selfAddress: String,
-  metrics: Metrics
+  metrics: Metrics,
+  cluster: Cluster[F]
 ) {
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -63,22 +67,24 @@ class RewardsManager[F[_]: Concurrent](
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
       trustMap <- eigenTrust.getTrustForAddresses
 
+      peers <- cluster.getPeerInfo
+
+      nodesWithProposalsOnly = peers.filter {
+        case (_, peerData) => MajorityHeight.isHeightBetween(rewardSnapshot.height)(peerData.majorityHeight)
+      }.keySet.map(_.address)
+
       weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height) >>> weightByStardust
-      contributions = calculateContributions(trustMap.keySet.toSeq)
+      contributions = calculateContributions(nodesWithProposalsOnly)
       distribution = weightContributions(contributions)
       normalizedDistribution = normalize(distribution)
 
-      _ <- logger.debug(s"Distribution:")
+      _ <- logger.debug(s"Distribution (${rewardSnapshot.hash}):")
       _ <- normalizedDistribution.toList.traverse {
         case (address, reward) => logger.debug(s"Address: ${address}, Reward: ${reward}")
       }
 
       rewardBalances <- updateAddressBalances(normalizedDistribution)
       _ <- lastRewardedHeight.modify(_ => (rewardSnapshot.height, ()))
-
-      _ <- logger.debug(
-        s"Rewarding by ${rewardSnapshot.hash} succeeded."
-      )
 
       _ <- metrics.updateMetricAsync("rewards_selfBalanceAfterReward", rewardBalances.getOrElse(selfAddress, 0L))
       _ <- metrics.updateMetricAsync(
@@ -105,6 +111,9 @@ class RewardsManager[F[_]: Concurrent](
       _ <- metrics.incrementMetricAsync("rewards_snapshotCount")
       _ <- metrics.updateMetricAsync("rewards_lastRewardedHeight", rewardSnapshot.height)
 
+      _ <- logger.debug(
+        s"Rewarding by ${rewardSnapshot.hash} succeeded."
+      )
     } yield ()
 
   private def normalize(contributions: Map[String, Double]): Map[String, Long] =
@@ -122,8 +131,8 @@ class RewardsManager[F[_]: Concurrent](
     trustEntropyMap: Map[String, Double]
   )(contributions: Map[String, Double]): Map[String, Double] = {
     val weightedEntropy = contributions.transform {
-      case (id, partitionSize) =>
-        partitionSize * (1 - trustEntropyMap(id)) // Normalize wrt total partition space
+      case (address, partitionSize) =>
+        partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
     }
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
@@ -132,10 +141,11 @@ class RewardsManager[F[_]: Concurrent](
   /**
     * Calculates non-weighted contributions so each address takes equal part which is calculated
     * as 1/totalSpace
+    *
     * @param ids
     * @return
     */
-  private def calculateContributions(ids: Seq[String]): Map[String, Double] = {
+  private def calculateContributions(ids: Set[String]): Map[String, Double] = {
     val totalSpace = ids.size
     val contribution = 1.0 / totalSpace
     ids.map { id =>
