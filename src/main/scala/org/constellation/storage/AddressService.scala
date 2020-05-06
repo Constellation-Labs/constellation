@@ -39,21 +39,23 @@ class AddressService[F[_]: Concurrent]() {
         )
     }
 
-  def transferRewards(rewardsDistribution: Map[String, Long]): F[List[AddressCacheData]] =
+  def transferRewards(rewardsDistribution: Map[String, Long]): F[Map[String, Long]] =
     locks.acquire(rewardsDistribution.keys.toList) {
       rewardsDistribution.toList.traverse {
         case (address, reward) =>
-          memPool.update(
-            address,
-            a =>
-              a.copy(
-                balance = a.balance + reward,
-                balanceByLatestSnapshot = a.balanceByLatestSnapshot + reward,
-                rewardsBalance = a.rewardsBalance + reward
-              ),
-            AddressCacheData(reward, reward)
-          )
-      }
+          memPool
+            .update(
+              address,
+              a =>
+                a.copy(
+                  balance = a.balance + reward,
+                  balanceByLatestSnapshot = a.balanceByLatestSnapshot + reward,
+                  rewardsBalance = a.rewardsBalance + reward
+                ),
+              AddressCacheData(reward, reward)
+            )
+            .map(a => address -> a.rewardsBalance)
+      }.map(_.toMap)
     }
 
   def transferSnapshot(tx: Transaction): F[AddressCacheData] =
