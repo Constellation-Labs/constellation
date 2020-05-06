@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Added
 - Endpoint returning last transaction reference for a given address
+### Fixed
+- Reward only these nodes who sent the proposal for rewarded height
 
 ## [v2.5.8] - 2020-05-01
 ### Fixed

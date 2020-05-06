@@ -7,6 +7,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Snapshot
 import org.constellation.domain.observation.Observation
+import org.constellation.domain.redownload.RedownloadService.PeersProposals
 import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema.CheckpointEdge
 import org.constellation.primitives.{ChannelMessage, Schema, Transaction}
@@ -34,14 +35,14 @@ class RewardsManager[F[_]: Concurrent](
 
   def clearLastRewardedHeight(): F[Unit] = setLastRewardedHeight(-1)
 
-  def attemptReward(snapshot: Snapshot, height: Long): F[Unit] =
+  def attemptReward(snapshot: Snapshot, height: Long, proposals: PeersProposals): F[Unit] =
     createRewardSnapshot(snapshot, height)
-      .flatMap(updateBySnapshot)
+      .flatMap(updateBySnapshot(_, proposals))
 
   private[rewards] def createRewardSnapshot(snapshot: Snapshot, height: Long): F[RewardSnapshot] =
     observationsFromSnapshot(snapshot).map(RewardSnapshot(snapshot.hash, height, _))
 
-  private[rewards] def updateBySnapshot(rewardSnapshot: RewardSnapshot): F[Unit] =
+  private[rewards] def updateBySnapshot(rewardSnapshot: RewardSnapshot, proposals: PeersProposals): F[Unit] =
     for {
       _ <- logger.debug(
         s"[Rewards] Updating rewards by snapshot ${rewardSnapshot.hash} at height ${rewardSnapshot.height}"
@@ -60,8 +61,12 @@ class RewardsManager[F[_]: Concurrent](
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
       trustMap <- eigenTrust.getTrustForAddresses
 
+      nodesWithProposalsOnly = proposals.filter { case (_, proposals) => proposals.contains(rewardSnapshot.height) }.map {
+        case (id, _) => id.address
+      }.toSet
+
       weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height) >>> weightByStardust
-      contributions = calculateContributions(trustMap.keySet.toSeq)
+      contributions = calculateContributions(nodesWithProposalsOnly)
       distribution = weightContributions(contributions)
       normalizedDistribution = normalize(distribution)
       _ <- logger.debug(s"[Rewards] Distribution:")
@@ -92,8 +97,8 @@ class RewardsManager[F[_]: Concurrent](
     trustEntropyMap: Map[String, Double]
   )(contributions: Map[String, Double]): Map[String, Double] = {
     val weightedEntropy = contributions.transform {
-      case (id, partitionSize) =>
-        partitionSize * (1 - trustEntropyMap(id)) // Normalize wrt total partition space
+      case (address, partitionSize) =>
+        partitionSize * (1 - trustEntropyMap(address)) // Normalize wrt total partition space
     }
     val totalEntropy = weightedEntropy.values.sum
     weightedEntropy.mapValues(_ / totalEntropy) // Scale by entropy magnitude
@@ -102,10 +107,11 @@ class RewardsManager[F[_]: Concurrent](
   /**
     * Calculates non-weighted contributions so each address takes equal part which is calculated
     * as 1/totalSpace
+    *
     * @param ids
     * @return
     */
-  private def calculateContributions(ids: Seq[String]): Map[String, Double] = {
+  private def calculateContributions(ids: Set[String]): Map[String, Double] = {
     val totalSpace = ids.size
     val contribution = 1.0 / totalSpace
     ids.map { id =>
