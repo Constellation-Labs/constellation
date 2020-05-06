@@ -12,6 +12,7 @@ import org.constellation.primitives.Schema.CheckpointEdge
 import org.constellation.primitives.{ChannelMessage, Schema, Transaction}
 import org.constellation.storage.AddressService
 import org.constellation.trust.TrustEdge
+import org.constellation.util.Metrics
 
 case class RewardSnapshot(
   hash: String,
@@ -22,7 +23,9 @@ case class RewardSnapshot(
 class RewardsManager[F[_]: Concurrent](
   eigenTrust: EigenTrust[F],
   checkpointService: CheckpointService[F],
-  addressService: AddressService[F]
+  addressService: AddressService[F],
+  selfAddress: String,
+  metrics: Metrics
 ) {
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -44,16 +47,16 @@ class RewardsManager[F[_]: Concurrent](
   private[rewards] def updateBySnapshot(rewardSnapshot: RewardSnapshot): F[Unit] =
     for {
       _ <- logger.debug(
-        s"[Rewards] Updating rewards by snapshot ${rewardSnapshot.hash} at height ${rewardSnapshot.height}"
+        s"Updating rewards by snapshot ${rewardSnapshot.hash} at height ${rewardSnapshot.height}"
       )
       _ <- Concurrent[F]
         .pure(rewardSnapshot.observations.isEmpty)
         .ifM(
-          logger.debug(s"[Rewards] ${rewardSnapshot.hash} has no observations"),
-          logger.debug(s"[Rewards] ${rewardSnapshot.hash} contains following observations:").flatMap { _ =>
+          logger.debug(s"${rewardSnapshot.hash} has no observations"),
+          logger.debug(s"${rewardSnapshot.hash} contains following observations:").flatMap { _ =>
             rewardSnapshot.observations.toList
               .map(_.signedObservationData.data)
-              .traverse(o => logger.debug(s"[Rewards] Observation for ${o.id}, ${o.event}"))
+              .traverse(o => logger.debug(s"Observation for ${o.id}, ${o.event}"))
               .void
           }
         )
@@ -64,17 +67,44 @@ class RewardsManager[F[_]: Concurrent](
       contributions = calculateContributions(trustMap.keySet.toSeq)
       distribution = weightContributions(contributions)
       normalizedDistribution = normalize(distribution)
-      _ <- logger.debug(s"[Rewards] Distribution:")
+
+      _ <- logger.debug(s"Distribution:")
       _ <- normalizedDistribution.toList.traverse {
-        case (address, reward) => logger.debug(s"[Rewards] Address: ${address}, Reward: ${reward}")
+        case (address, reward) => logger.debug(s"Address: ${address}, Reward: ${reward}")
       }
 
-      _ <- updateAddressBalances(normalizedDistribution)
+      rewardBalances <- updateAddressBalances(normalizedDistribution)
       _ <- lastRewardedHeight.modify(_ => (rewardSnapshot.height, ()))
 
       _ <- logger.debug(
-        s"[Rewards] Rewarding by ${rewardSnapshot.hash} succeeded."
+        s"Rewarding by ${rewardSnapshot.hash} succeeded."
       )
+
+      _ <- metrics.updateMetricAsync("rewards_selfBalanceAfterReward", rewardBalances.getOrElse(selfAddress, 0L))
+      _ <- metrics.updateMetricAsync(
+        "rewards_stardustBalanceAfterReward",
+        rewardBalances.getOrElse(StardustCollective.getAddress(), 0L)
+      )
+
+      _ <- metrics.updateMetricAsync("rewards_selfSnapshotReward", normalizedDistribution.getOrElse(selfAddress, 0L))
+      _ <- metrics.updateMetricAsync(
+        "rewards_stardustSnapshotReward",
+        normalizedDistribution.getOrElse(StardustCollective.getAddress(), 0L)
+      )
+
+      _ <- metrics
+        .updateMetricAsync("rewards_snapshotReward", normalizedDistribution.map { case (_, value) => value }.sum)
+      _ <- metrics
+        .updateMetricAsync(
+          "rewards_snapshotRewardWithoutStardust",
+          normalizedDistribution
+            .filterKeys(_ != StardustCollective.getAddress())
+            .map { case (_, value) => value }
+            .sum
+        )
+      _ <- metrics.incrementMetricAsync("rewards_snapshotCount")
+      _ <- metrics.updateMetricAsync("rewards_lastRewardedHeight", rewardSnapshot.height)
+
     } yield ()
 
   private def normalize(contributions: Map[String, Double]): Map[String, Long] =
@@ -118,8 +148,8 @@ class RewardsManager[F[_]: Concurrent](
       .traverse(checkpointService.fullData)
       .map(_.flatten.flatMap(_.checkpointBlock.observations))
 
-  private def updateAddressBalances(rewards: Map[String, Long]): F[Unit] =
-    addressService.transferRewards(rewards).void
+  private def updateAddressBalances(rewards: Map[String, Long]): F[Map[String, Long]] =
+    addressService.transferRewards(rewards)
 }
 
 object RewardsManager {
@@ -135,12 +165,12 @@ object RewardsManager {
   val epochFour = 1752000 // = 4 * epochOne (10 years)
   val rewardsPool = epochFour
   /*
-  10,000 units per month.
+  4 Snapshots per minute
    */
-  val epochOneRewards = 444.44
-  val epochTwoRewards = 0.34246575342 // = epochOneRewards / 2
-  val epochThreeRewards = 0.17123287671 // = epochTwoRewards / 2
-  val epochFourRewards = 0.08561643835 // = epochThreeRewards / 2
+  val epochOneRewardPerSnapshot = 164.61
+  val epochTwoRewardsPerSnapshot = 0.34246575342 // = epochOneRewards / 2
+  val epochThreeRewardsPerSnapshot = 0.17123287671 // = epochTwoRewards / 2
+  val epochFourRewardsPerSnapshot = 0.08561643835 // = epochThreeRewards / 2
 
   /*
   Partitioning of address space, light nodes have smaller basis that full.
@@ -156,10 +186,10 @@ object RewardsManager {
 
   // TODO: Move to RewardsManager
   def rewardDuringEpoch(curShapshot: Long) = curShapshot match {
-    case num if num >= 0 && num < epochOne           => epochOneRewards
-    case num if num >= epochOne && num < epochTwo    => epochTwoRewards
-    case num if num >= epochTwo && num < epochThree  => epochThreeRewards
-    case num if num >= epochThree && num < epochFour => epochFourRewards
+    case num if num >= 0 && num < epochOne           => epochOneRewardPerSnapshot
+    case num if num >= epochOne && num < epochTwo    => epochTwoRewardsPerSnapshot
+    case num if num >= epochTwo && num < epochThree  => epochThreeRewardsPerSnapshot
+    case num if num >= epochThree && num < epochFour => epochFourRewardsPerSnapshot
     case _                                           => 0d
   }
 

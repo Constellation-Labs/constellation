@@ -229,7 +229,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     rewardsManager = new RewardsManager[IO](
       eigenTrust = eigenTrust,
       checkpointService = checkpointService,
-      addressService = addressService
+      addressService = addressService,
+      selfAddress = id.address,
+      metrics = metrics
     )
 
     snapshotService = SnapshotService[IO](
