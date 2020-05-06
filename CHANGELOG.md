@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Max snapshot heights for epochs adjusted accordingly to snapshot creation speed
 
 ### Fixed
+- Reward only these nodes who sent the proposal for rewarded height
 - Reduce number of meaningful snapshots to avoid downloading too much 
 - Broadcast own joining height only after successful download
 
