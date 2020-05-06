@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Endpoint returning last transaction reference for a given address
 - Additional validation checking last transaction reference when submitting a transaction
+- Rewards metrics
+
+### Changed
+- Rewards adjusted to 4 snapshots per minute
 
 ## [v2.6.0] - 2020-05-08
 ### Changed
