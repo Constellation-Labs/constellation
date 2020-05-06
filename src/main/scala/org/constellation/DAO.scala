@@ -231,7 +231,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       checkpointService = checkpointService,
       addressService = addressService,
       selfAddress = id.address,
-      metrics = metrics
+      metrics = metrics,
+      cluster = cluster
     )
 
     snapshotService = SnapshotService[IO](
