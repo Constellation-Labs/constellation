@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.6.0] - 2020-05-08
+### Changed
+- Additional argument in Wallet CLI to pass already normalized tx amount 
+
 ## [v2.5.8] - 2020-05-01
 ### Fixed
 - Missing parents will not be resolved if present locally and waiting for acceptance

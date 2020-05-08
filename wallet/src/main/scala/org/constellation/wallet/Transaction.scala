@@ -58,11 +58,10 @@ object Transaction {
     prevTx: Option[Transaction] = None,
     src: String,
     dst: String,
-    amount: Double,
+    amount: Long,
     keyPair: KeyPair,
     fee: Option[Double] = None
   ): Transaction = {
-
     val lastTxRef =
       prevTx
         .map(tx => LastTransactionRef(tx.hash, tx.lastTxRef.ordinal + 1))
