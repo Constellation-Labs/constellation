@@ -116,7 +116,7 @@ trait Signable {
 
   def getHexEncoding = KeyUtils.bytes2hex(Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(this)).asBytes())
 
-  def runLengthEncoding(hashes: String*) : String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
+  def runLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
 
 }
 
@@ -136,10 +136,10 @@ case class TransactionEdgeData(
   lastTxRef: LastTransactionRef,
   fee: Option[Long] = None,
   salt: Long = Random.nextLong()
-) extends Signable  {
+) extends Signable {
   override def getEncoding = {
     val encodedAmount = runLengthEncoding(Seq(amount.toHexString): _*)
-    val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString) : _*)
+    val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString): _*)
     encodedAmount + lastTxRef.getEncoding + encodedFeeSalt
   }
 }
@@ -167,7 +167,7 @@ case class ObservationEdge(
   data: TypedEdgeHash
 ) extends Signable {
   override def getEncoding = {
-    val numParents = parents.length//note, we should not use magick number 2 here, state channels can have multiple
+    val numParents = parents.length //note, we should not use magick number 2 here, state channels can have multiple
     val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
     numParents + encodedParentHashRefs + data.hashReference
   }
@@ -240,13 +240,12 @@ object TransactionEdge {
     src: String,
     dst: String,
     lastTxRef: LastTransactionRef,
-    amount: Double,
+    amount: Long,
     keyPair: KeyPair,
     fee: Option[Double] = None
   ): Edge[TransactionEdgeData] = {
-    val amountToUse = amount * 1e8.toLong
     val feeToUse = fee.map(_ * 1e8.toLong).map(_.toLong)
-    val txData = TransactionEdgeData(amountToUse.toLong, lastTxRef, feeToUse)
+    val txData = TransactionEdgeData(amount, lastTxRef, feeToUse)
     val oe = ObservationEdge(
       Seq(
         TypedEdgeHash(src, EdgeHashType.AddressHash),

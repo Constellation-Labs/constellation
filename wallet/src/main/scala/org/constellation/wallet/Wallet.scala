@@ -113,15 +113,26 @@ object Wallet extends IOApp {
               .valueName("<file>")
               .abbr("f")
               .action((x, c) => c.copy(txPath = x)),
+            opt[Unit]("normalized")
+              .abbr("n")
+              .action((x, c) => c.copy(normalized = true)),
             opt[String]("fee").required
               .valueName("<int>")
               .action((x, c) => c.copy(fee = x.toDouble))
               .validate(x => if (x.toDouble >= 0) success else failure("Value <fee> must be >=0")),
             opt[String]("amount").required
-              .valueName("<int>")
+              .valueName("<int|long>")
               .abbr("a")
-              .action((x, c) => c.copy(amount = x.toDouble))
-              .validate(x => if (x.toDouble > 0) success else failure("Value <amount> must be >0"))
+              .action(
+                (x, c) =>
+                  c.copy(
+                    amount =
+                      // scopt doesn't allow to look into full list of arguments or prioritize some arguments (like flags)
+                      if (args.contains("-n") || args.contains("--normalized")) x.toLong
+                      else (x.toDouble * 1e8.toLong).toLong
+                  )
+              )
+              .validate(x => if (x.toLong > 0) success else failure("Value <amount> must be >0"))
           ),
         cmd("show-address")
           .action((_, c) => c.copy(method = CliMethod.ShowAddress))
