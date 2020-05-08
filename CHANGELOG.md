@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Rewards adjusted to 4 snapshots per minute
+- Max snapshot heights for epochs adjusted accordingly to snapshot creation speed
 
 ## [v2.6.0] - 2020-05-08
 ### Changed
