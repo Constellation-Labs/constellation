@@ -1,9 +1,9 @@
 package org.constellation.rewards
-
 import cats.effect._
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Snapshot
 import org.constellation.domain.observation.Observation
@@ -116,7 +116,7 @@ class RewardsManager[F[_]: Concurrent](
     StardustCollective.weightByStardust
 
   private def weightByEpoch(snapshotHeight: Long)(contributions: Map[String, Double]): Map[String, Double] =
-    contributions.mapValues(_ * RewardsManager.rewardDuringEpoch(snapshotHeight))
+    contributions.mapValues(_ * RewardsManager.totalRewardPerSnapshot(snapshotHeight))
 
   private def weightByTrust(
     trustEntropyMap: Map[String, Double]
@@ -155,43 +155,84 @@ class RewardsManager[F[_]: Concurrent](
 object RewardsManager {
   val roundingError = 0.000000000001
 
-  /*
-  Rewards computed about one snapshots per 3 minutes, i.e. about 14,600 snapshots per month.
-  Snapshots for a first epoch of 2.5 years.
-   */
-  val epochOne = 438000 // = 14,600 snapshots per month * 12 months per year * 2.5 years
-  val epochTwo = 876000 // = 2 * epochOne (5 years)
-  val epochThree = 1314000 // = 3 * epochOne (7.5 years)
-  val epochFour = 1752000 // = 4 * epochOne (10 years)
-  val rewardsPool = epochFour
-  /*
-  4 Snapshots per minute
-   */
-  val epochOneRewardPerSnapshot = 164.61
-  val epochTwoRewardsPerSnapshot = 0.34246575342 // = epochOneRewards / 2
-  val epochThreeRewardsPerSnapshot = 0.17123287671 // = epochTwoRewards / 2
-  val epochFourRewardsPerSnapshot = 0.08561643835 // = epochThreeRewards / 2
+  val snapshotsPerMinute = 4.0
+  val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  /*
-  Partitioning of address space, light nodes have smaller basis that full.
-  Normalizes rewards based on node size.
-   */
-  val partitonChart = Map[String, Set[String]]()
+  val epochOneRewards = 853333333.20 // Normalized
+  val epochTwoRewards: Double = epochOneRewards / 2
+  val epochThreeRewards: Double = epochTwoRewards / 2
+  val epochFourRewards: Double = epochThreeRewards / 2
 
-  /*
-  Should come from reputation service.
-   */
-  val transitiveReputationMatrix = Map[String, Map[String, Double]]()
-  val neighborhoodReputationMatrix = Map[String, Double]()
+  val epochOneDuration: Double = 2.5
+  val epochTwoDuration: Double = 2.5
+  val epochThreeDuration: Double = 2.5
+  val epochFourDuration: Double = 2.5
 
-  // TODO: Move to RewardsManager
-  def rewardDuringEpoch(curShapshot: Long) = curShapshot match {
-    case num if num >= 0 && num < epochOne           => epochOneRewardPerSnapshot
-    case num if num >= epochOne && num < epochTwo    => epochTwoRewardsPerSnapshot
-    case num if num >= epochTwo && num < epochThree  => epochThreeRewardsPerSnapshot
-    case num if num >= epochThree && num < epochFour => epochFourRewardsPerSnapshot
-    case _                                           => 0d
+  val epochOneMaxSnapshotHeight: Long = epochSnapshotHeightInterval(epochOneDuration)
+  val epochTwoMaxSnapshotHeight: Long = epochOneMaxSnapshotHeight + epochSnapshotHeightInterval(epochTwoDuration)
+  val epochThreeMaxSnapshotHeight: Long = epochTwoMaxSnapshotHeight + epochSnapshotHeightInterval(epochThreeDuration)
+  val epochFourMaxSnapshotHeight: Long = epochThreeMaxSnapshotHeight + epochSnapshotHeightInterval(epochFourDuration)
+
+  val epochOneRewardPerSnapshot: Double = epochRewardPerSnapshot(epochOneRewards)
+  val epochTwoRewardsPerSnapshot: Double = epochRewardPerSnapshot(epochTwoRewards)
+  val epochThreeRewardsPerSnapshot: Double = epochRewardPerSnapshot(epochThreeRewards)
+  val epochFourRewardsPerSnapshot: Double = epochRewardPerSnapshot(epochFourRewards)
+
+  val rewardsPool: Double = epochFourDuration
+
+  //  /*
+  //  Partitioning of address space, light nodes have smaller basis that full.
+  //  Normalizes rewards based on node size.
+  //   */
+  //  val partitonChart: Map[String, Set[String]] = Map[String, Set[String]]()
+  //
+  //  /*
+  //  Should come from reputation service.
+  //   */
+  //  val transitiveReputationMatrix: Map[String, Map[String, Double]] = Map[String, Map[String, Double]]()
+  //  val neighborhoodReputationMatrix: Map[String, Double] = Map[String, Double]()
+
+  def totalRewardPerSnapshot(snapshotHeight: Long): Double =
+    snapshotEpoch(snapshotHeight) match {
+      case 1 => epochOneRewardPerSnapshot
+      case 2 => epochTwoRewardsPerSnapshot
+      case 3 => epochThreeRewardsPerSnapshot
+      case 4 => epochFourRewardsPerSnapshot
+      case _ => 0d
+    }
+
+  private[rewards] def epochRewardPerSnapshot(epochTotalRewards: Double): Double =
+    // It is based on validation sheet
+    epochTotalRewards / 5 / 6 / 30 / 24 / 60 / snapshotsPerMinute
+
+  private[rewards] def epochMaxSnapshotNumber(
+    yearsDuration: Double,
+    snapshotsPerMinute: Double = RewardsManager.snapshotsPerMinute
+  ): Long = {
+    val months = yearsDuration * 12
+    val days = months * 30
+    val hours = days * 24
+    val minutes = hours * 60
+    (minutes * snapshotsPerMinute).toLong
   }
+
+  private[rewards] def epochSnapshotHeightInterval(
+    yearsDuration: Double,
+    snapshotsPerMinute: Double = RewardsManager.snapshotsPerMinute,
+    snapshotHeightInterval: Long = snapshotHeightInterval
+  ): Long = {
+    val snapshotsPerEpoch = epochMaxSnapshotNumber(yearsDuration, snapshotsPerMinute)
+    snapshotsPerEpoch * snapshotHeightInterval
+  }
+
+  private[rewards] def snapshotEpoch(snapshotHeight: Long): Int =
+    snapshotHeight match {
+      case num if num >= 0 && num <= epochOneMaxSnapshotHeight                           => 1
+      case num if num > epochOneMaxSnapshotHeight && num <= epochTwoMaxSnapshotHeight    => 2
+      case num if num > epochTwoMaxSnapshotHeight && num <= epochThreeMaxSnapshotHeight  => 3
+      case num if num > epochThreeMaxSnapshotHeight && num <= epochFourMaxSnapshotHeight => 4
+      case _                                                                             => -1
+    }
 
   @deprecated("Old implementation for light nodes", "Since we have full-nodes only")
   def validatorRewards(
@@ -202,7 +243,7 @@ object RewardsManager {
   ): Map[String, Double] = {
     val trustEntropyMap = shannonEntropy(transitiveReputationMatrix, neighborhoodReputationMatrix)
     val distro = rewardDistribution(partitonChart, trustEntropyMap)
-    distro.mapValues(_ * rewardDuringEpoch(curShapshot))
+    distro.mapValues(_ * totalRewardPerSnapshot(curShapshot))
   }
 
   @deprecated("Old implementation for light nodes", "Since we have full-nodes only")
