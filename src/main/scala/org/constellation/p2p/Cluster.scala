@@ -632,8 +632,9 @@ class Cluster[F[_]](
       for {
         _ <- clearServicesBeforeJoin()
         _ <- attemptRegisterPeer(hp)
-        _ <- T.sleep(15.seconds) >> broadcastOwnJoinedHeight()
+        _ <- T.sleep(15.seconds)
         _ <- LiftIO[F].liftIO(dao.downloadService.download())
+        _ <- broadcastOwnJoinedHeight()
       } yield (),
       "cluster_join"
     )
