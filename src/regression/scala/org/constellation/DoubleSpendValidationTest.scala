@@ -6,7 +6,7 @@ import cats.effect.IO
 import cats.implicits._
 import cats.effect.concurrent.Ref
 import org.constellation.checkpoint.CheckpointBlockValidator
-import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionValidator}
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.{CheckpointBlock, Genesis, TransactionCacheData}
 import org.constellation.primitives.Schema.{AddressCacheData, GenesisObservation, SignedObservationEdge}
@@ -33,6 +33,9 @@ class DoubleSpendValidationTest
     val src = KeyUtils.publicKeyToAddressString(keyPair.getPublic)
     val dst = KeyUtils.publicKeyToAddressString(Fixtures.tempKey2.getPublic)
 
+    val transactionChainService = mock[TransactionChainService[IO]]
+    transactionChainService.getLastAcceptedTransactionRef(*) shouldReturnF LastTransactionRef.empty
+    dao.transactionService.transactionChainService shouldReturn transactionChainService
     dao.transactionService.isAccepted(*) shouldReturnF false
     dao.transactionService.createDummyTransaction(*, *, *) shouldAnswer { (a: String, b: String, c: KeyPair) =>
       IO { Fixtures.makeDummyTransaction(a, b, c) }

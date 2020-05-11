@@ -6,7 +6,7 @@ import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import org.constellation.checkpoint.CheckpointBlockValidator
-import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionValidator}
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.{CheckpointBlock, Genesis}
 import org.constellation.primitives.Schema.{AddressCacheData, GenesisObservation, SignedObservationEdge}
@@ -37,6 +37,9 @@ class TransactionMaxValueTest
       val dst3 = KeyUtils.publicKeyToAddressString(Fixtures.tempKey4.getPublic)
 
       dao.transactionService.isAccepted(*) shouldReturnF false
+      val transactionChainService = mock[TransactionChainService[IO]]
+      transactionChainService.getLastAcceptedTransactionRef(*) shouldReturnF LastTransactionRef.empty
+      dao.transactionService.transactionChainService shouldReturn transactionChainService
       dao.transactionService.createDummyTransaction(*, *, *) shouldAnswer { (a: String, b: String, c: KeyPair) =>
         IO { Fixtures.makeDummyTransaction(a, b, c) }
       }
