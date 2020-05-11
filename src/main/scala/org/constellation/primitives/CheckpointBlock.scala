@@ -103,6 +103,10 @@ case class CheckpointBlock(
 
 object CheckpointBlock {
 
+  import io.circe.generic.auto._
+  import io.circe.parser.parse
+  import io.circe.syntax._
+
   def createCheckpointBlockSOE(
     transactions: Seq[Transaction],
     tips: Seq[SignedObservationEdge],
@@ -142,5 +146,8 @@ object CheckpointBlock {
 
     CheckpointBlock(transactions, checkpointEdge, messages, peers, observations)
   }
+
+  def checkpointToJsonString(checkpointBlock: CheckpointBlock): String =
+    checkpointBlock.asJson.noSpaces
 
 }

@@ -5,6 +5,7 @@ import java.util.concurrent.Semaphore
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
 
@@ -76,7 +77,7 @@ object ChannelMessage extends StrictLogging {
         logger.info(s"Channel not in use")
 
         val genesisMessageStr = "" // TODO: channelOpenRequest.json
-        val msg = create(genesisMessageStr, Genesis.Coinbase, channelOpenRequest.name)(dao.keyPair)
+        val msg = create(genesisMessageStr, LastTransactionRef.empty.prevHash, channelOpenRequest.name)(dao.keyPair)
         dao.threadSafeMessageMemPool.selfChannelNameToGenesisMessage(channelOpenRequest.name) = msg
         val genesisHashChannelId = msg.signedMessageData.hash
         dao.threadSafeMessageMemPool.selfChannelIdToName(genesisHashChannelId) = channelOpenRequest.name

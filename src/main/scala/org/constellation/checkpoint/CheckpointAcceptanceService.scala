@@ -445,7 +445,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       cb.messages.map { m =>
         val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
         val messageUpdate =
-          if (m.signedMessageData.data.previousMessageHash != Genesis.Coinbase) {
+          if (!m.signedMessageData.data.previousMessageHash.equals(Genesis.Coinbase)) {
             for {
               _ <- dao.messageService.memPool.put(
                 m.signedMessageData.data.channelId,
