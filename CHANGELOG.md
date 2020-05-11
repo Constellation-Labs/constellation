@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - Rewards adjusted to 4 snapshots per minute
 - Max snapshot heights for epochs adjusted accordingly to snapshot creation speed
 
+### Fixed
+- Broadcast own joining height only after successful download
+
 ## [v2.6.0] - 2020-05-08
 ### Changed
 - Additional argument in Wallet CLI to pass already normalized tx amount 
