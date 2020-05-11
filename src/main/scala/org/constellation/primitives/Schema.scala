@@ -76,6 +76,9 @@ object Schema {
 
     val validForCheckpointPendingAcceptance: Set[NodeState] = validDuringDownload
 
+    // TODO: Use initial for allowing joining after leaving
+    def canJoin(current: NodeState): Boolean = current == PendingDownload
+
     def isNotOffline(current: NodeState): Boolean = !offlineStates.contains(current)
 
     def isInvalidForJoining(current: NodeState): Boolean = invalidForJoining.contains(current)
@@ -191,15 +194,15 @@ object Schema {
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
     * Left is topologically ordered before right
     *
-    * @param parents: HyperEdge parent references
-    * @param data : Optional hash reference to attached information
+    * @param parents : HyperEdge parent references
+    * @param data    : Optional hash reference to attached information
     */
   case class ObservationEdge( // TODO: Consider renaming to ObservationHyperEdge or leave as is?
-                             parents: Seq[TypedEdgeHash],
-                             data: TypedEdgeHash)
-    extends Signable {
+    parents: Seq[TypedEdgeHash],
+    data: TypedEdgeHash
+  ) extends Signable {
     override def getEncoding = {
-      val numParents = parents.length//note, we should not use magick number 2 here, state channels can have multiple
+      val numParents = parents.length //note, we should not use magick number 2 here, state channels can have multiple
       val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
       numParents + encodedParentHashRefs + data.hashReference
     }
@@ -244,7 +247,7 @@ object Schema {
   ) extends Signable {
     override def getEncoding = {
       val encodedAmount = runLengthEncoding(Seq(amount.toHexString): _*)
-      val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString) : _*)
+      val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString): _*)
       encodedAmount + lastTxRef.getEncoding + encodedFeeSalt
     }
   }

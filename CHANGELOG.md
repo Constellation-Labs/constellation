@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Reduce number of meaningful snapshots to avoid downloading too much 
 - Broadcast own joining height only after successful download
+- Make double join impossible
 
 ## [v2.6.0] - 2020-05-08
 ### Changed
