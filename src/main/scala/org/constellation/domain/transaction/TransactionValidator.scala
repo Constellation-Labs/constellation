@@ -51,6 +51,29 @@ class TransactionValidator[F[_]: Sync](
         tx.validNel
     }
 
+  def validateLastTransactionRef(tx: Transaction): F[ValidationResult[Transaction]] =
+    transactionService
+      .transactionChainService
+      .getLastAcceptedTransactionRef(tx.src.address)
+      .map { lastTxRef =>
+        lazy val comparedOrdinals = tx.lastTxRef.ordinal.compare(lastTxRef.ordinal)
+        lazy val lastTxRefNotEqual = tx.lastTxRef != tx.edge.data.lastTxRef
+        lazy val nonZeroOrdinalHasEmptyHash = tx.lastTxRef.ordinal > 0L && tx.lastTxRef.prevHash.isEmpty
+        lazy val ordinalIsLower = comparedOrdinals < 0L
+        lazy val hashIsNotEqual = comparedOrdinals == 0L && tx.lastTxRef != lastTxRef
+
+        if (lastTxRefNotEqual)
+          InconsistentLastTxRef(tx).invalidNel
+        else if (nonZeroOrdinalHasEmptyHash)
+          NonZeroOrdinalButEmptyHash(tx).invalidNel
+        else if (ordinalIsLower)
+          LastTxRefOrdinalLowerThenStoredLastTxRef(tx).invalidNel
+        else if (hashIsNotEqual)
+          SameOrdinalButDifferentHashForLastTxRef(tx).invalidNel
+        else
+          tx.validNel
+      }
+
   def validateTransaction(tx: Transaction): F[ValidationResult[Transaction]] =
     for {
       staticValidation <- Sync[F].delay(
@@ -61,7 +84,8 @@ class TransactionValidator[F[_]: Sync](
           .product(validateFee(tx))
       )
       duplicateValidation <- validateDuplicate(tx)
-    } yield staticValidation.product(duplicateValidation).map(_ ⇒ tx)
+      lastTxRefValidation <- validateLastTransactionRef(tx)
+    } yield staticValidation.product(duplicateValidation).product(lastTxRefValidation).map(_ ⇒ tx)
 }
 
 sealed trait TransactionValidationError {
@@ -141,4 +165,42 @@ case class PreviousTransactionHasNotBeenAccepted(txHash: String, previousHash: S
 
 object PreviousTransactionHasNotBeenAccepted {
   def apply(tx: Transaction) = new PreviousTransactionHasNotBeenAccepted(tx.hash, tx.lastTxRef.prevHash)
+}
+
+//TODO: In the future we could have a separate general apiErrorMessage not revealing internal state for the client
+//      and more descriptive logErrorMessage for logs.
+sealed trait IncorrectLastTransactionRef extends TransactionValidationError {
+  val txHash: String
+  val lastTransactionRef: LastTransactionRef
+
+  def errorMessage: String =
+    s"Transaction tx=$txHash has an incorrect last transaction reference: $lastTransactionRef."
+}
+
+case class InconsistentLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
+  extends IncorrectLastTransactionRef
+
+object InconsistentLastTxRef {
+  def apply(tx: Transaction) = new InconsistentLastTxRef(tx.hash, tx.lastTxRef)
+}
+
+case class LastTxRefOrdinalLowerThenStoredLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
+  extends IncorrectLastTransactionRef
+
+object LastTxRefOrdinalLowerThenStoredLastTxRef {
+  def apply(tx: Transaction) = new LastTxRefOrdinalLowerThenStoredLastTxRef(tx.hash, tx.lastTxRef)
+}
+
+case class SameOrdinalButDifferentHashForLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
+  extends IncorrectLastTransactionRef
+
+object SameOrdinalButDifferentHashForLastTxRef {
+  def apply(tx: Transaction) = new SameOrdinalButDifferentHashForLastTxRef(tx.hash, tx.lastTxRef)
+}
+
+case class NonZeroOrdinalButEmptyHash(txHash: String, lastTransactionRef: LastTransactionRef)
+  extends IncorrectLastTransactionRef
+
+object NonZeroOrdinalButEmptyHash {
+  def apply(tx: Transaction) = new NonZeroOrdinalButEmptyHash(tx.hash, tx.lastTxRef)
 }
