@@ -630,6 +630,8 @@ class Cluster[F[_]](
   def join(hp: HostPort): F[Unit] =
     logThread(
       for {
+        state <- nodeState.get
+        _ <- if (NodeState.canJoin(state)) F.unit else F.raiseError(new Throwable("Node attempted to double join"))
         _ <- clearServicesBeforeJoin()
         _ <- attemptRegisterPeer(hp)
         _ <- T.sleep(15.seconds)
