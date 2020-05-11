@@ -6,6 +6,7 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema._
 import org.constellation.util.AccountBalance
@@ -15,7 +16,11 @@ object Genesis extends StrictLogging {
 
   implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
-  final val Coinbase = "coinbase"
+  final val Coinbase = "Nature loves courage. You make the commitment and nature will respond to that commitment " +
+    "by removing impossible obstacles. Dream the impossible dream and the world will not grind you under, it will " +
+    "lift you up. This is the trick. This is what all these teachers and philosophers who really counted, who really " +
+    "touched the alchemical gold, this is what they understood. This is the shamanic dance in the waterfall. This is " +
+    "how magick is done. By hurling yourself into the abyss and discovering it's a feather bed."
   // TODO: That key should be provided externally by the genesis creator.
   // We can use Node's KeyPair as well.
   final val CoinbaseKey = KeyUtils.makeKeyPair()
@@ -32,7 +37,7 @@ object Genesis extends StrictLogging {
       .traverse(
         ab =>
           IO.delay(logger.info(s"Account Balance set : $ab")) >> dao.transactionService
-            .createTransaction(Coinbase, ab.accountHash, ab.balance, CoinbaseKey, normalized = false)
+            .createTransaction(LastTransactionRef.empty.prevHash, ab.accountHash, ab.balance, CoinbaseKey, normalized = false)
       )
   }
 

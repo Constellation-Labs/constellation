@@ -381,9 +381,7 @@ class ConstellationNode(
   if (nodeConfig.isGenesisNode) {
     logger.info("Creating genesis block")
     Genesis.start()
-    logger.info(s"Genesis block hash ${dao.genesisBlock.map {
-      _.soeHash
-    }.getOrElse("")}")
+    logger.info(s"Genesis block ${dao.genesisBlock.map(CheckpointBlock.checkpointToJsonString).getOrElse("")}")
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   } else if (nodeConfig.isRollbackNode) {
     logger.info(s"Performing rollback for height: ${nodeConfig.rollbackHeight}, hash: ${nodeConfig.rollbackHash}")

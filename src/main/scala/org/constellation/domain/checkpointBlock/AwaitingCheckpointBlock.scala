@@ -17,7 +17,7 @@ object AwaitingCheckpointBlock {
   }
 
   def areParentsSOEAccepted[F[_]: Concurrent](soeService: SOEService[F])(cb: CheckpointBlock): F[Boolean] = {
-    val soeHashes = cb.parentSOEHashes.toList.filterNot(_ == Genesis.Coinbase)
+    val soeHashes = cb.parentSOEHashes.toList.filterNot(_.equals(Genesis.Coinbase))
     // TODO: should parent's amount be hardcoded?
 
     soeHashes
