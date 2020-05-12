@@ -13,13 +13,12 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class TransactionEndpointsTest
-  extends FreeSpec
+    extends FreeSpec
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
@@ -40,16 +39,17 @@ class TransactionEndpointsTest
     "getLastTransactionEndpoint" - {
       "should call a method returning reference to the last transaction from transactionChainService" in {
         transactionService.transactionChainService shouldReturn transactionChainService
-        transactionChainService.getLastTransactionRef(*) shouldReturnF LastTransactionRef.empty
+        transactionChainService.getLastAcceptedTransactionRef(*) shouldReturnF LastTransactionRef.empty
         transactionPeerEndpoints.orNotFound.run(Request(Method.GET, uri"transaction/last-ref/DAG123")).unsafeRunSync
 
-        transactionChainService.getLastTransactionRef("DAG123").wasCalled(once)
+        transactionChainService.getLastAcceptedTransactionRef("DAG123").wasCalled(once)
       }
 
       "should respond with an Ok status" in {
         transactionService.transactionChainService shouldReturn transactionChainService
-        transactionChainService.getLastTransactionRef(*) shouldReturnF LastTransactionRef.empty
-        val response = transactionPeerEndpoints.orNotFound.run(Request(Method.GET, uri"transaction/last-ref/DAG123")).unsafeRunSync
+        transactionChainService.getLastAcceptedTransactionRef(*) shouldReturnF LastTransactionRef.empty
+        val response =
+          transactionPeerEndpoints.orNotFound.run(Request(Method.GET, uri"transaction/last-ref/DAG123")).unsafeRunSync
 
         response.status shouldBe Status.Ok
       }
