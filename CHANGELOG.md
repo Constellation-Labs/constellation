@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [v2.7.0] - 2020-05-11
+## [v2.7.0] - 2020-05-12
 ### Added
 - Endpoint returning last transaction reference for a given address
 - Additional validation checking last transaction reference when submitting a transaction
