@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.7.1] - 2020-05-12
+### Fixed
+- Include own MajorityHeight when rewarding
+
 ## [v2.7.0] - 2020-05-12
 ### Added
 - Endpoint returning last transaction reference for a given address

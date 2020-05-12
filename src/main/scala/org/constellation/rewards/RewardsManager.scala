@@ -1,4 +1,5 @@
 package org.constellation.rewards
+import cats.data.NonEmptyList
 import cats.effect._
 import cats.effect.concurrent.Ref
 import cats.implicits._
@@ -69,8 +70,24 @@ class RewardsManager[F[_]: Concurrent](
 
       peers <- cluster.getPeerInfo
 
-      nodesWithProposalsOnly = peers.filter {
-        case (_, peerData) => MajorityHeight.isHeightBetween(rewardSnapshot.height)(peerData.majorityHeight)
+      ownJoiningHeight <- cluster.getOwnJoinedHeight()
+      ownMajorityHeight = MajorityHeight(
+        joined = ownJoiningHeight
+      )
+
+      peersMajorityHeightsWithOwn = peers
+        .mapValues(_.majorityHeight) + (cluster.id -> NonEmptyList.of(ownMajorityHeight))
+
+      _ <- logger.debug("Majority heights for rewarding:")
+      _ <- peersMajorityHeightsWithOwn.toList.traverse {
+        case (id, majorityHeights) =>
+          for {
+            _ <- logger.debug(s"${id.address}: ${majorityHeights}")
+          } yield ()
+      }
+
+      nodesWithProposalsOnly = peersMajorityHeightsWithOwn.filter {
+        case (_, majorityHeight) => MajorityHeight.isHeightBetween(rewardSnapshot.height)(majorityHeight)
       }.keySet.map(_.address)
 
       weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height) >>> weightByStardust
