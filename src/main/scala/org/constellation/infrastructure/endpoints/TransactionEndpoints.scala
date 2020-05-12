@@ -76,10 +76,11 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
       transactionService.lookup(hash).map(_.asJson).flatMap(Ok(_))
   }
 
-  private def getLastTransactionRefEndpoint(transactionService: TransactionService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "transaction" / "last-ref" / address =>
-      transactionService.transactionChainService.getLastTransactionRef(address).map(_.asJson).flatMap(Ok(_))
-  }
+  private def getLastTransactionRefEndpoint(transactionService: TransactionService[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "transaction" / "last-ref" / address =>
+        transactionService.transactionChainService.getLastAcceptedTransactionRef(address).map(_.asJson).flatMap(Ok(_))
+    }
 }
 
 object TransactionEndpoints {
