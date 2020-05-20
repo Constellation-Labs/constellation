@@ -4,6 +4,7 @@ import cats.effect.{ContextShift, IO}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.constellation.p2p.Cluster
+import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -32,8 +33,13 @@ class DownloadServiceTest
     redownloadService = dao.redownloadService
     checkpointAcceptanceService = dao.checkpointAcceptanceService
     metrics = dao.metrics
-    downloadService =
-      new DownloadService(redownloadService, cluster, checkpointAcceptanceService, dao.apiClient, metrics)
+    downloadService = new DownloadService(
+      redownloadService,
+      cluster,
+      checkpointAcceptanceService,
+      dao.apiClient,
+      metrics
+    )
 
     dao.blacklistedAddresses.clear shouldReturnF Unit
     dao.transactionChainService.clear shouldReturnF Unit

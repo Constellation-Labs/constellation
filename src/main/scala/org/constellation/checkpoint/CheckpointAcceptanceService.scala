@@ -87,10 +87,20 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
   def acceptWithNodeCheck(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] =
     cluster.getNodeState.flatMap {
-      case state if NodeState.canAcceptCheckpoint(state) => accept(checkpoint)
+      case state if NodeState.canAcceptCheckpoint(state) =>
+        logger.debug(
+          s"Node (state=${state}) can accept checkpoint: ${checkpoint.checkpointCacheData.checkpointBlock.baseHash}"
+        ) >> accept(
+          checkpoint
+        )
       case state if NodeState.canAwaitForCheckpointAcceptance(state) =>
-        snapshotService.syncBufferAccept(checkpoint)
-      case _ => Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
+        logger.debug(
+          s"Node (state=${state}) cannot accept checkpoint, adding hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash} to sync buffer pool"
+        ) >> snapshotService.syncBufferAccept(checkpoint)
+      case state =>
+        logger.error(
+          s"Node (state=${state}) cannot accept checkpoint hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash}"
+        ) >> Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
     }
 
   def accept(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] = {

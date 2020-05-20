@@ -42,14 +42,14 @@ class DownloadService[F[_]](
       _ <- metrics.incrementMetricAsync("downloadFinished_total")
     } yield ()
 
-    cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
+    (cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
       if (state.isNewSet) {
         wrappedDownload.handleErrorWith { error =>
           logger.error(s"Error during download process: ${error.getMessage}") >>
             cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void
         }
       } else F.unit
-    }
+    }) >> redownloadService.acceptCheckpointBlocks().rethrowT
   }
 
   private[redownload] def fetchAndPersistBlocks(): F[Unit] =
