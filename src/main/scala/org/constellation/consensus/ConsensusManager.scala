@@ -18,7 +18,7 @@ import org.constellation.primitives.concurrency.SingleLock
 import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
 import org.constellation.schema.Id
 import org.constellation.storage._
-import org.constellation.util.{Distance, PeerApiClient}
+import org.constellation.util.{Distance, Metrics, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.ExecutionContext
@@ -39,7 +39,8 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   dao: DAO,
   config: Config,
   remoteCall: Blocker,
-  calculationContext: ContextShift[F]
+  calculationContext: ContextShift[F],
+  metrics: Metrics
 ) {
 
   import ConsensusManager._
@@ -84,6 +85,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   def startOwnConsensus(): F[ConsensusInfo[F]] = {
     val startRoundTask = for {
+      _ <- metrics.incrementMetricAsync("consensus_startOwnRound")
       roundId <- withLock("startOwnRound", syncRoundInProgress())
       _ <- logger.debug(s"[${dao.id.short}] Starting own consensus $roundId")
       roundData <- createRoundData(roundId)
@@ -130,10 +132,21 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     } yield roundInfo
 
     startRoundTask.recoverWith {
+      case error: NoTipsForConsensus =>
+        metrics
+          .incrementMetricAsync("consensus_startOwnRound_noTipsForConsensusError")
+          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
+      case error: NoPeersForConsensus =>
+        metrics
+          .incrementMetricAsync("consensus_startOwnRound_noPeersForConsensusError")
+          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case error: ConsensusStartError =>
-        logger.debug(error.getMessage).flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
+        metrics
+          .incrementMetricAsync("consensus_startOwnRound_consensusStartError")
+          .flatMap(_ => logger.debug(error.getMessage))
+          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case error: ConsensusError =>
-        logger
+        metrics.incrementMetricAsync("consensus_startOwnRound_consensusError") >> logger
           .debug(error.getMessage)
           .flatMap(
             _ =>
@@ -143,7 +156,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           )
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
       case unknown =>
-        logger
+        metrics.incrementMetricAsync("consensus_startOwnRound_unknownError") >> logger
           .error(unknown)(s"Unexpected error when starting own consensus: ${unknown.getMessage}")
           .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](unknown))
     }
@@ -200,7 +213,8 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     } yield roundData
 
   def participateInBlockCreationRound(roundData: RoundData): F[(ConsensusInfo[F], RoundData)] =
-    for {
+    (for {
+      _ <- metrics.incrementMetricAsync("consensus_participateInRound")
       state <- cluster.getNodeState
       _ <- if (NodeState.canParticipateConsensus(state)) Sync[F].unit
       else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForConsensusParticipation, state))
@@ -229,7 +243,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       )
       _ <- consensuses.modify(r => (r + (roundData.roundId -> roundInfo), ()))
       _ <- logger.debug(s"[${dao.id.short}] Participate in round ${updatedRoundData.roundId}")
-    } yield (roundInfo, updatedRoundData)
+    } yield (roundInfo, updatedRoundData)).onError {
+      case SnapshotHeightAboveTip(_, _, _) =>
+        metrics.incrementMetricAsync("consensus_participateInRound_snapshotHeightAboveTipError")
+      case InvalidNodeState(_, _) =>
+        metrics.incrementMetricAsync("consensus_participateInRound_invalidNodeStateError")
+      case _ => metrics.incrementMetricAsync("consensus_participateInRound_unknownError")
+    }
 
   def continueRoundParticipation(roundInfo: ConsensusInfo[F], roundData: RoundData): F[Unit] =
     for {

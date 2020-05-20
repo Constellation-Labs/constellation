@@ -321,7 +321,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       this,
       ConfigUtil.config,
       Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.bounded)
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      metrics = metrics
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
 

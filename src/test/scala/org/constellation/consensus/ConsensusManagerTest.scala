@@ -6,6 +6,7 @@ import org.constellation._
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
 import org.constellation.domain.observation.Observation
 import org.constellation.primitives.Transaction
+import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
@@ -35,6 +36,7 @@ class ConsensusManagerTest
   )
 
   var consensusManager: ConsensusManager[IO] = _
+  var metrics: Metrics = _
   val consensus: Consensus[IO] = mock[Consensus[IO]]
 
   val dao: DAO = TestHelpers.prepareMockedDAO()
@@ -60,7 +62,8 @@ class ConsensusManagerTest
       dao,
       conf,
       Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.bounded)
+      IO.contextShift(ConstellationExecutionContext.bounded),
+      metrics
     )
   }
   describe("syncRoundInProgress") {

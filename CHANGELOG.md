@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Additional metrics for consensus
 
 ## [v2.7.1] - 2020-05-12
 ### Fixed
