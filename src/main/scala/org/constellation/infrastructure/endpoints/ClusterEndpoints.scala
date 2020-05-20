@@ -6,6 +6,8 @@ import io.circe.{Decoder, Encoder, KeyEncoder}
 import io.circe.generic.auto._
 import io.circe.syntax._
 import org.constellation.domain.observation.ObservationEvent
+import org.constellation.domain.p2p.PeerHealthCheck
+import org.constellation.domain.p2p.PeerHealthCheck.PeerHealthCheckStatus
 import org.constellation.domain.trust.TrustData
 import org.constellation.p2p.{Cluster, JoinedHeight, PeerUnregister, SetNodeStatus}
 import org.constellation.primitives.Schema.NodeState
@@ -20,12 +22,13 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   def publicEndpoints(cluster: Cluster[F]) =
     infoEndpoint(cluster)
 
-  def peerEndpoints(cluster: Cluster[F], trustManager: TrustManager[F]) =
+  def peerEndpoints(cluster: Cluster[F], trustManager: TrustManager[F], peerHealthCheck: PeerHealthCheck[F]) =
     infoEndpoint(cluster) <+>
       setNodeStatusEndpoint(cluster) <+>
       setJoiningHeightEndpoint(cluster) <+>
       deregisterEndpoint(cluster) <+>
-      trustEndpoint(trustManager)
+      trustEndpoint(trustManager) <+>
+      checkPeerResponsiveness(peerHealthCheck)
 
   private def infoEndpoint(cluster: Cluster[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -43,6 +46,11 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
           cluster.setNodeStatus(sns.id, sns.nodeStatus)
         }
       } yield ()) >> Ok()
+  }
+
+  private def checkPeerResponsiveness(peerHealthCheck: PeerHealthCheck[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "peer-responsiveness" / id =>
+      peerHealthCheck.verify(Id(id)).map(_.asJson).flatMap(Ok(_))
   }
 
   private def setJoiningHeightEndpoint(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -77,6 +85,10 @@ object ClusterEndpoints {
   def publicEndpoints[F[_]: Concurrent](cluster: Cluster[F]): HttpRoutes[F] =
     new ClusterEndpoints[F].publicEndpoints(cluster)
 
-  def peerEndpoints[F[_]: Concurrent](cluster: Cluster[F], trustManager: TrustManager[F]): HttpRoutes[F] =
-    new ClusterEndpoints[F].peerEndpoints(cluster, trustManager)
+  def peerEndpoints[F[_]: Concurrent](
+    cluster: Cluster[F],
+    trustManager: TrustManager[F],
+    peerHealthCheck: PeerHealthCheck[F]
+  ): HttpRoutes[F] =
+    new ClusterEndpoints[F].peerEndpoints(cluster, trustManager, peerHealthCheck)
 }

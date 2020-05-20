@@ -2,11 +2,13 @@ package org.constellation.domain.p2p
 
 import cats.data.{Kleisli, NonEmptyList}
 import cats.effect.{ContextShift, IO, Timer}
+import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
 import org.constellation.{PeerMetadata, ResourceInfo}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
-import org.constellation.infrastructure.p2p.client.MetricsClientInterpreter
+import org.constellation.infrastructure.p2p.client.{ClusterClientInterpreter, MetricsClientInterpreter}
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
 import org.constellation.util.Metrics
@@ -15,6 +17,7 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 class PeerHealthCheckTest
     extends FreeSpec
@@ -61,6 +64,13 @@ class PeerHealthCheckTest
       apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { _ =>
         IO.unit
       }
+      apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
+      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
+        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
+          IO.pure(PeerAvailable)
+        }
+
+      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
 
@@ -77,6 +87,12 @@ class PeerHealthCheckTest
           IO.raiseError(new Throwable("error"))
         } else IO.unit
       }
+      apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
+      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
+        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
+          IO.pure(PeerUnresponsive)
+        }
+      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
       peerHealthCheck.check().unsafeRunSync
 
@@ -91,6 +107,12 @@ class PeerHealthCheckTest
           IO.raiseError(new Throwable("error"))
         } else IO.unit
       }
+      apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
+      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
+        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
+          IO.pure(PeerUnresponsive)
+        }
+      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
       peerHealthCheck.check().unsafeRunSync
 
@@ -105,6 +127,12 @@ class PeerHealthCheckTest
           IO.raiseError(new Throwable("error"))
         } else IO.unit
       }
+      apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
+      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
+        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
+          IO.pure(PeerUnresponsive)
+        }
+      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
       peerHealthCheck.check().unsafeRunSync
 
