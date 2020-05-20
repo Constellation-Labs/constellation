@@ -694,7 +694,7 @@ class Cluster[F[_]](
 
   private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
     logThread(
-      broadcast(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)).run).flatTap {
+      broadcast(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)).run, Set(nodeId)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
         }

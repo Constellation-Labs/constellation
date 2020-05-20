@@ -147,7 +147,7 @@ object ConstellationNode extends IOApp {
         dao.metrics,
         dao.snapshotService
       ) <+>
-        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
+        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager, dao.peerHealthCheck) <+>
         ConsensusEndpoints
           .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
         ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
