@@ -9,6 +9,7 @@ import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.{JoinedHeight, PeerUnregister, SetNodeStatus}
 import org.http4s.client.Client
 import io.circe.generic.auto._
+import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
 import org.http4s.circe.CirceEntityDecoder._
@@ -27,6 +28,9 @@ class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F])(implicit F
     PeerResponse[F, Boolean]("status", client, POST) { (req, c) =>
       c.successful(req.withEntity(status))
     }.flatMapF(a => if (a) F.unit else F.raiseError(new Throwable("Cannot set node status")))
+
+  def checkPeerResponsiveness(id: Id): PeerResponse[F, PeerHealthCheck.PeerHealthCheckStatus] =
+    PeerResponse[F, PeerHealthCheck.PeerHealthCheckStatus](s"peer-responsiveness/$id")(client)
 
   def setJoiningHeight(height: JoinedHeight): PeerResponse[F, Unit] =
     PeerResponse[F, Boolean]("joinedHeight", client, POST) { (req, c) =>
