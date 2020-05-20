@@ -230,17 +230,17 @@ class SnapshotService[F[_]: Concurrent](
         val updated = curr + (cb.checkpointCacheData.checkpointBlock.baseHash -> cb)
         (updated, updated.size)
       }
-      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", size.toString)
+      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", size)
     } yield ()
 
   def syncBufferPull(): F[Map[String, FinishedCheckpoint]] =
     for {
       pulled <- syncBuffer.modify(curr => (Map.empty, curr))
-      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", pulled.size.toString)
+      _ <- dao.metrics.updateMetricAsync[F]("syncBufferSize", pulled.size)
     } yield pulled
 
   def getSnapshotInfoWithFullData: F[SnapshotInfo] =
-    getSnapshotInfo.flatMap { info =>
+    getSnapshotInfo().flatMap { info =>
       LiftIO[F].liftIO(
         info.acceptedCBSinceSnapshot.toList.traverse {
           dao.checkpointService.fullData(_)

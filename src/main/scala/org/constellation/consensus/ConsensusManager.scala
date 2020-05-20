@@ -134,31 +134,27 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     startRoundTask.recoverWith {
       case error: NoTipsForConsensus =>
         metrics
-          .incrementMetricAsync("consensus_startOwnRound_noTipsForConsensusError")
-          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
+          .incrementMetricAsync("consensus_startOwnRound_noTipsForConsensusError") >>
+          stopBlockCreationRound(StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)) >>
+          Sync[F].raiseError[ConsensusInfo[F]](error)
       case error: NoPeersForConsensus =>
-        metrics
-          .incrementMetricAsync("consensus_startOwnRound_noPeersForConsensusError")
-          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
+        metrics.incrementMetricAsync("consensus_startOwnRound_noPeersForConsensusError") >>
+          stopBlockCreationRound(StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)) >>
+          Sync[F].raiseError[ConsensusInfo[F]](error)
       case error: ConsensusStartError =>
-        metrics
-          .incrementMetricAsync("consensus_startOwnRound_consensusStartError")
-          .flatMap(_ => logger.debug(error.getMessage))
-          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
+        metrics.incrementMetricAsync("consensus_startOwnRound_consensusStartError") >>
+          logger.debug(error.getMessage) >>
+          Sync[F].raiseError[ConsensusInfo[F]](error)
       case error: ConsensusError =>
-        metrics.incrementMetricAsync("consensus_startOwnRound_consensusError") >> logger
-          .debug(error.getMessage)
-          .flatMap(
-            _ =>
-              stopBlockCreationRound(
-                StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)
-              )
-          )
-          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](error))
+        metrics.incrementMetricAsync("consensus_startOwnRound_consensusError") >>
+          logger.debug(error.getMessage) >>
+          stopBlockCreationRound(StopBlockCreationRound(error.roundId, None, error.transactions, error.observations)) >>
+          Sync[F].raiseError[ConsensusInfo[F]](error)
       case unknown =>
-        metrics.incrementMetricAsync("consensus_startOwnRound_unknownError") >> logger
-          .error(unknown)(s"Unexpected error when starting own consensus: ${unknown.getMessage}")
-          .flatMap(_ => Sync[F].raiseError[ConsensusInfo[F]](unknown))
+        metrics.incrementMetricAsync("consensus_startOwnRound_unknownError") >>
+          logger.error(unknown)(s"Unexpected error when starting own consensus: ${unknown.getMessage}") >>
+          forceStopOwnBlockCreationRound() >>
+          Sync[F].raiseError[ConsensusInfo[F]](unknown)
     }
   }
 
@@ -323,6 +319,12 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- logger.debug(
         s"[${dao.id.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.baseHash).getOrElse("empty")}"
       )
+    } yield ()
+
+  def forceStopOwnBlockCreationRound(): F[Unit] =
+    for {
+      _ <- ownConsensus.modify(_ => (None, ()))
+      _ <- logger.info("Force stop - own block creation round")
     } yield ()
 
   def updateNotifications(notifications: Option[List[PeerNotification]]): F[Unit] =

@@ -300,6 +300,23 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(isDownload: Boolean = false): F[Unit] = {
+    def wrappedRedownload(
+      shouldRedownload: Boolean,
+      meaningfulAcceptedSnapshots: SnapshotsAtHeight,
+      meaningfulMajorityState: SnapshotsAtHeight
+    ) =
+      for {
+        _ <- if (shouldRedownload) {
+          val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
+          val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
+          for {
+            _ <- logger.debug(s"Alignment result: $result")
+            _ <- logger.debug("Redownload needed! Applying the following redownload plan:")
+            _ <- applyRedownloadPlan(plan, meaningfulMajorityState).value.flatMap(F.fromEither)
+          } yield ()
+        } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
+      } yield ()
+
     val wrappedCheck = for {
       _ <- logger.debug("Checking alignment with majority snapshot...")
       peersProposals <- getPeerProposals()
@@ -332,15 +349,25 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
 
-      _ <- if (shouldRedownload(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval, isDownload)) {
-        val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
-        val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
-        for {
-          _ <- logger.debug(s"Alignment result: $result")
-          _ <- logger.debug("Redownload needed! Applying the following redownload plan:")
-          _ <- applyRedownloadPlan(plan, meaningfulMajorityState).value.flatMap(F.fromEither)
-        } yield ()
-      } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
+      shouldPerformRedownload = shouldRedownload(
+        meaningfulAcceptedSnapshots,
+        meaningfulMajorityState,
+        redownloadInterval,
+        isDownload
+      )
+
+      _ <- if (shouldPerformRedownload) {
+        cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
+          if (state.isNewSet) {
+            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
+              error =>
+                logger.error(error)(s"Redownload error: ${stringifyStackTrace(error)}") >> cluster
+                  .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+                  .void
+            }
+          } else F.unit
+        }
+      } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
       _ <- logger.debug("Sending majority snapshots to cloud (if enabled).")
       _ <- if (meaningfulMajorityState.nonEmpty) sendMajoritySnapshotsToCloud()
@@ -353,18 +380,21 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
 
-      _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+      _ <- if (shouldPerformRedownload) {
+        cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+      } else F.unit
+
+      _ <- logger.debug("Accepting all the checkpoint blocks received during the redownload.")
+      _ <- acceptCheckpointBlocks().value.flatMap(F.fromEither)
+
     } yield ()
 
-    cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
-      if (state.isNewSet) {
-        wrappedCheck.handleErrorWith { error =>
-          logger.error(error)(s"Redownload error: ${stringifyStackTrace(error)}") >> cluster
-            .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
-            .void
-        }
-      } else F.unit
-    }
+    cluster.getNodeState
+      .map(NodeState.validForRedownload.contains)
+      .ifM(
+        wrappedCheck,
+        logger.debug("Node state is not valid for redownload, skipping") >> F.unit
+      )
   }
 
   private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] = {
@@ -409,7 +439,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
     } yield ()
 
-    if (isEnabledCloudStorage) send.handleErrorWith(_ => metrics.incrementMetricAsync("sendToCloud_failure"))
+    if (isEnabledCloudStorage) send.handleErrorWith(error => {
+      logger.error(s"Sending snapshot to cloud failed with: ${error.getMessage}") >> metrics.incrementMetricAsync(
+        "sendToCloud_failure"
+      )
+    })
     else F.unit
   }
 
@@ -465,9 +499,6 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- EitherT.liftF(logger.debug("Fetching and persisting blocks above majority."))
       _ <- fetchAndPersistBlocksAboveMajority(majorityState)
 
-      _ <- EitherT.liftF(logger.debug("Accepting all the checkpoint blocks received during the redownload."))
-      _ <- acceptCheckpointBlocks()
-
       _ <- EitherT.liftF(logger.debug("RedownloadPlan has been applied succesfully."))
 
       _ <- EitherT.liftF(metrics.incrementMetricAsync("reDownloadFinished_total"))
@@ -506,27 +537,20 @@ class RedownloadService[F[_]: NonEmptyParallel](
       (updated, ())
     }.attemptT
 
-  private[redownload] def acceptCheckpointBlocks()(
-    implicit ord: Ordering[FinishedCheckpoint]
-  ): EitherT[F, Throwable, Unit] =
-    snapshotService
-      .syncBufferPull()
-      .flatMap(
-        _.values.toList
-          .sortBy(_.checkpointCacheData.height)
-          .traverse(
-            b =>
-              logger
-                .debug(s"Accepting sync buffer block: ${b.checkpointCacheData.height}") >> checkpointAcceptanceService
-                .accept(b)
-                .handleErrorWith(
-                  error =>
-                    logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
-                )
-          )
-      )
-      .void
-      .attemptT
+  private[redownload] def acceptCheckpointBlocks(): EitherT[F, Throwable, Unit] =
+    (for {
+      blocksToAccept <- snapshotService.syncBufferPull().map(_.values.toSeq.map(_.checkpointCacheData).distinct)
+      _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
+        val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
+        (updated, ())
+      }
+      _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
+        logger.debug(s"Accepting sync buffer block: ${b.height}") >>
+          checkpointAcceptanceService.accept(b).handleErrorWith { error =>
+            logger.warn(s"Error during buffer pool blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+          }
+      }
+    } yield ()).attemptT
 
   private[redownload] def updateHighestSnapshotInfo(): EitherT[F, Throwable, Unit] =
     for {
