@@ -26,10 +26,9 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
     transactionService: TransactionService[F],
     checkpointBlockValidator: CheckpointBlockValidator[F]
   ) =
-    getTransactionEndpoint(transactionService) <+> processTransactionEndpoint(
-      transactionService,
-      checkpointBlockValidator
-    )
+    getTransactionEndpoint(transactionService) <+>
+      processTransactionEndpoint(transactionService, checkpointBlockValidator) <+>
+      getLastTransactionRefEndpoint(transactionService)
 
   private def getBatchEndpoint(metrics: Metrics, transactionService: TransactionService[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
