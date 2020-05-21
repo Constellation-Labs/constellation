@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.8.0] - 2020-05-21
 ### Added
 - Additional metrics for consensus
 - Network confirmation before marking a dead peer as offline
