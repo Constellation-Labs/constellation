@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Additional metrics for consensus
 - Network confirmation before marking a dead peer as offline
+- Public last-tx-ref endpoint
 ### Fixed
 - Accepting checkpoint blocks after (re)download
 
