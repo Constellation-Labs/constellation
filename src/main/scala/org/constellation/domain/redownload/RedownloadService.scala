@@ -510,10 +510,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def removeUnacceptedSnapshotsFromDisk(): EitherT[F, Throwable, Unit] =
     for {
+      nextSnapshotHash <- snapshotService.nextSnapshotHash.get.attemptT
       stored <- snapshotStorage.list().map(_.toSet)
       accepted <- getAcceptedSnapshots().attemptT.map(_.values.toSet)
       created <- getCreatedSnapshots().attemptT.map(_.values.map(_.hash).toSet)
-      diff = stored.diff(accepted ++ created)
+      diff = stored.diff(accepted ++ created ++ Set(nextSnapshotHash))
       _ <- diff.toList.traverse { hash =>
         snapshotStorage.delete(hash) >> snapshotInfoStorage.delete(hash)
       }
