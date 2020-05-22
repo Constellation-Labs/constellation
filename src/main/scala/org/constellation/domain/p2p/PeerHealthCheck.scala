@@ -22,8 +22,8 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
 ) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   val periodicCheckTimeout: FiniteDuration = 5.seconds
-  val confirmationCheckTimeout: FiniteDuration = 2.seconds
-  val ensureSleepTimeBetweenChecks: FiniteDuration = 2.seconds
+  val confirmationCheckTimeout: FiniteDuration = 5.seconds
+  val ensureSleepTimeBetweenChecks: FiniteDuration = 3.seconds
   val ensureDefaultAttempts = 3
 
   def check(): F[Unit] =
@@ -47,10 +47,12 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
 
   def verify(id: Id): F[PeerHealthCheckStatus] =
     for {
+      _ <- logger.info(s"Verifying node responsiveness: ${id}")
       peer <- cluster.getPeerInfo.map(_.get(id))
       result <- peer
         .map(_.peerMetadata.toPeerClientMetadata)
         .fold(PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F])(checkPeer(_, confirmationCheckTimeout))
+      _ <- logger.info(s"Node responsiveness: ${id} is ${result}")
     } yield result
 
   private def timeoutTo[A](fa: F[A], after: FiniteDuration, fallback: F[A]): F[A] = // Consider extracting
@@ -100,8 +102,8 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
     peers.traverse { pd =>
       for {
         _ <- logger.info(s"Marking dead peer: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host}) as offline")
+        _ <- F.start(cluster.broadcastOfflineNodeState(pd.peerMetadata.id))
         _ <- cluster.markOfflinePeer(pd.peerMetadata.id)
-        _ <- cluster.broadcastOfflineNodeState(pd.peerMetadata.id)
         _ <- metrics.updateMetricAsync("deadPeer", pd.peerMetadata.host)
       } yield ()
     }.void
