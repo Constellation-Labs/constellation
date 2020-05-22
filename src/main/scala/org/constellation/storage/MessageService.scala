@@ -27,9 +27,10 @@ class MessageService[F[_]: Concurrent]()(implicit dao: DAO)
   def put(key: String, value: ChannelMessageMetadata): F[ChannelMessageMetadata] =
     memPool
       .put(key, value)
-      .flatTap { _ =>
-        Sync[F].delay(dao.channelStorage.insert(value))
-      }
+// commented out database storage
+//      .flatTap { _ =>
+//        Sync[F].delay(dao.channelStorage.insert(value))
+//      }
 
   def lookup(key: String): F[Option[ChannelMessageMetadata]] =
     Lookup.extendedLookup[F, String, ChannelMessageMetadata](List(memPool))(key)
