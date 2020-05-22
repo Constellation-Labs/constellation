@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.8.1] - 2020-05-22
 ## Fixed
 - Do not remove creating snapshot
 - ChannelStorage database disabled 
