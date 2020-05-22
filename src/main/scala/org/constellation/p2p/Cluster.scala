@@ -393,6 +393,12 @@ class Cluster[F[_]](
       F.delay(dao.peersInfoPath.write(p.values.toSeq.map(_.peerMetadata).asJson.noSpaces))
     }
 
+  private def timeoutTo[A](fa: F[A], after: FiniteDuration, fallback: F[A]): F[A] = // Consider extracting
+    F.race(T.sleep(after), fa).flatMap {
+      case Left(_)  => fallback
+      case Right(a) => F.pure(a)
+    }
+
   def markOfflinePeer(nodeId: Id): F[Unit] =
     logThread(
       {
@@ -401,6 +407,7 @@ class Cluster[F[_]](
 
         val leavingFlow = for {
           p <- OptionT.liftF(peers.get)
+          _ <- OptionT.liftF(logger.info(s"Mark offline peer: ${nodeId}"))
           leavingPeer <- OptionT.fromOption[F] {
             p.get(nodeId).filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
           }
@@ -411,10 +418,14 @@ class Cluster[F[_]](
           proposals <- OptionT.liftF {
             p.toList.traverse {
               case (_, pd) =>
-                apiClient.snapshot
-                  .getPeerProposals(leavingPeerId)
-                  .run(pd.peerMetadata.toPeerClientMetadata)
-                  .handleErrorWith(_ => F.pure(None))
+                timeoutTo(
+                  apiClient.snapshot
+                    .getPeerProposals(leavingPeerId)
+                    .run(pd.peerMetadata.toPeerClientMetadata)
+                    .handleErrorWith(_ => F.pure(None)),
+                  5.seconds,
+                  F.pure(none[SnapshotProposalsAtHeight])
+                )
             }.flatMap { list =>
               LiftIO[F]
                 .liftIO(dao.redownloadService.getPeerProposals().map(_.get(leavingPeerId)))
@@ -444,9 +455,11 @@ class Cluster[F[_]](
           _ <- OptionT.liftF {
             peers.modify(p => (p + (leavingPeerId -> newPeerData), p)) >> updateMetrics >> updatePersistentStore
           }
+
+          _ <- OptionT.liftF(logger.info(s"Mark offline peer: ${nodeId} - finished"))
         } yield ()
 
-        leavingFlow.getOrElseF(F.unit)
+        leavingFlow.getOrElseF(logger.error(s"Unexpected error during leaving flow"))
       },
       "cluster_markOfflinePeer"
     )
