@@ -58,6 +58,7 @@ class SnapshotService[F[_]: Concurrent](
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
+  val nextSnapshotHash: Ref[F, String] = Ref.unsafe("")
 
   val dataResolver = new DataResolver(dao)
 
@@ -82,17 +83,36 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateMaxAcceptedCBHashesInMemory()
       _ <- validateAcceptedCBsSinceSnapshot()
 
-      nextHeightInterval <- EitherT.liftF(getNextHeightInterval)
-      minActiveTipHeight <- EitherT.liftF(LiftIO[F].liftIO(dao.getActiveMinHeight))
-      minTipHeight <- EitherT.liftF(concurrentTipService.getMinTipHeight(minActiveTipHeight))
+      nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
+      minActiveTipHeight <- LiftIO[F]
+        .liftIO(dao.getActiveMinHeight)
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+      minTipHeight <- concurrentTipService
+        .getMinTipHeight(minActiveTipHeight)
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
-      blocksWithinHeightInterval <- EitherT.liftF(getBlocksWithinHeightInterval(nextHeightInterval))
+      blocksWithinHeightInterval <- getBlocksWithinHeightInterval(nextHeightInterval).attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
       allBlocks = blocksWithinHeightInterval.map(_.get).sortBy(_.checkpointBlock.baseHash)
 
       hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash)
-      publicReputation <- EitherT.liftF(trustManager.getPredictedReputation)
-      nextSnapshot <- EitherT.liftF(getNextSnapshot(hashesForNextSnapshot, publicReputation))
+      publicReputation <- trustManager.getPredictedReputation.attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+      nextSnapshot <- getNextSnapshot(hashesForNextSnapshot, publicReputation).attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+      _ <- nextSnapshotHash
+        .modify(_ => (nextSnapshot.hash, ()))
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
 
       _ <- EitherT.liftF(
         logger.debug(
@@ -106,20 +126,30 @@ class SnapshotService[F[_]: Concurrent](
         )
       )
       _ <- applySnapshot()
-      _ <- EitherT.liftF(lastSnapshotHeight.set(nextHeightInterval.toInt))
-      _ <- EitherT.liftF(acceptedCBSinceSnapshot.update(_.filterNot(hashesForNextSnapshot.contains)))
-      _ <- EitherT.liftF(calculateAcceptedTransactionsSinceSnapshot())
-      _ <- EitherT.liftF(updateMetricsAfterSnapshot())
+      _ <- lastSnapshotHeight
+        .set(nextHeightInterval.toInt)
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+      _ <- acceptedCBSinceSnapshot
+        .update(_.filterNot(hashesForNextSnapshot.contains))
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+      _ <- calculateAcceptedTransactionsSinceSnapshot().attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+      _ <- updateMetricsAfterSnapshot().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       snapshot = StoredSnapshot(nextSnapshot, allBlocks)
-      _ <- EitherT.liftF(storedSnapshot.set(snapshot))
+      _ <- storedSnapshot.set(snapshot).attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
       // TODO: pass stored snapshot to writeSnapshotToDisk
       _ <- writeSnapshotToDisk(snapshot.snapshot)
       _ <- writeSnapshotInfoToDisk()
       // For now we do not restore EigenTrust model
       //      _ <- writeEigenTrustToDisk(snapshot.snapshot)
 
-      _ <- EitherT.liftF(markLeavingPeersAsOffline())
+      _ <- markLeavingPeersAsOffline().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       created = SnapshotCreated(
         nextSnapshot.hash,
