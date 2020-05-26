@@ -35,7 +35,7 @@ object SelfAvoidingWalk extends StrictLogging {
     visited: Set[Int],
     currentTrust: Double
   ): (Int, Double) =
-    if (totalPathLength == currentPathLength) {
+    if (totalPathLength == currentPathLength || !nodeMap.contains(currentId)) { // TODO: remove nodeMap.contains and simulate perfect edges as input for the walk
       currentId -> currentTrust
     } else {
 
