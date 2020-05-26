@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import java.time.LocalDateTime
 
-import cats.data.{NonEmptyList, OptionT}
+import cats.data.{EitherT, NonEmptyList, OptionT}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.implicits._
@@ -399,70 +399,79 @@ class Cluster[F[_]](
       case Right(a) => F.pure(a)
     }
 
-  def markOfflinePeer(nodeId: Id): F[Unit] =
-    logThread(
-      {
-        implicit val snapOrder: Order[SnapshotProposalsAtHeight] =
-          Order.by[SnapshotProposalsAtHeight, List[Long]](a => a.keySet.toList.sorted)
+  def markOfflinePeer(nodeId: Id): F[Unit] = logThread(
+    {
+      implicit val snapOrder: Order[SnapshotProposalsAtHeight] =
+        Order.by[SnapshotProposalsAtHeight, List[Long]](a => a.keySet.toList.sorted)
 
-        val leavingFlow = for {
-          p <- OptionT.liftF(peers.get)
-          _ <- OptionT.liftF(logger.info(s"Mark offline peer: ${nodeId}"))
-          leavingPeer <- OptionT.fromOption[F] {
-            p.get(nodeId).filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
-          }
-          leavingPeerId = leavingPeer.peerMetadata.id
-          majorityHeight <- OptionT.liftF(LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight))
-          _ <- OptionT.liftF(ipManager.removeKnownIP(leavingPeer.peerMetadata.host))
+      val leavingFlow: F[Unit] = for {
+        p <- peers.get
+        notOfflinePeers = p.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) }
+        _ <- logger.info(s"Mark offline peer: ${nodeId}")
+        leavingPeer <- notOfflinePeers
+          .get(nodeId)
+          .fold(
+            F.raiseError[PeerData](
+              new Throwable(s"Peer id=${nodeId} cannot be find in the peers map or can be already offline")
+            )
+          )(_.pure[F])
+        leavingPeerId = leavingPeer.peerMetadata.id
+        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
 
-          proposals <- OptionT.liftF {
-            p.toList.traverse {
-              case (_, pd) =>
-                timeoutTo(
-                  apiClient.snapshot
-                    .getPeerProposals(leavingPeerId)
-                    .run(pd.peerMetadata.toPeerClientMetadata)
-                    .handleErrorWith(_ => F.pure(None)),
-                  5.seconds,
-                  F.pure(none[SnapshotProposalsAtHeight])
-                )
-            }.flatMap { list =>
-              LiftIO[F]
-                .liftIO(dao.redownloadService.getPeerProposals().map(_.get(leavingPeerId)))
-                .map(list.::)
-            }.map(_.flatten)
-          }
+        proposals <- notOfflinePeers.toList.traverse {
+          case (_, pd) =>
+            timeoutTo(
+              apiClient.snapshot
+                .getPeerProposals(leavingPeerId)
+                .run(pd.peerMetadata.toPeerClientMetadata)
+                .handleErrorWith(
+                  _ =>
+                    logger.debug(
+                      s"Cannot get peer proposals for leaving node (id=${leavingPeerId} host=${leavingPeer.peerMetadata.host}) from peer (id=${pd.peerMetadata.id} host=${pd.peerMetadata.host}). Fallback to empty"
+                    ) >> F.pure(None)
+                ),
+              5.seconds,
+              F.pure(none[SnapshotProposalsAtHeight])
+            )
+        }.flatMap { list =>
+          LiftIO[F]
+            .liftIO(dao.redownloadService.getPeerProposals().map(_.get(leavingPeerId)))
+            .map(list.::)
+        }.map(_.flatten)
 
-          maxProposal = proposals.maximumOption
-          _ <- OptionT.liftF {
-            maxProposal
-              .map(proposal => LiftIO[F].liftIO(dao.redownloadService.updatePeerProposal(leavingPeerId, proposal)))
-              .getOrElse(F.unit)
-          }
+        maxProposal = proposals.maximumOption
+        _ <- maxProposal.map { proposal =>
+          logger.debug(s"Maximum proposal for leaving node id=${leavingPeerId} is empty? ${proposal.isEmpty}") >>
+            LiftIO[F].liftIO(dao.redownloadService.updatePeerProposal(leavingPeerId, proposal))
+        }.getOrElse(F.unit)
 
-          maxProposalHeight = maxProposal.flatMap(_.keySet.toList.maximumOption)
-          joiningHeight = leavingPeer.majorityHeight.head.joined
+        maxProposalHeight = maxProposal.flatMap(_.keySet.toList.maximumOption)
+        joiningHeight = leavingPeer.majorityHeight.head.joined
 
-          leavingHeight = maxProposalHeight
-            .map(height => if (height > majorityHeight) majorityHeight else height)
-            .orElse(joiningHeight)
-            .getOrElse(majorityHeight)
+        leavingHeight = maxProposalHeight
+          .map(height => if (height > majorityHeight) majorityHeight else height)
+          .orElse(joiningHeight)
+          .getOrElse(majorityHeight)
 
-          newPeerData = leavingPeer
-            .updateLeavingHeight(leavingHeight)
-            .copy(peerMetadata = leavingPeer.peerMetadata.copy(nodeState = NodeState.Offline))
+        _ <- logger.debug(
+          s"Leaving node id=${leavingPeerId} | maxProposalHeight=${maxProposalHeight} | joiningHeight=${joiningHeight} | leavingHeight=${leavingHeight} "
+        )
 
-          _ <- OptionT.liftF {
-            peers.modify(p => (p + (leavingPeerId -> newPeerData), p)) >> updateMetrics >> updatePersistentStore
-          }
+        newPeerData = leavingPeer
+          .updateLeavingHeight(leavingHeight)
+          .copy(peerMetadata = leavingPeer.peerMetadata.copy(nodeState = NodeState.Offline))
 
-          _ <- OptionT.liftF(logger.info(s"Mark offline peer: ${nodeId} - finished"))
-        } yield ()
+        _ <- peers.modify(p => (p + (leavingPeerId -> newPeerData), p)) >> updateMetrics >> updatePersistentStore
 
-        leavingFlow.getOrElseF(logger.error(s"Unexpected error during leaving flow"))
-      },
-      "cluster_markOfflinePeer"
-    )
+        _ <- logger.info(s"Mark offline peer: ${nodeId} - finished")
+      } yield ()
+
+      leavingFlow.handleErrorWith { err =>
+        logger.error(s"Error during marking peer as offline: ${err.getMessage}") >> F.raiseError(err)
+      }
+    },
+    "cluster_markOfflinePeer"
+  )
 
   // TODO: not used but should be used for removing old peers
   def removePeer(pd: PeerData): F[Unit] =

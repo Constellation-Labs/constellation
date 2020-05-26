@@ -172,7 +172,9 @@ object ConstellationNode extends IOApp {
         SnapshotEndpoints.ownerEndpoints[IO](dao.snapshotStorage, dao.redownloadService)
 
       getKnownPeerId = { (ip: IP) =>
-        dao.cluster.getPeerData(ip).map(_.map(_.peerMetadata.id))
+        dao.cluster
+          .getPeerData(ip)
+          .map(_.filter(pd => NodeState.canUseAPI(pd.peerMetadata.nodeState)).map(_.peerMetadata.id))
       }
       getWhitelistedPeerId = { (ip: IP) =>
         dao.nodeConfig.whitelisting.get(ip).pure[IO]

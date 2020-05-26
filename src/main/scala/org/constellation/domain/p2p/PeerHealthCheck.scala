@@ -100,12 +100,13 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
 
   private def markOffline(peers: List[PeerData]): F[Unit] =
     peers.traverse { pd =>
-      for {
+      (for {
         _ <- logger.info(s"Marking dead peer: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host}) as offline")
         _ <- F.start(cluster.broadcastOfflineNodeState(pd.peerMetadata.id))
         _ <- cluster.markOfflinePeer(pd.peerMetadata.id)
         _ <- metrics.updateMetricAsync("deadPeer", pd.peerMetadata.host)
-      } yield ()
+      } yield ())
+        .handleErrorWith(_ => logger.error("Cannot mark peer as offline - error / skipping to next peer if available"))
     }.void
 }
 
