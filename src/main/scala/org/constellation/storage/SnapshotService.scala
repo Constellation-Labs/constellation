@@ -557,7 +557,14 @@ class SnapshotService[F[_]: Concurrent](
 
   private def markLeavingPeersAsOffline(): F[Unit] =
     LiftIO[F]
-      .liftIO(dao.leavingPeers.flatMap(_.values.toList.map(_.peerMetadata.id).traverse(dao.cluster.markOfflinePeer)))
+      .liftIO(dao.leavingPeers)
+      .flatMap {
+        _.values.toList.map(_.peerMetadata.id).traverse { p =>
+          LiftIO[F]
+            .liftIO(dao.cluster.markOfflinePeer(p))
+            .handleErrorWith(err => logger.error(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
+        }
+      }
       .void
 }
 

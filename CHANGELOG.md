@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Disallow offline nodes for communication
 
 ## [v2.8.1] - 2020-05-22
 ## Fixed

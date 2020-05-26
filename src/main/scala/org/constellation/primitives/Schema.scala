@@ -76,6 +76,8 @@ object Schema {
 
     val validForCheckpointPendingAcceptance: Set[NodeState] = validDuringDownload
 
+    val invalidForCommunication: Set[NodeState] = Set(Offline)
+
     // TODO: Use initial for allowing joining after leaving
     def canJoin(current: NodeState): Boolean = current == PendingDownload
 
@@ -103,6 +105,8 @@ object Schema {
 
     def canAwaitForCheckpointAcceptance(current: NodeState): Boolean =
       validForCheckpointPendingAcceptance.contains(current)
+
+    def canUseAPI(current: NodeState): Boolean = !invalidForCommunication.contains(current)
 
   }
 
