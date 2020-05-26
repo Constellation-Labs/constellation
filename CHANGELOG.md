@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.8.2] - 2020-05-26
 ## Added
 - Owner endpoint for observing majority heights
 ## Fixed
