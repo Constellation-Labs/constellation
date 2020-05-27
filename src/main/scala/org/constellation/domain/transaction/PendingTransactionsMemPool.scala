@@ -9,6 +9,8 @@ import org.constellation.primitives.Schema.Address
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.{PendingMemPool, RateLimiting}
 
+import scala.annotation.tailrec
+
 class PendingTransactionsMemPool[F[_]: Concurrent](
   transactionChainService: TransactionChainService[F],
   rateLimiting: RateLimiting[F]
@@ -43,7 +45,6 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
   private def sortAndFilterForPull(txs: List[TransactionCacheData]): F[List[TransactionCacheData]] =
     txs
       .groupBy(_.transaction.src.address)
-      .mapValues(_.sortBy(_.transaction.ordinal))
       .toList
       .pure[F]
       .flatMap(_.filterA {
@@ -54,25 +55,32 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
           case (addressHash, txs) =>
             transactionChainService
               .getLastAcceptedTransactionRef(addressHash)
-              .flatTap { last =>
-                logger.info(s"${Console.YELLOW}Last accepted: ${last} | Txs head: ${txs.headOption
-                  .map(_.transaction.lastTxRef)} hash=${txs.headOption.map(_.transaction.hash)}${Console.RESET}")
-              }
               .map { last =>
-                val ordinal = last.ordinal
-                val left = txs.filter(t => t.transaction.lastTxRef.ordinal >= ordinal || t.transaction.isTest) // TODO: get rid of >=
-                (last, left)
+                val consecutiveTransactions = takeConsecutiveTransactions(last, txs)
+                (last, consecutiveTransactions)
               }
-              .map {
-                case (last, t) =>
-                  if (t.headOption.map(_.transaction.lastTxRef).contains(last)) t
-                  else List.empty[TransactionCacheData]
+              .flatTap { case (last, consecTxs) =>
+                logger.info(s"${Console.YELLOW}Last accepted: ${last} | Txs head: ${consecTxs.headOption
+                  .map(_.transaction.lastTxRef)} hash=${consecTxs.headOption.map(_.transaction.hash)}${Console.RESET}")
               }
+              .map { case (_, consecTxs) => consecTxs }
         }
       }
       .map(
         _.sortBy(_.map(-_.transaction.fee.getOrElse(0L)).sum).flatten
       )
+
+  private def takeConsecutiveTransactions(lastAcceptedTxRef: LastTransactionRef, txs: List[TransactionCacheData]): List[TransactionCacheData] = {
+    @tailrec
+    def loop(acc: List[TransactionCacheData], prevTxRef: LastTransactionRef, txs: List[TransactionCacheData]): List[TransactionCacheData] =
+      txs.find(_.transaction.lastTxRef == prevTxRef) match {
+        case Some(tx) =>
+          loop(tx +: acc, LastTransactionRef(tx.transaction.hash, tx.transaction.ordinal), txs diff List(tx))
+        case None => acc.reverse //to preserve order of the chain
+    }
+
+    loop(List.empty, lastAcceptedTxRef, txs)
+  }
 }
 
 object PendingTransactionsMemPool {
