@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Pull only consecutive transactions chain for consensus #1241
 
 ## [v2.8.4] - 2020-06-04
 ## Added

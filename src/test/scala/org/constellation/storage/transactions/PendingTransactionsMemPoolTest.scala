@@ -2,14 +2,16 @@ package org.constellation.storage.transactions
 
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.domain.transaction.{PendingTransactionsMemPool, TransactionChainService, TransactionService}
-import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.domain.transaction.{LastTransactionRef, PendingTransactionsMemPool, TransactionChainService, TransactionService}
+import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
+import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.IdiomaticMockito
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with Matchers with BeforeAndAfter {
+  import constellation.signedObservationEdge
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
   var txChainService: TransactionChainService[IO] = _
@@ -151,6 +153,56 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
       ret shouldBe None
     }
+
+    "it should return None when no transaction references last accepted transaction" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, rl)
+
+      val tx1 = manuallyCreateTransaction("a", "", 1)
+      val tx2 = manuallyCreateTransaction("a", "abc", 0)
+
+      (memPool.put(tx1.hash, tx1) >>
+        memPool.put(tx2.hash, tx2)).unsafeRunSync
+
+      val result = memPool.pull(10).unsafeRunSync
+
+      result shouldBe None
+    }
+
+    "it should return a consecutive chain of transactions if first tx in a chain references last accepted tx" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, rl)
+
+      val tx1 = manuallyCreateTransaction("a", "", 0)
+      val tx2 = manuallyCreateTransaction("a", tx1.transaction.hash, tx1.transaction.ordinal)
+      val tx3 = manuallyCreateTransaction("a", tx2.transaction.hash, tx2.transaction.ordinal)
+      val tx4 = manuallyCreateTransaction("a", tx3.transaction.hash, tx3.transaction.ordinal)
+
+      //not sending tx3 to pending to break the chain
+      (memPool.put(tx1.hash, tx1) >>
+        memPool.put(tx2.hash, tx2) >>
+        memPool.put(tx4.hash, tx4)).unsafeRunSync
+
+      val result = memPool.pull(10).unsafeRunSync
+
+      result shouldBe Some(List(tx1, tx2))
+    }
+
+    "if there are transactions referring to the same ordinal but different hash or other way around - should pick the correct one if exists" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, rl)
+
+      val tx1 = manuallyCreateTransaction("a", "", 0)
+      val tx2Correct = manuallyCreateTransaction("a", tx1.transaction.hash, tx1.transaction.ordinal)
+      val tx2WrongOrdinal = manuallyCreateTransaction("a", tx1.transaction.hash, 2)
+      val tx2WrongHash = manuallyCreateTransaction("a", "wrongHash", tx1.transaction.ordinal)
+
+      (memPool.put(tx1.hash, tx1) >>
+        memPool.put(tx2Correct.hash, tx2Correct) >>
+        memPool.put(tx2WrongOrdinal.hash, tx2WrongOrdinal) >>
+        memPool.put(tx2WrongHash.hash, tx2WrongHash)).unsafeRunSync
+
+      val result = memPool.pull(10).unsafeRunSync
+
+      result shouldBe Some(List(tx1, tx2Correct))
+    }
   }
 
   def createTransaction(
@@ -162,4 +214,20 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
       .map(TransactionCacheData(_))
       .unsafeRunSync
 
+  def manuallyCreateTransaction(src: String, lastTxHash: String, lastTxOrdinal: Long): TransactionCacheData = {
+    val lastTxRef = LastTransactionRef(lastTxHash, lastTxOrdinal)
+    val data = TransactionEdgeData(1L, lastTxRef)
+    val oe = ObservationEdge(
+      parents = Seq(
+        TypedEdgeHash(src, EdgeHashType.AddressHash),
+        TypedEdgeHash("dst", EdgeHashType.AddressHash)
+      ),
+      data = TypedEdgeHash(data.hash, EdgeHashType.TransactionDataHash)
+    )
+    val soe = signedObservationEdge(oe)(Fixtures.tempKey)
+
+    TransactionCacheData(
+      Transaction(Edge(oe, soe, data), lastTxRef)
+    )
+  }
 }
