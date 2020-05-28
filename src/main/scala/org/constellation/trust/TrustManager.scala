@@ -34,7 +34,13 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 //          _ <- logger.debug(s"TrustManager.calculateIdxMaps for idxMap: ${idxMap.toString()}")
 //          _ <- logger.debug(s"TrustManager.scoringMap for scoringMap: ${scoringMap.toString()}")
           selfNodeId = scoringMap(nodeId)
-          trustNodes = TrustManager.calculateTrustNodes(scores, nodeId, scoringMap)
+
+          missingNodes = scoringMap.keySet.toList.diff(scores.map(_.id))
+          simulatedTrustDataForMissingNodes = missingNodes.map { id =>
+            TrustDataInternal(id, scoringMap.mapValues(_ => 1d))
+          }
+
+          trustNodes = TrustManager.calculateTrustNodes(scores ++ simulatedTrustDataForMissingNodes, nodeId, scoringMap)
 //          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
 
           idMappedScores = SelfAvoidingWalk
@@ -115,16 +121,13 @@ object TrustManager {
   ): List[TrustNode] =
     scores.map {
       case TrustDataInternal(id, peerScores) =>
-        println(s"${Console.RED}Size: ${peerScores.size}${Console.RESET}")
         val selfIdx = scoringMap(id)
         TrustNode(
           selfIdx,
           0d,
           0d,
           peerScores.map {
-            case (peerId, score) =>
-              println(s"${Console.RED}${score}${Console.RESET}")
-              TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)
+            case (peerId, score) => TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)
           }.toSeq
         )
     }

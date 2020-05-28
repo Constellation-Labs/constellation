@@ -116,7 +116,6 @@ object SelfAvoidingWalk extends StrictLogging {
         walkScores(id) += trust
       }
     }
-    logger.debug(s"walkFromOrigin for walkScores ${walkScores.toString()}")
 
     walkScores
   }
@@ -136,8 +135,8 @@ object SelfAvoidingWalk extends StrictLogging {
 
   // Need to change to fit to a distribution. Simple way to avoid that for now is splitting pos neg
   def normalizeScoresWithNegative(scores: Array[Double]): Array[Double] = {
-    val pos = scores.zipWithIndex.filter(_._1 > 0)
-    val neg = scores.zipWithIndex.filter(_._1 <= 0)
+    val pos = scores.zipWithIndex.filter(_._1 >= 0)
+    val neg = scores.zipWithIndex.filter(_._1 < 0)
     normalizeScoresWithIndex(pos).foreach {
       case (s, i) =>
         scores(i) = s
@@ -230,7 +229,7 @@ object SelfAvoidingWalk extends StrictLogging {
         logger.debug(s"runWalkBatchesFeedback - negativeScores - selfId: $selfId - negativeEdges: $negativeEdges")
         negativeEdges.filterNot { _.dst == selfId }.map { ne =>
           val nanTest = (ne.trust * score / negativeEdges.size)
-//        println("nanTest =>" + nanTest)
+//          println("nanTest =>" + nanTest)
           ne.dst -> nanTest
         }
     }.groupBy(_._1).mapValues(_.map { _._2 }.sum)
