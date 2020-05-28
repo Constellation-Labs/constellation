@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Fixed
 - Self avoiding walk: missing edges and negative 0d
+- No active tips issue and consensus hanging
 
 ## [v2.8.2] - 2020-05-26
 ## Added
