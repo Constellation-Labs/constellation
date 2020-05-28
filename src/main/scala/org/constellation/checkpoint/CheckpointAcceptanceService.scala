@@ -381,7 +381,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           logger.debug(s"[Accept checkpoint][2-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(Timer[F].sleep(3.seconds) >> resolveMissingParents(cb)) >>
           Concurrent[F].start(Timer[F].sleep(20.seconds) >> resolveMissingParents(cb)) >>
-          error.raiseError[F, Unit] >> dao.metrics.incrementMetricAsync("missingParents")
+          dao.metrics.incrementMetricAsync("missingParents") >> error.raiseError[F, Unit]
 
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>
