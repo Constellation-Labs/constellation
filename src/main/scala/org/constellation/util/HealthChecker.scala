@@ -87,33 +87,33 @@ class HealthChecker[F[_]: Concurrent](
     }
   }
 
-  private def collectMinTipHeights(): F[Map[Id, Long]] =
+  private def collectNextSnapshotHeights(): F[Map[Id, Long]] =
     for {
       peers <- LiftIO[F]
         .liftIO(dao.cluster.getPeerInfo)
         .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
-      minTipHeights <- peers.values.toList
+      nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)
-        .traverse(apiClient.tips.getMinTipHeight().run)
-    } yield minTipHeights.toMap
+        .traverse(apiClient.snapshot.getNextSnapshotHeight().run)
+    } yield nextSnapshotHeights.toMap
 
   def clearStaleTips(): F[Unit] =
     for {
-      minTipHeights <- collectMinTipHeights()
-      minHeights = minTipHeights.values.toList
-      nodesWithHeights = minHeights.filter(_ > 0)
+      nextSnasphotHeights <- collectNextSnapshotHeights()
+      heights = nextSnasphotHeights.values.toList
+      nodesWithHeights = heights.filter(_ > 0)
 
-      _ <- if (minHeights.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
+      _ <- if (heights.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
         val heightsOfMinimumFacilitators = nodesWithHeights
           .groupBy(a => a)
           .filter(_._2.size >= dao.processingConfig.numFacilitatorPeers)
 
         if (heightsOfMinimumFacilitators.nonEmpty) {
-          concurrentTipService.clearStaleTips(minHeights.min)
+          concurrentTipService.clearStaleTips(heights.min)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(
-          s"[Clear stale tips] Size=${minTipHeights.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
+          s"[Clear stale tips] Size=${nextSnasphotHeights.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
         )
     } yield ()
 
