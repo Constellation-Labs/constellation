@@ -18,7 +18,7 @@ scalacOptions :=
   )
 javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
-lazy val _version = "2.8.2"
+lazy val _version = "2.8.3"
 
 lazy val commonSettings = Seq(
   version := _version,
