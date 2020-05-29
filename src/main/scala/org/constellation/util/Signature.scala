@@ -25,8 +25,6 @@ trait Signable {
 
   def getHexEncoding = KeyUtils.bytes2hex(hashSerializedBytes(toEncode))
 
-  def runLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
-
 }
 
 case class SingleHashSignature(hash: String, hashSignature: HashSignature) {

@@ -1,5 +1,7 @@
 package org.constellation.domain.transaction
 
+import java.nio.charset.StandardCharsets.US_ASCII
+
 import cats.data.ValidatedNel
 import cats.effect.Sync
 import cats.implicits._
@@ -8,6 +10,8 @@ import org.constellation.primitives.Transaction
 
 object TransactionValidator {
   type ValidationResult[A] = ValidatedNel[TransactionValidationError, A]
+
+  private def canEncodeAsASCII(s: String): Boolean = US_ASCII.newEncoder().canEncode(s)
 
   def validateSourceSignature(tx: Transaction): ValidationResult[Transaction] =
     if (tx.isValid) tx.validNel else InvalidSourceSignature(tx).invalidNel
@@ -20,6 +24,18 @@ object TransactionValidator {
       tx.validNel
     else
       InvalidDestinationAddress(tx).invalidNel
+
+  def validateSourceAddressFormat(tx: Transaction): ValidationResult[Transaction] =
+    if (!canEncodeAsASCII(tx.src.address))
+      InvalidSourceAddressFormat(tx).invalidNel
+    else
+      tx.validNel
+
+  def validateDestinationAddressFormat(tx: Transaction): ValidationResult[Transaction] =
+    if (!canEncodeAsASCII(tx.dst.address))
+      InvalidDestinationAddressFormat(tx).invalidNel
+    else
+      tx.validNel
 
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.isDummy) {
@@ -35,6 +51,12 @@ object TransactionValidator {
       case Some(fee) if fee <= 0 => NonPositiveFee(tx).invalidNel
       case _                     => tx.validNel
     }
+
+  def validateLastTxRefFormat(tx: Transaction): ValidationResult[Transaction] =
+    if (!canEncodeAsASCII(tx.lastTxRef.prevHash))
+      IncorrectLastTxRefFormat(tx).invalidNel
+    else
+      tx.validNel
 }
 
 class TransactionValidator[F[_]: Sync](
@@ -80,6 +102,9 @@ class TransactionValidator[F[_]: Sync](
         validateSourceSignature(tx)
           .product(validateEmptyDestinationAddress(tx))
           .product(validateDestinationAddress(tx))
+          .product(validateSourceAddressFormat(tx))
+          .product(validateDestinationAddressFormat(tx))
+          .product(validateLastTxRefFormat(tx))
           .product(validateAmount(tx))
           .product(validateFee(tx))
       )
@@ -114,6 +139,22 @@ case class InvalidDestinationAddress(txHash: String, address: String) extends Tr
 
 object InvalidDestinationAddress {
   def apply(tx: Transaction) = new InvalidDestinationAddress(tx.hash, tx.dst.hash)
+}
+
+case class InvalidSourceAddressFormat(txHash: String, address: String) extends TransactionValidationError {
+  def errorMessage: String = s"Transaction tx=$txHash has an invalid format for source address=$address}"
+}
+
+object InvalidSourceAddressFormat {
+  def apply(tx: Transaction) = new InvalidSourceAddressFormat(tx.hash, tx.src.address)
+}
+
+case class InvalidDestinationAddressFormat(txHash: String, address: String) extends TransactionValidationError {
+  def errorMessage: String = s"Transaction tx=$txHash has an invalid format for destination address=$address}"
+}
+
+object InvalidDestinationAddressFormat {
+  def apply(tx: Transaction) = new InvalidDestinationAddressFormat(tx.hash, tx.dst.address)
 }
 
 case class NonPositiveAmount(txHash: String, amount: Long) extends TransactionValidationError {
@@ -175,6 +216,13 @@ sealed trait IncorrectLastTransactionRef extends TransactionValidationError {
 
   def errorMessage: String =
     s"Transaction tx=$txHash has an incorrect last transaction reference: $lastTransactionRef."
+}
+
+case class IncorrectLastTxRefFormat(txHash: String, lastTransactionRef: LastTransactionRef)
+  extends IncorrectLastTransactionRef
+
+object IncorrectLastTxRefFormat {
+  def apply(tx: Transaction) = new IncorrectLastTxRefFormat(tx.hash, tx.lastTxRef)
 }
 
 case class InconsistentLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
