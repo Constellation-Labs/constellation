@@ -1,6 +1,7 @@
 package org.constellation.wallet
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
+import java.nio.charset.StandardCharsets.US_ASCII
 
 import cats.Monoid
 import com.google.common.hash.Hashing
@@ -8,6 +9,7 @@ import com.twitter.chill.{IKryoRegistrar, Kryo, KryoPool, ScalaKryoInstantiator}
 import enumeratum._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.{bytes2hex, hexToPublicKey, signData, verifySignature}
+import org.constellation.wallet.EncodableValue._
 
 import scala.util.Random
 
@@ -100,6 +102,28 @@ object KryoSerializer {
     kryoPool.fromBytes(bytes).asInstanceOf[T]
 }
 
+sealed trait EncodableValue[A] { val value: A }
+
+object EncodableValue {
+  def encodeLength(len: Int): String = bytes2hex(BigInt(len).toByteArray)
+
+  private def encode[A](value: EncodableValue[A]): String = value match {
+    case EncodableLong(value) =>
+      val toEncode = BigInt(value).toByteArray
+      encodeLength(toEncode.length) + bytes2hex(toEncode)
+    case EncodableASCII(value) =>
+      val toEncode = US_ASCII.encode(value).array()
+      encodeLength(toEncode.length) + bytes2hex(toEncode)
+  }
+
+  def runLengthEncoding(values: Seq[EncodableValue[_]]): String = values.foldLeft("") {
+    (acc, value) => acc + encode(value)
+  }
+
+  final case class EncodableLong(value: Long) extends EncodableValue[Long]
+  final case class EncodableASCII(value: String) extends EncodableValue[String]
+}
+
 object Hashable {
   def hash(a: AnyRef): String = Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(a)).toString
 }
@@ -115,15 +139,12 @@ trait Signable {
   def getEncoding: String = Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(this)).toString
 
   def getHexEncoding = KeyUtils.bytes2hex(Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(this)).asBytes())
-
-  def runLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
-
 }
 
 case class LastTransactionRef(prevHash: String, ordinal: Long) extends Signable {
-  override def getEncoding = {
-    val args = Seq(prevHash, ordinal.toString)
-    runLengthEncoding(args: _*)
+  override def getEncoding: String = {
+    val args = Seq(EncodableASCII(prevHash), EncodableLong(ordinal))
+    runLengthEncoding(args)
   }
 }
 
@@ -137,9 +158,9 @@ case class TransactionEdgeData(
   fee: Option[Long] = None,
   salt: Long = Random.nextLong()
 ) extends Signable {
-  override def getEncoding = {
-    val encodedAmount = runLengthEncoding(Seq(amount.toHexString): _*)
-    val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString): _*)
+  override def getEncoding: String = {
+    val encodedAmount = runLengthEncoding(Seq(EncodableLong(amount)))
+    val encodedFeeSalt = runLengthEncoding(Seq(EncodableLong(fee.getOrElse(0L)), EncodableLong(salt)))
     encodedAmount + lastTxRef.getEncoding + encodedFeeSalt
   }
 }
@@ -166,9 +187,9 @@ case class ObservationEdge(
   parents: Seq[TypedEdgeHash],
   data: TypedEdgeHash
 ) extends Signable {
-  override def getEncoding = {
-    val numParents = parents.length //note, we should not use magick number 2 here, state channels can have multiple
-    val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
+  override def getEncoding: String = {
+    val numParents = encodeLength(parents.length) //note, we should not use magick number 2 here, state channels can have multiple
+    val encodedParentHashRefs = runLengthEncoding(parents.map(p => EncodableASCII(p.hashReference)))
     numParents + encodedParentHashRefs + data.hashReference
   }
 }
@@ -209,7 +230,7 @@ object SignHelp {
     bytes2hex(signData(hash.getBytes())(privateKey))
 
   def signedObservationEdge(oe: ObservationEdge)(implicit kp: KeyPair): SignedObservationEdge =
-    SignedObservationEdge(hashSignBatchZeroTyped(Hashable.hash(oe.getEncoding), kp))
+    SignedObservationEdge(hashSignBatchZeroTyped(oe.hash, kp))
 
   def hashSignBatchZeroTyped(hash: String, keyPair: KeyPair): SignatureBatch =
     SignatureBatch(hash, Seq(hashSign(hash, keyPair)))

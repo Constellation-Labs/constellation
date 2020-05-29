@@ -6,6 +6,7 @@ import enumeratum._
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.schema.Id
 import org.constellation.util._
+import org.constellation.wallet.EncodableValue.{EncodableASCII, EncodableLong, encodeLength, runLengthEncoding}
 
 // This can't be a trait due to serialization issues.
 import scala.util.Random
@@ -205,9 +206,9 @@ object Schema {
     parents: Seq[TypedEdgeHash],
     data: TypedEdgeHash
   ) extends Signable {
-    override def getEncoding = {
-      val numParents = parents.length //note, we should not use magick number 2 here, state channels can have multiple
-      val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
+    override def getEncoding: String = {
+      val numParents = encodeLength(parents.length) //note, we should not use magick number 2 here, state channels can have multiple
+      val encodedParentHashRefs = runLengthEncoding(parents.map(p => EncodableASCII(p.hashReference)))
       numParents + encodedParentHashRefs + data.hashReference
     }
   }
@@ -249,9 +250,9 @@ object Schema {
     fee: Option[Long] = None,
     salt: Long = Random.nextLong()
   ) extends Signable {
-    override def getEncoding = {
-      val encodedAmount = runLengthEncoding(Seq(amount.toHexString): _*)
-      val encodedFeeSalt = runLengthEncoding(Seq(fee.getOrElse(0L).toString, salt.toHexString): _*)
+    override def getEncoding: String = {
+      val encodedAmount = runLengthEncoding(Seq(EncodableLong(amount)))
+      val encodedFeeSalt = runLengthEncoding(Seq(EncodableLong(fee.getOrElse(0L)), EncodableLong(salt)))
       encodedAmount + lastTxRef.getEncoding + encodedFeeSalt
     }
   }

@@ -94,6 +94,63 @@ class TransactionValidatorTest
       }
     }
   }
+
+  "address format validation" - {
+    val validAddress = "DAG48nmxgpKhZzEzyc86y9oHotxxG57G8sBBwj34"
+    val lastTxRef = LastTransactionRef.empty
+
+    "validateSourceAddressFormat" - {
+      "should successfully pass validation for source address encoded with ASCII characters only" in {
+        val tx = createTransaction(validAddress, "", lastTxRef, lastTxRef)
+        val result = TransactionValidator.validateSourceAddressFormat(tx)
+
+        result shouldBe Validated.validNel(tx)
+      }
+
+      "should fail validation for source address containing non-ASCII characters" in {
+        val tx = createTransaction(validAddress + "ζ", "", lastTxRef, lastTxRef)
+        val result = TransactionValidator.validateSourceAddressFormat(tx)
+
+        result shouldBe Validated.invalidNel(InvalidSourceAddressFormat(tx))
+      }
+    }
+
+    "validateDestinationAddressFormat" - {
+      "should successfully pass validation for destination address encoded with ASCII characters only" in {
+        val tx = createTransaction("", validAddress, lastTxRef, lastTxRef)
+        val result = TransactionValidator.validateDestinationAddressFormat(tx)
+
+        result shouldBe Validated.validNel(tx)
+      }
+
+      "should fail validation for destination address containing non-ASCII characters" in {
+        val tx = createTransaction("", validAddress + "ζ", lastTxRef, lastTxRef)
+        val result = TransactionValidator.validateDestinationAddressFormat(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddressFormat(tx))
+      }
+    }
+  }
+
+  "validateLastTxRefFormat" - {
+    val validPrevHash = "d5149e2339ced3b285062dc403ba0c89642792a462476dc35f63e0328b3cac52"
+
+    "should successfully pass validation for previous hash encoded with ASCII characters only" in {
+      val lastTxRef = LastTransactionRef(validPrevHash, 1)
+      val tx = createTransaction("", "", lastTxRef, lastTxRef)
+      val result = TransactionValidator.validateLastTxRefFormat(tx)
+
+      result shouldBe Validated.validNel(tx)
+    }
+
+    "should fail validation for previous hash containing non-ASCII characters" in {
+      val lastTxRef = LastTransactionRef(validPrevHash + "ζ", 1)
+      val tx = createTransaction("", "", lastTxRef, lastTxRef)
+      val result = TransactionValidator.validateLastTxRefFormat(tx)
+
+      result shouldBe Validated.invalidNel(IncorrectLastTxRefFormat(tx))
+    }
+  }
 }
 
 object TransactionValidatorTest {
