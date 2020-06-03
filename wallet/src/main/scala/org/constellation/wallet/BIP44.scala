@@ -16,7 +16,8 @@ import org.constellation.keytool.KeyUtils.insertProvider
 import org.constellation.wallet.BIP44.{getPrivateKeyFromECBigIntAndCurve, getPublicKeyFromECPoint}
 
 class BIP44(seedPrase: String, childIndex: Int = 0, passphrase: String = "", creationTime: Long = new Date().getTime) {
-  val chainPathPrefix: String = "M/44H/137036H/0H/0/" //137.036 is the fine structure constant ...
+  //1137 is DAG coin type taken from https://github.com/satoshilabs/slips/blob/master/slip-0044.md
+  val chainPathPrefix: String = "M/44H/1137H/0H/0/"
   val seed = new DeterministicSeed(seedPrase, null, passphrase, creationTime)
   val chain: DeterministicKeyChain = DeterministicKeyChain.builder.seed(seed).build
 
