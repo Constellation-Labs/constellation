@@ -1,7 +1,7 @@
 package org.constellation.domain.p2p
 
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, Sync, Timer}
+import cats.effect.{Clock, Concurrent, ContextShift, Sync, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -17,14 +17,21 @@ import scala.concurrent.duration._
 
 class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F], metrics: Metrics)(
   implicit F: Concurrent[F],
-  C: ContextShift[F],
-  T: Timer[F]
+  CS: ContextShift[F],
+  T: Timer[F],
+  C: Clock[F]
 ) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   val periodicCheckTimeout: FiniteDuration = 5.seconds
   val confirmationCheckTimeout: FiniteDuration = 5.seconds
   val ensureSleepTimeBetweenChecks: FiniteDuration = 3.seconds
   val ensureDefaultAttempts = 3
+  val cacheAfterChecks = ensureDefaultAttempts
+  val cacheForTime = 30.seconds
+
+  val state: Ref[F, Map[Id, PeerHealthCheckStatus]] = Ref.unsafe(Map.empty)
+
+  val getClock = C.monotonic(MILLISECONDS)
 
   def check(): F[Unit] =
     for {
@@ -32,7 +39,7 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
       peers <- cluster.getPeerInfo.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       statuses <- peers.values.toList
         .traverse(pd => checkPeer(pd.peerMetadata.toPeerClientMetadata, periodicCheckTimeout).map(pd -> _))
-      unresponsiveStatuses = statuses.filter { case (_, status) => status == PeerUnresponsive }.map {
+      unresponsiveStatuses = statuses.filter { case (_, status) => status.isInstanceOf[PeerUnresponsive] }.map {
         case (pd, _) => pd
       }
       _ <- if (unresponsiveStatuses.nonEmpty)
@@ -49,9 +56,12 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
     for {
       _ <- logger.info(s"Verifying node responsiveness: ${id}")
       peer <- cluster.getPeerInfo.map(_.get(id))
+      clock <- getClock
       result <- peer
         .map(_.peerMetadata.toPeerClientMetadata)
-        .fold(PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F])(checkPeer(_, confirmationCheckTimeout))
+        .fold(PeerUnresponsive(clock, 1).asInstanceOf[PeerHealthCheckStatus].pure[F])(
+          checkPeer(_, confirmationCheckTimeout)
+        )
       _ <- logger.info(s"Node responsiveness: ${id} is ${result}")
     } yield result
 
@@ -63,18 +73,54 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
 
   private def checkPeer(peer: PeerClientMetadata, timeout: FiniteDuration): F[PeerHealthCheckStatus] =
     timeoutTo(
-      apiClient.metrics
-        .checkHealth()
-        .run(peer)
-        .map(_ => PeerAvailable.asInstanceOf[PeerHealthCheckStatus])
-        .handleErrorWith(_ => PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F]),
+      {
+        val check: F[PeerHealthCheckStatus] = apiClient.metrics
+          .checkHealth()
+          .run(peer)
+          .flatMap(_ => getClock)
+          .map[PeerHealthCheckStatus](clock => PeerAvailable(clock))
+          .flatTap { status =>
+            state.modify { m =>
+              val updated = m.updated(peer.id, status)
+              (updated, ())
+            }
+          }
+          .handleErrorWith(
+            _ =>
+              getClock.flatMap { clock =>
+                state.modify { m =>
+                  val status = m.get(peer.id).fold(PeerUnresponsive(clock, 1)) {
+                    case PeerAvailable(_)            => PeerUnresponsive(clock, 1)
+                    case PeerUnresponsive(_, checks) => PeerUnresponsive(clock, checks + 1)
+                  }
+
+                  val updated = m.updated(peer.id, status)
+                  (updated, status)
+                }
+              }
+          )
+
+        state.get.flatMap[PeerHealthCheckStatus](_.get(peer.id).fold(check) {
+          case PeerAvailable(_) => check
+          case PeerUnresponsive(lastCheck, checks) =>
+            getClock
+              .map(now => FiniteDuration(now - lastCheck, MILLISECONDS))
+              .map(lastCheck => checks >= cacheAfterChecks && lastCheck < cacheForTime)
+              .ifM(
+                logger
+                  .debug(s"Peer id=${peer.id} is unresponsive. Returning cached value.")
+                  .map(_ => PeerUnresponsive(lastCheck, checks)),
+                check
+              )
+        })
+      },
       timeout,
-      PeerUnresponsive.asInstanceOf[PeerHealthCheckStatus].pure[F]
+      getClock.map(PeerUnresponsive(_, 1))
     )
 
   private def ensureOffline(peerClientMetadata: PeerClientMetadata, attempts: Int = ensureDefaultAttempts): F[Boolean] =
     checkPeer(peerClientMetadata, confirmationCheckTimeout).flatMap {
-      case PeerUnresponsive =>
+      case PeerUnresponsive(_, _) =>
         if (attempts > 0)
           Timer[F].sleep(ensureSleepTimeBetweenChecks) >> ensureOffline(peerClientMetadata, attempts - 1)
         else true.pure[F]
@@ -91,9 +137,10 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
           apiClient.cluster.checkPeerResponsiveness(pd.peerMetadata.id).run,
           Set(pd.peerMetadata.id)
         )
+        clock <- getClock
         atLeastOneAvailable = statuses
-          .mapValues(_.getOrElse(PeerUnresponsive))
-          .exists { case (_, status) => status == PeerAvailable }
+          .mapValues(_.getOrElse(PeerUnresponsive(clock, 1)))
+          .exists { case (_, status) => status.isInstanceOf[PeerAvailable] }
         result = if (!atLeastOneAvailable) Some(pd) else None
       } yield result
     }.map(_.flatten)
@@ -116,7 +163,9 @@ object PeerHealthCheck {
     implicit C: ContextShift[F]
   ) = new PeerHealthCheck[F](cluster, apiClient, metrics)
 
-  sealed trait PeerHealthCheckStatus
-  object PeerAvailable extends PeerHealthCheckStatus
-  object PeerUnresponsive extends PeerHealthCheckStatus
+  sealed trait PeerHealthCheckStatus {
+    val lastCheck: Long
+  }
+  case class PeerAvailable(lastCheck: Long) extends PeerHealthCheckStatus
+  case class PeerUnresponsive(lastCheck: Long, checks: Int) extends PeerHealthCheckStatus
 }
