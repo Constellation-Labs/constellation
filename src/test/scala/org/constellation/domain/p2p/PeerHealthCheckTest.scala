@@ -67,7 +67,7 @@ class PeerHealthCheckTest
       apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
       apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
         .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerAvailable)
+          IO.pure(PeerAvailable(0L))
         }
 
       cluster.broadcast(*, *, *) shouldReturnF Map.empty
@@ -90,7 +90,7 @@ class PeerHealthCheckTest
       apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
       apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
         .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerUnresponsive)
+          IO.pure(PeerUnresponsive(0L, 1))
         }
       cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
@@ -110,7 +110,7 @@ class PeerHealthCheckTest
       apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
       apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
         .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerUnresponsive)
+          IO.pure(PeerUnresponsive(0L, 1))
         }
       cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
@@ -130,7 +130,7 @@ class PeerHealthCheckTest
       apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
       apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
         .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerUnresponsive)
+          IO.pure(PeerUnresponsive(0L, 1))
         }
       cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
