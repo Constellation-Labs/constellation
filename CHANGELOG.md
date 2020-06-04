@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.8.4] - 2020-06-04
 ## Added
 - Dead peer caching #1239
 ## Changed
