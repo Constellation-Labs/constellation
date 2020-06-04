@@ -344,6 +344,12 @@ class Cluster[F[_]](
       ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
       _ <- broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
+      _ <- F.start(
+        T.sleep(10.seconds) >> broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
+      )
+      _ <- F.start(
+        T.sleep(30.seconds) >> broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
+      )
     } yield ()
   }
 
