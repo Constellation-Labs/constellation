@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 - Dead peer caching #1239
 ## Changed
 - Different reputation does not change snapshot hash #1258
+- Broadcast joining height multiple times #1261
 
 ## [v2.8.3] - 2020-05-29
 ## Fixed
