@@ -8,6 +8,7 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
 import org.constellation.primitives._
@@ -45,7 +46,9 @@ case class FinishedCheckpointResponse(isSuccess: Boolean = false)
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: SortedMap[Id, Double])
-    extends Signable
+    extends Signable {
+  override def toEncode = checkpointBlocks :+ lastSnapshot
+}
 
 case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCache]) {
 
