@@ -10,8 +10,18 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Transaction
+import org.constellation.primitives.Schema.{
+  EdgeHashType,
+  ObservationEdge,
+  SignedObservationEdge,
+  TransactionEdgeData,
+  TypedEdgeHash
+}
+import org.constellation.primitives.{Edge, Transaction}
 import org.constellation.schema.Id
+import org.constellation.util.{HashSignature, SignatureBatch}
+
+import scala.util.{Random => ScalaRandom}
 
 object Fixtures {
 
@@ -115,5 +125,29 @@ object Fixtures {
 
   def makeDummyTransaction(src: String, dst: String, keyPair: KeyPair) =
     TransactionService.createDummyTransaction(src, dst, keyPair)(TransactionChainService[IO]).unsafeRunSync
+
+  def manuallyCreateTransaction(
+    src: String = "",
+    dst: String = "",
+    oeHash: String = "",
+    sbHash: String = "",
+    sbSignature: Seq[HashSignature] = Seq.empty,
+    amount: Long = 0L,
+    edgeLastTxRef: LastTransactionRef = LastTransactionRef.empty,
+    fee: Option[Long] = None,
+    salt: Long = ScalaRandom.nextLong,
+    lastTxRef: LastTransactionRef = LastTransactionRef.empty
+  ): Transaction =
+    Transaction(
+      edge = Edge(
+        ObservationEdge(
+          Seq(TypedEdgeHash(src, EdgeHashType.AddressHash), TypedEdgeHash(dst, EdgeHashType.AddressHash)),
+          TypedEdgeHash(oeHash, EdgeHashType.TransactionDataHash)
+        ),
+        SignedObservationEdge(SignatureBatch(sbHash, sbSignature)),
+        TransactionEdgeData(amount, edgeLastTxRef, fee, salt)
+      ),
+      lastTxRef
+    )
 
 }

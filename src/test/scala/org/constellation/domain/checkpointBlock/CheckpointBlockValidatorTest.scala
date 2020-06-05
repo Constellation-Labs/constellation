@@ -1,15 +1,17 @@
 package org.constellation.domain.checkpointBlock
+import cats.data.Validated
 import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
+import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointParentService}
-import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
+import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointParentService, InsufficientBalance}
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionService, TransactionValidator}
 import org.constellation.primitives.Schema._
-import org.constellation.primitives.{CheckpointBlock, Edge}
+import org.constellation.primitives.{CheckpointBlock, Edge, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.HashSignature
-import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
+import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -115,6 +117,28 @@ class CheckpointBlockValidatorTest
 
       val validationRes = cbValidator.simpleValidation(checkpointBlock)
       validationRes.unsafeRunSync.isValid shouldBe false
+    }
+  }
+
+  "validateSourceAddressBalances" - {
+    val src = "DAG123"
+    val preFilledTx: (Long, Option[Long]) => Transaction =
+      Fixtures.manuallyCreateTransaction(src, "", "", "", Seq.empty, _, LastTransactionRef.empty, _)
+
+    "should successfully pass validation if an address has sufficient balance regarding tx amount and fee" in {
+      addressService.lookup(src) shouldReturnF AddressCacheData(5L, 0L).some
+      val tx = preFilledTx(5L, None)
+      val result = cbValidator.validateSourceAddressBalances(Seq(tx)).unsafeRunSync
+
+      result shouldBe Validated.validNel(List(tx))
+    }
+
+    "should fail validation if an address has insufficient balance regarding tx amount and fee" in {
+      addressService.lookup(src) shouldReturnF AddressCacheData(5L, 0L).some
+      val txWithFee = preFilledTx(5L, 1L.some)
+      val result = cbValidator.validateSourceAddressBalances(Seq(txWithFee)).unsafeRunSync()
+
+      result shouldBe Validated.invalidNel(InsufficientBalance(src))
     }
   }
 }

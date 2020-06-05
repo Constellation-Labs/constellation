@@ -29,7 +29,7 @@ class AddressService[F[_]: Concurrent]() {
     locks.acquire(List(tx.src.hash, tx.dst.hash)) {
       memPool
         .update(tx.src.hash, { a =>
-          a.copy(balance = a.balance - tx.amount)
+          a.copy(balance = a.balance - tx.amount - tx.feeValue)
         }, AddressCacheData(0L, 0L))
         .flatMap(
           _ =>
@@ -60,7 +60,7 @@ class AddressService[F[_]: Concurrent]() {
 
   def transferSnapshot(tx: Transaction): F[AddressCacheData] =
     memPool.update(tx.src.hash, { a =>
-      a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount)
+      a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount - tx.feeValue)
     }, AddressCacheData(0L, 0L)) >>
       memPool.update(tx.dst.hash, { a =>
         a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
