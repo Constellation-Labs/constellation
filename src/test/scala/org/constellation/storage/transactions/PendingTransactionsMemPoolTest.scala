@@ -203,6 +203,44 @@ class PendingTransactionsMemPoolTest extends FreeSpec with IdiomaticMockito with
 
       result shouldBe Some(List(tx1, tx2Correct))
     }
+
+    "it should not return transactions from addresses which are over the limit" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, rl)
+
+      val tx1 = createTransaction("a")
+      val tx2 = createTransaction("a")
+
+      (rl.update(List(tx1).map(_.transaction)) >>
+        txService.accept(tx1) >>
+        memPool.put(tx2.hash, tx2)).unsafeRunSync
+
+      val result = memPool.pull(10).unsafeRunSync
+
+      result shouldBe None
+    }
+
+    "it should return transactions with positive fee from addresses that are over the limit" in {
+      val memPool = PendingTransactionsMemPool[IO](txChainService, rl)
+
+      val txa1 = createTransaction("a")
+      val txa2 = createTransaction("a", Some(2L))
+      val txa3 = createTransaction("a", Some(0L))
+      val txb1 = createTransaction("b")
+      val txb2 = createTransaction("b", Some(1L))
+      val txb3 = createTransaction("b")
+
+      (rl.update(List(txa1, txb1).map(_.transaction)) >>
+        txService.accept(txa1) >>
+        txService.accept(txb1) >>
+        memPool.put(txa2.hash, txa2) >>
+        memPool.put(txa3.hash, txa3) >>
+        memPool.put(txb2.hash, txb2) >>
+        memPool.put(txb3.hash, txb3)).unsafeRunSync
+
+      val result = memPool.pull(10).unsafeRunSync
+
+      result shouldBe List(txa2, txb2).some
+    }
   }
 
   def createTransaction(

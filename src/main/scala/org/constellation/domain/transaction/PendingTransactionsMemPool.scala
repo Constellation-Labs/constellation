@@ -46,10 +46,13 @@ class PendingTransactionsMemPool[F[_]: Concurrent](
     txs
       .groupBy(_.transaction.src.address)
       .toList
-      .pure[F]
-      .flatMap(_.filterA {
-        case (addressHash, _) => rateLimiting.available(Address(addressHash)).map(_ > 0)
-      })
+      .traverse { case (address, aTxs) =>
+        for {
+          isBelowLimit <- rateLimiting.available(Address(address)).map(_ > 0)
+          (positiveFee, noFee) = aTxs.partition(_.transaction.fee.exists(_ > 0L))
+          selectedTxs = if (isBelowLimit) positiveFee ++ noFee else positiveFee
+        } yield (address, selectedTxs)
+      }
       .flatMap { t =>
         t.traverse {
           case (addressHash, txs) =>

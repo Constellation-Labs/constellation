@@ -77,6 +77,8 @@ case class Transaction(
     hs.publicKey.address == src.address && hs.valid(signaturesHash) && hash == signaturesHash
   }
 
+  def feeValue: Long = fee.map(v => if (v < 0L) 0L else v).getOrElse(0L)
+
   val ordinal: Long = lastTxRef.ordinal + 1L
 }
 

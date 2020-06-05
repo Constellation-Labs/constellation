@@ -188,7 +188,7 @@ class CheckpointBlockValidator[F[_]: Sync](
 
     def validateBalance(address: String, t: Iterable[Transaction]): F[ValidationResult[List[Transaction]]] =
       lookup(address).map { balance =>
-        val amount = t.map(_.amount).map(BigInt(_)).sum
+        val amount = t.map(t => t.amount + t.feeValue).map(BigInt(_)).sum
         val diff = balance - amount
 
         val isNodeAddress = dao.id.address == address
