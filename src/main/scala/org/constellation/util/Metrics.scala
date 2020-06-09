@@ -33,6 +33,7 @@ object Metrics {
   val snapshotCount = "snapshotCount"
   val lastSnapshotHash = "lastSnapshotHash"
   val heightEmpty = "heightEmpty"
+  val heightBelow = "heightBelow"
   val checkpointValidationFailure = "checkpointValidationFailure"
   val batchTransactionsEndpoint = "batchTransactionsEndpoint"
   val batchObservationsEndpoint = "batchObservationsEndpoint"

@@ -127,8 +127,17 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     observationService = new ObservationService[IO](trustManager, this)
 
+    dataResolver = DataResolver(
+      keyPair,
+      apiClient,
+      cluster,
+      transactionService,
+      observationService,
+      () => checkpointAcceptanceService
+    )
+
     val merkleService =
-      new CheckpointMerkleService[IO](this, transactionService, messageService, notificationService, observationService)
+      new CheckpointMerkleService[IO](transactionService, notificationService, observationService, dataResolver)
 
     checkpointService = new CheckpointService[IO](
       this,
@@ -273,6 +282,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       checkpointBlockValidator,
       cluster,
       rateLimiting,
+      dataResolver,
       this
     )
 
@@ -316,6 +326,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusRemoteSender,
       cluster,
       apiClient,
+      dataResolver,
       this,
       ConfigUtil.config,
       Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),

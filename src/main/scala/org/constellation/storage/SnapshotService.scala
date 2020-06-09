@@ -15,7 +15,7 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.p2p.{Cluster, DataResolver}
+import org.constellation.p2p.{Cluster}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives._
 import org.constellation.rewards.EigenTrust
@@ -59,8 +59,6 @@ class SnapshotService[F[_]: Concurrent](
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
   val nextSnapshotHash: Ref[F, String] = Ref.unsafe("")
-
-  val dataResolver = new DataResolver(dao)
 
   def exists(hash: String): F[Boolean] =
     for {
@@ -490,7 +488,7 @@ class SnapshotService[F[_]: Concurrent](
   private def acceptSnapshot(s: Snapshot): F[Unit] =
     for {
       cbs <- getCheckpointBlocksFromSnapshot(s.checkpointBlocks.toList)
-      _ <- cbs.traverse(applySnapshotMessages(s, _))
+//      _ <- cbs.traverse(applySnapshotMessages(s, _))
       _ <- applySnapshotTransactions(s, cbs)
       _ <- applySnapshotObservations(cbs)
     } yield ()
@@ -505,35 +503,6 @@ class SnapshotService[F[_]: Concurrent](
 
       cbs = cbData.flatten.map(_.checkpointBlock)
     } yield cbs
-
-  private def applySnapshotMessages(s: Snapshot, cb: CheckpointBlockMetadata): F[Unit] = {
-
-    def updateMessage(msgHash: String, channelMessage: ChannelMessage) =
-      messageService.memPool.update(
-        msgHash,
-        _.copy(snapshotHash = Some(s.hash), blockHash = Some(cb.baseHash)),
-        ChannelMessageMetadata(
-          channelMessage,
-          Some(cb.baseHash),
-          Some(s.hash)
-        )
-      )
-
-    cb.messagesMerkleRoot.traverse {
-      messageService
-        .findHashesByMerkleRoot(_)
-        .flatMap(_.get.toList.traverse { msgHash =>
-          dao.metrics.incrementMetricAsync("messageSnapshotHashUpdated") >>
-            LiftIO[F]
-              .liftIO(
-                dataResolver
-                  .resolveMessageDefaults(msgHash)(IO.contextShift(ConstellationExecutionContext.bounded))
-                  .map(_.channelMessage)
-              )
-              .flatMap(updateMessage(msgHash, _))
-        })
-    }.void
-  }
 
   private def applySnapshotObservations(cbs: List[CheckpointBlockMetadata]): F[Unit] =
     for {

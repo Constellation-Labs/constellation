@@ -1,6 +1,6 @@
 package org.constellation.checkpoint
 
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
+import cats.effect.{Concurrent, ContextShift, IO}
 import cats.implicits._
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.{DataResolver, PeerNotification}
@@ -11,25 +11,18 @@ import org.constellation.util.MerkleTree
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 class CheckpointMerkleService[F[_]: Concurrent](
-  dao: DAO,
   transactionService: MerkleStorageAlgebra[F, String, TransactionCacheData],
-  messageService: MerkleStorageAlgebra[F, String, ChannelMessageMetadata],
   notificationService: MerkleStorageAlgebra[F, String, PeerNotification],
-  observationService: MerkleStorageAlgebra[F, String, Observation]
+  observationService: MerkleStorageAlgebra[F, String, Observation],
+  dataResolver: DataResolver[F]
 ) {
-
-  val dataResolver = new DataResolver(dao)
-
-  val contextShift
-    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
 
   def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
     for {
       t <- store(data.transactions.map(_.hash), transactionService)
-      m <- store(data.messages.map(_.signedMessageData.hash), messageService)
       n <- store(data.notifications.map(_.hash), notificationService)
-      e <- store(data.observations.map(_.hash), observationService)
-    } yield CheckpointBlockMetadata(t, data.checkpoint, m, n, e)
+      o <- store(data.observations.map(_.hash), observationService)
+    } yield CheckpointBlockMetadata(t, data.checkpoint, None, n, o)
 
   private def store[A](data: Seq[String], ss: MerkleStorageAlgebra[F, String, A]): F[Option[String]] =
     data match {
@@ -42,13 +35,12 @@ class CheckpointMerkleService[F[_]: Concurrent](
   def convert(merkle: CheckpointCacheMetadata): F[CheckpointCache] =
     for {
       txs <- merkle.checkpointBlock.transactionsMerkleRoot.fold(List[Transaction]().pure[F])(fetchBatchTransactions)
-      msgs <- merkle.checkpointBlock.messagesMerkleRoot.fold(List[ChannelMessage]().pure[F])(fetchMessages)
       notifications <- merkle.checkpointBlock.notificationsMerkleRoot
         .fold(List[PeerNotification]().pure[F])(fetchNotifications)
       obs <- merkle.checkpointBlock.observationsMerkleRoot.fold(List[Observation]().pure[F])(fetchBatchObservations)
     } yield
       CheckpointCache(
-        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, msgs, notifications, obs),
+        CheckpointBlock(txs, merkle.checkpointBlock.checkpoint, Seq.empty, notifications, obs),
         merkle.children,
         merkle.height
       )
@@ -86,20 +78,12 @@ class CheckpointMerkleService[F[_]: Concurrent](
       resolvedByFetch <- resolver(notResolvedByLookup)
     } yield resolvedByFetch.map(mapper) ++ resolvedByLookup.map(mapper)
 
-  def fetchTransactions(merkleRoot: String): F[List[Transaction]] =
-    fetch[TransactionCacheData, Transaction](
-      merkleRoot,
-      transactionService,
-      (x: TransactionCacheData) => x.transaction,
-      (s: String) => LiftIO[F].liftIO(dataResolver.resolveTransactionDefaults(s)(contextShift)(dao = dao))
-    )
-
   def fetchBatchTransactions(merkleRoot: String): F[List[Transaction]] =
     fetchBatch[TransactionCacheData, Transaction](
       merkleRoot,
       transactionService,
       (x: TransactionCacheData) => x.transaction,
-      (s: List[String]) => LiftIO[F].liftIO(dataResolver.resolveBatchTransactionsDefaults(s)(contextShift)(dao = dao))
+      (s: List[String]) => dataResolver.resolveBatchTransactionsDefaults(s)
     )
 
   def fetchBatchObservations(merkleRoot: String): F[List[Observation]] =
@@ -107,15 +91,7 @@ class CheckpointMerkleService[F[_]: Concurrent](
       merkleRoot,
       observationService,
       (o: Observation) => o,
-      (s: List[String]) => LiftIO[F].liftIO(dataResolver.resolveBatchObservationsDefaults(s)(contextShift)(dao = dao))
-    )
-
-  def fetchMessages(merkleRoot: String): F[List[ChannelMessage]] =
-    fetch[ChannelMessageMetadata, ChannelMessage](
-      merkleRoot,
-      messageService,
-      (x: ChannelMessageMetadata) => x.channelMessage,
-      (s: String) => LiftIO[F].liftIO(dataResolver.resolveMessageDefaults(s)(contextShift)(dao = dao))
+      (s: List[String]) => dataResolver.resolveBatchObservationsDefaults(s)
     )
 
   def fetchNotifications(merkleRoot: String): F[List[PeerNotification]] =
