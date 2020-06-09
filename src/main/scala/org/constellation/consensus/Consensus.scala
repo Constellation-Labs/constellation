@@ -19,7 +19,7 @@ import org.constellation.consensus.ConsensusManager.{
 }
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.{Observation, ObservationService}
-import org.constellation.p2p.{DataResolver, PeerData, PeerNotification}
+import org.constellation.p2p.{PeerData, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, NodeState, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
@@ -34,7 +34,6 @@ import scala.concurrent.duration._
 class Consensus[F[_]: Concurrent: ContextShift](
   roundData: RoundData,
   arbitraryMessages: Seq[(ChannelMessage, Int)],
-  dataResolver: DataResolver,
   transactionService: TransactionService[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   messageService: MessageService[F],

@@ -36,6 +36,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   remoteSender: ConsensusRemoteSender[F],
   cluster: Cluster[F],
   apiClient: ClientInterpreter[F],
+  dataResolver: DataResolver[F],
   dao: DAO,
   config: Config,
   remoteCall: Blocker,
@@ -46,7 +47,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   import ConsensusManager._
 
   implicit val shadowDAO: DAO = dao
-  val dataResolver = new DataResolver(dao)
 
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   private val maxTransactionThreshold: Int =
@@ -94,7 +94,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         new Consensus[F](
           roundData._1,
           roundData._2,
-          dataResolver,
           transactionService,
           checkpointAcceptanceService,
           messageService,
@@ -221,7 +220,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         new Consensus[F](
           updatedRoundData,
           arbitraryMsgs,
-          dataResolver,
           transactionService,
           checkpointAcceptanceService,
           messageService,
@@ -383,7 +381,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   )(implicit dao: DAO): F[List[CheckpointCache]] =
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
-      peers = roundData.peers.map(p => PeerApiClient(p.peerMetadata.id, p.peerMetadata.toPeerClientMetadata))
+      peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
       existing <- soes.map(_.hash).traverse(soeService.lookup).map(_.flatten)
       missing = soes.diff(existing)
 
@@ -395,13 +393,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         }
         .flatMap {
           _.traverse { hash =>
-            LiftIO[F].liftIO(
-              dataResolver.resolveCheckpointDefaults(hash, peers.find(_.id == roundData.facilitatorId.id))(
-                IO.contextShift(ConstellationExecutionContext.bounded)
-              )(
-                dao = shadowDAO
-              )
-            )
+            dataResolver.resolveCheckpointDefaults(hash, peers.find(_.id == roundData.facilitatorId.id))
           }
         }
       _ <- logger.debug(

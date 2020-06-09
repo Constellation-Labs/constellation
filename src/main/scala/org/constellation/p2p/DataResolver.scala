@@ -1,303 +1,176 @@
 package org.constellation.p2p
 
 import java.net.SocketTimeoutException
+import java.security.KeyPair
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.implicits._
-import constellation._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
+import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
-import org.constellation.domain.observation.{Observation, RequestTimeoutOnResolving}
+import org.constellation.domain.observation.{Observation, ObservationService, RequestTimeoutOnResolving}
+import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState, SignedObservationEdge}
-import org.constellation.primitives.{ChannelMessageMetadata, TransactionCacheData}
+import org.constellation.infrastructure.p2p.PeerResponse.{PeerClientMetadata, PeerResponse}
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.primitives.TransactionCacheData
+import org.constellation.storage.SOEService
 import org.constellation.util.Logging._
-import org.constellation.util.{Distance, PeerApiClient}
+import org.constellation.util.Distance
+import DataResolver._
 
-import scala.concurrent.duration._
+class DataResolver[F[_]](
+  keyPair: KeyPair,
+  apiClient: ClientInterpreter[F],
+  cluster: Cluster[F],
+  transactionService: TransactionService[F],
+  observationService: ObservationService[F],
+  checkpointAcceptanceService: () => CheckpointAcceptanceService[F]
+)(
+  implicit F: Concurrent[F],
+  T: Timer[F],
+  CS: ContextShift[F]
+) {
 
-class DataResolver(dao: DAO) {
+  implicit private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  val apiClient = dao.apiClient
-
-  implicit val logger = Slf4jLogger.getLogger[IO]
-
-  def resolveMessageDefaults(
-    hash: String,
-    priorityClient: Option[PeerApiClient] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    getPeersForResolving(dao).flatMap(resolveMessage(hash, _, priorityClient)(contextToReturn))
-
-  def resolveMessage(
-    hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient]
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[ChannelMessageMetadata] =
-    IO.raiseError(new NotImplementedError())
-
-  def resolveTransactionDefaults(
-    hash: String,
-    priorityClient: Option[PeerApiClient] = None,
-    roundId: Option[RoundId] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    getPeersForResolving(dao).flatMap(resolveTransaction(hash, _, priorityClient, roundId)(contextToReturn))
+  private val getPeersForResolving: F[List[PeerClientMetadata]] =
+    for {
+      all <- cluster.getPeerInfo
+      notOffline = all.filter { case (_, peer) => NodeState.isNotOffline(peer.peerMetadata.nodeState) }
+      peers = notOffline.map { case (_, peer)  => peer.peerMetadata.toPeerClientMetadata }
+    } yield peers.toList
 
   def resolveBatchTransactionsDefaults(
     hashes: List[String],
-    priorityClient: Option[PeerApiClient] = None,
+    priorityClient: Option[PeerClientMetadata] = None,
     roundId: Option[RoundId] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
+  ): F[List[TransactionCacheData]] =
     if (hashes.nonEmpty)
-      getPeersForResolving(dao).flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId)(contextToReturn))
-    else List.empty[TransactionCacheData].pure[IO]
+      getPeersForResolving.flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId))
+    else List.empty[TransactionCacheData].pure[F]
 
   def resolveBatchObservationsDefaults(
     hashes: List[String],
-    priorityClient: Option[PeerApiClient] = None,
+    priorityClient: Option[PeerClientMetadata] = None,
     roundId: Option[RoundId] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Observation]] =
+  ): F[List[Observation]] =
     if (hashes.nonEmpty)
-      getPeersForResolving(dao).flatMap(resolveBatchObservations(hashes, _, priorityClient, roundId)(contextToReturn))
-    else List.empty[Observation].pure[IO]
-
-  def resolveTransaction(
-    hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient],
-    roundId: Option[RoundId] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[TransactionCacheData] =
-    logThread(
-      logger.debug(s"Start resolving transaction=${hash} for round $roundId") >>
-        resolveDataByDistance[TransactionCacheData](
-          List(hash),
-          apiClient.transaction.getTransaction,
-          pool,
-          priorityClient
-        )(contextToReturn).sequence.flatMap { txs =>
-          txs.headOption match {
-            case Some(tcd) =>
-              dao.transactionService
-                .put(tcd, ConsensusStatus.Unknown)
-                .flatTap(_ => logger.debug(s"Stored resolved transaction=${tcd.hash} for roundId=${roundId}"))
-            case _ =>
-              IO.raiseError[TransactionCacheData](
-                new Throwable(s"Failed with resolving transaction=${hash} for roundId=${roundId}")
-              )
-          }
-        },
-      s"dataResolver_resolveTransaction [${hash}]"
-    )
+      getPeersForResolving.flatMap(resolveBatchObservations(hashes, _, priorityClient, roundId))
+    else List.empty[Observation].pure[F]
 
   def resolveBatchTransactions(
     hashes: List[String],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient],
+    pool: List[PeerClientMetadata],
+    priorityClient: Option[PeerClientMetadata],
     roundId: Option[RoundId] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[TransactionCacheData]] =
-    logger.debug(s"Start resolving transactions = ${hashes} for round = $roundId") *>
-      resolveBatchData[TransactionCacheData](hashes, apiClient.transaction.getBatch, pool ++ priorityClient)(
-        contextToReturn
-      ).flatMap(
+  ): F[List[TransactionCacheData]] =
+    logger.debug(s"Start resolving transactions = $hashes for round = $roundId") >>
+      resolveBatchData[TransactionCacheData](hashes, apiClient.transaction.getBatch, pool ++ priorityClient).flatMap(
         txs =>
           txs.traverse { tcd =>
-            dao.transactionService
+            transactionService
               .put(tcd, ConsensusStatus.Unknown)
               .flatTap(
-                _ => logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId = ${roundId}")
+                _ => logger.debug(s"Stored resolved transactions = ${tcd.hash} for roundId=$roundId")
               )
           }
       )
 
   def resolveBatchObservations(
     hashes: List[String],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient],
+    pool: List[PeerClientMetadata],
+    priorityClient: Option[PeerClientMetadata],
     roundId: Option[RoundId] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[Observation]] =
-    logger.debug(s"Start resolving observations = ${hashes} for round = $roundId") *>
-      resolveBatchData[Observation](hashes, apiClient.observation.getBatch, pool ++ priorityClient)(contextToReturn)
+  ): F[List[Observation]] =
+    logger.debug(s"Start resolving observations=$hashes for round = $roundId") *>
+      resolveBatchData[Observation](hashes, apiClient.observation.getBatch, pool ++ priorityClient)
         .flatMap(
           obs =>
             obs.traverse { o =>
-              dao.observationService
+              observationService
                 .put(o, ConsensusStatus.Unknown)
                 .flatTap(
-                  _ => logger.debug(s"Stored resolved observations = ${o.hash} for roundId = ${roundId}")
+                  _ => logger.debug(s"Stored resolved observations=${o.hash} for roundId=$roundId")
                 )
             }
         )
 
   def resolveCheckpointDefaults(
     hash: String,
-    priorityClient: Option[PeerApiClient] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
-    getPeersForResolving(dao).flatMap(resolveCheckpoint(hash, _, priorityClient)(contextToReturn))
+    priorityClient: Option[PeerClientMetadata] = None
+  ): F[CheckpointCache] =
+    getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
 
   def resolveCheckpoint(
     hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[CheckpointCache] =
+    pool: List[PeerClientMetadata],
+    priorityClient: Option[PeerClientMetadata] = None
+  ): F[CheckpointCache] =
     logThread(
       resolveDataByDistance[CheckpointCache](
         List(hash),
         apiClient.checkpoint.getCheckpoint,
         pool,
         priorityClient
-      )(contextToReturn).head
-        .flatTap(dao.checkpointAcceptanceService.accept(_)(contextToReturn).start(contextToReturn))
+      ).head
+        .flatTap(cb => F.start(CS.shift >> checkpointAcceptanceService().accept(cb)))
         .flatTap { cb =>
           logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}")
         },
-      s"dataResolver_resolveCheckpoint [${hash}]"
+      s"dataResolver_resolveCheckpoint [$hash]"
     )
 
-  def resolveSoeDefaults(
+  def resolveDataByDistance[A <: AnyRef](
     hashes: List[String],
-    priorityClient: Option[PeerApiClient] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdge]] =
-    getPeersForResolving(dao).flatMap(resolveSoe(hashes, _, priorityClient)(contextToReturn))
-
-  def resolveSoe(
-    hashes: List[String],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[SignedObservationEdge]] =
-    logThread(
-      resolveDataByDistanceFlat[SignedObservationEdge](
-        hashes,
-        apiClient.soe.getSoe,
-        pool,
-        priorityClient
-      )(contextToReturn).flatTap(_.traverse(soe => dao.soeService.put(soe.hash, soe))),
-      s"dataResolver_resolveSoe [${hashes}]"
-    )
-
-  def resolveCheckpoints(
-    hashes: List[String],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[List[CheckpointCache]] =
-    logThread(
-      resolveDataByDistanceFlat[CheckpointCache](
-        hashes,
-        apiClient.checkpoint.getCheckpoint,
-        pool,
-        priorityClient
-      )(contextToReturn).flatTap(
-        cbs => cbs.traverse(cb => dao.checkpointAcceptanceService.accept(cb)(contextToReturn))
-      ),
-      s"dataResolver_resolveCheckpoints [${hashes}]"
-    )
-
-  def resolveObservationDefaults(
-    hash: String,
-    priorityClient: Option[PeerApiClient] = None
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
-    getPeersForResolving(dao).flatMap(resolveObservation(hash, _, priorityClient)(contextToReturn))
-
-  def resolveObservation(
-    hash: String,
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient]
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, dao: DAO): IO[Observation] =
-    logThread(
-      resolveDataByDistance[Observation](
-        List(hash),
-        apiClient.observation.getObservation,
-        pool,
-        priorityClient
-      )(contextToReturn).head
-        .flatTap(o => logger.debug(s"Resolving observation=${o.hash}"))
-        .flatTap(o => dao.observationService.put(o, ConsensusStatus.Unknown)),
-      s"dataResolver_resolveObservation [${hash}]"
-    )
-
-  def resolveDataByDistance[T <: AnyRef](
-    hashes: List[String],
-    endpoint: String => PeerResponse[IO, Option[T]],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): List[IO[T]] =
+    endpoint: String => PeerResponse[F, Option[A]],
+    pool: List[PeerClientMetadata],
+    priorityClient: Option[PeerClientMetadata] = None
+  ): List[F[A]] =
     hashes.map { hash =>
-      resolveData[T](hash, endpoint, priorityClient.toList ++ pool.sortBy { p =>
+      resolveData[A](hash, endpoint, priorityClient.toList ++ pool.sortBy { p =>
         Distance.calculate(hash, p.id)
-      })(contextToReturn)
+      })
     }
 
-  def resolveBatchDataByDistance[T <: AnyRef](
-    hashes: List[String],
-    endpoint: List[String] => PeerResponse[IO, List[(String, Option[T])]],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 30.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
-    hashes match {
-      case Nil => List.empty.pure[IO]
-      case _ =>
-        resolveBatchData[T](hashes, endpoint, priorityClient.toList ++ pool.sortBy { p =>
-          Distance.calculate(hashes.head, p.id)
-        })(contextToReturn)
-    }
-
-  private[p2p] def resolveData[T <: AnyRef](
+  private[p2p] def resolveData[A <: AnyRef](
     hash: String,
-    endpoint: String => PeerResponse[IO, Option[T]],
-    sortedPeers: List[PeerApiClient],
+    endpoint: String => PeerResponse[F, Option[A]],
+    sortedPeers: List[PeerClientMetadata],
     maxErrors: Int = 100
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[T] = {
+  ): F[A] = {
 
     def makeAttempt(
-      innerPeers: Iterable[PeerApiClient],
-      allPeers: Iterable[PeerApiClient],
+      innerPeers: Iterable[PeerClientMetadata],
+      allPeers: Iterable[PeerClientMetadata],
       errorsSoFar: Int = 0
-    ): IO[T] =
+    ): F[A] =
       innerPeers match {
         case _ if errorsSoFar >= maxErrors =>
-          IO.raiseError[T](DataResolutionMaxErrors(hash))
+          F.raiseError[A](DataResolutionMaxErrors(hash))
         case Nil =>
-          IO.raiseError[T](
-            DataResolutionOutOfPeers(dao.id.short, List(hash), allPeers.map(_.id.short))
+          F.raiseError[A](
+            DataResolutionOutOfPeers(List(hash), allPeers.map(_.id.short))
           )
         case head :: tail =>
-          getData[T](hash, endpoint, head)(contextToReturn).flatMap {
-            case Some(a) => IO.pure(a)
+          getData[A](hash, endpoint, head).flatMap {
+            case Some(a) => a.pure[F]
             case None =>
-              IO.raiseError[T](DataResolutionNoneResponse(hash, head))
+              F.raiseError[A](DataResolutionNoneResponse(hash, head))
           }.handleErrorWith {
-            case e: DataResolutionMaxErrors  => IO.raiseError[T](e)
-            case e: DataResolutionOutOfPeers => IO.raiseError[T](e)
-            case e if tail.isEmpty           => IO.raiseError[T](e)
+            case e: DataResolutionMaxErrors  => F.raiseError[A](e)
+            case e: DataResolutionOutOfPeers => F.raiseError[A](e)
+            case e if tail.isEmpty           => F.raiseError[A](e)
             case e: DataResolutionNoneResponse =>
               logger.warn(e.getMessage) >>
-                makeAttempt(tail, allPeers, errorsSoFar + 1)
+                CS.shift >> makeAttempt(tail, allPeers, errorsSoFar + 1)
             case e =>
               logger.error(
-                s"Unexpected error while resolving hash=${hash} with host=${head.client.host}, and id ${head.client.id} trying next peer | ${e.getMessage}"
+                s"Unexpected error while resolving hash=$hash with host=${head.host}, and id ${head.id} trying next peer | ${e.getMessage}"
               ) >>
-                makeAttempt(tail, allPeers, errorsSoFar + 1)
+                CS.shift >> makeAttempt(tail, allPeers, errorsSoFar + 1)
           }
 
       }
@@ -308,107 +181,104 @@ class DataResolver(dao: DAO) {
     } yield t
   }
 
-  private[p2p] def resolveBatchData[T <: AnyRef](
+  private[p2p] def resolveBatchData[A <: AnyRef](
     hashes: List[String],
-    endpoint: List[String] => PeerResponse[IO, List[(String, Option[T])]],
-    sortedPeers: List[PeerApiClient]
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] = {
+    endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
+    sortedPeers: List[PeerClientMetadata]
+  ): F[List[A]] = {
 
     def makeAttempt(
-      peers: List[PeerApiClient],
+      peers: List[PeerClientMetadata],
       allHashes: List[String],
       innerHashes: List[String] = List.empty[String],
-      response: List[T] = List.empty[T]
-    ): IO[List[T]] = {
+      response: List[A] = List.empty[A]
+    ): F[List[A]] = {
 
       if (peers.isEmpty && innerHashes.size != allHashes.size) {
-        return IO.raiseError(DataResolutionOutOfPeers(dao.id.short, hashes, sortedPeers.map(_.id.short)))
+        return F.raiseError(DataResolutionOutOfPeers(hashes, sortedPeers.map(_.id.short)))
       }
 
       if (innerHashes.size == allHashes.size) {
-        return response.pure[IO]
+        return response.pure[F]
       }
 
       val peer = peers.head
       val filteredPeers = peers.filterNot(_ == peer)
       val requestHashes = allHashes.filterNot(innerHashes.toSet)
 
-      getBatchData[T](requestHashes, endpoint, peer)(contextToReturn).flatMap { data =>
+      getBatchData[A](requestHashes, endpoint, peer).flatMap { data =>
         logger.debug(
-          s"Requested : ${peer.client.host} : for hashes = ${requestHashes
-            .mkString(",")} : and response hashes = ${data.size}"
+          s"Requested : ${peer.host} : for hashes = ${requestHashes.mkString(",")} : and response hashes = ${data.size}"
         ) >>
-          makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
+          CS.shift >> makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
       }
     }
 
     makeAttempt(sortedPeers, hashes).handleErrorWith(
-      e => logger.error(s"Unexpected error while resolving hashes : ${e.getMessage}") *> IO.raiseError(e)
+      e => logger.error(s"Unexpected error while resolving hashes : ${e.getMessage}") *> F.raiseError[List[A]](e)
     )
   }
 
   private[p2p] def getData[T <: AnyRef](
     hash: String,
-    endpoint: String => PeerResponse[IO, Option[T]],
-    peerApiClient: PeerApiClient
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[Option[T]] =
-    endpoint(hash).run(peerApiClient.client).onError {
+    endpoint: String => PeerResponse[F, Option[T]],
+    peerClientMetadata: PeerClientMetadata
+  ): F[Option[T]] =
+    endpoint(hash).run(peerClientMetadata).onError {
       case _: SocketTimeoutException =>
-        dao.observationService
-          .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(List(hash)))(dao.keyPair))
+        observationService
+          .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(List(hash)))(keyPair))
           .void
     }
 
-  private[p2p] def getBatchData[T <: AnyRef](
+  private[p2p] def getBatchData[A <: AnyRef](
     hashes: List[String],
-    endpoint: List[String] => PeerResponse[IO, List[(String, Option[T])]],
-    peerApiClient: PeerApiClient
-  )(contextToReturn: ContextShift[IO])(implicit apiTimeout: Duration, m: Manifest[T], dao: DAO): IO[List[(String, T)]] =
+    endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
+    peerClientMetadata: PeerClientMetadata
+  ): F[List[(String, A)]] =
     endpoint(hashes)
-      .run(peerApiClient.client)
+      .run(peerClientMetadata)
       .map(_.mapFilter {
         case (hash, data) => data.map((hash, _))
       })
       .onError {
         case _: SocketTimeoutException =>
-          dao.observationService
-            .put(Observation.create(peerApiClient.id, RequestTimeoutOnResolving(hashes))(dao.keyPair))
+          observationService
+            .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(hashes))(keyPair))
             .void
       }
-
-  private[p2p] def resolveDataByDistanceFlat[T <: AnyRef](
-    hashes: List[String],
-    endpoint: String => PeerResponse[IO, Option[T]],
-    pool: List[PeerApiClient],
-    priorityClient: Option[PeerApiClient] = None
-  )(
-    contextToReturn: ContextShift[IO]
-  )(implicit apiTimeout: Duration = 3.seconds, m: Manifest[T], dao: DAO): IO[List[T]] =
-    resolveDataByDistance[T](hashes, endpoint, pool, priorityClient)(contextToReturn).sequence
-
-  private[p2p] def getPeersForResolving(dao: DAO): IO[List[PeerApiClient]] = {
-    val peers = for {
-      all <- dao.peerInfo
-      ready = all.filter { case (_, peer) => NodeState.isNotOffline(peer.peerMetadata.nodeState) }
-      leaving <- dao.leavingPeers
-    } yield (ready ++ leaving)
-    peers.map(_.map(p => PeerApiClient(p._1, p._2.peerMetadata.toPeerClientMetadata)).toList)
-  }
-
 }
 
-case class DataResolutionOutOfPeers(thisNode: String, hashes: List[String], peers: Iterable[String])
-    extends Exception(
-      s"Node [$thisNode] run out of peers when resolving with hashes: $hashes following tried: $peers"
+object DataResolver {
+
+  def apply[F[_]: Concurrent: ContextShift: Timer](
+    keyPair: KeyPair,
+    apiClient: ClientInterpreter[F],
+    cluster: Cluster[F],
+    transactionService: TransactionService[F],
+    observationService: ObservationService[F],
+    checkpointAcceptanceService: () => CheckpointAcceptanceService[F]
+  ): DataResolver[F] =
+    new DataResolver(
+      keyPair,
+      apiClient,
+      cluster,
+      transactionService,
+      observationService,
+      checkpointAcceptanceService
     )
 
-case class DataResolutionNoneResponse(hash: String, client: PeerApiClient)
-    extends Exception(
-      s"Failed to resolve hash=${hash} with host=${client.client.host} and id ${client.id.short}, returned None"
-    )
-case class DataResolutionMaxErrors(hash: String)
-    extends Exception(
-      s"Max errors threshold reached when resolving hash: $hash aborting"
-    )
+  case class DataResolutionOutOfPeers(hashes: List[String], peers: Iterable[String])
+      extends Exception(
+        s"Node run out of peers when resolving with hashes: $hashes following tried: $peers"
+      )
+
+  case class DataResolutionNoneResponse(hash: String, client: PeerClientMetadata)
+      extends Exception(
+        s"Failed to resolve hash=$hash with host=${client.host} and id ${client.id.short}, returned None"
+      )
+  case class DataResolutionMaxErrors(hash: String)
+      extends Exception(
+        s"Max errors threshold reached when resolving hash: $hash aborting"
+      )
+}

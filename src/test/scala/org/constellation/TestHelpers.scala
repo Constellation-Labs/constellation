@@ -20,7 +20,7 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.p2p.{Cluster, JoiningPeerValidator, PeerData}
+import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
@@ -162,75 +162,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
 
     dao.readyPeers shouldReturn IO.pure(facilitators)
 
-    dao
-  }
-
-  private def prepareMockedDao(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO = {
-    import constellation._
-
-    implicit val logger: io.chrisdavenport.log4cats.Logger[IO] = Slf4jLogger.getLogger
-    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.bounded)
-    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
-
-    val dao: DAO = mock[DAO]
-    val kp: KeyPair = makeKeyPair()
-    dao.nodeConfig shouldReturn NodeConfig()
-    dao.keyPair shouldReturn kp
-
-    val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
-    f.createDirectoryIfNotExists()
-    dao.dbPath shouldReturn f
-
-    dao.id shouldReturn Fixtures.id
-
-    val ss = new SOEService[IO]()
-    dao.soeService shouldReturn ss
-
-    val ns = new NotificationService[IO]()
-    dao.notificationService shouldReturn ns
-
-    val ms = {
-      implicit val shadedDao = dao
-      new MessageService[IO]()
-    }
-    dao.messageService shouldReturn ms
-
-    val rl = RateLimiting[IO]()
-
-    val txChain = TransactionChainService[IO]
-    val ts = new TransactionService[IO](txChain, rl, dao)
-    dao.transactionService shouldReturn ts
-
-    val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO](dao.apiClient)
-    dao.joiningPeerValidator shouldReturn joiningPeerValidator
-
-    val cts = mock[ConcurrentTipService[IO]]
-
-    val tm = mock[TrustManager[IO]]
-    dao.trustManager shouldReturn tm
-
-    val os = new ObservationService[IO](tm, dao)
-    dao.observationService shouldReturn os
-
-    dao.checkpointService shouldReturn mock[CheckpointService[IO]]
-
-    val keyPair = KeyUtils.makeKeyPair()
-    dao.keyPair shouldReturn keyPair
-
-    dao.cluster shouldReturn mock[Cluster[IO]]
-    dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
-
-    val metrics = new Metrics(CollectorRegistry.defaultRegistry, 1)(dao)
-    dao.metrics shouldReturn metrics
-
-    val ipManager = IPManager[IO]()
-    val cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, dao.apiClient, dao)
-    dao.cluster shouldReturn cluster
-    dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunSync
-
-    dao.miscLogger shouldReturn Logger("miscLogger")
-
-    dao.readyPeers shouldReturn IO.pure(facilitators)
+    val dr = mock[DataResolver[IO]]
+    dao.dataResolver shouldReturn dr
 
     dao
   }

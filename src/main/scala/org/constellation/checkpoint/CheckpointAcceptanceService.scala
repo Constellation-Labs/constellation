@@ -34,6 +34,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   checkpointBlockValidator: CheckpointBlockValidator[F],
   cluster: Cluster[F],
   rateLimiting: RateLimiting[F],
+  dataResolver: DataResolver[F],
   dao: DAO
 ) {
   import CheckpointAcceptanceService._
@@ -51,8 +52,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
-
-  val dataResolver = new DataResolver(dao)
 
   def handleSignatureRequest(sr: SignatureRequest): F[SignatureResponse] =
     checkpointBlockValidator
@@ -214,6 +213,12 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
             .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
         } else Sync[F].pure(maybeHeight.get)
 
+        lastSnapshotHeight <- snapshotService.getLastSnapshotHeight
+        _ <- if (height.min <= lastSnapshotHeight.toLong) {
+          dao.metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
+            HeightBelow(checkpoint.checkpointBlock, height).raiseError[F, Unit]
+        } else Sync[F].unit
+
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Accept data")
         _ <- checkpointService.put(checkpoint.copy(height = maybeHeight))
         _ <- checkpointParentService.incrementChildrenCount(cb)
@@ -256,7 +261,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       } yield ()
 
     acceptCheckpoint.handleErrorWith {
-      case ex @ (PendingAcceptance(_) | MissingCheckpointBlockException) =>
+      case ex @ (PendingAcceptance(_) | MissingCheckpointBlockException | HeightBelow(_, _)) =>
         acceptErrorHandler(ex)
       case ex =>
         pendingAcceptance.modify { pa =>
@@ -313,11 +318,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     }.flatMap { txs =>
       if (txs.nonEmpty) {
         for {
-//          stored <- txs.traverse(transactionService.lookup).map(_.flatten)
-//          missing = txs.diff(stored.map(_.hash))
-//          resolved <- LiftIO[F].liftIO(DataResolver.resolveBatchTransactionsDefaults(missing)(contextShift))
-//          allTxs = stored ++ resolved
-          allTxs <- LiftIO[F].liftIO(dataResolver.resolveBatchTransactionsDefaults(txs)(contextShift))
+          allTxs <- dataResolver.resolveBatchTransactionsDefaults(txs)
           _ <- logger.info(s"${Console.YELLOW}${allTxs.map(tx => (tx.hash, tx.cbBaseHash))}${Console.RESET}")
           cbs <- allTxs
             .flatMap(_.cbBaseHash)
@@ -326,11 +327,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
             .flatMap {
               _.filterA(hash => awaiting.get.map(_.map(_.checkpointBlock.baseHash).contains(hash)).map(!_))
             }
-            .flatMap {
-              _.traverse { hash =>
-                LiftIO[F].liftIO(dataResolver.resolveCheckpointDefaults(hash)(contextShift))
-              }
-            }
+            .flatMap(_.traverse(hash => dataResolver.resolveCheckpointDefaults(hash)))
           _ <- cbs.traverse(accept(_))
         } yield ()
       } else Sync[F].unit
@@ -362,11 +359,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         .flatMap {
           _.filterA(hash => awaiting.get.map(_.map(_.checkpointBlock.baseHash).contains(hash)).map(!_))
         }
-        .flatMap {
-          _.traverse { hash =>
-            LiftIO[F].liftIO(dataResolver.resolveCheckpointDefaults(hash)(contextShift)(dao = dao))
-          }
-        }
+        .flatMap(_.traverse(hash => dataResolver.resolveCheckpointDefaults(hash)))
     } yield resolveCheckpoints
 
   def acceptErrorHandler(err: Throwable)(implicit cs: ContextShift[F]): F[Unit] =
@@ -376,23 +369,28 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           logger.debug(s"[Accept checkpoint][1-?] Release lock") >>
           knownError.raiseError[F, Unit]
 
+      case error @ HeightBelow(hash, _) =>
+        acceptLock.release >>
+          logger.debug(s"[Accept checkpoint][2-${hash}] Release lock") >>
+          error.raiseError[F, Unit]
+
       case error @ MissingParents(cb) =>
         acceptLock.release >>
-          logger.debug(s"[Accept checkpoint][2-${cb.baseHash}] Release lock") >>
+          logger.debug(s"[Accept checkpoint][3-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(Timer[F].sleep(3.seconds) >> resolveMissingParents(cb)) >>
           Concurrent[F].start(Timer[F].sleep(20.seconds) >> resolveMissingParents(cb)) >>
           dao.metrics.incrementMetricAsync("missingParents") >> error.raiseError[F, Unit]
 
       case error @ MissingTransactionReference(cb) =>
         acceptLock.release >>
-          logger.debug(s"[Accept checkpoint][3-${cb.baseHash}] Release lock") >>
+          logger.debug(s"[Accept checkpoint][4-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(Timer[F].sleep(3.seconds) >> resolveMissingReferences(cb)) >>
           Concurrent[F].start(Timer[F].sleep(20.seconds) >> resolveMissingReferences(cb)) >>
           error.raiseError[F, Unit]
 
       case otherError =>
         acceptLock.release >>
-          logger.debug(s"[Accept checkpoint][4-?] Release lock") >>
+          logger.debug(s"[Accept checkpoint][5-?] Release lock") >>
           Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) >>
           dao.metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") >>
           otherError.raiseError[F, Unit]

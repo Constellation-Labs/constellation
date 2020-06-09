@@ -30,7 +30,7 @@ import org.constellation.domain.transaction.{
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
-import org.constellation.p2p.{Cluster, JoiningPeerValidator}
+import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator}
 import org.constellation.primitives.Schema._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackLoader, RollbackService}
@@ -117,6 +117,13 @@ object MissingHeightException {
   def apply(cb: CheckpointBlock): MissingHeightException = new MissingHeightException(cb.baseHash, cb.soeHash)
 }
 
+case class HeightBelow(baseHash: String, height: Long)
+    extends Exception(s"CheckpointBlock hash=${baseHash} height=${height} is below the last snapshot height")
+
+object HeightBelow {
+  def apply(cb: CheckpointBlock, height: Height): HeightBelow = new HeightBelow(cb.baseHash, height.min)
+}
+
 case class PendingAcceptance(baseHash: String)
     extends Exception(s"CheckpointBlock: $baseHash is already pending acceptance phase.")
 
@@ -174,6 +181,7 @@ trait EdgeDAO {
 
   var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _
+  var dataResolver: DataResolver[IO] = _
   var trustManager: TrustManager[IO] = _
   var transactionService: TransactionService[IO] = _
   var blacklistedAddresses: BlacklistedAddresses[IO] = _
