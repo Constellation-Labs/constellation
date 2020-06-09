@@ -5,6 +5,8 @@ import java.util.concurrent.Semaphore
 
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.util.{MerkleProof, Signable, SignatureBatch}
@@ -20,6 +22,11 @@ case class ChannelMessageData(
   channelId: String
 ) extends Signable
 
+object ChannelMessageData {
+  implicit val channelMessageDataEncoder: Encoder[ChannelMessageData] = deriveEncoder
+  implicit val channelMessageDataDecoder: Decoder[ChannelMessageData] = deriveDecoder
+}
+
 case class SignedData[+D <: Signable](
   data: D,
   signatures: SignatureBatch
@@ -30,6 +37,10 @@ case class ChannelMessageMetadata(
   blockHash: Option[String] = None,
   snapshotHash: Option[String] = None
 )
+
+object ChannelMessageMetadata {
+  implicit val channelMessageMetadata: Encoder[ChannelMessageMetadata] = deriveEncoder
+}
 
 case class ChannelMetadata(
   channelOpen: ChannelOpen,
@@ -50,6 +61,12 @@ case class SingleChannelUIOutput(
 case class ChannelMessage(signedMessageData: SignedData[ChannelMessageData])
 
 object ChannelMessage extends StrictLogging {
+
+  implicit val signedChannelMessageDataEncoder: Encoder[SignedData[ChannelMessageData]] = deriveEncoder
+  implicit val signedChannelMessageDataDecoder: Decoder[SignedData[ChannelMessageData]] = deriveDecoder
+
+  implicit val channelMessageEncoder: Encoder[ChannelMessage] = deriveEncoder
+  implicit val channelMessageDecoder: Decoder[ChannelMessage] = deriveDecoder
 
   def create(message: String, previous: String, channelId: String)(
     implicit keyPair: KeyPair

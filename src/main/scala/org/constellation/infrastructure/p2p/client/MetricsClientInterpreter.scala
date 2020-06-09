@@ -1,7 +1,6 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import io.circe.generic.auto._
 import org.constellation.domain.p2p.client.MetricsClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse

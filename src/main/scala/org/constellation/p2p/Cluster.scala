@@ -11,6 +11,7 @@ import constellation._
 import enumeratum._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation._
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -25,13 +26,17 @@ import org.constellation.util._
 
 import scala.concurrent.duration._
 import scala.util.Random
-import io.circe.generic.auto._
 import io.circe.syntax._
 import io.circe.parser._
-import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
+
+object SetNodeStatus {
+  implicit val setNodeStatusDecoder: Decoder[SetNodeStatus] = deriveDecoder
+  implicit val setNodeStatusEncoder: Encoder[SetNodeStatus] = deriveEncoder
+}
+
 case class SetStateResult(oldState: NodeState, isNewSet: Boolean)
 case class PeerData(
   peerMetadata: PeerMetadata,
@@ -64,6 +69,11 @@ case class Deregistration(ip: String, port: Int, id: Id)
 
 case class JoinedHeight(id: Id, height: Long)
 
+object JoinedHeight {
+  implicit val joinedHeightDecoder: Decoder[JoinedHeight] = deriveDecoder
+  implicit val joinedHeightEncoder: Encoder[JoinedHeight] = deriveEncoder
+}
+
 case object GetPeerInfo
 
 case class UpdatePeerInfo(peerData: PeerData)
@@ -71,11 +81,19 @@ case class ChangePeerState(id: Id, state: NodeState)
 
 case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
 
+object PeerNotification {
+  implicit val peerNotificationEncoder: Encoder[PeerNotification] = deriveEncoder
+  implicit val peerNotificationDecoder: Decoder[PeerNotification] = deriveDecoder
+}
+
 case class MajorityHeight(joined: Option[Long], left: Option[Long] = None) {
   def isFinite = joined.isDefined && left.isDefined
 }
 
 object MajorityHeight {
+  implicit val majorityHeightEncoder: Encoder[MajorityHeight] = deriveEncoder
+  implicit val majorityHeightDecoder: Decoder[MajorityHeight] = deriveDecoder
+
   def genesis: MajorityHeight = MajorityHeight(Some(0L), None)
 
   def isHeightBetween(height: Long, majorityHeight: MajorityHeight): Boolean =
@@ -779,10 +797,12 @@ object Cluster {
   ) = new Cluster(ipManager, joiningPeerValidator, apiClient, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
-  case class TestClusterNode(aa: String)
 
   object ClusterNode {
     def apply(pm: PeerMetadata) = new ClusterNode(pm.id, HostPort(pm.host, pm.httpPort), pm.nodeState, 0L)
+
+    implicit val clusterNodeEncoder: Encoder[ClusterNode] = deriveEncoder
+    implicit val clusterNodeDecoder: Decoder[ClusterNode] = deriveDecoder
   }
 
 }

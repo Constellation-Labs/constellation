@@ -8,6 +8,8 @@ import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
@@ -21,6 +23,12 @@ import org.constellation.{ConstellationExecutionContext, DAO}
 import scala.util.Random
 
 case class TipSoe(soe: Seq[SignedObservationEdge], minHeight: Option[Long])
+
+object TipSoe {
+  implicit val tipSoeEncoder: Encoder[TipSoe] = deriveEncoder
+  implicit val tipSoeDecoder: Decoder[TipSoe] = deriveDecoder
+}
+
 case class PulledTips(tipSoe: TipSoe, peers: Map[Id, PeerData])
 case class TipConflictException(cb: CheckpointBlock, conflictingTxs: List[String])
     extends Exception(

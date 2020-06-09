@@ -4,15 +4,15 @@ import java.io.{StringWriter, Writer}
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.circe.generic.auto._
-import io.circe.syntax._
-import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
+import io.circe.syntax._
 import org.constellation.primitives.Schema.MetricsResult
 import org.constellation.util.Metrics
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+
+import MetricsResult._
 
 class MetricsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 

@@ -2,8 +2,8 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.circe.generic.auto._
 import io.circe.syntax._
+import org.constellation.primitives.Schema.SignedObservationEdge._
 import org.constellation.storage.SOEService
 import org.http4s.HttpRoutes
 import org.http4s.circe._

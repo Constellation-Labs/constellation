@@ -1,5 +1,7 @@
 package org.constellation
 
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.primitives.Schema.NodeType
@@ -20,11 +22,21 @@ case class PeerMetadata(
   def toPeerClientMetadata: PeerClientMetadata = PeerClientMetadata(host, httpPort, id)
 }
 
+object PeerMetadata {
+  implicit val peerMetadataEncoder: Encoder[PeerMetadata] = deriveEncoder
+  implicit val peerMetadataDecoder: Decoder[PeerMetadata] = deriveDecoder
+}
+
 case class ResourceInfo(
   maxMemory: Long = Runtime.getRuntime.maxMemory(),
   cpuNumber: Int = Runtime.getRuntime.availableProcessors(),
   diskUsableBytes: Long
 )
+
+object ResourceInfo {
+  implicit val resourceInfoEncoder: Encoder[ResourceInfo] = deriveEncoder
+  implicit val resourceInfoDecoder: Decoder[ResourceInfo] = deriveDecoder
+}
 
 case class RemovePeerRequest(host: Option[HostPort] = None, id: Option[Id] = None)
 
@@ -69,9 +81,17 @@ case class ChannelUIOutput(channels: Seq[String])
 
 case class ChannelValidationInfo(channel: String, valid: Boolean)
 
+object ChannelValidationInfo {
+  implicit val channelValidationInfoEncoder: Encoder[ChannelValidationInfo] = deriveEncoder
+}
+
 case class BlockUIOutput(
   id: String,
   height: Long,
   parents: Seq[String],
   channels: Seq[ChannelValidationInfo]
 )
+
+object BlockUIOutput {
+  implicit val blockUIOutputEncoder: Encoder[BlockUIOutput] = deriveEncoder
+}

@@ -2,16 +2,18 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.implicits._
+import io.circe.{Decoder, Encoder}
 import org.constellation.BuildInfo
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
-import io.circe.generic.auto._
+import io.circe.generic.semiauto._
 import io.circe.syntax._
-import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.http4s._
 import org.http4s.circe._
 
 class BuildInfoEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
+  import BuildInfoEndpoints.BuildInfoJson
+  import BuildInfoEndpoints.BuildInfoJson._
 
   private def buildInfoEndpoint(): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -49,6 +51,9 @@ object BuildInfoEndpoints {
   )
 
   object BuildInfoJson {
+
+    implicit val buildInfoJsonEncoder: Encoder[BuildInfoJson] = deriveEncoder
+    implicit val buildInfoJsonDecoder: Decoder[BuildInfoJson] = deriveDecoder
 
     def apply(): BuildInfoJson = new BuildInfoJson(
       BuildInfo.name,

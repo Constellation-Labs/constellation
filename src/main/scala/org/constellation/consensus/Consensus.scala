@@ -6,6 +6,8 @@ import cats.implicits._
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
@@ -522,7 +524,18 @@ object Consensus {
   }
 
   case class FacilitatorId(id: Id) extends AnyVal
+
+  object FacilitatorId {
+    implicit val facilitatorIdEncoder: Encoder[FacilitatorId] = deriveEncoder
+    implicit val facilitatorIdDecoder: Decoder[FacilitatorId] = deriveDecoder
+  }
+
   case class RoundId(id: String) extends AnyVal
+
+  object RoundId {
+    implicit val roundIdEncoder: Encoder[RoundId] = deriveEncoder
+    implicit val roundIdDecoder: Decoder[RoundId] = deriveDecoder
+  }
 
   case class UnionProposals(state: StageState)
 
@@ -541,11 +554,21 @@ object Consensus {
     observations: Seq[Observation] = Seq.empty[Observation]
   ) extends ConsensusProposal
 
+  object ConsensusDataProposal {
+    implicit val consensusDataProposalDecoder: Decoder[ConsensusDataProposal] = deriveDecoder
+    implicit val consensusDataProposalEncoder: Encoder[ConsensusDataProposal] = deriveEncoder
+  }
+
   case class UnionBlockProposal(
     roundId: RoundId,
     facilitatorId: FacilitatorId,
     checkpointBlock: CheckpointBlock
   ) extends ConsensusProposal
+
+  object UnionBlockProposal {
+    implicit val unionBlockProposalDecoder: Decoder[UnionBlockProposal] = deriveDecoder
+    implicit val unionBlockProposalEncoder: Encoder[UnionBlockProposal] = deriveEncoder
+  }
 
   case class RoundData(
     roundId: RoundId,
@@ -595,5 +618,10 @@ object Consensus {
     facilitatorId: FacilitatorId,
     checkpointBlock: CheckpointBlock
   ) extends ConsensusProposal
+
+  object SelectedUnionBlock {
+    implicit val selectedUnionBlockDecoder: Decoder[SelectedUnionBlock] = deriveDecoder
+    implicit val selectedUnionBlockEncoder: Encoder[SelectedUnionBlock] = deriveEncoder
+  }
 
 }

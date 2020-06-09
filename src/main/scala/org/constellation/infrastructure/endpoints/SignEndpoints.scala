@@ -4,14 +4,16 @@ import java.security.KeyPair
 
 import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
-import io.circe.generic.auto._
 import io.circe.syntax._
-import org.constellation.consensus.SignatureRequest
 import org.constellation.p2p.{Cluster, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.util.{HostPort, SignHelp, SingleHashSignature}
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import PeerAuthSignRequest._
+import SingleHashSignature._
+import PeerRegistrationRequest._
+import HostPort._
 
 class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 

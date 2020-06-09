@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Changed
 - Circe update to v0.13.0
+- Get rid of circe auto derivation
 ## Fixed
 - Pull only consecutive transactions chain for consensus #1241
 

@@ -5,7 +5,6 @@ import cats.effect.{Blocker, Concurrent, ContextShift}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Printer
-import io.circe.generic.auto._
 import io.circe.syntax._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.ConstellationNode.getClass
@@ -14,6 +13,8 @@ import org.constellation.util.ServeUI
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+
+import org.constellation.primitives.ChannelMessageMetadata._
 
 class UIEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 

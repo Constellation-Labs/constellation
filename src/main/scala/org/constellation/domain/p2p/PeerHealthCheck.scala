@@ -5,6 +5,9 @@ import cats.effect.{Clock, Concurrent, ContextShift, Sync, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
+import io.circe.syntax._
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -166,6 +169,26 @@ object PeerHealthCheck {
   sealed trait PeerHealthCheckStatus {
     val lastCheck: Long
   }
+
+  object PeerHealthCheckStatus {
+    implicit val peerAvailableEncoder: Encoder.AsObject[PeerAvailable] = deriveEncoder
+    implicit val peerAvailableDecoder: Decoder[PeerAvailable] = deriveDecoder
+
+    implicit val peerUnresponsiveEncoder: Encoder.AsObject[PeerUnresponsive] = deriveEncoder
+    implicit val peerUnresponsiveDecoder: Decoder[PeerUnresponsive] = deriveDecoder
+
+    implicit val encodePeerHealthCheckStatus: Encoder[PeerHealthCheckStatus] = Encoder.instance {
+      case a @ PeerAvailable(_)       => a.asJson
+      case a @ PeerUnresponsive(_, _) => a.asJson
+    }
+
+    implicit val decodePeerHealthCheckStatus: Decoder[PeerHealthCheckStatus] =
+      List[Decoder[PeerHealthCheckStatus]](
+        Decoder[PeerAvailable].widen,
+        Decoder[PeerUnresponsive].widen
+      ).reduceLeft(_.or(_))
+  }
+
   case class PeerAvailable(lastCheck: Long) extends PeerHealthCheckStatus
   case class PeerUnresponsive(lastCheck: Long, checks: Int) extends PeerHealthCheckStatus
 }

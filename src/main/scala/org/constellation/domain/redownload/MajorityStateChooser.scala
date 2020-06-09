@@ -1,6 +1,9 @@
 package org.constellation.domain.redownload
 
 import cats.implicits._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
+import io.circe.syntax._
 import org.constellation.domain.redownload.MajorityStateChooser.{ExtendedSnapshotProposal, SnapshotProposal}
 import org.constellation.domain.redownload.RedownloadService.{
   PeersCache,
@@ -123,6 +126,17 @@ object MajorityStateChooser {
   def apply(id: Id): MajorityStateChooser = new MajorityStateChooser(id)
 
   case class SnapshotProposal(hash: String, reputation: SortedMap[Id, Double])
+
+  object SnapshotProposal {
+    implicit val smDecoder: Decoder[SortedMap[Id, Double]] =
+      Decoder.decodeMap[Id, Double].map(m => SortedMap(m.toSeq: _*))
+
+    implicit val smEncoder: Encoder[SortedMap[Id, Double]] =
+      Encoder.encodeMap[Id, Double].contramap(m => m.toMap)
+
+    implicit val snapshotProposalEncoder: Encoder[SnapshotProposal] = deriveEncoder
+    implicit val snapshotProposalDecoder: Decoder[SnapshotProposal] = deriveDecoder
+  }
 
   case class ExtendedSnapshotProposal(
     hash: String,

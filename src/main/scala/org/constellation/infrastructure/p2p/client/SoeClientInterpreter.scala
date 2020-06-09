@@ -4,7 +4,6 @@ import cats.effect.{Concurrent, ContextShift}
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.http4s.client.Client
-import io.circe.generic.auto._
 import org.constellation.domain.p2p.client.SoeClientAlgebra
 import org.constellation.primitives.Schema.SignedObservationEdge
 import org.http4s.circe.CirceEntityDecoder._

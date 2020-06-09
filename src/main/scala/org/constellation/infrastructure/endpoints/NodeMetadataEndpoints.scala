@@ -2,17 +2,19 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.circe.KeyEncoder
-import io.circe.generic.auto._
+import io.circe.{Encoder, KeyEncoder}
 import io.circe.syntax._
-import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.{NodeState, NodeType}
+import io.circe.generic.semiauto._
+import org.constellation.p2p.{Cluster, MajorityHeight}
+import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage.AddressService
 import org.constellation.util.NodeStateInfo
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import NodeStateInfo._
+import AddressCacheData._
 
 class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
@@ -52,7 +54,9 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
         .flatMap(Ok(_))
   }
 
-  implicit val idEncoder: KeyEncoder[Id] = KeyEncoder.encodeKeyString.contramap[Id](_.hex)
+  import Id._
+  implicit val peersMajorityHeightsEncoder: Encoder[Map[Id, List[MajorityHeight]]] =
+    Encoder.encodeMap[Id, List[MajorityHeight]]
 
   private def getPeersMajorityHeights(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "peers" / "majority-height" =>

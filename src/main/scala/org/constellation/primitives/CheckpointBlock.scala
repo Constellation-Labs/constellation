@@ -4,6 +4,7 @@ import java.security.KeyPair
 
 import cats.implicits._
 import constellation.signedObservationEdge
+import io.circe.Decoder
 import org.constellation.DAO
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.PeerNotification
@@ -103,9 +104,13 @@ case class CheckpointBlock(
 
 object CheckpointBlock {
 
-  import io.circe.generic.auto._
+  import io.circe.Encoder
+  import io.circe.generic.semiauto._
   import io.circe.parser.parse
   import io.circe.syntax._
+
+  implicit val checkpointBlockEncoder: Encoder[CheckpointBlock] = deriveEncoder
+  implicit val checkpointBlockDecoder: Decoder[CheckpointBlock] = deriveDecoder
 
   def createCheckpointBlockSOE(
     transactions: Seq[Transaction],

@@ -2,10 +2,13 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.circe.generic.auto._
+import io.circe.Encoder
 import io.circe.syntax._
+import io.circe.generic.semiauto._
 import org.constellation.checkpoint.CheckpointService
+import org.constellation.consensus.TipData
 import org.constellation.primitives.ConcurrentTipService
+import org.constellation.primitives.Schema.Height._
 import org.constellation.schema.Id
 import org.http4s.HttpRoutes
 import org.http4s.circe._
@@ -20,6 +23,9 @@ class TipsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   ) =
     getTipsEndpoint(concurrentTipService: ConcurrentTipService[F]) <+>
       getHeights(nodeId, concurrentTipService, checkpointService)
+
+  implicit val tipDataMapEncoder: Encoder[Map[String, TipData]] = Encoder.encodeMap[String, TipData]
+  implicit val idLongEncoder: Encoder[(Id, Long)] = deriveEncoder
 
   private def getTipsEndpoint(concurrentTipService: ConcurrentTipService[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -38,6 +44,7 @@ class TipsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
           maybeHeights <- tips.toList.traverse { case (hash, _) => checkpointService.lookup(hash) }
           response = maybeHeights.flatMap(_.flatMap(_.height))
         } yield response.asJson).flatMap(Ok(_))
+
       case GET -> Root / "heights" / "min" =>
         concurrentTipService.getMinTipHeight(None).map((nodeId, _)).map(_.asJson).flatMap(Ok(_))
     }
