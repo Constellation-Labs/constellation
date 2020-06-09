@@ -7,7 +7,6 @@ import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.primitives.Schema.{CheckpointCache, GenesisObservation}
 import org.http4s.client.Client
-import io.circe.generic.auto._
 import org.constellation.domain.observation.ObservationEvent
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
@@ -16,6 +15,10 @@ import org.http4s.Method._
 class CheckpointClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F])
     extends CheckpointClientAlgebra[F] {
   import ObservationEvent._
+  import GenesisObservation._
+  import CheckpointCache._
+  import SignatureResponse._
+  import FinishedCheckpoint._
 
   def getGenesis(): PeerResponse[F, Option[GenesisObservation]] =
     PeerResponse[F, Option[GenesisObservation]]("genesis")(client)

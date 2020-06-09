@@ -1,14 +1,11 @@
 package org.constellation.infrastructure.endpoints
 
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
-import io.circe.generic.auto._
-import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.Consensus.{
   ConsensusDataProposal,
@@ -26,13 +23,15 @@ import org.constellation.storage.SnapshotService
 import org.http4s._
 import org.http4s.circe._
 
-import scala.concurrent.Future
+import ObservationEvent._
+import RoundDataRemote._
+import ConsensusDataProposal._
+import UnionBlockProposal._
+import SelectedUnionBlock._
 
 class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
-
-  import ObservationEvent._
 
   private def convert(r: RoundDataRemote): RoundData =
     RoundData(

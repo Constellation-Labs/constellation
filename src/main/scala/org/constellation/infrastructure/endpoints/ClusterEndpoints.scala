@@ -2,8 +2,6 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.circe.{Decoder, Encoder, KeyEncoder}
-import io.circe.generic.auto._
 import io.circe.syntax._
 import org.constellation.domain.observation.ObservationEvent
 import org.constellation.domain.p2p.PeerHealthCheck
@@ -16,6 +14,14 @@ import org.constellation.trust.TrustManager
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+
+import org.constellation.p2p.Cluster.ClusterNode._
+import SetNodeStatus._
+import PeerHealthCheckStatus._
+import JoinedHeight._
+import PeerUnregister._
+import TrustData._
+import Id._
 
 class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
@@ -69,12 +75,10 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       } yield ()) >> Ok()
   }
 
-  implicit val idEncoder: KeyEncoder[Id] = KeyEncoder.encodeKeyString.contramap[Id](_.hex)
-
   private def trustEndpoint(trustManager: TrustManager[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "trust" =>
       trustManager.getPredictedReputation.flatMap { predicted =>
-        if (predicted.isEmpty) trustManager.getStoredReputation.map(TrustData)
+        if (predicted.isEmpty) trustManager.getStoredReputation.map(TrustData(_))
         else TrustData(predicted).pure[F]
       }.map(_.asJson).flatMap(Ok(_))
   }

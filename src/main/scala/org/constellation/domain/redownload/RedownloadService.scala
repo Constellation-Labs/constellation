@@ -6,6 +6,8 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
@@ -668,5 +670,15 @@ object RedownloadService {
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 
+  implicit val snapshotProposalsAtHeightEncoder: Encoder[Map[Long, SnapshotProposal]] =
+    Encoder.encodeMap[Long, SnapshotProposal]
+  implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, SnapshotProposal]] =
+    Decoder.decodeMap[Long, SnapshotProposal]
+
   case class LatestMajorityHeight(lowest: Long, highest: Long)
+
+  object LatestMajorityHeight {
+    implicit val latestMajorityHeightEncoder: Encoder[LatestMajorityHeight] = deriveEncoder
+    implicit val latestMajorityHeightDecoder: Decoder[LatestMajorityHeight] = deriveDecoder
+  }
 }

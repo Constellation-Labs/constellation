@@ -4,8 +4,6 @@ import cats.effect.{Concurrent, ContextShift}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.auto._
 import io.circe.syntax._
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest}
@@ -17,11 +15,16 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 
+import ObservationEvent._
+import GenesisObservation._
+import org.constellation.primitives.Schema.CheckpointCache._
+import org.constellation.consensus.SignatureRequest._
+import org.constellation.consensus.SignatureResponse._
+import FinishedCheckpoint._
+
 class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
-
-  import ObservationEvent._
 
   def peerEndpoints(
     genesisObservation: => Option[GenesisObservation],

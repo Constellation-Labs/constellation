@@ -2,8 +2,8 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.implicits._
-import io.circe.generic.auto._
 import io.circe.syntax._
+import io.circe.generic.semiauto._
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.{CheckpointCache, Node}
@@ -13,6 +13,8 @@ import org.constellation.{BlockUIOutput, ChannelValidationInfo}
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import BlockUIOutput._
+import io.circe.{Decoder, Encoder}
 
 class StatisticsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
@@ -43,6 +45,8 @@ class StatisticsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] 
         }.map(_.asJson).flatMap(Ok(_))
     }
 
+  import DashboardResponse._
+
   private def dashboardEndpoint(
     transactionService: TransactionService[F],
     cluster: Cluster[F]
@@ -61,6 +65,11 @@ class StatisticsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] 
     }
 
   case class DashboardResponse(peers: List[Node], transactions: List[TransactionCacheData])
+
+  object DashboardResponse {
+    implicit val dashboardResponseEncoder: Encoder[DashboardResponse] = deriveEncoder
+    implicit val dashboardResponseDecoder: Decoder[DashboardResponse] = deriveDecoder
+  }
 }
 
 object StatisticsEndpoints {

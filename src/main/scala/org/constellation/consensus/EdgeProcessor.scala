@@ -8,6 +8,8 @@ import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.PeerData
 import org.constellation.primitives.Schema._
@@ -33,17 +35,36 @@ case class CreateCheckpointEdgeResponse(
 
 case class SignatureRequest(checkpointBlock: CheckpointBlock, facilitators: Set[Id])
 
+object SignatureRequest {
+  implicit val signatureRequestEncoder: Encoder[SignatureRequest] = deriveEncoder
+  implicit val signatureRequestDecoder: Decoder[SignatureRequest] = deriveDecoder
+}
+
 case class SignatureResponse(signature: Option[HashSignature], reRegister: Boolean = false)
+
+object SignatureResponse {
+  implicit val signatureResponseEncoder: Encoder[SignatureResponse] = deriveEncoder
+  implicit val signatureResponseDecoder: Decoder[SignatureResponse] = deriveDecoder
+}
+
+case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators: Set[Id])
 
 object FinishedCheckpoint {
   implicit val ord: Ordering[FinishedCheckpoint] =
     Ordering.by[FinishedCheckpoint, CheckpointCache](_.checkpointCacheData)
+
+  implicit val finishedCheckpointEncoder: Encoder[FinishedCheckpoint] = deriveEncoder
+  implicit val finishedCheckpointDecoder: Decoder[FinishedCheckpoint] = deriveDecoder
 }
-case class FinishedCheckpoint(checkpointCacheData: CheckpointCache, facilitators: Set[Id])
 
 case class FinishedCheckpointResponse(isSuccess: Boolean = false)
 
 case class TipData(checkpointBlock: CheckpointBlock, numUses: Int, height: Height)
+
+object TipData {
+  implicit val tipDataEncoder: Encoder[TipData] = deriveEncoder
+  implicit val tipDataDecoder: Decoder[TipData] = deriveDecoder
+}
 
 case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: SortedMap[Id, Double])
     extends Signable {

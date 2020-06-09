@@ -3,6 +3,8 @@ package org.constellation.schema
 import java.security.PublicKey
 
 import com.google.common.hash.Hashing
+import io.circe.{Decoder, Encoder, KeyDecoder, KeyEncoder}
+import io.circe.generic.semiauto._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.hexToPublicKey
 
@@ -30,4 +32,12 @@ case class Id(hex: String) extends Ordered[Id] {
   lazy val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
 
   override def compare(that: Id): Int = hex.compare(that.hex)
+}
+
+object Id {
+  implicit val idEncoder: Encoder[Id] = deriveEncoder
+  implicit val idDecoder: Decoder[Id] = deriveDecoder
+
+  implicit val keyIdEncoder: KeyEncoder[Id] = KeyEncoder.encodeKeyString.contramap[Id](_.hex)
+  implicit val keyIdDecoder: KeyDecoder[Id] = KeyDecoder.decodeKeyString.map(Id(_))
 }

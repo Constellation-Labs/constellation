@@ -4,6 +4,8 @@ import java.security.KeyPair
 import java.time.Instant
 
 import constellation._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.domain.consensus.ConsensusObject
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
@@ -37,6 +39,9 @@ case class TransactionCacheData(
 
 object TransactionCacheData {
   def apply(tx: Transaction): TransactionCacheData = TransactionCacheData(transaction = tx)
+
+  implicit val transactionCacheDataEncoder: Encoder[TransactionCacheData] = deriveEncoder
+  implicit val transactionCacheDataDecoder: Decoder[TransactionCacheData] = deriveDecoder
 }
 
 case class Transaction(
@@ -73,6 +78,14 @@ case class Transaction(
   }
 
   val ordinal: Long = lastTxRef.ordinal + 1L
+}
+
+object Transaction {
+  implicit val edgeTransactionDataEncoder: Encoder[Edge[TransactionEdgeData]] = deriveEncoder
+  implicit val edgeTransactionDataDecoder: Decoder[Edge[TransactionEdgeData]] = deriveDecoder
+
+  implicit val transactionEncoder: Encoder[Transaction] = deriveEncoder
+  implicit val transactionDecoder: Decoder[Transaction] = deriveDecoder
 }
 
 case class TransactionGossip(tx: Transaction, path: Set[Id]) {

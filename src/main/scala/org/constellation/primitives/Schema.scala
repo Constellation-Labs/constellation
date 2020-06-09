@@ -3,9 +3,12 @@ package org.constellation.primitives
 import java.security.KeyPair
 
 import enumeratum._
+import io.circe.{Decoder, Encoder}
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.schema.Id
 import org.constellation.util._
+import io.circe.generic.semiauto._
+import io.circe.syntax._
 
 // This can't be a trait due to serialization issues.
 import scala.util.Random
@@ -194,6 +197,11 @@ object Schema {
     baseHash: Option[String] = None
   )
 
+  object TypedEdgeHash {
+    implicit val typedEdgeHashEncoder: Encoder[TypedEdgeHash] = deriveEncoder
+    implicit val typedEdgeHashDecoder: Decoder[TypedEdgeHash] = deriveDecoder
+  }
+
   /**
     * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.
     * Left is topologically ordered before right
@@ -210,6 +218,11 @@ object Schema {
       val encodedParentHashRefs = runLengthEncoding(parents.map(_.hashReference): _*)
       numParents + encodedParentHashRefs + data.hashReference
     }
+  }
+
+  object ObservationEdge {
+    implicit val observationEdgeEncoder: Encoder[ObservationEdge] = deriveEncoder
+    implicit val observationEdgeDecoder: Decoder[ObservationEdge] = deriveDecoder
   }
 
   /**
@@ -237,6 +250,11 @@ object Schema {
 
   }
 
+  object SignedObservationEdge {
+    implicit val signedObservationEdgeEncoder: Encoder[SignedObservationEdge] = deriveEncoder
+    implicit val signedObservationEdgeDecoder: Decoder[SignedObservationEdge] = deriveDecoder
+  }
+
   /**
     * Holder for ledger update information about a transaction
     *
@@ -256,6 +274,11 @@ object Schema {
     }
   }
 
+  object TransactionEdgeData {
+    implicit val transactionEdgeDataEncoder: Encoder[TransactionEdgeData] = deriveEncoder
+    implicit val transactionEdgeDataDecoder: Decoder[TransactionEdgeData] = deriveDecoder
+  }
+
   /**
     * Collection of references to transaction hashes
     *
@@ -267,9 +290,22 @@ object Schema {
     observationsHashes: Seq[String]
   ) extends Signable
 
+  object CheckpointEdgeData {
+    implicit val checkpointEdgeDataEncoder: Encoder[CheckpointEdgeData] = deriveEncoder
+    implicit val checkpointEdgeDataDecoder: Decoder[CheckpointEdgeData] = deriveDecoder
+  }
+
   case class CheckpointEdge(edge: Edge[CheckpointEdgeData]) {
 
     def plus(other: CheckpointEdge) = this.copy(edge = edge.plus(other.edge))
+  }
+
+  object CheckpointEdge {
+    implicit val checkpointEdgeDataEncoder: Encoder[Edge[CheckpointEdgeData]] = deriveEncoder
+    implicit val checkpointEdgeDataDecoder: Decoder[Edge[CheckpointEdgeData]] = deriveDecoder
+
+    implicit val checkpointEdgeEncoder: Encoder[CheckpointEdge] = deriveEncoder
+    implicit val checkpointEdgeDecoder: Decoder[CheckpointEdge] = deriveDecoder
   }
 
   case class Address(address: String) extends Signable {
@@ -303,6 +339,11 @@ object Schema {
 
   }
 
+  object AddressCacheData {
+    implicit val addressCacheDataEncoder: Encoder[AddressCacheData] = deriveEncoder
+    implicit val addressCacheDataDecoder: Decoder[AddressCacheData] = deriveDecoder
+  }
+
   // Instead of one balance we need a Map from soe hash to balance and reputation
   // These values should be removed automatically by eviction
   // We can maintain some kind of automatic LRU cache for keeping track of what we want to remove
@@ -311,6 +352,11 @@ object Schema {
 
   case class Height(min: Long, max: Long) extends Ordered[Height] {
     override def compare(that: Height): Int = min.compare(that.min)
+  }
+
+  object Height {
+    implicit val heightEncoder: Encoder[Height] = deriveEncoder
+    implicit val heightDecoder: Decoder[Height] = deriveDecoder
   }
 
   case class CommonMetadata(
@@ -331,10 +377,6 @@ object Schema {
     height: Option[Height] = None
   )
 
-  object CheckpointCache {
-    implicit val checkpointCacheOrdering: Ordering[CheckpointCache] =
-      Ordering.by[CheckpointCache, Long](_.height.fold(0L)(_.min))
-  }
   case class CheckpointCache(
     checkpointBlock: CheckpointBlock,
     children: Int = 0,
@@ -352,6 +394,14 @@ object Schema {
 
   }
 
+  object CheckpointCache {
+    implicit val checkpointCacheOrdering: Ordering[CheckpointCache] =
+      Ordering.by[CheckpointCache, Long](_.height.fold(0L)(_.min))
+
+    implicit val checkpointCacheEncoder: Encoder[CheckpointCache] = deriveEncoder
+    implicit val checkpointCacheDecoder: Decoder[CheckpointCache] = deriveDecoder
+  }
+
   case class PeerIPData(canonicalHostName: String, port: Option[Int])
 
   case class ValidPeerIPData(canonicalHostName: String, port: Int)
@@ -367,11 +417,26 @@ object Schema {
 
   }
 
+  object GenesisObservation {
+    implicit val genesisEncoder: Encoder[GenesisObservation] = deriveEncoder
+    implicit val genesisDecoder: Decoder[GenesisObservation] = deriveDecoder
+  }
+
   @deprecated("Needs to be removed after peer manager changes", "january")
   case class InternalHeartbeat(round: Long = 0L)
 
   case class MetricsResult(metrics: Map[String, String])
 
+  object MetricsResult {
+    implicit val metricsResultEncoder: Encoder[MetricsResult] = deriveEncoder
+    implicit val metricsResultDecoder: Decoder[MetricsResult] = deriveDecoder
+  }
+
   case class Node(address: String, host: String, port: Int)
+
+  object Node {
+    implicit val nodeEncoder: Encoder[Node] = deriveEncoder
+    implicit val nodeDecoder: Decoder[Node] = deriveDecoder
+  }
 
 }

@@ -5,7 +5,6 @@ import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.generic.auto._
 import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.TransactionService
@@ -15,12 +14,13 @@ import org.constellation.util.Metrics
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import org.constellation.primitives.TransactionCacheData._
+import org.constellation.domain.transaction.LastTransactionRef._
+import Transaction._
 
 class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
-
-  implicit val txDecoder: EntityDecoder[F, Transaction] = jsonOf
 
   def publicEndpoints(
     transactionService: TransactionService[F],
@@ -47,7 +47,7 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
     HttpRoutes.of[F] {
       case req @ POST -> Root / "transaction" =>
         for {
-          tx <- req.as[Transaction]
+          tx <- req.decodeJson[Transaction]
           _ <- logger.info(s"Received transaction hash=${tx.hash}")
           validation <- checkpointBlockValidator.singleTransactionValidation(tx)
           response <- validation match {

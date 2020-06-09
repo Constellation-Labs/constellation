@@ -5,6 +5,9 @@ import cats.effect.{IO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
+import io.circe.syntax._
+import io.circe.generic.semiauto._
 import org.constellation.domain.transaction.TransactionValidator
 import org.constellation.primitives.Schema.{CheckpointCache, ObservationEdge, SignedObservationEdge}
 import org.constellation.primitives.{CheckpointBlock, Transaction}
@@ -334,9 +337,39 @@ sealed trait CheckpointBlockValidation {
   def errorMessage: String
 }
 
+object CheckpointBlockValidation {
+
+  implicit val encodeCheckpointBlockValidation: Encoder[CheckpointBlockValidation] = Encoder.instance {
+    case a @ EmptySignatures()           => a.asJson
+    case a @ InvalidSignature(_)         => a.asJson
+    case a @ InvalidTransaction(_, _)    => a.asJson
+    case a @ InvalidCheckpointHash(_, _) => a.asJson
+    case a @ DuplicatedTransaction(_)    => a.asJson
+    case a @ NoAddressCacheFound(_, _)   => a.asJson
+    case a @ InsufficientBalance(_)      => a.asJson
+  }
+
+  implicit val decodeCheckpointBlockValidation: Decoder[CheckpointBlockValidation] =
+    List[Decoder[CheckpointBlockValidation]](
+      Decoder[EmptySignatures].widen,
+      Decoder[InvalidSignature].widen,
+      Decoder[InvalidTransaction].widen,
+      Decoder[InvalidCheckpointHash].widen,
+      Decoder[DuplicatedTransaction].widen,
+      Decoder[NoAddressCacheFound].widen,
+      Decoder[InsufficientBalance].widen
+    ).reduceLeft(_.or(_))
+
+}
+
 case class EmptySignatures() extends CheckpointBlockValidation {
 
   def errorMessage: String = "CheckpointBlock has no signatures"
+}
+
+object EmptySignatures {
+  implicit val emptySignaturesEncoder: Encoder[EmptySignatures] = deriveEncoder
+  implicit val emptySignaturesDecoder: Decoder[EmptySignatures] = deriveDecoder
 }
 
 case class InvalidSignature(signature: String) extends CheckpointBlockValidation {
@@ -345,8 +378,10 @@ case class InvalidSignature(signature: String) extends CheckpointBlockValidation
 }
 
 object InvalidSignature {
-
   def apply(s: HashSignature) = new InvalidSignature(s.signature)
+
+  implicit val invalidSignatureEncoder: Encoder[InvalidSignature] = deriveEncoder
+  implicit val invalidSignatureDecoder: Decoder[InvalidSignature] = deriveDecoder
 }
 
 case class InvalidTransaction(txHash: String, cause: String) extends CheckpointBlockValidation {
@@ -354,10 +389,13 @@ case class InvalidTransaction(txHash: String, cause: String) extends CheckpointB
   def errorMessage: String = s"CheckpointBlock includes transaction=$txHash which is invalid, cause: $cause"
 }
 
-object InvalidCheckpointHash {
+object InvalidTransaction {
 
-  def apply(c: CheckpointBlock) =
-    new InvalidCheckpointHash(c.checkpoint.edge.observationEdge, c.checkpoint.edge.signedObservationEdge)
+  def apply(t: Transaction, v: TransactionValidator.ValidationResult[Transaction]) =
+    new InvalidTransaction(t.hash, v.leftMap(_.map(_.errorMessage)).toString)
+
+  implicit val invalidTransactionEncoder: Encoder[InvalidTransaction] = deriveEncoder
+  implicit val invalidTransactionDecoder: Decoder[InvalidTransaction] = deriveDecoder
 }
 
 case class InvalidCheckpointHash(oe: ObservationEdge, soe: SignedObservationEdge) extends CheckpointBlockValidation {
@@ -366,10 +404,13 @@ case class InvalidCheckpointHash(oe: ObservationEdge, soe: SignedObservationEdge
     s"CheckpointBlock received has incompatible hashes with ObservationEdge=$oe and SignedObservationEdge=$soe"
 }
 
-object InvalidTransaction {
+object InvalidCheckpointHash {
 
-  def apply(t: Transaction, v: TransactionValidator.ValidationResult[Transaction]) =
-    new InvalidTransaction(t.hash, v.leftMap(_.map(_.errorMessage)).toString)
+  def apply(c: CheckpointBlock) =
+    new InvalidCheckpointHash(c.checkpoint.edge.observationEdge, c.checkpoint.edge.signedObservationEdge)
+
+  implicit val invalidCheckpointHashEncoder: Encoder[InvalidCheckpointHash] = deriveEncoder
+  implicit val invalidCheckpointHashDecoder: Decoder[InvalidCheckpointHash] = deriveDecoder
 }
 
 case class DuplicatedTransaction(txHash: String) extends CheckpointBlockValidation {
@@ -380,6 +421,9 @@ case class DuplicatedTransaction(txHash: String) extends CheckpointBlockValidati
 object DuplicatedTransaction {
 
   def apply(t: Transaction) = new DuplicatedTransaction(t.hash)
+
+  implicit val duplicatedTransactionEncoder: Encoder[DuplicatedTransaction] = deriveEncoder
+  implicit val duplicatedTransactionDecoder: Decoder[DuplicatedTransaction] = deriveDecoder
 }
 
 case class NoAddressCacheFound(txHash: String, srcAddress: String) extends CheckpointBlockValidation {
@@ -391,10 +435,18 @@ case class NoAddressCacheFound(txHash: String, srcAddress: String) extends Check
 object NoAddressCacheFound {
 
   def apply(t: Transaction) = new NoAddressCacheFound(t.hash, t.src.address)
+
+  implicit val noAddressCacheFoundEncoder: Encoder[NoAddressCacheFound] = deriveEncoder
+  implicit val noAddressCacheFoundDecoder: Decoder[NoAddressCacheFound] = deriveDecoder
 }
 
 case class InsufficientBalance(address: String) extends CheckpointBlockValidation {
 
   def errorMessage: String =
     s"CheckpointBlock includes transaction from address=$address which has insufficient balance"
+}
+
+object InsufficientBalance {
+  implicit val insufficientBalanceEncoder: Encoder[InsufficientBalance] = deriveEncoder
+  implicit val insufficientBalanceDecoder: Decoder[InsufficientBalance] = deriveDecoder
 }

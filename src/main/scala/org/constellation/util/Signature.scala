@@ -4,6 +4,8 @@ import java.security.{KeyPair, PublicKey}
 
 import cats.kernel.Monoid
 import constellation._
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.primitives.Schema._
@@ -33,6 +35,11 @@ case class SingleHashSignature(hash: String, hashSignature: HashSignature) {
     hash == expectedHash && hashSignature.valid(expectedHash)
 }
 
+object SingleHashSignature {
+  implicit val singleHashSignatureEncoder: Encoder[SingleHashSignature] = deriveEncoder
+  implicit val singleHashSignatureDecoder: Decoder[SingleHashSignature] = deriveDecoder
+}
+
 case class HashSignature(
   signature: String,
   id: Id
@@ -47,6 +54,11 @@ case class HashSignature(
 
   override def compare(that: HashSignature): Int =
     signature.compare(that.signature)
+}
+
+object HashSignature {
+  implicit val hashSignatureEncoder: Encoder[HashSignature] = deriveEncoder
+  implicit val hashSignatureDecoder: Decoder[HashSignature] = deriveDecoder
 }
 
 case class SignatureBatch(
@@ -85,6 +97,11 @@ case class SignatureBatch(
     )
   }
 
+}
+
+object SignatureBatch {
+  implicit val signatureBatchEncoder: Encoder[SignatureBatch] = deriveEncoder
+  implicit val signatureBatchDecoder: Decoder[SignatureBatch] = deriveDecoder
 }
 
 trait SignHelpExt {

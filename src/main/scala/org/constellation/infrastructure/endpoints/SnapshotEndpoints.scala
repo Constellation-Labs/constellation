@@ -2,15 +2,14 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.{Concurrent, IO}
 import cats.implicits._
-import io.circe.generic.auto._
 import io.circe.syntax._
-import io.circe.{Encoder, KeyEncoder}
+import io.circe.Encoder
+import io.circe.generic.semiauto._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Schema.NodeState
 import org.constellation.schema.Id
@@ -22,9 +21,12 @@ import org.http4s.dsl.Http4sDsl
 
 import scala.collection.SortedMap
 
+import Id._
+import RedownloadService._
+import LatestMajorityHeight._
+
 class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
-  implicit val idEncoder: KeyEncoder[Id] = KeyEncoder.encodeKeyString.contramap[Id](_.hex)
   implicit val smEncoder: Encoder[SortedMap[Id, Double]] =
     Encoder.encodeMap[Id, Double].contramap[SortedMap[Id, Double]](_.toMap)
 
@@ -98,6 +100,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         redownloadService.getPeerProposals().map(_.get(Id(id))).map(_.asJson).flatMap(Ok(_))
     }
 
+  implicit val idLongEncoder: Encoder[(Id, Long)] = deriveEncoder
+
   private def getNextSnapshotHeight(nodeId: Id, snapshotService: SnapshotService[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "nextHeight" =>
@@ -145,7 +149,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   private def getLatestMajorityHeight(redownloadService: RedownloadService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "latestMajorityHeight" =>
       (redownloadService.lowestMajorityHeight, redownloadService.latestMajorityHeight)
-        .mapN(LatestMajorityHeight)
+        .mapN(LatestMajorityHeight(_, _))
         .map(_.asJson)
         .flatMap(Ok(_))
   }

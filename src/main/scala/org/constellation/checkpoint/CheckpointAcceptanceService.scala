@@ -188,7 +188,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
             .traverse(
               id =>
                 observationService
-                  .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation))(dao.keyPair))
+                  .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation.toString))(dao.keyPair))
             )
             .flatMap(
               _ =>

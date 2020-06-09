@@ -6,8 +6,10 @@ import java.security.KeyPair
 import cats.data.NonEmptyList
 import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.implicits._
+import io.circe.generic.semiauto._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.{Decoder, Encoder}
 import org.constellation.PeerMetadata
 import org.constellation.consensus.Consensus.{FacilitatorId, RoundData, RoundId}
 import org.constellation.consensus.ConsensusManager.{
@@ -103,3 +105,8 @@ case class RoundDataRemote(
   messages: Seq[ChannelMessage],
   observations: List[Observation]
 )
+
+object RoundDataRemote {
+  implicit val roundDataRemoteDecoder: Decoder[RoundDataRemote] = deriveDecoder
+  implicit val roundDataRemoteEncoder: Encoder[RoundDataRemote] = deriveEncoder
+}

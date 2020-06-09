@@ -43,7 +43,7 @@ class MajorityStateChooserTest
 
       "if there are no created snapshots and there are 2 peers (but only one with snapshot)" in {
         val peersCache =
-          List("z", "a", "b").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+          List("z", "a", "b").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
         val createdSnapshots = Map.empty[Long, SnapshotProposal]
         val peersProposals = Map(
           Id("a") -> Map(2L -> "aa"),
@@ -55,7 +55,7 @@ class MajorityStateChooserTest
 
       "if there is one created snapshot and there are 2 peers without snapshots" in {
         val peersCache =
-          List("z", "a", "b").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+          List("z", "a", "b").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
         val createdSnapshots = Map(2L -> "aa").toSnapshotProposals
         val peersProposals = Map(
           Id("a") -> Map.empty[Long, SnapshotProposal],
@@ -67,7 +67,7 @@ class MajorityStateChooserTest
 
       "if all nodes joined higher than proposals" in {
         val peersCache =
-          List("z", "a", "b").map(Id).map(_ -> NonEmptyList.one(MajorityHeight(Some(10L), None))).toMap
+          List("z", "a", "b").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight(Some(10L), None))).toMap
         val createdSnapshots = Map(2L -> "aa").toSnapshotProposals
         val peersProposals = Map(
           Id("a") -> Map(2L -> "aa"),
@@ -82,7 +82,7 @@ class MajorityStateChooserTest
       "and not all peers made snapshot" - {
         "returns empty Map without majority snapshot at this height" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val createdSnapshots = Map(2L -> "aa").toSnapshotProposals
           val peersProposals = Map(
             Id("a") -> Map(2L -> "bb"),
@@ -99,7 +99,7 @@ class MajorityStateChooserTest
     "if there are more than one heights" - {
       "returns majority snapshot at each height if there is a clear majority (more than 50%)" in {
         val peersCache =
-          List("z", "a", "b").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+          List("z", "a", "b").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
         val createdSnapshots = Map(2L -> "aa", 4L -> "bb", 6L -> "cc").toSnapshotProposals
         val peersProposals = Map(
           Id("a") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd"),
@@ -115,7 +115,7 @@ class MajorityStateChooserTest
       "if there is no reputation" - {
         "returns the first hash in alphabetical order" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val createdSnapshots = Map(2L -> "xx", 4L -> "yy", 6L -> "zz").toSnapshotProposals
           val peersProposals = Map(
             Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz"),
@@ -129,7 +129,7 @@ class MajorityStateChooserTest
 
         "does not return consistent continuation but treats each height individually" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val createdSnapshots = Map(2L -> "xx", 4L -> "dd", 6L -> "zz").toSnapshotProposals
           val peersProposals = Map(
             Id("a") -> Map(2L -> "xx", 4L -> "dd", 6L -> "zz"),
@@ -145,7 +145,7 @@ class MajorityStateChooserTest
       "if there is reputation" - {
         "return the majority calculated by trust proposers" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val trust = SortedMap[Id, Double](Id("z") -> 1, Id("a") -> 1, Id("b") -> 0.1, Id("c") -> 0.1)
           val createdSnapshots = Map(2L -> "xx", 4L -> "yy", 6L -> "zz").mapValues(SnapshotProposal(_, trust))
           val peersProposals = Map(
@@ -163,7 +163,7 @@ class MajorityStateChooserTest
       "if there is positive and negative reputation" - {
         "return the majority calculated by trust proposers" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val trust = SortedMap[Id, Double](Id("z") -> 1, Id("a") -> -1, Id("b") -> -0.1, Id("c") -> -0.1)
           val createdSnapshots = Map(2L -> "xx", 4L -> "yy", 6L -> "zz").mapValues(SnapshotProposal(_, trust))
           val peersProposals = Map(
@@ -183,7 +183,7 @@ class MajorityStateChooserTest
       "and each proposal has the same quantity" - {
         "returns the first hash in alphabetical order" in {
           val peersCache =
-            List("z", "a", "b").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val createdSnapshots = Map(2L -> "aa", 4L -> "ee", 6L -> "ii").toSnapshotProposals
           val peersProposals = Map(
             Id("a") -> Map(2L -> "dd", 4L -> "bb", 6L -> "ff"),
@@ -199,7 +199,7 @@ class MajorityStateChooserTest
         "returns the proposal with the most quantity" in {
           val peersCache =
             List("z", "a", "b", "c", "d", "e", "f", "g", "h")
-              .map(Id)
+              .map(Id(_))
               .map(_ -> NonEmptyList.one(MajorityHeight.genesis))
               .toMap
           val createdSnapshots = Map(2L -> "jj", 4L -> "kk", 6L -> "ll").toSnapshotProposals
@@ -222,7 +222,7 @@ class MajorityStateChooserTest
       "and there is a different trust across the peers" - {
         "returns the proposal weighted by proposers' trust" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val trustOwn = SortedMap[Id, Double](Id("z") -> 0.8, Id("a") -> 0.6, Id("b") -> 0.1, Id("c") -> 0.1)
           val trustA = SortedMap[Id, Double](Id("z") -> 1, Id("a") -> 0.2, Id("b") -> -0.5, Id("c") -> 0.1)
           val trustB = SortedMap[Id, Double](Id("z") -> 0.3, Id("a") -> 0.4, Id("b") -> 0.1, Id("c") -> 1)
@@ -242,7 +242,7 @@ class MajorityStateChooserTest
 
         "with sum of trust all yielding 0.0 returns the proposal weighted by ratio of occurrences" in {
           val peersCache =
-            List("z", "a", "b", "c").map(Id).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
+            List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val trustOwn = SortedMap[Id, Double](Id("z") -> 0.8, Id("a") -> 0.4, Id("b") -> 0.1, Id("c") -> 0.1)
           val trustA = SortedMap[Id, Double](Id("z") -> -0.4, Id("a") -> 0.2, Id("b") -> -0.3, Id("c") -> 0.1)
           val trustB = SortedMap[Id, Double](Id("z") -> -0.4, Id("a") -> 0.4, Id("b") -> 0.1, Id("c") -> -0.1)

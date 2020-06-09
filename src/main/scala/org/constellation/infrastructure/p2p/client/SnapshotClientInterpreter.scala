@@ -1,8 +1,8 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import io.circe.generic.auto._
-import io.circe.{Decoder, KeyDecoder}
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 import org.constellation.domain.p2p.client.SnapshotClientAlgebra
 import org.constellation.domain.redownload.RedownloadService.{
   LatestMajorityHeight,
@@ -16,14 +16,17 @@ import org.http4s.Method._
 import org.http4s.Status.Successful
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.client.Client
+import org.constellation.domain.redownload.RedownloadService._
 
 import scala.collection.SortedMap
 
 class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) extends SnapshotClientAlgebra[F] {
 
-  implicit val idDecoder: KeyDecoder[Id] = KeyDecoder.decodeKeyString.map(Id)
+  import Id._
+
   implicit val smDecoder: Decoder[SortedMap[Id, Double]] =
     Decoder.decodeMap[Id, Double].map(m => SortedMap(m.toSeq: _*))
+  implicit val idLongDecoder: Decoder[(Id, Long)] = deriveDecoder[(Id, Long)]
 
   def getStoredSnapshots(): PeerResponse[F, List[String]] =
     PeerResponse[F, List[String]]("snapshot/stored")(client)

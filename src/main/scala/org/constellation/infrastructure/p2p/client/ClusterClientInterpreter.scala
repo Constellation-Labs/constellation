@@ -1,14 +1,12 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import io.circe.KeyDecoder
 import org.constellation.domain.p2p.client.ClusterClientAlgebra
 import org.constellation.domain.trust.TrustData
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.p2p.{JoinedHeight, PeerUnregister, SetNodeStatus}
 import org.http4s.client.Client
-import io.circe.generic.auto._
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
@@ -19,7 +17,11 @@ import org.http4s.Method._
 class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F])(implicit F: Concurrent[F])
     extends ClusterClientAlgebra[F] {
 
-  implicit val idDecoder: KeyDecoder[Id] = KeyDecoder.decodeKeyString.map(Id)
+  import Id._
+  import ClusterNode._
+  import SetNodeStatus._
+  import JoinedHeight._
+  import TrustData._
 
   def getInfo(): PeerResponse[F, List[ClusterNode]] =
     PeerResponse[F, List[ClusterNode]]("cluster/info")(client)
