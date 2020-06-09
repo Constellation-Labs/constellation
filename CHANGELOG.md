@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Changed
+- Circe update to v0.13.0
 ## Fixed
 - Pull only consecutive transactions chain for consensus #1241
 

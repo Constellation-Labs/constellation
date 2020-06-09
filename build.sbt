@@ -47,7 +47,7 @@ lazy val versions = new {
   val mockito = "1.5.16"
   val twitterChill = "0.9.3"
   val http4s = "0.21.2"
-  val circe = "0.12.3"
+  val circe = "0.13.0"
   val circeEnumeratum = "1.5.23"
   val circeGenericExtras = "0.13.0"
 }
