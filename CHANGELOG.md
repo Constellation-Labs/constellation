@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [v2.9.0-rc1] - 2020-06-10
+## [v2.9.0-rc2] - 2020-06-10
 ## Fixed
 - Check blocks below the snapshot height before missing parents 
 
