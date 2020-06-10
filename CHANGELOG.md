@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ## [v2.9.0-rc1] - 2020-06-10
+## Fixed
+- Check blocks below the snapshot height before missing parents 
+
+## [v2.9.0-rc1] - 2020-06-10
 ## Changed
 - Circe update to v0.13.0
 - Get rid of circe auto derivation

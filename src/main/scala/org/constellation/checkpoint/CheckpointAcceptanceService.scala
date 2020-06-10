@@ -146,6 +146,20 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
             Sync[F].unit
           )
 
+        maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
+        _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Height is empty: ${maybeHeight.isEmpty}")
+        height <- if (maybeHeight.isEmpty) {
+          dao.metrics
+            .incrementMetricAsync[F](Metrics.heightEmpty)
+            .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
+        } else Sync[F].pure(maybeHeight.get)
+
+        lastSnapshotHeight <- snapshotService.getLastSnapshotHeight
+        _ <- if (height.min <= lastSnapshotHeight.toLong) {
+          dao.metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
+            HeightBelow(checkpoint.checkpointBlock, height).raiseError[F, Unit]
+        } else Sync[F].unit
+
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking missing parents")
         _ <- AwaitingCheckpointBlock
           .areParentsSOEAccepted(checkpointParentService.soeService)(cb)
@@ -205,19 +219,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
         _ <- checkpointParentService.soeService
           .put(cb.soeHash, cb.soe) // TODO: consider moving down
-        maybeHeight <- checkpointParentService.calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
-        _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Height is empty: ${maybeHeight.isEmpty}")
-        height <- if (maybeHeight.isEmpty) {
-          dao.metrics
-            .incrementMetricAsync[F](Metrics.heightEmpty)
-            .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
-        } else Sync[F].pure(maybeHeight.get)
-
-        lastSnapshotHeight <- snapshotService.getLastSnapshotHeight
-        _ <- if (height.min <= lastSnapshotHeight.toLong) {
-          dao.metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
-            HeightBelow(checkpoint.checkpointBlock, height).raiseError[F, Unit]
-        } else Sync[F].unit
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Accept data")
         _ <- checkpointService.put(checkpoint.copy(height = maybeHeight))
