@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## Changed
 - Circe update to v0.13.0
 - Get rid of circe auto derivation
+- Whitelisting - change operator IP
 ## Fixed
 - Pull only consecutive transactions chain for consensus #1241
 - Handle transactions with positive fee correctly #1201
