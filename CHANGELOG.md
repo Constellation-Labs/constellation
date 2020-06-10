@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Changed
 - Broadcast joining height multiple times #1261
+- Whitelisting - change operator IP
 
 ## [v2.8.2] - 2020-05-26
 ## Added
