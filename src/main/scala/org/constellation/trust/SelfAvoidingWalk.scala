@@ -2,6 +2,7 @@ package org.constellation.trust
 
 import com.typesafe.scalalogging.StrictLogging
 
+import scala.annotation.tailrec
 import scala.util.Random
 
 /**
@@ -26,6 +27,7 @@ object SelfAvoidingWalk extends StrictLogging {
   }
 
   // TODO: Make this iterative (simpler, avoid stack depth issue) and memoize visited up to N (small)
+  @tailrec
   def walk(
     selfId: Int,
     currentId: Int,
