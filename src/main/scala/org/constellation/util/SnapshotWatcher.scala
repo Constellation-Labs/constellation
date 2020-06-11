@@ -9,6 +9,6 @@ class SnapshotWatcher(healthChecker: HealthChecker[IO]) extends PeriodicIO("Snap
   override def trigger(): IO[Unit] =
     healthChecker.checkForStaleTips()
 
-  schedule(3 minute, 10 seconds)
+  schedule(1 minute, 5 seconds)
 
 }

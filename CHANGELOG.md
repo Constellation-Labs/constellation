@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Changed
 - Added @tailrec for SelfAvoidingWalk
+- Changed scheduler delay for stale checks
 
 ## [v2.9.0-rc2] - 2020-06-10
 ## Fixed
