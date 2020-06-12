@@ -102,7 +102,8 @@ class DataResolver[F[_]](
     hash: String,
     priorityClient: Option[PeerClientMetadata] = None
   ): F[CheckpointCache] =
-    getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
+    checkpointAcceptanceService().waitingForAcceptance.modify(a => (a + hash, ())) >>
+      getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
 
   def resolveCheckpoint(
     hash: String,
@@ -119,7 +120,8 @@ class DataResolver[F[_]](
         .flatTap(cb => F.start(CS.shift >> checkpointAcceptanceService().accept(cb)))
         .flatTap { cb =>
           logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}")
-        },
+        }
+        .onError { case _ => checkpointAcceptanceService().waitingForAcceptance.modify(a => (a - hash, ())) },
       s"dataResolver_resolveCheckpoint [$hash]"
     )
 

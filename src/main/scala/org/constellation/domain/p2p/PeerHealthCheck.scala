@@ -141,10 +141,11 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
           Set(pd.peerMetadata.id)
         )
         clock <- getClock
-        atLeastOneAvailable = statuses
+        howManyAvailable = statuses
           .mapValues(_.getOrElse(PeerUnresponsive(clock, 1)))
-          .exists { case (_, status) => status.isInstanceOf[PeerAvailable] }
-        result = if (!atLeastOneAvailable) Some(pd) else None
+          .count { case (_, status) => status.isInstanceOf[PeerAvailable] }
+        _ <- logger.debug(s"[${pd.peerMetadata.host}] How many available: ${howManyAvailable}")
+        result = if (howManyAvailable == 0) Some(pd) else None
       } yield result
     }.map(_.flatten)
 
@@ -171,24 +172,12 @@ object PeerHealthCheck {
   }
 
   object PeerHealthCheckStatus {
-    implicit val peerAvailableEncoder: Encoder.AsObject[PeerAvailable] = deriveEncoder
-    implicit val peerAvailableDecoder: Decoder[PeerAvailable] = deriveDecoder
 
-    implicit val peerUnresponsiveEncoder: Encoder.AsObject[PeerUnresponsive] = deriveEncoder
-    implicit val peerUnresponsiveDecoder: Decoder[PeerUnresponsive] = deriveDecoder
-
-    implicit val encodePeerHealthCheckStatus: Encoder[PeerHealthCheckStatus] = Encoder.instance {
-      case a @ PeerAvailable(_)       => a.asJson
-      case a @ PeerUnresponsive(_, _) => a.asJson
-    }
-
-    implicit val decodePeerHealthCheckStatus: Decoder[PeerHealthCheckStatus] =
-      List[Decoder[PeerHealthCheckStatus]](
-        Decoder[PeerAvailable].widen,
-        Decoder[PeerUnresponsive].widen
-      ).reduceLeft(_.or(_))
+    implicit val encodePeerHealthCheckStatus: Encoder[PeerHealthCheckStatus] = deriveEncoder
+    implicit val decodePeerHealthCheckStatus: Decoder[PeerHealthCheckStatus] = deriveDecoder
   }
 
   case class PeerAvailable(lastCheck: Long) extends PeerHealthCheckStatus
+
   case class PeerUnresponsive(lastCheck: Long, checks: Int) extends PeerHealthCheckStatus
 }

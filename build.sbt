@@ -5,6 +5,7 @@ envVars in Test := Map("CL_STOREPASS" -> "storepass", "CL_KEYPASS" -> "keypass")
 enablePlugins(JavaAgent, JavaAppPackaging)
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
 addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+addCompilerPlugin(("org.scalamacros" % "paradise" % "2.1.0").cross(CrossVersion.full))
 
 scalacOptions :=
   Seq(
@@ -31,6 +32,7 @@ lazy val coreSettings = Seq(
   resolvers += "Artima Maven Repository".at("https://repo.artima.com/releases"),
   resolvers += "Typesafe Releases".at("https://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io"),
+  resolvers += Resolver.sonatypeRepo("releases"),
   resolvers += Resolver.bintrayRepo("abankowski", "maven")
 )
 
