@@ -20,7 +20,7 @@ variable "instance_count" {
 
 variable "instance_type" {
   type = string
-  default = "t3.xlarge"
+  default = "r5.large"
 }
 
 variable "node_disk_size" {
