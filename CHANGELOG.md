@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.9.1-rc1] - 2020-06-12
 ## Fixed
 - Fixed missing parents in consensus
 - Fixed circe mappings for ADTs
