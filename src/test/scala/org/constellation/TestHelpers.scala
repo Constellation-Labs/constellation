@@ -21,7 +21,7 @@ import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator, PeerData}
-import org.constellation.primitives.{ConcurrentTipService, IPManager}
+import org.constellation.primitives.{ConcurrentTipService, IPManager, ThreadSafeMessageMemPool}
 import org.constellation.primitives.Schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
@@ -164,6 +164,9 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
 
     val dr = mock[DataResolver[IO]]
     dao.dataResolver shouldReturn dr
+
+    val tsmmp = mock[ThreadSafeMessageMemPool]
+    dao.threadSafeMessageMemPool shouldReturn tsmmp
 
     dao
   }
