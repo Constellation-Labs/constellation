@@ -421,7 +421,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
       validationResult <- validateReceivedProposals(
         proposals,
         "consensusDataProposals",
-        countSelfAsPeer = roundStartedByMe
+        countSelfAsPeer = false
       )
       _ <- validationResult match {
         case Left(exception) => consensusManager.handleRoundError(exception)
@@ -458,10 +458,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
   private[consensus] def receivedAllCheckpointBlockProposals(size: Int): Boolean =
     size == roundData.peers.size + 1
 
-  private[consensus] def receivedAllConsensusDataProposals(size: Int): Boolean = {
-    val extraMessage = if (roundStartedByMe) 1 else 0
-    size == roundData.peers.size + extraMessage
-  }
+  private[consensus] def receivedAllConsensusDataProposals(size: Int): Boolean =
+    size == roundData.peers.size
 
   def validateReceivedProposals(
     proposals: Map[FacilitatorId, AnyRef],

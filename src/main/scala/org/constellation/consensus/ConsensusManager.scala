@@ -118,16 +118,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         Sync[F].raiseError[Unit](
           NotAllPeersParticipate(roundId, roundData._1.transactions, roundData._1.observations)
         )
-      _ <- roundInfo.consensus.addConsensusDataProposal(
-        ConsensusDataProposal(
-          roundData._1.roundId,
-          FacilitatorId(dao.id),
-          roundData._1.transactions,
-          roundData._1.messages.map(_.signedMessageData.hash),
-          roundData._1.peers.flatMap(_.notification).toSeq,
-          roundData._1.observations
-        )
-      )
     } yield roundInfo
 
     startRoundTask.recoverWith {
