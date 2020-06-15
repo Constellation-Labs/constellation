@@ -27,7 +27,8 @@ object SelfAvoidingWalk extends StrictLogging {
   }
 
   // TODO: Make this iterative (simpler, avoid stack depth issue) and memoize visited up to N (small)
-  @tailrec
+  // use breeze ^
+  @scala.annotation.tailrec
   def walk(
     selfId: Int,
     currentId: Int,
@@ -104,7 +105,7 @@ object SelfAvoidingWalk extends StrictLogging {
     val maxPathLength = nodes.size - 1
 
     def walkFromOrigin() = {
-      val totalPathLength = Random.nextInt(maxPathLength - 1) + 1 //note, need min of 3 nodes
+      val totalPathLength = Random.nextInt(maxPathLength) + 1 //note, need min of 3 nodes
       walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1d)
     }
     val numNodes = nodes.maxBy(_.id).id

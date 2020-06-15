@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Fixed
 - Fix union checkpoint block creation during consensus
+- Fix stack overflow in SelfAvoidingWalk
 
 ## [v2.9.1-rc1] - 2020-06-12
 ## Fixed
