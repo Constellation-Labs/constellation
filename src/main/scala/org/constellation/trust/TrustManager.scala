@@ -20,7 +20,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
     cluster.getPeerInfo.flatMap { peers =>
-      if (peers.nonEmpty) {
+      if (peers.size > 2) {
         for {
           reputation <- getStoredReputation
           _ <- logger.info(s"Begin handleTrustScoreUpdate for peerTrustScores: ${peerTrustScores.toString()}")
