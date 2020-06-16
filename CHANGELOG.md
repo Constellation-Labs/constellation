@@ -2,9 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.8.3] - 2020-06-16
 ## Changed
-- Broadcast joining height multiple times #1261
 - Whitelisting - change operator IP
+## Fixed
+- Broadcast joining height multiple times #1261
+- Fix missing parents metric 
 
 ## [v2.8.2] - 2020-05-26
 ## Added
