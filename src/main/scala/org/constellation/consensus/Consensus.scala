@@ -339,11 +339,19 @@ class Consensus[F[_]: Concurrent: ContextShift](
               .filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
               .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
         )
+      baseHash = finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash
       _ <- logger.debug(
-        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash}"
+        s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${baseHash}"
       )
       responses <- nonFacilitators.traverse { pd =>
-        apiClient.checkpoint.sendFinishedCheckpoint(finishedCheckpoint).run(pd.peerMetadata.toPeerClientMetadata)
+        apiClient.checkpoint
+          .sendFinishedCheckpoint(finishedCheckpoint)
+          .run(pd.peerMetadata.toPeerClientMetadata)
+          .handleErrorWith { error =>
+            logger.warn(error)(
+              s"Cannot broadcast finished checkpoint block hash=${baseHash} to: ${pd.peerMetadata.host}"
+            ) >> false.pure[F]
+          }
       }
     } yield responses
   }

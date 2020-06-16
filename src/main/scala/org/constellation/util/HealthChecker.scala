@@ -94,7 +94,17 @@ class HealthChecker[F[_]: Concurrent](
         .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)
-        .traverse(apiClient.snapshot.getNextSnapshotHeight().run)
+        .traverse(
+          a =>
+            apiClient.snapshot
+              .getNextSnapshotHeight()
+              .run(a)
+              .map {
+                case (id, height) => (id, height)
+              }
+              .handleErrorWith(_ => (a.id, -1L).pure[F])
+        )
+        .map(_.filter { case (_, height) => height >= 0L })
     } yield nextSnapshotHeights.toMap
 
   def clearStaleTips(): F[Unit] =
@@ -109,7 +119,7 @@ class HealthChecker[F[_]: Concurrent](
           .filter(_._2.size >= dao.processingConfig.numFacilitatorPeers)
 
         if (heightsOfMinimumFacilitators.nonEmpty) {
-          concurrentTipService.clearStaleTips(heights.min)
+          concurrentTipService.clearStaleTips(heightsOfMinimumFacilitators.keySet.min)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(
