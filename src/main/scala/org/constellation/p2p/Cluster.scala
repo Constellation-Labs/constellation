@@ -341,7 +341,11 @@ class Cluster[F[_]](
       p <- peers.get.map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       clients = p.map(_._2.peerMetadata).toList
       maxMajorityHeight <- clients
-        .traverse(pm => apiClient.snapshot.getLatestMajorityHeight().run(pm.toPeerClientMetadata))
+        .traverse(
+          pm =>
+            apiClient.snapshot.getLatestMajorityHeight().run(pm.toPeerClientMetadata).map(_.some).handleErrorWith(None)
+        )
+        .map(_.flatten)
         .map(heights => if (heights.nonEmpty) heights.map(_.highest).max else 0L)
       delay = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 

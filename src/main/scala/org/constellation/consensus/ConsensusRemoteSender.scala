@@ -91,6 +91,9 @@ class ConsensusRemoteSender[F[_]: Concurrent](
               .put(Observation.create(pd.peerMetadata.id, RequestTimeoutOnConsensus(roundId))(keyPair))
               .void
         }.flatTap(_ => logger.debug(s"Consensus ${roundId} sending msg ${msg}"))
+          .handleErrorWith(
+            e => logger.error(e)(s"Cannot send consensus round=${roundId} message ${msg}") >> false.pure[F]
+          )
     )
 
 }

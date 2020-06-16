@@ -258,7 +258,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           s"Awaiting for acceptance: ${awaitingBlocks.size} | Allowed to accept: ${allowedToAccept.size}"
         )
 
-        _ <- Concurrent[F].start(allowedToAccept.traverse(accept(_)))
+        _ <- Concurrent[F].start(allowedToAccept.traverse(accept(_).handleErrorWith(_ => Sync[F].unit)))
       } yield ()
 
     acceptCheckpoint.handleErrorWith {
@@ -329,7 +329,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
               _.filterA(hash => awaiting.get.map(_.map(_.checkpointBlock.baseHash).contains(hash)).map(!_))
             }
             .flatMap(_.traverse(hash => dataResolver.resolveCheckpointDefaults(hash)))
-          _ <- cbs.traverse(accept(_))
+          _ <- cbs.traverse(accept(_).handleErrorWith(_ => Sync[F].unit))
         } yield ()
       } else Sync[F].unit
     }
