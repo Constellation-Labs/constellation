@@ -20,26 +20,25 @@ All notable changes to this project will be documented in this file.
 - Check blocks below the snapshot height before missing parents 
 
 ## [v2.9.0-rc1] - 2020-06-10
-## Changed
-- Circe update to v0.13.0
-- Get rid of circe auto derivation
-- Whitelisting - change operator IP
-- Data resolver refactor
-## Fixed
-- Pull only consecutive transactions chain for consensus #1241
-- Handle transactions with positive fee correctly #1201
-
-## [v2.8.4] - 2020-06-04
 ## Added
 - Dead peer caching #1239
 ## Changed
+- Circe update to v0.13.0
+- Get rid of circe auto derivation
+- Data resolver refactor
 - Different reputation does not change snapshot hash #1258
-- Broadcast joining height multiple times #1261
-
-## [v2.8.3] - 2020-05-29
 ## Fixed
+- Pull only consecutive transactions chain for consensus #1241
+- Handle transactions with positive fee correctly #1201
 - Self avoiding walk: missing edges and negative 0d
 - No active tips issue and consensus hanging
+
+## [v2.8.3] - 2020-06-16
+## Changed
+- Whitelisting - change operator IP
+## Fixed
+- Broadcast joining height multiple times #1261
+- Fixed missing parents metric
 
 ## [v2.8.2] - 2020-05-26
 ## Added
