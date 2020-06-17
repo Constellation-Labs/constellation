@@ -99,9 +99,6 @@ class HealthChecker[F[_]: Concurrent](
             apiClient.snapshot
               .getNextSnapshotHeight()
               .run(a)
-              .map {
-                case (id, height) => (id, height)
-              }
               .handleErrorWith(_ => (a.id, -1L).pure[F])
         )
         .map(_.filter { case (_, height) => height >= 0L })

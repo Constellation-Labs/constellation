@@ -392,7 +392,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       case otherError =>
         acceptLock.release >>
           logger.debug(s"[Accept checkpoint][5-?] Release lock") >>
-          Sync[F].delay(logger.error(s"Error when accepting block: ${otherError.getMessage}")) >>
+          Sync[F].delay(logger.error(otherError)(s"Error when accepting block")) >>
           dao.metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") >>
           otherError.raiseError[F, Unit]
     }

@@ -28,7 +28,7 @@ import scala.concurrent.duration._
 import scala.util.Random
 import io.circe.syntax._
 import io.circe.parser._
-import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
+import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, SnapshotProposalsAtHeight}
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
@@ -343,7 +343,11 @@ class Cluster[F[_]](
       maxMajorityHeight <- clients
         .traverse(
           pm =>
-            apiClient.snapshot.getLatestMajorityHeight().run(pm.toPeerClientMetadata).map(_.some).handleErrorWith(None)
+            apiClient.snapshot
+              .getLatestMajorityHeight()
+              .run(pm.toPeerClientMetadata)
+              .map(_.some)
+              .handleError(_ => none[LatestMajorityHeight])
         )
         .map(_.flatten)
         .map(heights => if (heights.nonEmpty) heights.map(_.highest).max else 0L)

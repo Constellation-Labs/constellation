@@ -166,11 +166,11 @@ class DataResolver[F[_]](
             case e: DataResolutionOutOfPeers => F.raiseError[A](e)
             case e if tail.isEmpty           => F.raiseError[A](e)
             case e: DataResolutionNoneResponse =>
-              logger.warn(e.getMessage) >>
+              logger.warn(e)(s"Data resolution none response") >>
                 CS.shift >> makeAttempt(tail, allPeers, errorsSoFar + 1)
             case e =>
-              logger.error(
-                s"Unexpected error while resolving hash=$hash with host=${head.host}, and id ${head.id} trying next peer | ${e.getMessage}"
+              logger.error(e)(
+                s"Unexpected error while resolving hash=$hash with host=${head.host}, and id ${head.id} trying next peer"
               ) >>
                 CS.shift >> makeAttempt(tail, allPeers, errorsSoFar + 1)
           }
@@ -217,7 +217,7 @@ class DataResolver[F[_]](
     }
 
     makeAttempt(sortedPeers, hashes).handleErrorWith(
-      e => logger.error(s"Unexpected error while resolving hashes : ${e.getMessage}") *> F.raiseError[List[A]](e)
+      e => logger.error(e)(s"Unexpected error while resolving hashes") *> F.raiseError[List[A]](e)
     )
   }
 
