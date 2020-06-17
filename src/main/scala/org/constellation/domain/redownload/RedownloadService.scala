@@ -182,7 +182,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       .getCreatedSnapshots()
       .run(client)
       .handleErrorWith { e =>
-        logger.error(s"Fetch peers proposals error: ${e.getMessage}") >> F.pure(Map.empty)
+        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty)
       }
 
   // TODO: Extract to HTTP layer
@@ -294,7 +294,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
               .handleErrorWith(
-                error => logger.warn(s"Error during blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+                error => logger.warn(error)(s"Error during blocks acceptance after redownload") >> F.unit
               )
           }
         } yield ()
@@ -442,7 +442,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield ()
 
     if (isEnabledCloudStorage) send.handleErrorWith(error => {
-      logger.error(s"Sending snapshot to cloud failed with: ${error.getMessage}") >> metrics.incrementMetricAsync(
+      logger.error(error)(s"Sending snapshot to cloud failed with") >> metrics.incrementMetricAsync(
         "sendToCloud_failure"
       )
     })
@@ -550,7 +550,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
         logger.debug(s"Accepting sync buffer block: ${b.height}") >>
           checkpointAcceptanceService.accept(b).handleErrorWith { error =>
-            logger.warn(s"Error during buffer pool blocks acceptance after redownload: ${error.getMessage}") >> F.unit
+            logger.warn(error)(s"Error during buffer pool blocks acceptance after redownload") >> F.unit
           }
       }
     } yield ()).attemptT

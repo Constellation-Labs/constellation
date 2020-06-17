@@ -45,7 +45,7 @@ class DownloadService[F[_]](
     (cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
       if (state.isNewSet) {
         wrappedDownload.handleErrorWith { error =>
-          logger.error(s"Error during download process: ${error.getMessage}") >>
+          logger.error(error)(s"Error during download process") >>
             cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void
         }
       } else F.unit
@@ -83,7 +83,7 @@ class DownloadService[F[_]](
             logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
               .accept(b)
               .handleErrorWith(
-                error => logger.warn(s"Error during blocks acceptance after download: ${error.getMessage}") >> F.unit
+                error => logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
               )
           }
         } yield ()
