@@ -70,13 +70,16 @@ class BIP44Test extends FreeSpec with Matchers {
 //    val signature = bip44.signData(tx.edge.observationEdge.hash.getBytes())
 //    val signDataManually = KeyUtils.bytes2hex(signature)
 
-    println("mnemonic: " + seedCode)
-    println("bip44 path: " + bip44.chainPathPrefix + childIndex)
-    println("privateKey: " + KeyUtils.privateKeyToHex(privateKey))
-    println("publicKey: " + KeyUtils.publicKeyToHex(publicKey))
-    println("address: " + address)
-    println("transaction: " + tx.asJson.noSpaces)
+    println("mnemonic:              " + seedCode)
+    println("bip44 path:            " + bip44.chainPathPrefix + childIndex)
+    println("withPrefixPriKey:      " + KeyUtils.bytes2hex(privateKey.getEncoded))
+    println("privateKey:            " + KeyUtils.privateKeyToHex(privateKey))
+    println("withPrefixPubKey:      " + KeyUtils.bytes2hex(publicKey.getEncoded))
+    println("publicKey:             " + KeyUtils.publicKeyToHex(publicKey))
+    println("address:               " + address)
+    println("transaction:           " + tx.asJson.noSpaces)
     println("hex encoded signature: " + tx.edge.signedObservationEdge.signatureBatch.signatures.head.signature)
-    println("runLengthEncoding: " + runLengthEncoding)
+    println("runLengthEncoding:     " + runLengthEncoding)
+    println("runLenEnc sha256 hash  " + Hashable.hash(runLengthEncoding))
   }
 }

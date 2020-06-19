@@ -1,19 +1,17 @@
 package org.constellation.wallet
 
-import java.math.BigInteger
-import java.security.{KeyFactory, KeyPair, PrivateKey, PublicKey}
+import java.security.{KeyPair, PrivateKey}
 import java.util
 import java.util.Date
 
 import org.bitcoinj.crypto.{ChildNumber, DeterministicKey, HDUtils}
+import org.bitcoinj.params.MainNetParams
 import org.bitcoinj.wallet.{DeterministicKeyChain, DeterministicSeed}
-import org.bouncycastle.asn1.sec.SECNamedCurves
-import org.bouncycastle.asn1.x9.X9ECParameters
-import org.bouncycastle.jce.spec.{ECParameterSpec, ECPrivateKeySpec, _}
-import org.bouncycastle.math.ec
+import org.bouncycastle.crypto.params.{ECDomainParameters, ECPrivateKeyParameters, ECPublicKeyParameters}
+import org.bouncycastle.jcajce.provider.asymmetric.ec.{BCECPrivateKey, BCECPublicKey}
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.constellation.keytool.KeyUtils
-import org.constellation.keytool.KeyUtils.insertProvider
-import org.constellation.wallet.BIP44.{getPrivateKeyFromECBigIntAndCurve, getPublicKeyFromECPoint}
+import org.constellation.wallet.BIP44.getECKeyPairFromBip44Key
 
 class BIP44(seedPrase: String, childIndex: Int = 0, passphrase: String = "", creationTime: Long = new Date().getTime) {
   //1137 is DAG coin type taken from https://github.com/satoshilabs/slips/blob/master/slip-0044.md
@@ -32,28 +30,40 @@ class BIP44(seedPrase: String, childIndex: Int = 0, passphrase: String = "", cre
 
   def getChildKeyPairOfDepth(depth: Int = childIndex) = {
     val key: DeterministicKey = getDeterministicKeyOfDepth(depth)
-    val rawPrivate: BigInteger = key.getPrivKey
-    val privateKey: PrivateKey = getPrivateKeyFromECBigIntAndCurve(rawPrivate, "secp256k1")
-    val publicKey: PublicKey = getPublicKeyFromECPoint(key.getPubKeyPoint)
-    new KeyPair(publicKey, privateKey)
+
+    // For debugging
+    val params = new MainNetParams
+    val mainKey = chain.getKeyByPath(HDUtils.parsePath(chainPathPrefix), true)
+    println(s"seed:             ${chain.getSeed.toHexString}")
+    println(s"mainKeyPriv:      ${mainKey.serializePrivB58(params)}")
+    println(s"mainKeyPublic:    ${mainKey.serializePubB58(params)}")
+    println(s"privChildBase58:  ${key.serializePrivB58(params)}")
+    println(s"pubChildBase58:   ${key.serializePubB58(params)}")
+    println(s"privChildKeyWiF:  ${key.getPrivateKeyAsWiF(params)}")
+    println(s"privChildKey hex: ${KeyUtils.bytes2hex(key.getPrivKeyBytes)}")
+    println(s"pubChildKey hex:  ${KeyUtils.bytes2hex(key.getPubKey)}")
+    println("RAW PRIVATE:      " + KeyUtils.bytes2hex(key.getPrivKey.toByteArray))
+    // end
+
+    getECKeyPairFromBip44Key(key)
   }
 }
 
 object BIP44 extends App {
   import org.bouncycastle.jce.ECNamedCurveTable
 
-  def getPrivateKeyFromECBigIntAndCurve(s: BigInteger, curveName: String) = {
-    val ecParameterSpec: ECParameterSpec = ECNamedCurveTable.getParameterSpec(curveName)
-    val privateKeySpec: ECPrivateKeySpec = new ECPrivateKeySpec(s, ecParameterSpec)
-    val keyFactory = KeyFactory.getInstance("ECDSA")
-    val priv = keyFactory.generatePrivate(privateKeySpec)
-    priv
-  }
-
-  def getPublicKeyFromECPoint(point: ec.ECPoint) = {
-    val kf = KeyFactory.getInstance(KeyUtils.ECDSA, insertProvider)
-    val curve: X9ECParameters = SECNamedCurves.getByName("secp256k1")
-    val params = new ECParameterSpec(curve.getCurve(), curve.getG(), curve.getN(), curve.getH())
-    kf.generatePublic(new ECPublicKeySpec(point, params))
+  def getECKeyPairFromBip44Key(bip44Key: DeterministicKey): KeyPair = {
+    val rawPrivate = bip44Key.getPrivKey
+    val ecPoint = bip44Key.getPubKeyPoint
+    val bcConf = BouncyCastleProvider.CONFIGURATION
+    val curveParams = ECNamedCurveTable.getParameterSpec("secp256k1")
+    val n = curveParams.getN
+    val curve = curveParams.getCurve
+    val domainParams = new ECDomainParameters(curve, ecPoint, n)
+    val privKeyParams = new ECPrivateKeyParameters(rawPrivate, domainParams)
+    val publicKeyParams = new ECPublicKeyParameters(ecPoint, domainParams)
+    val publicKey = new BCECPublicKey(KeyUtils.ECDSA, publicKeyParams, curveParams, bcConf)
+    val privateKey = new BCECPrivateKey(KeyUtils.ECDSA, privKeyParams, publicKey, curveParams, bcConf)
+    new KeyPair(publicKey, privateKey)
   }
 }
