@@ -11,7 +11,8 @@ import io.circe.generic.semiauto._
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
-import org.constellation.domain.cloud.HeightHashFileStorage
+import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
+import org.constellation.domain.cloud.{CloudService, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.rewards.StoredRewards
@@ -43,12 +44,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
   majorityStateChooser: MajorityStateChooser,
   snapshotStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
-  rewardsStorage: LocalFileStorage[F, StoredRewards],
   snapshotService: SnapshotService[F],
+  cloudService: CloudServiceEnqueue[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
-  snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
-  rewardsCloudStorage: HeightHashFileStorage[F, StoredRewards],
   rewardsManager: RewardsManager[F],
   apiClient: ClientInterpreter[F],
   metrics: Metrics
@@ -410,14 +408,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
       uploadSnapshots <- hashes.traverse {
         case (height, hash) =>
           snapshotStorage.getFile(hash).rethrowT.map {
-            snapshotCloudStorage.write(height, hash, _).rethrowT
+            cloudService.enqueueSnapshot(_, height, hash)
           }
       }
 
       uploadSnapshotInfos <- hashes.traverse {
         case (height, hash) =>
           snapshotInfoStorage.getFile(hash).rethrowT.map {
-            snapshotInfoCloudStorage.write(height, hash, _).rethrowT
+            cloudService.enqueueSnapshotInfo(_, height, hash)
           }
       }
 
@@ -441,12 +439,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
     } yield ()
 
-    if (isEnabledCloudStorage) send.handleErrorWith(error => {
+    send.handleErrorWith(error => {
       logger.error(error)(s"Sending snapshot to cloud failed with") >> metrics.incrementMetricAsync(
         "sendToCloud_failure"
       )
     })
-    else F.unit
   }
 
   private[redownload] def rewardMajoritySnapshots(): EitherT[F, Throwable, Unit] =
@@ -633,12 +630,9 @@ object RedownloadService {
     majorityStateChooser: MajorityStateChooser,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
-    rewardsStorage: LocalFileStorage[F, StoredRewards],
     snapshotService: SnapshotService[F],
+    cloudService: CloudServiceEnqueue[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
-    snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
-    snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
-    rewardsCloudStorage: HeightHashFileStorage[F, StoredRewards],
     rewardsManager: RewardsManager[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics
@@ -651,12 +645,9 @@ object RedownloadService {
       majorityStateChooser,
       snapshotStorage,
       snapshotInfoStorage,
-      rewardsStorage,
       snapshotService,
+      cloudService,
       checkpointAcceptanceService,
-      snapshotCloudStorage,
-      snapshotInfoCloudStorage,
-      rewardsCloudStorage,
       rewardsManager,
       apiClient,
       metrics

@@ -4,65 +4,47 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directive0
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
 import better.files.File
-import cats.Monad
-import cats.effect.{Blocker, Clock, ConcurrentEffect, ContextShift, ExitCode, IO, IOApp, Resource, Sync, Timer}
+import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp, Resource, Sync}
 import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
-import constellation._
+import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Decoder
 import io.prometheus.client.CollectorRegistry
 import org.constellation.CustomDirectives.printResponseTime
-import org.constellation.datastore.SnapshotTrigger
+import org.constellation.domain.cloud.CloudService
+import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend, FileToSend}
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
+import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.infrastructure.configuration.CliConfigParser
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
-import org.constellation.infrastructure.endpoints.{
-  BuildInfoEndpoints,
-  CheckpointEndpoints,
-  ClusterEndpoints,
-  ConsensusEndpoints,
-  MetricsEndpoints,
-  NodeMetadataEndpoints,
-  ObservationEndpoints,
-  SignEndpoints,
-  SnapshotEndpoints,
-  SoeEndpoints,
-  StatisticsEndpoints,
-  TipsEndpoints,
-  TransactionEndpoints,
-  UIEndpoints
-}
+import org.constellation.infrastructure.endpoints._
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
+import org.constellation.keytool.KeyStoreUtils
 import org.constellation.primitives.IPManager.IP
 import org.constellation.primitives.Schema.{GenesisObservation, NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.schema.Id
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
-import org.http4s.{HttpApp, HttpRoutes, Request}
+import org.http4s.Request
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
-import org.http4s.client.okhttp.OkHttpBuilder
-import org.slf4j.MDC
 import org.http4s.implicits._
 import org.http4s.metrics.prometheus.Prometheus
-import org.http4s.syntax._
 import org.http4s.server.blaze.BlazeServerBuilder
-import org.http4s.server.{Router, middleware, Server => H4Server}
-import org.http4s.server.middleware.Logger
-import pl.abankowski.httpsigner.http4s.{Http4sRequestSigner, Http4sResponseSigner}
-import pl.abankowski.httpsigner.signature.generic.GenericGenerator
+import org.http4s.server.{Router, middleware}
+import org.slf4j.MDC
+import pureconfig._
+import pureconfig.generic.ProductHint
+import pureconfig.generic.auto._
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.Try
@@ -92,6 +74,11 @@ object ConstellationNode extends IOApp {
 
       config = ConfigFactory.load() // TODO
 
+      cloudConfigPath = Option(cliConfig.cloud)
+      cloudConfig = cloudConfigPath.flatMap { c =>
+        ConfigSource.file(c).load[CloudConfig].toOption
+      }.getOrElse(CloudConfig.empty)
+
       _ <- Resource.liftF(createPreferencesPath[IO](preferencesPath))
 
       nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
@@ -116,7 +103,11 @@ object ConstellationNode extends IOApp {
       signedApiClient = PeerAuthMiddleware
         .requestSignerMiddleware(logger(apiClient), nodeConfig.primaryKeyPair.getPrivate, nodeConfig.hostName)
 
-      node = new ConstellationNode(nodeConfig, signedApiClient, registry)
+      cloudService <- Resource.liftF(IO.delay { CloudService[IO](cloudConfig) })
+      cloudQueue <- Resource.liftF(Queue.unbounded[IO, DataToSend])
+      cloudQueueInstance <- Resource.liftF(cloudService.cloudSendingQueue(cloudQueue))
+
+      node = new ConstellationNode(nodeConfig, cloudQueueInstance, signedApiClient, registry)
 
       server <- createServer(node.dao, registry)
     } yield server
@@ -321,6 +312,7 @@ object ConstellationNode extends IOApp {
 
 class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig(),
+  cloudService: CloudServiceEnqueue[IO],
   client: Client[IO],
   registry: CollectorRegistry
 )(
@@ -334,7 +326,7 @@ class ConstellationNode(
   dao.apiClient = ClientInterpreter[IO](client)
   dao.nodeConfig = nodeConfig
   dao.metrics = new Metrics(registry, periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
-  dao.initialize(nodeConfig)
+  dao.initialize(nodeConfig, cloudService)
 
   dao.node = this
 

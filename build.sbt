@@ -52,6 +52,7 @@ lazy val versions = new {
   val circe = "0.13.0"
   val circeEnumeratum = "1.5.23"
   val circeGenericExtras = "0.13.0"
+  val fs2 = "2.4.2"
 }
 
 lazy val http4sDependencies = Seq(
@@ -70,6 +71,12 @@ lazy val circeDependencies = Seq(
   "io.circe" %% "circe-parser" % versions.circe,
   "com.beachape" %% "enumeratum-circe" % versions.circeEnumeratum
 )
+
+lazy val fs2Dependencies = Seq(
+  "co.fs2" %% "fs2-core",
+  "co.fs2" %% "fs2-io",
+  "co.fs2" %% "fs2-reactive-streams"
+).map(_ % versions.fs2)
 
 lazy val sharedDependencies = Seq(
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
@@ -127,7 +134,8 @@ lazy val coreDependencies = Seq(
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
   "org.perf4j" % "perf4j" % "0.9.16",
   "pl.abankowski" %% "http-request-signer-core" % "0.3.2",
-  "pl.abankowski" %% "http4s-request-signer" % "0.3.2"
+  "pl.abankowski" %% "http4s-request-signer" % "0.3.2",
+  "com.github.pureconfig" %% "pureconfig" % "0.12.3"
 ) ++ http4sDependencies ++ schemaSharedDependencies
 
 //Test dependencies

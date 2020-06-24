@@ -7,6 +7,7 @@ import cats.implicits._
 import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot
+import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
@@ -53,6 +54,7 @@ class RedownloadServiceTest
   var metrics: Metrics = _
   var rewardsManager: RewardsManager[IO] = _
   var apiClient: ClientInterpreter[IO] = _
+  var cloudService: CloudServiceEnqueue[IO] = _
 
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
@@ -71,6 +73,7 @@ class RedownloadServiceTest
     cloudStorage = mock[CloudStorageOld[IO]]
     rewardsManager = mock[RewardsManager[IO]]
     apiClient = mock[ClientInterpreter[IO]]
+    cloudService = mock[CloudServiceEnqueue[IO]]
 
     metrics.incrementMetricAsync[IO](*)(*) shouldReturnF Unit
     metrics.updateMetricAsync[IO](*, any[Long])(*) shouldReturnF Unit
@@ -83,12 +86,9 @@ class RedownloadServiceTest
       majorityStateChooser,
       snapshotStorage,
       snapshotInfoStorage,
-      rewardsStorage,
       snapshotService,
+      cloudService,
       checkpointAcceptanceService,
-      snapshotCloudStorage,
-      snapshotInfoCloudStorage,
-      rewardsCloudStorage,
       rewardsManager,
       apiClient,
       metrics
@@ -336,8 +336,10 @@ class RedownloadServiceTest
       NonEmptyList(mock[MajorityHeight], Nil)
     )
     val initialPeersProposals = Map(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty)))
-    val peer1Proposals = Map(1L -> SnapshotProposal("hash2p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty))
-    val peer2Proposals = Map(1L -> SnapshotProposal("hash1p2", SortedMap.empty), 2L -> SnapshotProposal("hash2p2", SortedMap.empty))
+    val peer1Proposals =
+      Map(1L -> SnapshotProposal("hash2p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty))
+    val peer2Proposals =
+      Map(1L -> SnapshotProposal("hash1p2", SortedMap.empty), 2L -> SnapshotProposal("hash2p2", SortedMap.empty))
 
     "for empty proposals Map" - {
       "should not override previously stored proposals" in {
@@ -345,9 +347,10 @@ class RedownloadServiceTest
         redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
         cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
-        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
-          IO.pure(Map.empty)
-        }
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
+          .apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+            IO.pure(Map.empty)
+          }
 
         val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
         val expected = initialPeersProposals
@@ -360,9 +363,10 @@ class RedownloadServiceTest
       "should add proposals when there are no proposals stored yet" in {
         cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
-        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
-          IO.pure(peer1Proposals)
-        }
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
+          .apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+            IO.pure(peer1Proposals)
+          }
 
         val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
         val expected = Map(peer1 -> peer1Proposals)
@@ -374,12 +378,18 @@ class RedownloadServiceTest
         redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
         cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
-        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
-          IO.pure(peer1Proposals)
-        }
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
+          .apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+            IO.pure(peer1Proposals)
+          }
 
         val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
-        val expected = Map(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty)))
+        val expected = Map(
+          peer1 -> Map(
+            1L -> SnapshotProposal("hash1p1", SortedMap.empty),
+            2L -> SnapshotProposal("hash3p1", SortedMap.empty)
+          )
+        )
 
         result shouldEqual expected
       }
@@ -388,9 +398,10 @@ class RedownloadServiceTest
         redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
         cluster.getPeerInfo shouldReturnF Map(peer2 -> peer2Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
-        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli.apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
-          IO.pure(peer2Proposals)
-        }
+        apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
+          .apply[IO, PeerClientMetadata, SnapshotProposalsAtHeight] { _ =>
+            IO.pure(peer2Proposals)
+          }
 
         val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
         val expected = initialPeersProposals ++ Map(peer2 -> peer2Proposals)
@@ -615,12 +626,9 @@ class RedownloadServiceTest
           majorityStateChooser,
           snapshotStorage,
           snapshotInfoStorage,
-          rewardsStorage,
           snapshotService,
+          cloudService,
           checkpointAcceptanceService,
-          snapshotCloudStorage,
-          snapshotInfoCloudStorage,
-          rewardsCloudStorage,
           rewardsManager,
           apiClient,
           metrics
