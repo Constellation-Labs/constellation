@@ -6,6 +6,7 @@ import better.files.File
 import cats.effect.{Blocker, Concurrent, ConcurrentEffect, ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
+import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint._
@@ -13,10 +14,13 @@ import org.constellation.consensus._
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
+import org.constellation.domain.cloud.CloudService
+import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, FileToSend}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
+import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -95,7 +99,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
   def initialize(
-    nodeConfigInit: NodeConfig = NodeConfig()
+    nodeConfigInit: NodeConfig = NodeConfig(),
+    cloudService: CloudServiceEnqueue[IO]
   )(implicit materialize: ActorMaterializer = null): Unit = {
     implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
@@ -113,6 +118,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
     rateLimiting = new RateLimiting[IO]
+
+    this.cloudService = cloudService
 
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
@@ -294,12 +301,9 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       MajorityStateChooser(id),
       snapshotStorage,
       snapshotInfoStorage,
-      rewardsStorage,
       snapshotService,
+      cloudService,
       checkpointAcceptanceService,
-      snapshotCloudStorage,
-      snapshotInfoCloudStorage,
-      rewardsCloudStorage,
       rewardsManager,
       apiClient,
       metrics

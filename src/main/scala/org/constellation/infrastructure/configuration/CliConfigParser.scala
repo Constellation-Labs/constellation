@@ -1,5 +1,6 @@
 package org.constellation.infrastructure.configuration
 
+import better.files.File
 import cats.effect.Sync
 import cats.implicits._
 import com.typesafe.config.Config
@@ -72,6 +73,9 @@ object CliConfigParser {
       opt[String]("alias").required
         .action((x, c) => c.copy(alias = x))
         .text("Alias for keypair in provided keystore file"),
+      opt[String]("cloud")
+        .action((x, c) => c.copy(cloud = x))
+        .text("Path to the cloud providers configuration file"),
       help("help").text("prints this usage text"),
       version("version").text(s"Constellation v${BuildInfo.version}"),
       checkConfig(
@@ -80,6 +84,10 @@ object CliConfigParser {
             _ <- checkConfigOption(
               c.genesisNode && c.rollbackNode,
               "can't start in rollback mode and genesis mode at the same time"
+            )
+            _ <- checkConfigOption(
+              !(c.cloud == null || c.cloud != null && File(c.cloud).exists()),
+              "provided cloud providers configuration file does not exist"
             )
           } yield ()
       )

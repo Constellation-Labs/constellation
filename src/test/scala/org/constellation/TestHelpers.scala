@@ -32,31 +32,6 @@ import org.mockito.cats.IdiomaticMockitoCats
 
 object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with ArgumentMatchersSugar {
 
-  def prepareRealDao(
-    facilitators: Map[Id, PeerData] = prepareFacilitators(1),
-    nodeConfig: NodeConfig = NodeConfig()
-  ): DAO = {
-    val dao: DAO = new DAO {
-      override def readyPeers: IO[
-        Map[Id, PeerData]
-      ] = IO.pure(facilitators)
-
-      override def peerInfo: IO[
-        Map[Id, PeerData]
-      ] = IO.pure(facilitators)
-
-      override def registerAgent(id: Id): IO[Unit] = IO.unit
-    }
-
-    dao.nodeConfig = nodeConfig
-    dao.metrics = new Metrics(CollectorRegistry.defaultRegistry, nodeConfig.processingConfig.metricCheckInterval)(dao)
-    dao.initialize(nodeConfig)
-
-    (dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready) >>
-      facilitators.toList.traverse(p => dao.cluster.updatePeerInfo(p._2))).unsafeRunSync
-    dao
-  }
-
   def prepareFacilitators(size: Int): Map[Id, PeerData] =
     Seq
       .fill(size) {

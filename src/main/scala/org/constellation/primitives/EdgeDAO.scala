@@ -4,6 +4,7 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
+import fs2.concurrent.Queue
 import org.constellation.checkpoint.{
   CheckpointAcceptanceService,
   CheckpointBlockValidator,
@@ -13,7 +14,8 @@ import org.constellation.checkpoint.{
 import org.constellation.consensus._
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.cloud.{CloudStorage, CloudStorageOld, HeightHashFileStorage}
+import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend}
+import org.constellation.domain.cloud.{CloudService, CloudStorage, CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
@@ -178,6 +180,8 @@ trait EdgeDAO {
   val secretReputation: TrieMap[Id, Double] = TrieMap()
 
   val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
+
+  var cloudService: CloudServiceEnqueue[IO] = _
 
   var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _

@@ -19,5 +19,6 @@ case class CliConfig(
   rollbackNode: Boolean = false,
   rollbackHeight: Long = 0L,
   rollbackHash: String = null,
-  testMode: Boolean = false
+  testMode: Boolean = false,
+  cloud: String = null
 )

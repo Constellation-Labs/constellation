@@ -37,7 +37,13 @@ object Genesis extends StrictLogging {
       .traverse(
         ab =>
           IO.delay(logger.info(s"Account Balance set : $ab")) >> dao.transactionService
-            .createTransaction(LastTransactionRef.empty.prevHash, ab.accountHash, ab.balance, CoinbaseKey, normalized = false)
+            .createTransaction(
+              LastTransactionRef.empty.prevHash,
+              ab.accountHash,
+              ab.balance,
+              CoinbaseKey,
+              normalized = false
+            )
       )
   }
 
@@ -155,15 +161,7 @@ object Genesis extends StrictLogging {
       )
       .unsafeRunSync()
 
-    if (ConfigUtil.isEnabledCloudStorage) {
-      dao.genesisObservationCloudStorage
-        .write(go)
-        .fold(
-          err => logger.error(s"Cannot write genesis observation to cloud ${err.getMessage}"),
-          _ => logger.debug("Genesis observation saved successfully to cloud")
-        )
-        .unsafeRunSync()
-    }
+    dao.cloudService.enqueueGenesis(go).unsafeRunSync()
   }
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
