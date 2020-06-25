@@ -40,10 +40,11 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
             TrustDataInternal(id, scoringMap.mapValues(_ => 1d))
           }
 
-          trustNodes = TrustManager.calculateTrustNodes(scores ++ simulatedTrustDataForMissingNodes, nodeId, scoringMap)
-//          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
+          trustNodesInternal = scores ++ simulatedTrustDataForMissingNodes
+          trustNodes = TrustManager.calculateTrustNodes(trustNodesInternal.distinct, nodeId, scoringMap)
+          //          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
 
-          idMappedScores = SelfAvoidingWalk
+          idMappedScores: Map[Id, Double] = SelfAvoidingWalk
             .runWalkFeedbackUpdateSingleNode(
               selfNodeId,
               trustNodes
@@ -128,7 +129,7 @@ object TrustManager {
           0d,
           peerScores.map {
             case (peerId, score) => TrustEdge(selfIdx, scoringMap(peerId), score, id == currentNodeId)
-          }.toSeq
+          }.toSeq.distinct
         )
     }
 
