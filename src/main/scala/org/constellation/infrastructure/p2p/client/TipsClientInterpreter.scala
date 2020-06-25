@@ -14,24 +14,26 @@ import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
 import TipData._
+import org.constellation.session.SessionTokenService
+import scala.language.reflectiveCalls
 
-class TipsClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) extends TipsClientAlgebra[F] {
+class TipsClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]) extends TipsClientAlgebra[F] {
 
   implicit val tipDataMapDecoder: Decoder[Map[String, TipData]] = Decoder.decodeMap[String, TipData]
   implicit val idLongDecoder: Decoder[(Id, Long)] = deriveDecoder[(Id, Long)]
 
   def getTips(): PeerResponse[F, Map[String, TipData]] =
-    PeerResponse[F, Map[String, TipData]]("tips")(client)
+    PeerResponse[F, Map[String, TipData]]("tips")(client, sessionTokenService)
 
   def getHeights(): PeerResponse[F, List[Height]] =
-    PeerResponse[F, List[Height]]("heights")(client)
+    PeerResponse[F, List[Height]]("heights")(client, sessionTokenService)
 
   def getMinTipHeight(): PeerResponse[F, (Id, Long)] =
-    PeerResponse[F, (Id, Long)]("heights/min")(client)
+    PeerResponse[F, (Id, Long)]("heights/min")(client, sessionTokenService)
 }
 
 object TipsClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): TipsClientInterpreter[F] =
-    new TipsClientInterpreter[F](client)
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): TipsClientInterpreter[F] =
+    new TipsClientInterpreter[F](client, sessionTokenService)
 }

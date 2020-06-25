@@ -97,7 +97,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           s"Node (state=${state}) cannot accept checkpoint, adding hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash} to sync buffer pool"
         ) >> snapshotService.syncBufferAccept(checkpoint)
       case state =>
-        logger.error(
+        logger.warn(
           s"Node (state=${state}) cannot accept checkpoint hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash}"
         ) >> Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
     }

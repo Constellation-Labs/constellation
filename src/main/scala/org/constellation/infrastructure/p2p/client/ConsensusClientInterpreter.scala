@@ -8,37 +8,39 @@ import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.http4s.client.Client
 import org.constellation.domain.observation.ObservationEvent
+import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
+import scala.language.reflectiveCalls
 
-class ConsensusClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F]) extends ConsensusClientAlgebra[F] {
+class ConsensusClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]) extends ConsensusClientAlgebra[F] {
   import ObservationEvent._
   import RoundDataRemote._
 
   def participateInNewRound(roundData: RoundDataRemote): PeerResponse[F, Boolean] =
-    PeerResponse("block-round/new-round", client, POST) { (req, c) =>
+    PeerResponse("block-round/new-round", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(roundData))
     }
 
   def addConsensusDataProposal(proposal: ConsensusDataProposal): PeerResponse[F, Boolean] =
-    PeerResponse("block-round/proposal", client, POST) { (req, c) =>
+    PeerResponse("block-round/proposal", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(proposal))
     }
 
   def addUnionBlock(proposal: UnionBlockProposal): PeerResponse[F, Boolean] =
-    PeerResponse("block-round/union", client, POST) { (req, c) =>
+    PeerResponse("block-round/union", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(proposal))
     }
 
   def addSelectedUnionBlock(proposal: SelectedUnionBlock): PeerResponse[F, Boolean] =
-    PeerResponse("block-round/selected", client, POST) { (req, c) =>
+    PeerResponse("block-round/selected", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(proposal))
     }
 }
 
 object ConsensusClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): ConsensusClientInterpreter[F] =
-    new ConsensusClientInterpreter[F](client)
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): ConsensusClientInterpreter[F] =
+    new ConsensusClientInterpreter[F](client, sessionTokenService)
 }

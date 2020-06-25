@@ -29,6 +29,8 @@ import scala.util.Random
 import io.circe.syntax._
 import io.circe.parser._
 import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, SnapshotProposalsAtHeight}
+import org.constellation.session.SessionTokenService
+import org.constellation.session.SessionTokenService.Token
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
@@ -117,6 +119,7 @@ class Cluster[F[_]](
   ipManager: IPManager[F],
   joiningPeerValidator: JoiningPeerValidator[F],
   apiClient: ClientInterpreter[F],
+  sessionTokenService: SessionTokenService[F],
   dao: DAO
 )(
   implicit F: Concurrent[F],
@@ -301,6 +304,8 @@ class Cluster[F[_]](
                 _ <- setJoinedAsInitialFacilitator(request.joinsAsInitialFacilitator)
               } yield ()
 
+              val updateToken = sessionTokenService.updatePeerToken(ip, request.token)
+
               for {
                 state <- withMetric(
                   apiClient.nodeMetadata.getNodeState().run(peerClientMetadata),
@@ -323,7 +328,7 @@ class Cluster[F[_]](
                   .map(_.prepend(majorityHeight))
                   .getOrElse(NonEmptyList.one(majorityHeight))
                 peerData = PeerData(peerMetadata, majorityHeights)
-                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> C.shift >> F.start(
+                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> updateToken >> C.shift >> F.start(
                   peerDiscovery.discoverFrom(peerMetadata)
                 )
               } yield ()
@@ -495,6 +500,8 @@ class Cluster[F[_]](
 
         _ <- peers.modify(p => (p + (leavingPeerId -> newPeerData), p)) >> updateMetrics >> updatePersistentStore
 
+        _ <- sessionTokenService.clearPeerToken(leavingPeer.peerMetadata.host)
+
         _ <- logger.info(s"Mark offline peer: ${nodeId} - finished")
       } yield ()
 
@@ -573,7 +580,7 @@ class Cluster[F[_]](
     )
 
   // Someone joins to me
-  def pendingRegistrationRequest: F[PeerRegistrationRequest] =
+  def pendingRegistrationRequest: F[PeerRegistrationRequest] = {
     for {
       height <- getOwnJoinedHeight()
 
@@ -584,6 +591,8 @@ class Cluster[F[_]](
       participatedInRollbackFlow <- participatedInRollbackFlow.get.map(_.getOrElse(false))
       participatedInGenesisFlow <- participatedInGenesisFlow.get.map(_.getOrElse(false))
       whitelistingHash = KryoSerializer.serializeAnyRef(dao.nodeConfig.whitelisting).sha256
+      oOwnToken <- sessionTokenService.getOwnToken()
+      ownToken <- oOwnToken.map(F.pure).getOrElse(F.raiseError(new Throwable("Own token not set!")))
 
       _ <- logger.debug(
         s"Pending registration request: ownHeight=$height peers=$peersSize isInitialFacilitator=$isInitialFacilitator participatedInRollbackFlow=$participatedInRollbackFlow participatedInGenesisFlow=$participatedInGenesisFlow"
@@ -601,38 +610,45 @@ class Cluster[F[_]](
           participatesInGenesisFlow = participatedInGenesisFlow,
           participatesInRollbackFlow = participatedInRollbackFlow,
           joinsAsInitialFacilitator = isInitialFacilitator,
-          whitelistingHash
+          whitelistingHash,
+          ownToken
         )
       }
     } yield prr
+  }
+    .handleErrorWith { err =>
+      logger.error(err)("Creating pendingRegistrationRequest failed!") >>
+        err.raiseError[F, PeerRegistrationRequest]
+  }
 
   // I join to someone
   def attemptRegisterPeer(hp: HostPort): F[Unit] =
     logThread(
       withMetric(
         {
-          dao.nodeConfig.whitelisting
-            .get(hp.host)
-            .map(PeerClientMetadata(hp.host, hp.port, _))
-            .map {
-              client =>
-                apiClient.sign
-                  .getRegistrationRequest()
-                  .run(client)
-                  .flatMap { registrationRequest =>
-                    for {
-                      _ <- pendingRegistration(hp.host, registrationRequest)
-                      prr <- pendingRegistrationRequest
-                      response <- apiClient.sign.register(prr).run(client)
-                    } yield response
-                  }
-                  .handleErrorWith { err =>
-                    logger.error(s"registration request failed: $err") >>
-                      dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
-                      err.raiseError[F, Unit]
-                  }
-            }
-            .getOrElse(logger.error(s"unknown peer, not whitelisted"))
+          sessionTokenService.createAndSetNewOwnToken() >>
+            dao.nodeConfig.whitelisting
+              .get(hp.host)
+              .map(PeerClientMetadata(hp.host, hp.port, _))
+              .map {
+                client =>
+                  apiClient.sign
+                    .getRegistrationRequest()
+                    .run(client)
+                    .flatMap { registrationRequest =>
+                      for {
+                        _ <- pendingRegistration(hp.host, registrationRequest)
+                        prr <- pendingRegistrationRequest
+                        response <- apiClient.sign.register(prr).run(client)
+                      } yield response
+                    }
+                    .handleErrorWith { err =>
+                      logger.error(err)("Registration request failed") >>
+                        dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
+                        err.raiseError[F, Unit]
+                    }
+              }
+              .getOrElse(logger.error(s"unknown peer, not whitelisted"))
 
         },
         "addPeerWithRegistrationSymmetric"
@@ -678,6 +694,7 @@ class Cluster[F[_]](
       _ <- LiftIO[F].liftIO(dao.transactionService.clear)
       _ <- LiftIO[F].liftIO(dao.observationService.clear)
       _ <- LiftIO[F].liftIO(dao.redownloadService.clear)
+      _ <- sessionTokenService.clear()
       // TODO: add services to clear if needed
     } yield ()
 
@@ -712,6 +729,7 @@ class Cluster[F[_]](
         ips <- ipManager.listKnownIPs
         _ <- ips.toList.traverse(ipManager.removeKnownIP)
         _ <- peers.modify(_ => (Map.empty, Map.empty))
+        _ <- sessionTokenService.clearOwnToken()
         _ <- if (dao.nodeConfig.isGenesisNode) setOwnJoinedHeight(0L) else clearOwnJoinedHeight()
         _ <- LiftIO[F].liftIO(dao.eigenTrust.clearAgents())
         _ <- updateMetrics()
@@ -801,8 +819,9 @@ object Cluster {
     ipManager: IPManager[F],
     joiningPeerValidator: JoiningPeerValidator[F],
     apiClient: ClientInterpreter[F],
+    sessionTokenService: SessionTokenService[F],
     dao: DAO
-  ) = new Cluster(ipManager, joiningPeerValidator, apiClient, dao)
+  ) = new Cluster(ipManager, joiningPeerValidator, apiClient, sessionTokenService, dao)
 
   case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
 

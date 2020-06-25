@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 - Additional logs for batch-fetching by merkle root
 ## Fixed
 - Remove snapshot only if snapshot was send to cloud
+## Added
+- Session token for communication between peers #1284
 
 ## [v2.9.1] - 2020-06-17 
 ## Fixed

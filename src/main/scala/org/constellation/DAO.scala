@@ -46,6 +46,7 @@ import org.constellation.primitives._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
 import org.constellation.schema.Id
+import org.constellation.session.SessionTokenService
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
@@ -56,6 +57,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
+
+  var sessionTokenService: SessionTokenService[IO] = _
 
   var apiClient: ClientInterpreter[IO] = _
 
@@ -128,7 +131,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     joiningPeerValidator = JoiningPeerValidator[IO](apiClient)
 
     ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, apiClient, this)
+    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, apiClient, sessionTokenService, this)
 
     trustManager = TrustManager[IO](id, cluster)
 

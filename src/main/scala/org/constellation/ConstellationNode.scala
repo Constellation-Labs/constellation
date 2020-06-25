@@ -31,6 +31,7 @@ import org.constellation.primitives.IPManager.IP
 import org.constellation.primitives.Schema.{GenesisObservation, NodeState, ValidPeerIPData}
 import org.constellation.primitives._
 import org.constellation.schema.Id
+import org.constellation.session.SessionTokenService
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
 import org.http4s.Request
 import org.http4s.client.Client
@@ -100,14 +101,21 @@ object ConstellationNode extends IOApp {
 
       logger = org.http4s.client.middleware.Logger[IO](logHeaders = true, logBody = false)(_)
 
+      sessionTokenService = new SessionTokenService[IO]()
+
       signedApiClient = PeerAuthMiddleware
-        .requestSignerMiddleware(logger(apiClient), nodeConfig.primaryKeyPair.getPrivate, nodeConfig.hostName)
+        .requestSignerMiddleware(
+          logger(apiClient),
+          nodeConfig.primaryKeyPair.getPrivate,
+          nodeConfig.hostName,
+          sessionTokenService
+        )
 
       cloudService <- Resource.liftF(IO.delay { CloudService[IO](cloudConfig) })
       cloudQueue <- Resource.liftF(Queue.unbounded[IO, DataToSend])
       cloudQueueInstance <- Resource.liftF(cloudService.cloudSendingQueue(cloudQueue))
 
-      node = new ConstellationNode(nodeConfig, cloudQueueInstance, signedApiClient, registry)
+      node = new ConstellationNode(nodeConfig, cloudQueueInstance, signedApiClient, registry, sessionTokenService)
 
       server <- createServer(node.dao, registry)
     } yield server
@@ -172,12 +180,16 @@ object ConstellationNode extends IOApp {
       }
 
       peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId)(
-        peerPublicEndpoints <+> PeerAuthMiddleware.enforceKnownPeersMiddleware(getWhitelistedPeerId, getKnownPeerId)(
-          peerWhitelistedEndpoints
+        peerPublicEndpoints <+> PeerAuthMiddleware.requestTokenVerifierMiddleware(dao.sessionTokenService)(
+          PeerAuthMiddleware.enforceKnownPeersMiddleware(getWhitelistedPeerId, getKnownPeerId)(
+            peerWhitelistedEndpoints
+          )
         )
       )
 
-      signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(dao.keyPair.getPrivate)(peerEndpoints)
+      signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(dao.keyPair.getPrivate, dao.sessionTokenService)(
+        peerEndpoints
+      )
 
       metrics <- Prometheus.metricsOps[IO](registry)
       metricsMiddleware = middleware.Metrics[IO](metrics)(_)
@@ -314,7 +326,8 @@ class ConstellationNode(
   val nodeConfig: NodeConfig = NodeConfig(),
   cloudService: CloudServiceEnqueue[IO],
   client: Client[IO],
-  registry: CollectorRegistry
+  registry: CollectorRegistry,
+  sessionTokenService: SessionTokenService[IO]
 )(
   implicit val system: ActorSystem,
   implicit val materialize: ActorMaterializer,
@@ -323,7 +336,8 @@ class ConstellationNode(
 ) extends StrictLogging {
 
   implicit val dao: DAO = new DAO()
-  dao.apiClient = ClientInterpreter[IO](client)
+  dao.sessionTokenService = sessionTokenService
+  dao.apiClient = ClientInterpreter[IO](client, dao.sessionTokenService)
   dao.nodeConfig = nodeConfig
   dao.metrics = new Metrics(registry, periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
   dao.initialize(nodeConfig, cloudService)
@@ -366,6 +380,11 @@ class ConstellationNode(
       .unsafeRunSync()
   }
 
+  def setTokenForGenesisNode() = {
+    logger.info("Creating token for genesis node")
+    dao.sessionTokenService.createAndSetNewOwnToken().unsafeRunSync()
+  }
+
   //////////////
 
   logger.info("Node started")
@@ -376,6 +395,7 @@ class ConstellationNode(
     logger.info("Creating genesis block")
     Genesis.start()
     logger.info(s"Genesis block ${dao.genesisBlock.map(CheckpointBlock.checkpointToJsonString).getOrElse("")}")
+    setTokenForGenesisNode()
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   } else if (nodeConfig.isRollbackNode) {
     logger.info(s"Performing rollback for height: ${nodeConfig.rollbackHeight}, hash: ${nodeConfig.rollbackHash}")
@@ -384,6 +404,7 @@ class ConstellationNode(
       .rethrowT
       .handleError(e => logger.error(s"Rollback error: ${Logging.stringifyStackTrace(e)}"))
       .unsafeRunSync()
+    setTokenForGenesisNode()
     dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready).unsafeRunAsync(_ => ())
   }
 

@@ -13,10 +13,12 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.IPManager.IP
 import org.constellation.schema.Id
+import org.constellation.session.SessionTokenService
+import org.constellation.session.SessionTokenService.{Token, TokenValid, `X-Session-Token`}
 import org.http4s._
 import org.http4s.client.Client
 import org.http4s.dsl.io._
-import pl.abankowski.httpsigner.SignatureValid
+import pl.abankowski.httpsigner.{HttpCryptoConfig, SignatureValid}
 import pl.abankowski.httpsigner.http4s.{
   Http4sRequestSigner,
   Http4sRequestVerifier,
@@ -52,14 +54,43 @@ object PeerAuthMiddleware {
     }
 
   def responseSignerMiddleware[F[_]: Sync](
-    privateKey: PrivateKey
+    privateKey: PrivateKey,
+    sessionTokenService: SessionTokenService[F]
   )(http: HttpRoutes[F])(implicit C: ContextShift[F]): HttpRoutes[F] =
     Kleisli { req: Request[F] =>
-      http(req).flatMap { res =>
-        new Http4sResponseSigner[F](getGenerator(privateKey))
-          .sign(res)
+
+      for {
+        res <- http(req)
+        headerToken <- sessionTokenService.getOwnToken()
+          .map(_.map(t => Header(`X-Session-Token`.value, t.value)))
           .attemptT
           .toOption
+        newHeaders = headerToken.fold(res.headers)(h => res.headers.put(h))
+        resWithHeader = res.copy(headers = newHeaders)
+        signedResponse <- new Http4sResponseSigner[F](getGenerator(privateKey), new ConstellationHttpCryptoConfig {})
+          .sign(resWithHeader)
+          .attemptT
+          .toOption
+      } yield signedResponse
+    }
+
+  def responseTokenVerifierMiddleware[F[_] : Concurrent](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): Client[F] =
+    Client { (req: Request[F]) =>
+      client.run(req).flatMap { response =>
+        Resource.liftF {
+          val peerIp = req.uri.authority.map(_.host.value).getOrElse("unknown")
+          val headerToken = response.headers
+            .get(`X-Session-Token`)
+            .map(h => Token(h.value))
+
+          sessionTokenService.verifyPeerToken(peerIp, headerToken) >>= {
+            case TokenValid => response.pure[F]
+            case _ => Response[F](status = Unauthorized).pure[F]
+          }
+        }
       }
     }
 
@@ -67,7 +98,8 @@ object PeerAuthMiddleware {
     client: Client[F]
   )(implicit F: Concurrent[F], C: ContextShift[F]): Client[F] =
     Client { (req: Request[F]) =>
-      val verifier = new Http4sResponseVerifier[F](getVerifier(peerId.toPublicKey))
+      val verifier =
+        new Http4sResponseVerifier[F](getVerifier(peerId.toPublicKey), new ConstellationHttpCryptoConfig {})
 
       import fs2._
 
@@ -97,7 +129,12 @@ object PeerAuthMiddleware {
       }
     }
 
-  def requestSignerMiddleware[F[_]](client: Client[F], privateKey: PrivateKey, selfIp: String)(
+  def requestSignerMiddleware[F[_]](
+    client: Client[F],
+    privateKey: PrivateKey,
+    selfIp: String,
+    sessionTokenService: SessionTokenService[F]
+  )(
     implicit F: Concurrent[F],
     C: ContextShift[F]
   ): Client[F] =
@@ -105,7 +142,7 @@ object PeerAuthMiddleware {
       import fs2._
 
       val logger = Slf4jLogger.getLogger[F]
-      val signer = new Http4sRequestSigner(getGenerator(privateKey))
+      val signer = new Http4sRequestSigner(getGenerator(privateKey), new ConstellationHttpCryptoConfig {})
 
       Resource.suspend {
         Ref[F].of(Vector.empty[Chunk[Byte]]).map { vec =>
@@ -116,18 +153,40 @@ object PeerAuthMiddleware {
               .flatMap(v => Stream.emits(v).covary[F])
               .flatMap(c => Stream.chunk(c).covary[F])
 
-            val newReq = req.withBodyStream(req.body.observe(_.chunks.flatMap(s => Stream.eval_(vec.update(_ :+ s)))))
-
-            logger.debug(
-              s"Middleware (Signer) ip=$selfIp, uri=${req.uri.path}, method=${req.method.name}, query=${req.uri.query.renderString}, headers=${req.headers}}"
-            ) >> signer
-              .sign(newReq)
-              .map { r =>
-                req.withBodyStream(copiedBody).withHeaders(r.headers)
-              }
+            for {
+              _ <- logger.debug(
+                s"Middleware (Signer) ip=$selfIp, uri=${req.uri.path}, method=${req.method.name}, query=${req.uri.query.renderString}, headers=${req.headers}}"
+              )
+              tokenHeader <- sessionTokenService.getOwnToken().map(_.map(t => Header(`X-Session-Token`.value, t.value)))
+              newHeaders = tokenHeader.fold(req.headers)(h => req.headers.put(h))
+              newReq = req
+                .withBodyStream(req.body.observe(_.chunks.flatMap(s => Stream.eval_(vec.update(_ :+ s)))))
+                .withHeaders(newHeaders)
+              signedRequest <- signer.sign(newReq).map(r => req.withBodyStream(copiedBody).withHeaders(r.headers))
+            } yield signedRequest
           }
         }
       } >>= client.run
+    }
+
+  def requestTokenVerifierMiddleware[F[_]: Concurrent](
+    sessionTokenService: SessionTokenService[F]
+  )(http: HttpRoutes[F]): HttpRoutes[F] =
+    Kleisli { req: Request[F] =>
+      val ip = req.remoteAddr.getOrElse("unknown")
+      val unauthorizedResponse: OptionT[F, Response[F]] = OptionT.pure[F](Response[F](status = Unauthorized))
+
+      val headerToken = req.headers
+        .get(`X-Session-Token`)
+        .map(h => Token(h.value))
+
+      for {
+        tokenVerificationResult <- sessionTokenService.verifyPeerToken(ip, headerToken).attemptT.toOption
+        response <- tokenVerificationResult match {
+          case TokenValid => http(req)
+          case _          => unauthorizedResponse
+        }
+      } yield response
     }
 
   def requestVerifierMiddleware[F[_]](
@@ -161,7 +220,7 @@ object PeerAuthMiddleware {
         id <- knownPeer(ip).attemptT.toOption.flatMap(_.toOptionT)
 
         crypto = getVerifier(id.toPublicKey)
-        verifier = new Http4sRequestVerifier[F](crypto)
+        verifier = new Http4sRequestVerifier[F](crypto, new ConstellationHttpCryptoConfig {})
 
         verifierResult <- verifier
           .verify(tuple._2)
@@ -182,4 +241,13 @@ object PeerAuthMiddleware {
 
   private def getGenerator(privateKey: PrivateKey): Generator =
     GenericGenerator(KeyUtils.DefaultSignFunc, KeyUtils.provider, privateKey)
+
+  trait ConstellationHttpCryptoConfig extends HttpCryptoConfig {
+    override val protectedHeaders = Set(
+      "Content-Type",
+      "Cookie",
+      "Referer",
+      `X-Session-Token`.value
+    )
+  }
 }

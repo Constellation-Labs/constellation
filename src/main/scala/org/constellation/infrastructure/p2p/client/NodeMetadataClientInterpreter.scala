@@ -7,24 +7,26 @@ import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.http4s.client.Client
 import org.constellation.PeerMetadata
 import org.constellation.primitives.Schema.AddressCacheData
+import org.constellation.session.SessionTokenService
 import org.constellation.util.NodeStateInfo
 import org.http4s.circe.CirceEntityDecoder._
+import scala.language.reflectiveCalls
 
-class NodeMetadataClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F])
+class NodeMetadataClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])
     extends NodeMetadataClientAlgebra[F] {
 
   def getNodeState(): PeerResponse[F, NodeStateInfo] =
     PeerResponse[F, NodeStateInfo]("state")(client)
 
   def getAddressBalance(address: String): PeerResponse[F, Option[AddressCacheData]] =
-    PeerResponse[F, Option[AddressCacheData]](s"address/${address}")(client)
+    PeerResponse[F, Option[AddressCacheData]](s"address/${address}")(client, sessionTokenService)
 
   def getPeers(): PeerResponse[F, Seq[PeerMetadata]] =
-    PeerResponse[F, Seq[PeerMetadata]]("peers")(client)
+    PeerResponse[F, Seq[PeerMetadata]]("peers")(client, sessionTokenService)
 }
 
 object NodeMetadataClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F]): NodeMetadataClientInterpreter[F] =
-    new NodeMetadataClientInterpreter[F](client)
+  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): NodeMetadataClientInterpreter[F] =
+    new NodeMetadataClientInterpreter[F](client, sessionTokenService)
 }

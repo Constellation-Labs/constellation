@@ -4,6 +4,7 @@ import io.circe.{Decoder, Encoder}
 import org.constellation.schema.Id
 import org.constellation.ResourceInfo
 import io.circe.generic.semiauto._
+import org.constellation.session.SessionTokenService.Token
 
 case class PeerAuthSignRequest(salt: Long)
 
@@ -21,7 +22,8 @@ case class PeerRegistrationRequest(
   participatesInGenesisFlow: Boolean,
   participatesInRollbackFlow: Boolean,
   joinsAsInitialFacilitator: Boolean,
-  whitelistingHash: String
+  whitelistingHash: String,
+  token: Token
 )
 
 object PeerRegistrationRequest {

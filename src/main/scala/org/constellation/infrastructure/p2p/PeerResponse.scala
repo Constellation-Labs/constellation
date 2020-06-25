@@ -2,13 +2,14 @@ package org.constellation.infrastructure.p2p
 
 import cats.ApplicativeError
 import cats.data.Kleisli
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Concurrent, ContextShift}
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.schema.Id
+import org.constellation.session.SessionTokenService
 import org.http4s.{EntityDecoder, Method, Request, Uri}
 import org.http4s.Uri.{Authority, Path, RegName, Scheme}
-import org.http4s.Method._
 import org.http4s.client.Client
+import org.http4s.Method._
 
 object PeerResponse {
   type PeerResponse[F[_], A] = Kleisli[F, PeerClientMetadata, A]
@@ -23,30 +24,56 @@ object PeerResponse {
     Uri(scheme = Some(Scheme.http), authority = Some(Authority(host = RegName(pm.host), port = Some(pm.port.toInt))))
       .addPath(path)
 
-  def apply[F[_]: Concurrent: ContextShift, A](path: Path, client: Client[F], method: Method = GET)(
-    f: (Request[F], Client[F]) => F[A]
-  ): PeerResponse[F, A] =
-    Kleisli.apply { pm =>
-      val req = Request[F](method = method, uri = getUri(pm, path))
-      f(req, PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client))
-    }
+  def apply[F[_], A](path: Path, method: Method) = new {
 
-  def apply[F[_]: Concurrent: ContextShift, A](
-    path: Path
-  )(client: Client[F])(implicit decoder: EntityDecoder[F, A]): PeerResponse[F, A] =
-    Kleisli.apply { pm =>
-      val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
-      verified.expect[A](getUri(pm, path))
-    }
-
-  def successful[F[_]: Concurrent: ContextShift](path: Path, errorMsg: String, method: Method = GET)(
-    client: Client[F]
-  )(implicit F: ApplicativeError[F, Throwable]): PeerResponse[F, Unit] =
-    Kleisli
-      .apply[F, PeerClientMetadata, Boolean] { pm =>
+    def apply(
+      client: Client[F]
+    )(f: (Request[F], Client[F]) => F[A])(implicit F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, A] =
+      Kleisli.apply { pm =>
         val req = Request[F](method = method, uri = getUri(pm, path))
-        val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
-        verified.successful(req)
+        f(req, PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client))
       }
-      .flatMapF(a => if (a) F.unit else F.raiseError(new Throwable(errorMsg)))
+
+    def apply(client: Client[F], sessionTokenService: SessionTokenService[F])(
+      f: (Request[F], Client[F]) => F[A]
+    )(implicit F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, A] =
+      apply(PeerAuthMiddleware.responseTokenVerifierMiddleware(client, sessionTokenService))(f)
+  }
+
+  def apply[F[_], A](path: Path) = new {
+
+    def apply(
+      client: Client[F]
+    )(implicit decoder: EntityDecoder[F, A], F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, A] =
+      Kleisli.apply { pm =>
+        val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
+        verified.expect[A](getUri(pm, path))
+      }
+
+    def apply(
+      client: Client[F],
+      sessionTokenService: SessionTokenService[F]
+    )(implicit decoder: EntityDecoder[F, A], F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, A] =
+      apply(PeerAuthMiddleware.responseTokenVerifierMiddleware(client, sessionTokenService))
+  }
+
+  def successful[F[_]](path: Path, errorMsg: String, method: Method = GET) = new {
+
+    def apply(
+      client: Client[F]
+    )(implicit A: ApplicativeError[F, Throwable], F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, Unit] =
+      Kleisli
+        .apply[F, PeerClientMetadata, Boolean] { pm =>
+          val req = Request[F](method = method, uri = getUri(pm, path))
+          val verified = PeerAuthMiddleware.responseVerifierMiddleware[F](pm.id)(client)
+          verified.successful(req)
+        }
+        .flatMapF(a => if (a) F.unit else F.raiseError(new Throwable(errorMsg)))
+
+    def apply(
+      client: Client[F],
+      sessionTokenService: SessionTokenService[F]
+    )(implicit A: ApplicativeError[F, Throwable], F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, Unit] =
+      apply(PeerAuthMiddleware.responseTokenVerifierMiddleware(client, sessionTokenService))
+  }
 }

@@ -135,7 +135,8 @@ lazy val coreDependencies = Seq(
   "org.perf4j" % "perf4j" % "0.9.16",
   "pl.abankowski" %% "http-request-signer-core" % "0.3.2",
   "pl.abankowski" %% "http4s-request-signer" % "0.3.2",
-  "com.github.pureconfig" %% "pureconfig" % "0.12.3"
+  "com.github.pureconfig" %% "pureconfig" % "0.12.3",
+  "io.chrisdavenport" %% "fuuid" % "0.4.0"
 ) ++ http4sDependencies ++ schemaSharedDependencies
 
 //Test dependencies
