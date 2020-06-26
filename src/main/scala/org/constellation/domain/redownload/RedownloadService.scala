@@ -514,8 +514,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
       accepted <- getAcceptedSnapshots().attemptT.map(_.values.toSet)
       created <- getCreatedSnapshots().attemptT.map(_.values.map(_.hash).toSet)
       diff = stored.diff(accepted ++ created ++ Set(nextSnapshotHash))
-      _ <- diff.toList.traverse { hash =>
-        snapshotStorage.delete(hash) >> snapshotInfoStorage.delete(hash)
+      sentToCloud <- cloudService.getAlreadySent().map(_.map(_.hash)).attemptT
+      toRemove = diff.intersect(sentToCloud).toList
+      _ <- toRemove.traverse { hash =>
+        snapshotStorage.delete(hash) >>
+          snapshotInfoStorage.delete(hash) >>
+          cloudService.removeSentSnapshot(hash).attemptT
       }
     } yield ()
 

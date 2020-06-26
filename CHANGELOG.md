@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Remove snapshot only if snapshot was send to cloud
 
 ## [v2.9.1] - 2020-06-17 
 ## Fixed
