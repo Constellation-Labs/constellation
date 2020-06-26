@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Added
+- Additional logs for batch-fetching by merkle root
 ## Fixed
 - Remove snapshot only if snapshot was send to cloud
 

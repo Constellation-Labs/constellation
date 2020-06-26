@@ -2,6 +2,7 @@ package org.constellation.checkpoint
 
 import cats.effect.{Concurrent, ContextShift, IO}
 import cats.implicits._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.observation.Observation
 import org.constellation.p2p.{DataResolver, PeerNotification}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
@@ -16,6 +17,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
   observationService: MerkleStorageAlgebra[F, String, Observation],
   dataResolver: DataResolver[F]
 ) {
+
+  private val logger = Slf4jLogger.getLogger[F]
 
   def storeMerkleRoots(data: CheckpointBlock): F[CheckpointBlockMetadata] =
     for {
@@ -84,6 +87,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
       transactionService,
       (x: TransactionCacheData) => x.transaction,
       (s: List[String]) => dataResolver.resolveBatchTransactionsDefaults(s)
+    ).handleErrorWith(
+      e => logger.error(e)("Fetch batch for merkle root error: fetchBatchTransactions").map(_ => List.empty)
     )
 
   def fetchBatchObservations(merkleRoot: String): F[List[Observation]] =
@@ -92,6 +97,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
       observationService,
       (o: Observation) => o,
       (s: List[String]) => dataResolver.resolveBatchObservationsDefaults(s)
+    ).handleErrorWith(
+      e => logger.error(e)("Fetch batch for merkle root error:fetchBatchObservations").map(_ => List.empty)
     )
 
   def fetchNotifications(merkleRoot: String): F[List[PeerNotification]] =
@@ -100,6 +107,8 @@ class CheckpointMerkleService[F[_]: Concurrent](
       notificationService,
       (x: PeerNotification) => x,
       (s: String) => ???
+    ).handleErrorWith(
+      e => logger.error(e)("Fetch batch for merkle root error: fetchNotifications").map(_ => List.empty)
     )
 
 }
