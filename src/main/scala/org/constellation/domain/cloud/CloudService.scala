@@ -3,12 +3,14 @@ package org.constellation.domain.cloud
 import better.files.File
 import cats.implicits._
 import cats.effect.Concurrent
+import cats.effect.concurrent.Ref
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.cloud.CloudService.{
   CloudServiceEnqueue,
   DataToSend,
   GenesisToSend,
   SnapshotInfoToSend,
+  SnapshotSent,
   SnapshotToSend
 }
 import org.constellation.domain.cloud.config.{CloudConfig, GCP, Local, S3, S3Compat}
@@ -21,6 +23,8 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
 
   private val logger = Slf4jLogger.getLogger[F]
 
+  private val sentData: Ref[F, Set[SnapshotSent]] = Ref.unsafe(Set.empty)
+
   def cloudSendingQueue(queue: Queue[F, DataToSend]): F[CloudServiceEnqueue[F]] = {
     val send: F[Unit] = queue.dequeue.through(sendFile).compile.drain
 
@@ -29,21 +33,48 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
       new CloudServiceEnqueue[F]() {
         def enqueueGenesis(genesis: GenesisObservation): F[Unit] =
           queue.enqueue1(GenesisToSend(genesis)) >> logger.debug(s"Enqueued genesis")
-        def enqueueSnapshot(snapshot: File, height: Long, hash: String) =
+        def enqueueSnapshot(snapshot: File, height: Long, hash: String): F[Unit] =
           queue.enqueue1(SnapshotToSend(snapshot, height, hash)) >> logger
             .debug(s"Enqueued snapshot height=${height} hash=${hash}")
-        def enqueueSnapshotInfo(snapshotInfo: File, height: Long, hash: String) =
+        def enqueueSnapshotInfo(snapshotInfo: File, height: Long, hash: String): F[Unit] =
           queue.enqueue1(SnapshotInfoToSend(snapshotInfo, height, hash)) >> logger
             .debug(s"Enqueued snapshot info height=${height} hash=${hash}")
+        def getAlreadySent(): F[Set[SnapshotSent]] =
+          sentData.get.map(_.filter(snap => snap.snapshot && snap.snapshotInfo))
+        def removeSentSnapshot(hash: String): F[Unit] =
+          sentData.modify { s =>
+            val updated = s.filterNot(_.hash == hash)
+            (updated, ())
+          }
       }
     }
   }
 
   private def sendFile: Pipe[F, DataToSend, Unit] =
     _.evalMap {
-      case GenesisToSend(genesis)          => sendGenesis(genesis)
-      case s @ SnapshotToSend(_, _, _)     => sendSnapshot(s)
-      case s @ SnapshotInfoToSend(_, _, _) => sendSnapshotInfo(s)
+      case GenesisToSend(genesis)             => sendGenesis(genesis)
+      case s @ SnapshotToSend(_, _, hash)     => sendSnapshot(s) >> markSnapshotAsSent(hash)
+      case s @ SnapshotInfoToSend(_, _, hash) => sendSnapshotInfo(s) >> markSnapshotInfoAsSent(hash)
+    }
+
+  private def markSnapshotAsSent(hash: String): F[Unit] =
+    sentData.modify { s =>
+      val updated = s
+        .find(_.hash == hash)
+        .fold(s + SnapshotSent(hash, snapshot = true, snapshotInfo = false))(
+          snap => s.filterNot(_.hash == hash) + SnapshotSent(hash, snapshot = true, snapshotInfo = snap.snapshotInfo)
+        )
+      (updated, ())
+    }
+
+  private def markSnapshotInfoAsSent(hash: String): F[Unit] =
+    sentData.modify { s =>
+      val updated = s
+        .find(_.hash == hash)
+        .fold(s + SnapshotSent(hash, snapshot = false, snapshotInfo = true))(
+          snap => s.filterNot(_.hash == hash) + SnapshotSent(hash, snapshot = snap.snapshot, snapshotInfo = true)
+        )
+      (updated, ())
     }
 
   private def sendGenesis(genesis: GenesisObservation): F[Unit] =
@@ -94,6 +125,8 @@ object CloudService {
     def enqueueGenesis(genesis: GenesisObservation): F[Unit]
     def enqueueSnapshot(snapshot: File, height: Long, hash: String): F[Unit]
     def enqueueSnapshotInfo(snapshotInfo: File, height: Long, hash: String): F[Unit]
+    def getAlreadySent(): F[Set[SnapshotSent]]
+    def removeSentSnapshot(hash: String): F[Unit]
   }
 
   sealed trait DataToSend
@@ -107,4 +140,6 @@ object CloudService {
   case class GenesisToSend(data: GenesisObservation) extends ClassToSend[GenesisObservation]
   case class SnapshotToSend(file: File, height: Long, hash: String) extends FileToSend
   case class SnapshotInfoToSend(file: File, height: Long, hash: String) extends FileToSend
+
+  case class SnapshotSent(hash: String, snapshot: Boolean, snapshotInfo: Boolean)
 }
