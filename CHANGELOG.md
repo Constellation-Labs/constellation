@@ -2,12 +2,15 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.10.0-rc1] - 2020-06-29
 ## Added
+- Support for cloud providers and queue sending
 - Additional logs for batch-fetching by merkle root
+- Session token for communication between peers #1284
 ## Fixed
 - Remove snapshot only if snapshot was send to cloud
-## Added
-- Session token for communication between peers #1284
+- Distinct trust nodes for SelfAvoidingWalk
 
 ## [v2.9.1] - 2020-06-17 
 ## Fixed
