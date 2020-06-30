@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.10.0] - 2020-06-30
+## Added
+- Whitelist new operators
+
 ## [v2.10.0-rc1] - 2020-06-29
 ## Added
 - Support for cloud providers and queue sending
