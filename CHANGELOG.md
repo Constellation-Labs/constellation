@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 ## [v2.10.0] - 2020-06-30
 ## Added
 - Whitelist new operators
+## Changed
+- Remove stale tips at higher height
 
 ## [v2.10.0-rc1] - 2020-06-29
 ## Added
