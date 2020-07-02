@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 ## [v2.11.0] - 2020-07-02
 ## Changed
 - Revert: remove stale tips at higher height
+- Change `snapshotPerMinute` from `4` to `2` as rewards adjustment
 
 ## [v2.10.0] - 2020-06-30
 ## Added

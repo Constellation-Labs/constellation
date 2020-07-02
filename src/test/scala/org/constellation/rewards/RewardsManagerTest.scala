@@ -15,7 +15,7 @@ class RewardsManagerTest
   val snapshotHeightInterval = 2L
 
   "epoch 1" - {
-    val expectedTotalPerSnapshot = 164.61
+    val expectedTotalPerSnapshot = 329.22
     val maxMintingValue = 853333333.20.round
 
     "reward per snapshot matches expected" in {

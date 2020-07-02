@@ -182,7 +182,7 @@ class RewardsManager[F[_]: Concurrent](
 object RewardsManager {
   val roundingError = 0.000000000001
 
-  val snapshotsPerMinute = 4.0
+  val snapshotsPerMinute = 2.0
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
   val epochOneRewards = 853333333.20 // Normalized
