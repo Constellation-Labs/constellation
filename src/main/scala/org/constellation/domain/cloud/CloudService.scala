@@ -1,6 +1,7 @@
 package org.constellation.domain.cloud
 
 import better.files.File
+import cats.data.EitherT
 import cats.implicits._
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
@@ -52,10 +53,19 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
 
   private def sendFile: Pipe[F, DataToSend, Unit] =
     _.evalMap {
-      case GenesisToSend(genesis)             => sendGenesis(genesis)
-      case s @ SnapshotToSend(_, _, hash)     => sendSnapshot(s) >> markSnapshotAsSent(hash)
-      case s @ SnapshotInfoToSend(_, _, hash) => sendSnapshotInfo(s) >> markSnapshotInfoAsSent(hash)
+      case GenesisToSend(genesis) => sendGenesis(genesis)
+      case s @ SnapshotToSend(_, _, hash) =>
+        sendSnapshot(s) >>= { ops =>
+          if (atLeastOne(ops)) markSnapshotAsSent(hash) else F.unit
+        }
+      case s @ SnapshotInfoToSend(_, _, hash) =>
+        sendSnapshotInfo(s) >>= { ops =>
+          if (atLeastOne(ops)) markSnapshotInfoAsSent(hash) else F.unit
+        }
     }
+
+  private def atLeastOne(ops: List[Either[Throwable, Unit]]): Boolean =
+    ops.count(_.isRight) > 0
 
   private def markSnapshotAsSent(hash: String): F[Unit] =
     sentData.modify { s =>
@@ -85,27 +95,37 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
           .handleErrorWith(logger.error(_)(s"Sending genesis to cloud failed, provider=${p.name}"))
     }.void
 
-  private def sendSnapshot(snapshot: SnapshotToSend): F[Unit] =
+  private def sendSnapshot(snapshot: SnapshotToSend): F[List[Either[Throwable, Unit]]] =
     providers.traverse { p =>
-      logger.debug(s"Sending snapshot to cloud, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}") >>
-        p.storeSnapshot(snapshot.file, snapshot.height, snapshot.hash).rethrowT.handleErrorWith {
-          logger.error(_) {
-            s"Sending snapshot to cloud failed, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}"
+      logger
+        .debug(s"Sending snapshot to cloud, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}") >>
+        p.storeSnapshot(snapshot.file, snapshot.height, snapshot.hash)
+          .rethrowT
+          .map(_.asRight[Throwable])
+          .handleErrorWith { error =>
+            logger
+              .error(error) {
+                s"Sending snapshot to cloud failed, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}"
+              } >> error.asLeft[Unit].pure[F]
           }
-        }
-    }.void
+    }
 
-  private def sendSnapshotInfo(snapshotInfo: SnapshotInfoToSend): F[Unit] =
+  private def sendSnapshotInfo(snapshotInfo: SnapshotInfoToSend): F[List[Either[Throwable, Unit]]] =
     providers.traverse { p =>
-      logger.debug(
-        s"Sending snapshot info to cloud, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
-      ) >>
-        p.storeSnapshotInfo(snapshotInfo.file, snapshotInfo.height, snapshotInfo.hash).rethrowT.handleErrorWith {
-          logger.error(_) {
-            s"Sending snapshot info to cloud failed, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
+      logger
+        .debug(
+          s"Sending snapshot info to cloud, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
+        ) >>
+        p.storeSnapshotInfo(snapshotInfo.file, snapshotInfo.height, snapshotInfo.hash)
+          .rethrowT
+          .map(_.asRight[Throwable])
+          .handleErrorWith { error =>
+            logger
+              .error(error) {
+                s"Sending snapshot info to cloud failed, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
+              } >> error.asLeft[Unit].pure[F]
           }
-        }
-    }.void
+    }
 }
 
 object CloudService {
