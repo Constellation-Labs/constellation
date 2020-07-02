@@ -369,7 +369,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
-      _ <- logger.debug("Sending majority snapshots to cloud (if enabled).")
+      _ <- logger.debug("Sending majority snapshots to cloud.")
       _ <- if (meaningfulMajorityState.nonEmpty) sendMajoritySnapshotsToCloud()
       else logger.debug("No majority - skipping sending to cloud")
 
@@ -400,9 +400,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] = {
     val send = for {
       majorityState <- lastMajorityState.get
+      accepted <- acceptedSnapshots.get
       lastHeight <- lastSentHeight.get
+      maxAccepted = accepted.keySet.toList.maximumOption.getOrElse(0L)
 
-      toSend = majorityState.filterKeys(_ > lastHeight)
+      toSend = majorityState.filterKeys(_ > lastHeight).filterKeys(_ <= maxAccepted)
       hashes = toSend.toList
 
       uploadSnapshots <- hashes.traverse {
@@ -449,11 +451,13 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def rewardMajoritySnapshots(): EitherT[F, Throwable, Unit] =
     for {
       majorityState <- lastMajorityState.get.attemptT
+      accepted <- acceptedSnapshots.get.attemptT
       lastHeight <- rewardsManager.getLastRewardedHeight().attemptT
+      maxAccepted = accepted.keySet.toList.maximumOption.getOrElse(0L)
 
       _ <- EitherT.liftF(logger.debug(s"Last rewarded height is $lastHeight. Rewarding majority snapshots above."))
 
-      majoritySubsetToReward = takeHighestUntilKey(majorityState, lastHeight)
+      majoritySubsetToReward = takeHighestUntilKey(majorityState, lastHeight).filterKeys(_ <= maxAccepted)
 
       snapshotsToReward <- majoritySubsetToReward.toList.sortBy {
         case (height, _) => height

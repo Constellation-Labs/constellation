@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 ## [v2.11.1] - 2020-07-03
 ## Fixed
 - Mark snapshot as sent only if sent to at least one provider
+- Do not send and reward unaccepted majority snapshots
 
 ## [v2.11.0] - 2020-07-02
 ## Changed
