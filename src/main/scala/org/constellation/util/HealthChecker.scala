@@ -115,10 +115,8 @@ class HealthChecker[F[_]: Concurrent](
           .groupBy(a => a)
           .filter(_._2.size >= dao.processingConfig.numFacilitatorPeers)
 
-        val offsetAboveClusterMinimumHeight = 4
-
         if (heightsOfMinimumFacilitators.nonEmpty) {
-          concurrentTipService.clearStaleTips(heightsOfMinimumFacilitators.keySet.min + offsetAboveClusterMinimumHeight)
+          concurrentTipService.clearStaleTips(heightsOfMinimumFacilitators.keySet.min)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(

@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.11.0] - 2020-07-02
+## Changed
+- Revert: remove stale tips at higher height
+
 ## [v2.10.0] - 2020-06-30
 ## Added
 - Whitelist new operators
