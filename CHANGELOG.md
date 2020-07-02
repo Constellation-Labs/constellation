@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## Fixed
 - Mark snapshot as sent only if sent to at least one provider
 - Do not send and reward unaccepted majority snapshots
+- Calculate stale tips by the occurrences
 
 ## [v2.11.0] - 2020-07-02
 ## Changed
