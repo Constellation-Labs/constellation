@@ -106,17 +106,25 @@ class HealthChecker[F[_]: Concurrent](
 
   def clearStaleTips(): F[Unit] =
     for {
-      nextSnasphotHeights <- collectNextSnapshotHeights() // map[ id -> height ]
-      heights = nextSnasphotHeights.values.toList // list [ height ]
-      nodesWithHeights = heights.filter(_ > 0) // list [ height > 0 ]
+      nextSnasphotHeights <- collectNextSnapshotHeights()
+      heights = nextSnasphotHeights.values.toList
+      nodesWithHeights = heights.filter(_ > 0)
 
-      _ <- if (heights.size - nodesWithHeights.size < dao.processingConfig.numFacilitatorPeers && nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
+      _ <- if (nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
 
-        val minClusterHeight = nodesWithHeights.sorted
-          .get(1)
+        /*
+          nodes:            A     B     C
+          delay: 10
+          min tip height:   20    24    13
+          next snapshot:    10    14    3
 
-        if (minClusterHeight.nonEmpty) {
-          concurrentTipService.clearStaleTips(minClusterHeight.get)
+          --> node C should remove tip at height 13, as that tip will not be accepted by node A
+         */
+
+        val maxNextSnapshotHeight = nodesWithHeights.maximumOption
+
+        if (maxNextSnapshotHeight.nonEmpty) {
+          concurrentTipService.clearStaleTips(maxNextSnapshotHeight.get)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(

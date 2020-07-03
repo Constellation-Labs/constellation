@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.11.2] - 2020-07-03
+## Fixed
+- Calculate stale tips using max of next snapshot heights
+
 ## [v2.11.1] - 2020-07-03
 ## Fixed
 - Mark snapshot as sent only if sent to at least one provider
