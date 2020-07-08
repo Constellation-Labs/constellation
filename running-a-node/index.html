@@ -7,13 +7,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   
+  <link rel="canonical" href="https://constellation-labs.github.io/constellation/running-a-node/">
   <link rel="shortcut icon" href="../img/favicon.ico">
   <title>Running a node - Constellation Documentation</title>
-  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700" />
 
-  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
-  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  <link rel="stylesheet" href="../css/theme.css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" />
   
   <script>
     // Current page data
@@ -24,7 +25,7 @@
   
   <script src="../js/jquery-2.1.1.min.js" defer></script>
   <script src="../js/modernizr-2.8.3.min.js" defer></script>
-  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
   <script>hljs.initHighlightingOnLoad();</script> 
   
 </head>
@@ -35,6 +36,7 @@
 
     
     <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
       <div class="wy-side-nav-search">
         <a href=".." class="icon icon-home"> Constellation Documentation</a>
         <div role="search">
@@ -45,54 +47,70 @@
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-	<ul class="current">
-	  
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="..">Introduction</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../architecture/">Architecture</a>
-	    </li>
-          
-            <li class="toctree-l1">
-		
-    <a class="" href="../design-choices/">Design choices</a>
-	    </li>
-          
-            <li class="toctree-l1 current">
-		
-    <a class="current" href="./">Running a node</a>
-    <ul class="subnav">
-            
-    <li class="toctree-l2"><a href="#running-a-node">Running a node</a></li>
-    
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../consensus/">Consensus</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../design-choices/">Design choices</a>
+                    </li>
+                </ul>
+                <ul class="current">
+                    <li class="toctree-l1 current"><a class="reference internal current" href="./">Running a node</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#download-release">Download release</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#node-requirements">Node Requirements</a>
         <ul>
-        
-            <li><a class="toctree-l3" href="#download-release">Download release</a></li>
-        
-            <li><a class="toctree-l3" href="#node-requirements">Node Requirements</a></li>
-        
-            <li><a class="toctree-l3" href="#connecting-to-an-existing-network">Connecting To An Existing Network</a></li>
-        
-            <li><a class="toctree-l3" href="#node-configuration">Node Configuration</a></li>
-        
-            <li><a class="toctree-l3" href="#where-to-run">Where to Run</a></li>
-        
-            <li><a class="toctree-l3" href="#additional-tools">Additional Tools</a></li>
-        
+    <li class="toctree-l3"><a class="reference internal" href="#instance-specs">Instance specs:</a>
+    </li>
         </ul>
-    
-
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#node-configuration">Node Configuration</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#port-configuration">Port Configuration</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#connecting-to-an-existing-network">Connecting To An Existing Network</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#where-to-run">Where to Run</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#running-a-node-at-home">Running a node at home</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#cloud-hosting">Cloud hosting</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#cloud-providers">Cloud providers</a>
+    </li>
+        </ul>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#manual-builds-and-deployment">Manual Builds And Deployment</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#additional-tools">Additional Tools</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#docker">Docker</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#terraform-optional">Terraform (Optional!)</a>
+    </li>
+        </ul>
+    </li>
+        </ul>
+    </li>
     </ul>
-	    </li>
-          
-        </ul>
+                    </li>
+                </ul>
       </div>
-      &nbsp;
+    </div>
     </nav>
 
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
@@ -120,16 +138,20 @@
       
     </li>
   </ul>
+  
   <hr/>
 </div>
           <div role="main">
             <div class="section">
               
                 <h1 id="running-a-node">Running a node</h1>
-<p>Constellation nodes are currently released as JAR file. These can be run on any system supporting java 8 or higher.</p>
+<p>Constellation nodes are currently released as JAR file. You can always find the latest one on
+<a href="https://github.com/Constellation-Labs/constellation/releases">constellation/releases</a>
+page.
+It can be run on any system supporting Java 8 or higher.</p>
 <h2 id="download-release">Download release</h2>
-<p>Releases are currently distributed as Java JAR files. <a href="https://github.com/Constellation-Labs/constellation/releases">Download the latest from github.</a> </p>
-<p>Specifically, we're requesting testnet operators run <a href="https://github.com/Constellation-Labs/constellation/releases/download/v1.0.1/constellation-assembly-1.0.1.jar">Release 1.0.1</a>.</p>
+<p>Releases are currently distributed as Java JAR files. 
+Download the <a href="https://github.com/Constellation-Labs/constellation/releases">latest from github.</a></p>
 <h2 id="node-requirements">Node Requirements</h2>
 <p>To run a constellation node, you'll need a machine with java 8 or higher installed.
 While we expect that running on Windows will work, we have only internally tested on MacOS and Linux.</p>
@@ -141,25 +163,40 @@ While we expect that running on Windows will work, we have only internally teste
 <li>Memory: 3GB or higher</li>
 <li>Disk: 200GB available.</li>
 </ul>
+<h2 id="node-configuration">Node Configuration</h2>
+<p>Nodes can be configured in two ways. Some options are available through the cmdline, and more extensive options are available by supplying a configuration file. There is a 
+<a href="https://github.com/Constellation-Labs/constellation/blob/dev/src/main/resources/reference.conf">default configuration file</a>, 
+but the options in it can be overriden by providing an additional conf file. The format is HOCON from 
+<a href="https://github.com/lightbend/config">Lightbend Config</a> 
+but is essentially a superset of YAML &amp; JSON. We intend to document available configuration options in more depth soon.</p>
+<h3 id="port-configuration">Port Configuration</h3>
+<p>A constellation node has two API's: A control API meant for the node operator to make changes to node operation, and a data (or peer) API, used by nodes to communicate with each other.</p>
+<p>By default, the control API uses port 9000, and the peer API uses port 9001. These can be overridden in the node configuration, but whatever they are set to, these ports must be open and exposed to the public internet.</p>
 <h2 id="connecting-to-an-existing-network">Connecting To An Existing Network</h2>
 <p>The most important configuration to connect to our testnet is providing a seed node to connect to. The easiest way to do this right now is to set it with an environment variable (example ip only, don't use):</p>
 <p><code>export DAG_SEED_PEER=123.456.123.456:9001</code></p>
 <p>We are not currently running any publicly joinable network -- please get in touch on Telegram or Discord if you'd like to connect a node to our testnet network.</p>
-<h2 id="node-configuration">Node Configuration</h2>
-<p>Nodes can be configured in two ways. Some options are available through the cmdline, and more extensive options are available by supplying a configuration file. There is a <a href="https://github.com/Constellation-Labs/constellation/blob/dev/src/main/resources/reference.conf">default configuration file</a>, but the options in it can be overriden by providing an additional conf file. The format is HOCON from <a href="https://github.com/lightbend/config">Lightbend Config</a> but is essentially a superset of YAML &amp; JSON. We intend to document available configuration options in more depth soon.</p>
-<h3 id="port-configuration">Port Configuration</h3>
-<p>A constellation node has two API's: A control API meant for the node operator to make changes to node operation, and a data (or peer) API, used by nodes to communicate with each other.</p>
-<p>By default, the control API uses port 9000, and the peer API uses port 9001. These can be overridden in the node configuration, but whatever they are set to, these ports must be open and exposed to the public internet.</p>
 <h2 id="where-to-run">Where to Run</h2>
-<p>As a team we have the most expertise with <a href="https://cloud.google.com/">Google Cloud</a>, and it is our recommended platform for those without one already, but any cloud provider will work.</p>
-<h3 id="cloud-providers">Cloud providers</h3>
-<p>Any cloud provider should work fine. While we do all our testing on GCP (Google Cloud Provider), we are not using any proprietary features. If you can launch a machine, install java 8 or higher, assign an external IP, and open the ports for the control API and peer API, you shouldn't have any problems.</p>
 <h3 id="running-a-node-at-home">Running a node at home</h3>
 <p>While running a from your home internet is possible, it's not a supported or recommended setup. It can be difficult to properly expose ports on your computer to the public internet, because home networking equipment like modems and routers often have firewalls blocking these ports, and often home networks do not have a stable ip address. For now, our official recommendation is to use a cloud provider.</p>
-<h2 id="additional-tools">Additional Tools</h2>
-<h3 id="docker">Docker</h3>
+<h3 id="cloud-hosting">Cloud hosting</h3>
+<p>As a team we have the most expertise with Google Cloud, and it is our recommended platform for those without one already, but any cloud provider will work.
+On 
+<a href="https://cloud.google.com/">Google Cloud Platform</a> 
+(GCP), choose <em>compute engine</em> using a Ubuntu or Debian machine. 
+You can also do the installations up on the cloud machine.
+Make sure the relevant ports are open / not firewalled. </p>
+<h4 id="cloud-providers">Cloud providers</h4>
+<p>Any cloud provider should work fine. While we do all our testing on GCP (Google Cloud Provider), we are not using any proprietary features. If you can launch a machine, install java 8 or higher, assign an external IP, and open the ports for the control API and peer API, you shouldn't have any problems.</p>
+<h2 id="manual-builds-and-deployment">Manual Builds And Deployment</h2>
+<p>The <a href="https://github.com/Constellation-Labs/constellation/blob/dev/docs/build-instructions.md">build instructions</a> have more pointers on how to run a node.</p>
+<h3 id="additional-tools">Additional Tools</h3>
+<p>Check out the 
+<a href="https://github.com/Constellation-Labs/constellation/blob/dev/docs/dependencies.md">recommended tools and frameworks</a> 
+section in the docks. Here we highlight two:</p>
+<h4 id="docker">Docker</h4>
 <p>We intend to have official docker images soon -- stay tuned.</p>
-<h3 id="terraform-optional">Terraform (Optional!)</h3>
+<h4 id="terraform-optional">Terraform (Optional!)</h4>
 <p>At Constellation Labs we use terraform to quickly launch and destroy clusters for testing. Our terraform configurations are checked in to the repository in the terraform directory, so they are available as a guide if you'd like to use it yourself. They automate some nice but optional things like running the node as a service. They are currently setup for GCP, and they have a few constellation-specific hardcoded variables (backend storage location, project name). That said -- if you're familiar with terraform, they should be straightforward to adapt for your uses. While we are not officially supporting this right now, we can provide some support on discord for this method.</p>
               
             </div>
@@ -181,7 +218,7 @@ While we expect that running on Windows will work, we have only internally teste
     
   </div>
 
-  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
 </footer>
       
         </div>
@@ -191,7 +228,7 @@ While we expect that running on Windows will work, we have only internally teste
 
   </div>
 
-  <div class="rst-versions" role="note" style="cursor: pointer">
+  <div class="rst-versions" role="note" aria-label="versions">
     <span class="rst-current-version" data-toggle="rst-current-version">
       
           <a href="https://github.com/Constellation-Labs/constellation/" class="fa fa-github" style="float: left; color: #fcfcfc"> GitHub</a>
@@ -205,6 +242,11 @@ While we expect that running on Windows will work, we have only internally teste
     <script>var base_url = '..';</script>
     <script src="../js/theme.js" defer></script>
       <script src="../search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
 
 </body>
 </html>
