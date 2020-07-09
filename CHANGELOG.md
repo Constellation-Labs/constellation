@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.11.3] - 2020-07-09
+## Changed
+- Change IP of node operator
+
 ## [v2.11.2] - 2020-07-03
 ## Fixed
 - Calculate stale tips using max of next snapshot heights
