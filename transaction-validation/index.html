@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="canonical" href="https://constellation-labs.github.io/constellation/transaction-validation/">
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Transaction Validation - Constellation Documentation</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700" />
+
+  <link rel="stylesheet" href="../css/theme.css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" />
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Transaction Validation";
+    var mkdocs_page_input_path = "transaction-validation.md";
+    var mkdocs_page_url = "/constellation/transaction-validation/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> Constellation Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../design-choices/">Design choices</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../running-a-node/">Running a node</a>
+                    </li>
+                </ul>
+                <ul class="current">
+                    <li class="toctree-l1 current"><a class="reference internal current" href="./">Transaction Validation</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#source-signature-validation">Source signature validation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#destination-address-validation">Destination address validation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#token-amount-validation">Token amount validation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#fee-validation">Fee validation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#duplicated-transaction-validation">Duplicated transaction validation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#last-transaction-reference-validation">Last transaction reference validation</a>
+    </li>
+    </ul>
+                    </li>
+                </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">Constellation Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Transaction Validation</li>
+    <li class="wy-breadcrumbs-aside">
+      
+        <a href="https://github.com/Constellation-Labs/constellation/edit/dev/docs-gh-pages/transaction-validation.md"
+          class="icon icon-github"> Edit on GitHub</a>
+      
+    </li>
+  </ul>
+  
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="transaction-validation">Transaction Validation</h1>
+<p>Each transaction sent to cluster needs to be validated before proposing it to block/consensus.
+Part of code responsible for validation is in <code>TransactionValidator.scala</code>.</p>
+<h2 id="source-signature-validation">Source signature validation</h2>
+<p>Sender needs to sign transaction by using his private key. Signature of transaction
+needs to ensure following things:
+- transaction has been signed by known sender
+- sender can't deny signing the transaction
+- nobody altered transaction</p>
+<p>Validation checks in collection of validation signatures about the edge called <code>signatureBatch</code> if there
+is such address which equals source address and compares <code>hash</code> with <code>signaturesHash</code></p>
+<h2 id="destination-address-validation">Destination address validation</h2>
+<p>Valid destination wallet address (receiver of tokens) must match the following conditions:</p>
+<ul>
+<li>Can't be empty</li>
+<li>Must have <code>DAG</code> prefix</li>
+<li>Must have at least <code>30</code> characters length</li>
+<li>Must be different from source address</li>
+</ul>
+<p><img alt="alt text" src="../img/transaction-validation/dag-address-format.jpg" title="DAG address format" /></p>
+<p>The validation of address emptiness happens in <code>validateEmptyDestinationAddress</code> which just checks if address is not empty.
+In case of failure it returns <code>EmptyDestinationAddress</code> validation result.
+If address is not empty then <code>validateDestinationAddress</code> is triggered which checks the prefix, length and compares
+source address with destination address. In case of failure it returns <code>InvalidDestinationAddress</code>.</p>
+<h2 id="token-amount-validation">Token amount validation</h2>
+<p>Each transaction contains information about number of tokens to transfer from source address to destination address.
+The way of validating amount of token differs between dummy and non-dummy transactions.</p>
+<p>When <strong>dummy</strong> transaction fails:</p>
+<ul>
+<li>Number of tokens different than <code>0</code>. It is because dummy transaction should not change any of balances so <code>0</code> is expected there.
+In case of failure it returns <code>NonZeroAmount</code> validation result.</li>
+</ul>
+<p>When <strong>non-dummy</strong> transaction fails:</p>
+<ul>
+<li><code>0</code> tokens, in opposite to dummy transaction we must provide positive number of tokens. It causes <code>NonPositiveAmount</code>.</li>
+<li>Negative number of tokens. It causes <code>NonPositiveAmount</code> as well.</li>
+<li>Number of tokens bigger than maximum value of <code>Long</code> which causes <code>OverflowAmount</code> validation result.</li>
+</ul>
+<p>Amount is validated in <code>validateAmount</code> method.</p>
+<h2 id="fee-validation">Fee validation</h2>
+<p>For fee, we apply similar validation rules as we apply to non-dummy transactions.
+Transaction does not need to have fee at all but if it exits it can't be:
+- Equal to <code>0</code> (because then transaction should not include fee at all). It causes <code>NonPositiveAmount</code>.
+- Negative number of tokens. It causes <code>NonPositiveAmount</code> as well.</p>
+<h2 id="duplicated-transaction-validation">Duplicated transaction validation</h2>
+<p>Each transaction is unique (identified by unique hash) so sending same transaction twice should fail.
+Each of nodes stores list of already accepted transactions and sending already accepted one fails with <code>HashDuplicateFound</code>.
+Validation is being triggered in <code>validateDuplicate</code> method.</p>
+<h2 id="last-transaction-reference-validation">Last transaction reference validation</h2>
+<p>All transactions sent from particular source address form chain structure where each transaction stores a <strong>reference</strong> to
+previous transaction (<code>lastTxRef</code> field).
+There is also <code>ordinal</code> field which stores <strong>ordinal number</strong> which is the index of transaction
+according to the order.</p>
+<p>That being said all the transactions need to form a chain by keeping reference to previous transaction
+and incrementing the <code>ordinal</code> number. The only exception for that statement is the very first transaction
+because it must have <code>lastTxRef</code> empty (because there is no previous transaction) and <code>ordinal</code> set to <code>0</code>
+(because we start indexing from <code>0</code>).</p>
+<p>Each of nodes stores information about last accepted transaction for each wallet address and validates
+received one against it. Validation happens in <code>validateLastTransactionRef</code> and checks couple of things depending on
+if it is first transaction or one of next ones.</p>
+<p><img alt="alt text" src="../img/transaction-validation/tx-chain.jpg" title="Transaction chain" /></p>
+<p>For <strong>very first</strong> transaction:</p>
+<ul>
+<li>if <code>ordinal</code> is set to <code>0</code></li>
+<li>if <code>lastTxRef</code> is empty</li>
+</ul>
+<p>For <strong>each next</strong> transaction:</p>
+<ul>
+<li>if <code>lastTxRef</code> is not empty</li>
+<li>if <code>lastTxRef</code> points to last accepted transaction for that address (to check if transaction chain has no gaps)</li>
+<li>if <code>ordinal</code> has been incremented properly (it should be <code>+1</code> to previous <code>ordinal</code> number)</li>
+</ul>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="../running-a-node/" class="btn btn-neutral" title="Running a node"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+          <a href="https://github.com/Constellation-Labs/constellation/" class="fa fa-github" style="float: left; color: #fcfcfc"> GitHub</a>
+      
+      
+        <span><a href="../running-a-node/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
+
+</body>
+</html>
