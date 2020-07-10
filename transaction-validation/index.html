@@ -121,10 +121,12 @@
 Part of code responsible for validation is in <code>TransactionValidator.scala</code>.</p>
 <h2 id="source-signature-validation">Source signature validation</h2>
 <p>Sender needs to sign transaction by using his private key. Signature of transaction
-needs to ensure following things:
-- transaction has been signed by known sender
-- sender can't deny signing the transaction
-- nobody altered transaction</p>
+needs to ensure following things:</p>
+<ul>
+<li>transaction has been signed by known sender</li>
+<li>sender can't deny signing the transaction</li>
+<li>nobody altered transaction</li>
+</ul>
 <p>Validation checks in collection of validation signatures about the edge called <code>signatureBatch</code> if there
 is such address which equals source address and compares <code>hash</code> with <code>signaturesHash</code></p>
 <h2 id="destination-address-validation">Destination address validation</h2>
