@@ -159,9 +159,11 @@ In case of failure it returns <code>NonZeroAmount</code> validation result.</li>
 <p>Amount is validated in <code>validateAmount</code> method.</p>
 <h2 id="fee-validation">Fee validation</h2>
 <p>For fee, we apply similar validation rules as we apply to non-dummy transactions.
-Transaction does not need to have fee at all but if it exits it can't be:
-- Equal to <code>0</code> (because then transaction should not include fee at all). It causes <code>NonPositiveAmount</code>.
-- Negative number of tokens. It causes <code>NonPositiveAmount</code> as well.</p>
+Transaction does not need to have fee at all but if it exits it can't be:</p>
+<ul>
+<li>Equal to <code>0</code> (because then transaction should not include fee at all). It causes <code>NonPositiveAmount</code>.</li>
+<li>Negative number of tokens. It causes <code>NonPositiveAmount</code> as well.</li>
+</ul>
 <h2 id="duplicated-transaction-validation">Duplicated transaction validation</h2>
 <p>Each transaction is unique (identified by unique hash) so sending same transaction twice should fail.
 Each of nodes stores list of already accepted transactions and sending already accepted one fails with <code>HashDuplicateFound</code>.
