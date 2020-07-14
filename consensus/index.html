@@ -72,9 +72,9 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#3-merge-broadcast-and-gather-consensus-block-proposals">3. Merge, broadcast and gather consensus block proposals</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#4-select-majority-block-proposal-and-merge-facilitators-signatures">4. Select majority block proposal and merge facilitator's signatures</a>
+    <li class="toctree-l3"><a class="reference internal" href="#4-select-a-majority-block-proposal-and-merge-facilitators-signatures">4. Select a majority block proposal and merge facilitator's signatures</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#5-accepted-finished-block-and-broadcast-to-non-facilitators">5. Accepted finished block and broadcast to non-facilitators</a>
+    <li class="toctree-l3"><a class="reference internal" href="#5-accept-a-finished-block-and-broadcast-it-to-non-facilitators">5. Accept a finished block and broadcast it to non-facilitators</a>
     </li>
         </ul>
     </li>
@@ -141,7 +141,7 @@
 <ul>
 <li><strong>consensus owner</strong> - the node which sent consensus proposal to others and initiated a new round</li>
 <li><strong>facilitator</strong> - node which has been selected to take part in a new round and responded successfully to participate in it (including owner)</li>
-<li><strong>SOE</strong> - signed observation edge</li>
+<li><strong>SOE</strong> - signed observation edge (see: )</li>
 <li><strong>data proposal</strong> - transactions (and other checkpoint block data) proposed by the facilitator to include in the new consensus round</li>
 </ul>
 <h3 id="consensus-round">Consensus round</h3>
@@ -149,17 +149,17 @@
 <li>Start consensus</li>
 <li>Broadcast and gather consensus data proposals</li>
 <li>Merge, broadcast and gather consensus block proposals</li>
-<li>Select majority block proposal and merge facilitators' signatures</li>
-<li>Accepted finished block and broadcast to non-facilitators</li>
+<li>Select a majority block proposal and merge facilitators' signatures</li>
+<li>Accept a finished block and broadcast it to non-facilitators</li>
 </ol>
 <h3 id="stages">Stages</h3>
 <h4 id="1-start-consensus">1. Start consensus</h4>
 <p><code>ConsensusScheduler</code> runs <code>consensusManager.startOwnConsensus()</code> every <strong>n</strong> seconds
 (<em>default value: 10s</em>, configurable under <code>constellation.consensus.start-own-interval</code>).
 To start a new round, node must be in one of valid node states. Otherwise, creating new round will be skipped.
-Valid node states for starting new consensus round are <strong>Ready</strong> and <strong>SnapshotCreation</strong>.</p>
-<p>When new round can be created, owner creates one using pending transactions (up to <code>maxTransactionThreshold</code>), tip SOE
-and selects final facilitators. Peers which can take part in the consensus round must have <strong>nextSnapshotHeight</strong> above
+Valid node states for starting new consensus round are <code>Ready</code> and <code>SnapshotCreation</code>.</p>
+<p>When new round can be created, owner creates one by using pending transactions (up to <code>maxTransactionThreshold</code>), tip SOE
+and selects final facilitators. Peers which can take part in the consensus round must have <code>nextSnapshotHeight</code> below
 the proposed tip. Otherwise, the selected node will not be able to accept the final checkpoint block. Facilitators are being
 selected randomly taking into account above preconditions.</p>
 <p><strong>Dummy transaction</strong> is a transaction pulled to the consensus round if node has no real transactions. Node should always
@@ -168,18 +168,19 @@ which is equivalent to the real transaction but carries 0 amount.</p>
 <h4 id="2-broadcast-and-gather-consensus-data-proposals">2. Broadcast and gather consensus data proposals</h4>
 <p>Owner sends the <code>NotifyFacilitators</code> message to all selected facilitators and waits for the response. If facilitator is able
 to start a consensus, responds with success message and creates a corresponding round. Facilitator cannot start a consensus
-if proposed tip is above the current snapshot height or is in the incorrect state (i.e. leaving from the cluster).
+if proposed tip is below the next snapshot height or is in the incorrect state (i.e. leaving from the cluster).
 When all facilitators have been notified and started rounds successfully, each one pulls transactions, similarly as owner did,
 and broadcasts it to all consensus round's participants. In parallel, each participant gathers proposals from others and keeps it locally.</p>
 <h4 id="3-merge-broadcast-and-gather-consensus-block-proposals">3. Merge, broadcast and gather consensus block proposals</h4>
-<p>When node received all proposals, it merges them together to create a block proposal and then broadcasts it to others.
-Such a block proposal is signed by the proposer only.</p>
-<h4 id="4-select-majority-block-proposal-and-merge-facilitators-signatures">4. Select majority block proposal and merge facilitator's signatures</h4>
-<p>When node received all block proposals, it verifies the correctness of proposals. The majority block is being chosen
+<p>When node receives all proposals, it merges them together to create a block proposal and then broadcasts it to others.
+Such a block proposal is being signed by the proposer only. The same process happens on every node taking part in a consensus round,
+hence when data used for block proposal creation are the same, block proposals will be equal (except signatures which obviously must be different). </p>
+<h4 id="4-select-a-majority-block-proposal-and-merge-facilitators-signatures">4. Select a majority block proposal and merge facilitator's signatures</h4>
+<p>When node receives all block proposals, it verifies the correctness of proposals. The majority block is being chosen
 and all edges from corresponding blocks are merged together creating one block with all signatures. Such a block
 is broadcasted to other facilitators as <strong>selected</strong> one.</p>
-<h4 id="5-accepted-finished-block-and-broadcast-to-non-facilitators">5. Accepted finished block and broadcast to non-facilitators</h4>
-<p>When node received confirmation from other participants that the selected block is the same across all facilitators,
+<h4 id="5-accept-a-finished-block-and-broadcast-it-to-non-facilitators">5. Accept a finished block and broadcast it to non-facilitators</h4>
+<p>When node receives confirmation from other participants that the selected block is the same across all facilitators,
 it starts acceptance flow for the selected block. If block has been accepted successfully, node broadcasts it to all non-facilitators.
 It simply means that every other node in the network receives the newly created block and tries to accept it.</p>
 <h3 id="clean-up">Clean up</h3>
@@ -194,7 +195,7 @@ round has been finished with an error.</p>
 <li><code>NoPeersForConsensus</code> - there are no peers to start a new round with</li>
 <li><code>NotAllPeersParticipate</code> - one of selected facilitator rejected participating in the round
 (i.e. when proposed tip is above the latest created snapshot height) </li>
-<li><code>NotEnoughProposals</code> - if node received fewer proposals than expected</li>
+<li><code>NotEnoughProposals</code> - if node receives fewer proposals than expected</li>
 </ul>
 <h3 id="configuration">Configuration</h3>
 <pre><code class="hocon">consensus {
@@ -204,7 +205,6 @@ round has been finished with an error.</p>
     cleanup-interval = 10s
     union-proposals-timeout = 10s
     checkpoint-block-resolve-majority-timeout = 10s
-    accept-resolved-majority-block-timeout = 10s
     form-checkpoint-blocks-timeout = 40s
   }
 </code></pre>
