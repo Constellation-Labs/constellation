@@ -2,6 +2,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## [v2.12.0-rc1] 2020-07-16
+## Changed
+- Adjustment for SelfAvoidingWalk
 
 ## [v2.11.3] - 2020-07-09
 ## Changed
