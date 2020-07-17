@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.12.0] 2020-07-17
+## Changed
+- New operators whitelisted
+
 ## [v2.12.0-rc1] 2020-07-16
 ## Changed
 - Adjustment for SelfAvoidingWalk
