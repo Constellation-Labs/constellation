@@ -57,9 +57,11 @@ object BIP44 extends App {
     val ecPoint = bip44Key.getPubKeyPoint
     val bcConf = BouncyCastleProvider.CONFIGURATION
     val curveParams = ECNamedCurveTable.getParameterSpec("secp256k1")
+    val g = curveParams.getG
     val n = curveParams.getN
+    val h = curveParams.getH
     val curve = curveParams.getCurve
-    val domainParams = new ECDomainParameters(curve, ecPoint, n)
+    val domainParams = new ECDomainParameters(curve, g, n, h)
     val privKeyParams = new ECPrivateKeyParameters(rawPrivate, domainParams)
     val publicKeyParams = new ECPublicKeyParameters(ecPoint, domainParams)
     val publicKey = new BCECPublicKey(KeyUtils.ECDSA, publicKeyParams, curveParams, bcConf)

@@ -22,10 +22,26 @@ class BIP44Test extends FreeSpec with Matchers {
     assert(isValid)
   }
 
+  "BIP44 wallet keys should validate for DAG signature scheme using publickey recovered from id" in {
+    val bip44 = new BIP44(seedCode)
+    val dagSign = bip44.signData(msg)
+    val publicKey = KeyUtils.hexToPublicKey("08dda015c42ea066a52d68e2ab2985b5ab255d3d0fd2b90363548cc74963b156e1a6aec5beb1a0c1df86025ffded1dba91afa87ecacdc6e32934421ab6c28d9e")
+    val isValid = KeyUtils.verifySignature(msg, dagSign)(publicKey)
+    assert(isValid)
+  }
+
   "BTC signature scheme should work for DAG" in {
     val bip44 = new BIP44(seedCode)
     val dagSign = bip44.signData(msgKeccak)
     val isValid = KeyUtils.verifySignature(msgKeccak, dagSign)(bip44.getChildKeyPairOfDepth().getPublic)
+    assert(isValid)
+  }
+
+  "BTC signature scheme should work for DAG using publickey recovered from id" in {
+    val bip44 = new BIP44(seedCode)
+    val dagSign = bip44.signData(msgKeccak)
+    val publicKey = KeyUtils.hexToPublicKey("08dda015c42ea066a52d68e2ab2985b5ab255d3d0fd2b90363548cc74963b156e1a6aec5beb1a0c1df86025ffded1dba91afa87ecacdc6e32934421ab6c28d9e")
+    val isValid = KeyUtils.verifySignature(msgKeccak, dagSign)(publicKey)
     assert(isValid)
   }
 
