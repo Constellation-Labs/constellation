@@ -1,7 +1,7 @@
 package org.constellation.wallet
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
-import java.nio.charset.StandardCharsets.US_ASCII
+import java.nio.charset.StandardCharsets.{US_ASCII, UTF_8}
 
 import cats.Monoid
 import com.google.common.hash.Hashing
@@ -125,7 +125,10 @@ object EncodableValue {
 }
 
 object Hashable {
-  def hash(a: AnyRef): String = Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(a)).toString
+  def hash(a: AnyRef): String = a match {
+    case str: String => Hashing.sha256().hashBytes(str.getBytes(UTF_8)).toString
+    case _ => Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(a)).toString
+  }
 }
 
 trait Signable {

@@ -1,5 +1,6 @@
 import java.net.InetSocketAddress
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
@@ -105,7 +106,11 @@ package object constellation extends POWExt with SignHelpExt {
 
   }
 
-  def hashSerialized(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256
+  def hashSerialized(obj: AnyRef) = obj match {
+    case str: String => str.getBytes(UTF_8).sha256
+    case _ => KryoSerializer.serializeAnyRef(obj).sha256
+  }
+
   def hashSerializedBytes(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256Bytes
 
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
