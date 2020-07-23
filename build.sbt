@@ -164,6 +164,7 @@ Test / logBuffered := false
 assemblyMergeStrategy in assembly := {
   case "logback.xml"                                       => MergeStrategy.first
   case x if x.contains("io.netty.versions.properties")     => MergeStrategy.discard
+  case PathList("org", "bouncycastle", xs @ _*)            => MergeStrategy.first
   case PathList(xs @ _*) if xs.last == "module-info.class" => MergeStrategy.first
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
