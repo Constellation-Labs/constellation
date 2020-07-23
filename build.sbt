@@ -224,7 +224,13 @@ lazy val wallet = (project in file("wallet"))
     buildInfoPackage := "org.constellation.wallet",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.wallet.Wallet"),
-    libraryDependencies ++= walletSharedDependencies
+    libraryDependencies ++= walletSharedDependencies,
+    assemblyMergeStrategy in assembly := {
+      case PathList("org", "bouncycastle", xs @ _*)            => MergeStrategy.first
+      case x =>
+        val oldStrategy = (assemblyMergeStrategy in assembly).value
+        oldStrategy(x)
+    }
   )
 
 lazy val schema = (project in file("schema"))
