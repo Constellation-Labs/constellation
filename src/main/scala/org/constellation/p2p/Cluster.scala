@@ -138,6 +138,7 @@ class Cluster[F[_]](
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
+  private val registrationSessions: Ref[F, Map[String, Id]] = Ref.unsafe[F, Map[String, Id]](Map.empty)
 
   private val peerDiscovery = PeerDiscovery[F](apiClient, this, dao.id)
 
@@ -147,6 +148,16 @@ class Cluster[F[_]](
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
   private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
+
+  def setPeerRegistrationSession(ip: String, id: Id): F[Unit] =
+    registrationSessions.modify { r =>
+      (r + (ip -> id), ())
+    }
+
+  def removePeerRegistrationSession(ip: String, id: Id): F[Unit] =
+    registrationSessions.modify { r =>
+      (r - ip, ())
+    }
 
   def setJoinedAsInitialFacilitator(joined: Boolean): F[Unit] =
     joinedAsInitialFacilitator.modify { j =>
@@ -245,7 +256,10 @@ class Cluster[F[_]](
       "cluster_setNodeStatus"
     )
 
-  def pendingRegistration(ip: String, request: PeerRegistrationRequest): F[Unit] =
+  def pendingRegistration(
+    ip: String,
+    request: PeerRegistrationRequest
+  ): F[Unit] =
     logThread(
       for {
         pr <- PendingRegistration(ip, request).pure[F]
@@ -253,22 +267,34 @@ class Cluster[F[_]](
 
         validExternalHost = validWithLoopbackGuard(request.host)
         peers <- peers.get
+        // TODO: Move to JoiningPeerValidator
         existsNotOffline = peers.exists {
           case (_, d) =>
-            d.peerMetadata.host == request.host && d.peerMetadata.httpPort == request.port && NodeState
+            val existingId = d.peerMetadata.id == request.id
+            val existingIP = d.peerMetadata.host == request.host
+            val canActAsJoiningSource = NodeState
               .canActAsJoiningSource(
                 d.peerMetadata.nodeState
               )
+            (existingId || existingIP) && canActAsJoiningSource
         }
 
+        // TODO: Move to JoiningPeerValidator
         isCorrectIP = ip == request.host && ip != ""
-        isWhitelisted = dao.nodeConfig.whitelisting.get(ip).contains(request.id)
+        // TODO: Move to JoiningPeerValidator
+        isWhitelisted = dao.nodeConfig.whitelisting.contains(request.id)
         whitelistingHash = KryoSerializer.serializeAnyRef(dao.nodeConfig.whitelisting).sha256
         validWhitelistingHash = whitelistingHash == request.whitelistingHash
 
         isSelfId = dao.id == request.id
         badAttempt = !isCorrectIP || !isWhitelisted || !validWhitelistingHash || isSelfId || !validExternalHost || existsNotOffline
-        isValid <- joiningPeerValidator.isValid(PeerClientMetadata(request.host, request.port, request.id))
+        isValid <- joiningPeerValidator.isValid(
+          PeerClientMetadata(
+            request.host,
+            request.port,
+            request.id
+          )
+        )
 
         _ <- if (!isWhitelisted) {
           dao.metrics.incrementMetricAsync[F]("notWhitelistedAdditionAttempt")
@@ -280,12 +306,18 @@ class Cluster[F[_]](
           dao.metrics.incrementMetricAsync[F]("invalidPeerAdditionAttempt")
         } else {
           val authSignRequest = PeerAuthSignRequest(Random.nextLong())
-          val peerClientMetadata = PeerClientMetadata(request.host, request.port, request.id)
+          val peerClientMetadata = PeerClientMetadata(
+            request.host,
+            request.port,
+            request.id
+          )
           val req = apiClient.sign.sign(authSignRequest).run(peerClientMetadata)
 
           req.flatTap { sig =>
             if (sig.hashSignature.id != request.id) {
-              logger.warn(s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}") >>
+              logger.warn(
+                s"Keys should be the same: ${sig.hashSignature.id} != ${request.id}"
+              ) >>
                 dao.metrics.incrementMetricAsync[F]("peerKeyMismatch")
             } else F.unit
           }.flatTap { sig =>
@@ -304,7 +336,8 @@ class Cluster[F[_]](
                 _ <- setJoinedAsInitialFacilitator(request.joinsAsInitialFacilitator)
               } yield ()
 
-              val updateToken = sessionTokenService.updatePeerToken(ip, request.token)
+              val updateToken =
+                sessionTokenService.updatePeerToken(ip, request.token)
 
               for {
                 state <- withMetric(
@@ -333,7 +366,9 @@ class Cluster[F[_]](
                 )
               } yield ()
           }.handleErrorWith { err =>
-            logger.warn(s"Sign request to ${request.host}:${request.port} failed. $err") >>
+            logger.warn(
+              s"Sign request to ${request.host}:${request.port} failed. $err"
+            ) >>
               dao.metrics.incrementMetricAsync[F]("peerSignatureRequestFailed")
           }
         }
@@ -615,40 +650,38 @@ class Cluster[F[_]](
         )
       }
     } yield prr
-  }
-    .handleErrorWith { err =>
-      logger.error(err)("Creating pendingRegistrationRequest failed!") >>
-        err.raiseError[F, PeerRegistrationRequest]
+  }.handleErrorWith { err =>
+    logger.error(err)("Creating pendingRegistrationRequest failed!") >>
+      err.raiseError[F, PeerRegistrationRequest]
   }
 
   // I join to someone
-  def attemptRegisterPeer(hp: HostPort): F[Unit] =
+  def attemptRegisterPeer(peerClientMetadata: PeerClientMetadata): F[Unit] =
     logThread(
       withMetric(
         {
           sessionTokenService.createAndSetNewOwnToken() >>
             dao.nodeConfig.whitelisting
-              .get(hp.host)
-              .map(PeerClientMetadata(hp.host, hp.port, _))
-              .map {
-                client =>
-                  apiClient.sign
-                    .getRegistrationRequest()
-                    .run(client)
-                    .flatMap { registrationRequest =>
-                      for {
-                        _ <- pendingRegistration(hp.host, registrationRequest)
-                        prr <- pendingRegistrationRequest
-                        response <- apiClient.sign.register(prr).run(client)
-                      } yield response
-                    }
-                    .handleErrorWith { err =>
-                      logger.error(err)("Registration request failed") >>
-                        dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
-                        err.raiseError[F, Unit]
-                    }
-              }
-              .getOrElse(logger.error(s"unknown peer, not whitelisted"))
+              .contains(peerClientMetadata.id)
+              .pure[F]
+              .ifM(
+                apiClient.sign
+                  .getRegistrationRequest()
+                  .run(peerClientMetadata)
+                  .flatMap { registrationRequest =>
+                    for {
+                      _ <- pendingRegistration(peerClientMetadata.host, registrationRequest)
+                      prr <- pendingRegistrationRequest
+                      response <- apiClient.sign.register(prr).run(peerClientMetadata)
+                    } yield response
+                  }
+                  .handleErrorWith { err =>
+                    logger.error(err)("Registration request failed") >>
+                      dao.metrics.incrementMetricAsync[F]("peerGetRegistrationRequestFailed") >>
+                      err.raiseError[F, Unit]
+                  },
+                logger.error(s"unknown peer, not whitelisted")
+              )
 
         },
         "addPeerWithRegistrationSymmetric"
@@ -659,16 +692,16 @@ class Cluster[F[_]](
   def rejoin(): F[Unit] = {
     implicit val ec = ConstellationExecutionContext.bounded
 
-    def attemptRejoin(lastKnownAPIClients: Seq[HostPort]): F[Unit] =
-      lastKnownAPIClients match {
-        case Nil => F.raiseError(new RuntimeException("Couldn't rejoin the cluster"))
-        case hostPort :: remainingHostPorts =>
-          join(hostPort)
-            .handleErrorWith(err => {
-              logger.error(s"Couldn't rejoin via ${hostPort.host}: ${err.getMessage}")
-              attemptRejoin(remainingHostPorts)
-            })
-      }
+    //    def attemptRejoin(lastKnownAPIClients: Seq[HostPort]): F[Unit] =
+    //      lastKnownAPIClients match {
+    //        case Nil => F.raiseError(new RuntimeException("Couldn't rejoin the cluster"))
+    //        case hostPort :: remainingHostPorts =>
+    //          join(hostPort)
+    //            .handleErrorWith(err => {
+    //              logger.error(s"Couldn't rejoin via ${hostPort.host}: ${err.getMessage}")
+    //              attemptRejoin(remainingHostPorts)
+    //            })
+    //      }
 
     for {
       _ <- logger.warn("Trying to rejoin the cluster...")
@@ -680,7 +713,7 @@ class Cluster[F[_]](
         .getOrElse(Seq.empty[PeerMetadata])
         .map(pm => HostPort(pm.host, pm.httpPort))
 
-      _ <- attemptRejoin(lastKnownPeers)
+      //      _ <- attemptRejoin(lastKnownPeers)
     } yield ()
   }
 
@@ -698,7 +731,7 @@ class Cluster[F[_]](
       // TODO: add services to clear if needed
     } yield ()
 
-  def join(hp: HostPort): F[Unit] =
+  def join(hp: PeerClientMetadata): F[Unit] =
     logThread(
       for {
         state <- nodeState.get

@@ -3,6 +3,8 @@ package org.constellation.infrastructure.p2p
 import cats.ApplicativeError
 import cats.data.Kleisli
 import cats.effect.{Concurrent, ContextShift}
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.schema.Id
 import org.constellation.session.SessionTokenService
@@ -18,6 +20,9 @@ object PeerResponse {
 
   object PeerClientMetadata {
     def apply(host: String, port: Int, id: Id): PeerClientMetadata = PeerClientMetadata(host, port.toString, id)
+
+    implicit val peerClientMetadataEncoder: Encoder[PeerClientMetadata] = deriveEncoder
+    implicit val peerClientMetadataDecoder: Decoder[PeerClientMetadata] = deriveDecoder
   }
 
   def getUri(pm: PeerClientMetadata, path: String): Uri =
