@@ -187,9 +187,10 @@ object ConstellationNode extends IOApp {
         )
       )
 
-      signedPeerEndpoints = PeerAuthMiddleware.responseSignerMiddleware(dao.keyPair.getPrivate, dao.sessionTokenService)(
-        peerEndpoints
-      )
+      signedPeerEndpoints = PeerAuthMiddleware
+        .responseSignerMiddleware(dao.keyPair.getPrivate, dao.sessionTokenService)(
+          peerEndpoints
+        )
 
       metrics <- Prometheus.metricsOps[IO](registry)
       metricsMiddleware = middleware.Metrics[IO](metrics)(_)
@@ -238,17 +239,21 @@ object ConstellationNode extends IOApp {
     }
   }
 
-  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Map[IP, Id]] =
+  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Set[Id]] =
     for {
-      source <- Sync[F].delay { Source.fromFile(cliConfig.whitelisting) }
-      lines = source.getLines().filter(_.nonEmpty).toList
-      values = lines.map(_.split(",").map(_.trim).toList)
-      mappedValues = values.map {
-        case ip :: id :: Nil => Map(ip -> Id(id))
-        case _               => Map.empty[IP, Id]
-      }.fold(Map.empty[IP, Id])(_ ++ _)
-      _ <- Sync[F].delay { source.close() }
-    } yield mappedValues
+      source <- Sync[F].delay {
+        Source.fromFile(cliConfig.whitelisting)
+      }
+      ids = source
+        .getLines()
+        .filter(_.nonEmpty)
+        .map(_.trim)
+        .map(Id(_))
+        .toSet
+      _ <- Sync[F].delay {
+        source.close()
+      }
+    } yield ids
 
   private def getAllocAccountBalances[F[_]: Sync](cliConfig: CliConfig): F[Seq[AccountBalance]] = Sync[F].delay {
     Try(new AccountBalanceCSVReader(cliConfig.allocFilePath, cliConfig.allocFileNormalized).read()).getOrElse(Seq.empty)

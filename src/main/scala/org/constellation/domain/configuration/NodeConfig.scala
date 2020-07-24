@@ -27,5 +27,5 @@ case class NodeConfig(
   processingConfig: ProcessingConfig = ProcessingConfig(),
   dataPollingManagerOn: Boolean = false,
   allocAccountBalances: Seq[AccountBalance] = Seq.empty,
-  whitelisting: Map[IP, Id] = Map.empty
+  whitelisting: Set[Id] = Set.empty
 )
