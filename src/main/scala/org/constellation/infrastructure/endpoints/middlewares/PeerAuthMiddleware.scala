@@ -7,13 +7,14 @@ import cats.data.{Kleisli, OptionT}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Resource, Sync}
 import cats.implicits._
-import cats.syntax._
 import fs2.{Chunk, Stream}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
+import org.constellation.p2p.Cluster
 import org.constellation.primitives.IPManager.IP
 import org.constellation.schema.Id
 import org.constellation.session.SessionTokenService
+import org.constellation.session.Registration.`X-Id`
 import org.constellation.session.SessionTokenService.{Token, TokenValid, `X-Session-Token`}
 import org.http4s._
 import org.http4s.client.Client
@@ -31,8 +32,8 @@ import pl.abankowski.httpsigner.signature.generic.{GenericGenerator, GenericVeri
 object PeerAuthMiddleware {
 
   def enforceKnownPeersMiddleware[F[_]: Sync](
-    whitelistedPeer: IP => F[Option[Id]],
-    knownPeer: IP => F[Option[Id]]
+    knownPeer: IP => F[Option[Id]],
+    whitelistedId: Id => Boolean
   )(http: HttpRoutes[F]): HttpRoutes[F] =
     Kleisli { req: Request[F] =>
       val ip = req.remoteAddr.getOrElse("unknown")
@@ -45,8 +46,7 @@ object PeerAuthMiddleware {
             s"Middleware (Enforce known peers) ip=$ip, uri=${req.uri.path}, method=${req.method.name}, query=${req.uri.query.renderString}, headers=${req.headers}"
           )
         )
-        _ <- OptionT(whitelistedPeer(ip))
-        _ <- OptionT(knownPeer(ip))
+        _ <- OptionT(knownPeer(ip).map(_.filter(whitelistedId)))
         res <- http(req)
       } yield res
 
@@ -58,10 +58,10 @@ object PeerAuthMiddleware {
     sessionTokenService: SessionTokenService[F]
   )(http: HttpRoutes[F])(implicit C: ContextShift[F]): HttpRoutes[F] =
     Kleisli { req: Request[F] =>
-
       for {
         res <- http(req)
-        headerToken <- sessionTokenService.getOwnToken()
+        headerToken <- sessionTokenService
+          .getOwnToken()
           .map(_.map(t => Header(`X-Session-Token`.value, t.value)))
           .attemptT
           .toOption
@@ -74,7 +74,7 @@ object PeerAuthMiddleware {
       } yield signedResponse
     }
 
-  def responseTokenVerifierMiddleware[F[_] : Concurrent](
+  def responseTokenVerifierMiddleware[F[_]: Concurrent](
     client: Client[F],
     sessionTokenService: SessionTokenService[F]
   ): Client[F] =
@@ -88,7 +88,7 @@ object PeerAuthMiddleware {
 
           sessionTokenService.verifyPeerToken(peerIp, headerToken) >>= {
             case TokenValid => response.pure[F]
-            case _ => Response[F](status = Unauthorized).pure[F]
+            case _          => Response[F](status = Unauthorized).pure[F]
           }
         }
       }
@@ -133,7 +133,8 @@ object PeerAuthMiddleware {
     client: Client[F],
     privateKey: PrivateKey,
     selfIp: String,
-    sessionTokenService: SessionTokenService[F]
+    sessionTokenService: SessionTokenService[F],
+    selfId: Id
   )(
     implicit F: Concurrent[F],
     C: ContextShift[F]
@@ -157,8 +158,12 @@ object PeerAuthMiddleware {
               _ <- logger.debug(
                 s"Middleware (Signer) ip=$selfIp, uri=${req.uri.path}, method=${req.method.name}, query=${req.uri.query.renderString}, headers=${req.headers}}"
               )
-              tokenHeader <- sessionTokenService.getOwnToken().map(_.map(t => Header(`X-Session-Token`.value, t.value)))
-              newHeaders = tokenHeader.fold(req.headers)(h => req.headers.put(h))
+              tokenHeader: Option[Header.Raw] <- sessionTokenService
+                .getOwnToken()
+                .map(_.map(t => Header(`X-Session-Token`.value, t.value)))
+              newHeaders = tokenHeader
+                .fold(req.headers)(h => req.headers.put(h))
+                .put(Header(`X-Id`.value, selfId.hex))
               newReq = req
                 .withBodyStream(req.body.observe(_.chunks.flatMap(s => Stream.eval_(vec.update(_ :+ s)))))
                 .withHeaders(newHeaders)
@@ -190,11 +195,13 @@ object PeerAuthMiddleware {
     }
 
   def requestVerifierMiddleware[F[_]](
-    knownPeer: IP => F[Option[Id]]
+    knownPeer: IP => F[Option[Id]],
+    whitelistedId: Id => Boolean
   )(http: HttpRoutes[F])(implicit C: ContextShift[F], F: Concurrent[F]): HttpRoutes[F] =
     Kleisli { req: Request[F] =>
       val logger = Slf4jLogger.getLogger[F]
       val ip = req.remoteAddr.getOrElse("unknown")
+      val idFromHeaders = req.headers.get(`X-Id`).map(_.value).map(Id(_))
       val unauthorizedResponse: OptionT[F, Response[F]] = OptionT.pure[F](Response[F](status = Unauthorized))
 
       val verify: OptionT[F, Response[F]] = for {
@@ -217,7 +224,11 @@ object PeerAuthMiddleware {
           .attemptT
           .toOption
 
-        id <- knownPeer(ip).attemptT.toOption.flatMap(_.toOptionT)
+        id <- knownPeer(ip)
+          .map(_.orElse(idFromHeaders.filter(whitelistedId)))
+          .attemptT
+          .toOption
+          .flatMap(_.toOptionT)
 
         crypto = getVerifier(id.toPublicKey)
         verifier = new Http4sRequestVerifier[F](crypto, new ConstellationHttpCryptoConfig {})

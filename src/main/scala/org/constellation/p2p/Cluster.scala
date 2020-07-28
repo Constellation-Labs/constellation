@@ -138,7 +138,6 @@ class Cluster[F[_]](
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
-  private val registrationSessions: Ref[F, Map[String, Id]] = Ref.unsafe[F, Map[String, Id]](Map.empty)
 
   private val peerDiscovery = PeerDiscovery[F](apiClient, this, dao.id)
 
@@ -148,16 +147,6 @@ class Cluster[F[_]](
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
   private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
-
-  def setPeerRegistrationSession(ip: String, id: Id): F[Unit] =
-    registrationSessions.modify { r =>
-      (r + (ip -> id), ())
-    }
-
-  def removePeerRegistrationSession(ip: String, id: Id): F[Unit] =
-    registrationSessions.modify { r =>
-      (r - ip, ())
-    }
 
   def setJoinedAsInitialFacilitator(joined: Boolean): F[Unit] =
     joinedAsInitialFacilitator.modify { j =>

@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Changed
+- Remove IP from whitelisting and introduce dynamic IP to Id mapping
 
 ## [v2.12.0] 2020-07-17
 ## Changed
