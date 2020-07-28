@@ -108,7 +108,8 @@ object ConstellationNode extends IOApp {
           logger(apiClient),
           nodeConfig.primaryKeyPair.getPrivate,
           nodeConfig.hostName,
-          sessionTokenService
+          sessionTokenService,
+          nodeConfig.primaryKeyPair.getPublic.toId
         )
 
       cloudService <- Resource.liftF(IO.delay { CloudService[IO](cloudConfig) })
@@ -175,13 +176,14 @@ object ConstellationNode extends IOApp {
           .getPeerData(ip)
           .map(_.filter(pd => NodeState.canUseAPI(pd.peerMetadata.nodeState)).map(_.peerMetadata.id))
       }
-      getWhitelistedPeerId = { (ip: IP) =>
-        dao.nodeConfig.whitelisting.get(ip).pure[IO]
+
+      isIdWhitelisted = { (id: Id) =>
+        dao.nodeConfig.whitelisting.contains(id)
       }
 
-      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getWhitelistedPeerId)(
+      peerEndpoints = PeerAuthMiddleware.requestVerifierMiddleware(getKnownPeerId, isIdWhitelisted)(
         peerPublicEndpoints <+> PeerAuthMiddleware.requestTokenVerifierMiddleware(dao.sessionTokenService)(
-          PeerAuthMiddleware.enforceKnownPeersMiddleware(getWhitelistedPeerId, getKnownPeerId)(
+          PeerAuthMiddleware.enforceKnownPeersMiddleware(getKnownPeerId, isIdWhitelisted)(
             peerWhitelistedEndpoints
           )
         )

@@ -20,9 +20,6 @@ object PeerResponse {
 
   object PeerClientMetadata {
     def apply(host: String, port: Int, id: Id): PeerClientMetadata = PeerClientMetadata(host, port.toString, id)
-
-    implicit val peerClientMetadataEncoder: Encoder[PeerClientMetadata] = deriveEncoder
-    implicit val peerClientMetadataDecoder: Decoder[PeerClientMetadata] = deriveDecoder
   }
 
   def getUri(pm: PeerClientMetadata, path: String): Uri =

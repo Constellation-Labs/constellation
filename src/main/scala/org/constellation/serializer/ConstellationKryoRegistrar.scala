@@ -7,7 +7,7 @@ import org.constellation.consensus._
 import org.constellation.domain.observation._
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.p2p.{PeerNotification}
+import org.constellation.p2p.PeerNotification
 import org.constellation.primitives.Schema._
 import org.constellation.primitives.{SignedData, _}
 import org.constellation.schema.Id
@@ -24,6 +24,7 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.primitives.IPManager.IP
 import org.constellation.rewards.EigenTrustAgents
+import org.constellation.session.Registration.JoinRequestPayload
 
 import scala.collection.SortedMap
 import scala.collection.immutable.TreeMap

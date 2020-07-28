@@ -2,6 +2,7 @@ package org.constellation.domain.p2p.client
 
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
+import org.constellation.schema.Id
 import org.constellation.util.SingleHashSignature
 
 trait SignClientAlgebra[F[_]] {

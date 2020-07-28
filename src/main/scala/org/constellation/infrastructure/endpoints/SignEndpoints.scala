@@ -15,6 +15,8 @@ import SingleHashSignature._
 import PeerRegistrationRequest._
 import HostPort._
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.schema.Id
+import org.constellation.session.Registration.JoinRequestPayload
 
 class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 
@@ -46,8 +48,8 @@ class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends
   private def joinEndpoint(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "join" =>
       (for {
-        hostPort <- req.decodeJson[PeerClientMetadata]
-        _ <- F.start(C.shift >> cluster.join(hostPort))
+        hostPort <- req.decodeJson[JoinRequestPayload]
+        _ <- F.start(C.shift >> cluster.join(PeerClientMetadata(hostPort.host, hostPort.port, Id(hostPort.id))))
       } yield ()) >> Ok()
   }
 
@@ -57,7 +59,7 @@ class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends
   }
 
   private def getRegistrationRequest(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case req @ GET -> Root / "registration" / "request" =>
+    case GET -> Root / "registration" / "request" =>
       cluster.pendingRegistrationRequest.map(_.asJson).flatMap(Ok(_))
   }
 
