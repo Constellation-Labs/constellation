@@ -241,21 +241,22 @@ object ConstellationNode extends IOApp {
     }
   }
 
-  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Set[Id]] =
+  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Map[Id, Option[String]]] =
     for {
       source <- Sync[F].delay {
         Source.fromFile(cliConfig.whitelisting)
       }
-      ids = source
-        .getLines()
-        .filter(_.nonEmpty)
-        .map(_.trim)
-        .map(Id(_))
-        .toSet
+      lines = source.getLines().filter(_.nonEmpty).toList
+      values = lines.map(_.split(",").map(_.trim).toList)
+      mappedValues = values.map {
+        case id :: alias :: Nil => Map(Id(id) -> Some(alias))
+        case id :: Nil          => Map(Id(id) -> None)
+        case _                  => Map.empty[Id, Option[String]]
+      }.fold(Map.empty[Id, Option[String]])(_ ++ _)
       _ <- Sync[F].delay {
         source.close()
       }
-    } yield ids
+    } yield mappedValues
 
   private def getAllocAccountBalances[F[_]: Sync](cliConfig: CliConfig): F[Seq[AccountBalance]] = Sync[F].delay {
     Try(new AccountBalanceCSVReader(cliConfig.allocFilePath, cliConfig.allocFileNormalized).read()).getOrElse(Seq.empty)

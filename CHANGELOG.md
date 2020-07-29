@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Added
+- Possibility to set alias for node in whitelisting file (and including it in cluster/info)
 ## Changed
 - Remove IP from whitelisting and introduce dynamic IP to Id mapping
 - Remove offline peers after snapshot

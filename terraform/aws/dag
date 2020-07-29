@@ -120,14 +120,15 @@ restart() {
   sleep 15
 
   headIP=`head -1 $HOSTS_FILE`
-  headID=`head -1 whitelisting-$TAG`
-  echo "headID: $headID"
+  headNode=`head -1 whitelisting-$TAG`
+  headId=$(echo $headNode | cut -d "," -f 1)
+  echo "headId: $headId"
   while read ip; do
     if [ "$ip" == "$headIP" ]; then
       echo "Skipping genesis node"
     else
       echo "Joining node: $ip"
-      ssh admin@$ip -o StrictHostKeyChecking=no -n "curl -s -X POST http://127.0.0.1:9002/join -H 'Content-type: application/json' -d '{ \"host\": \"$headIP\", \"port\": 9001, \"id\": \"$headID\" }'"
+      ssh admin@$ip -o StrictHostKeyChecking=no -n "curl -s -X POST http://127.0.0.1:9002/join -H 'Content-type: application/json' -d '{ \"host\": \"$headIP\", \"port\": 9001, \"id\": \"$headId\" }'"
     fi
   done <$HOSTS_FILE
 }
@@ -203,13 +204,13 @@ whitelist() {
   checkHosts
 
   i=0
-  while read ip; do
+  while read alias; do
     line=$((i+1))
     id=$(awk "NR==$line {print; exit}" ids)
     if [ $i -eq 0 ]; then
-      echo "$id" > whitelisting-$TAG
+      echo "$id,alias" > whitelisting-$TAG
     else
-      echo "$id" >> whitelisting-$TAG
+      echo "$id,alias" >> whitelisting-$TAG
     fi
 
     ((i++))

@@ -42,6 +42,8 @@ trait NodeData {
 
   def id: Id = keyPair.getPublic.toId
 
+  def alias: Option[String] = nodeConfig.whitelisting.get(id).flatten
+
   def selfAddressStr: String = id.address
 
   val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address

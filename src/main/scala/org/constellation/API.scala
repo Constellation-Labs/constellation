@@ -12,6 +12,7 @@ case class PeerMetadata(
   host: String,
   httpPort: Int,
   id: Id,
+  alias: Option[String] = None,
   nodeState: NodeState = NodeState.Ready,
   timeAdded: Long = System.currentTimeMillis(),
   auxHost: String = "",
