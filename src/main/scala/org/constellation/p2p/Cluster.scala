@@ -536,7 +536,6 @@ class Cluster[F[_]](
     "cluster_markOfflinePeer"
   )
 
-  // TODO: not used but should be used for removing old peers
   def removePeer(pd: PeerData): F[Unit] =
     logThread(
       LiftIO[F]

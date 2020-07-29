@@ -15,8 +15,8 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.p2p.{Cluster}
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.p2p.Cluster
+import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
 import org.constellation.primitives._
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.Id
@@ -148,6 +148,7 @@ class SnapshotService[F[_]: Concurrent](
       //      _ <- writeEigenTrustToDisk(snapshot.snapshot)
 
       _ <- markLeavingPeersAsOffline().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
+      _ <- removeOfflinePeers().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       created = SnapshotCreated(
         nextSnapshot.hash,
@@ -531,7 +532,22 @@ class SnapshotService[F[_]: Concurrent](
         _.values.toList.map(_.peerMetadata.id).traverse { p =>
           LiftIO[F]
             .liftIO(dao.cluster.markOfflinePeer(p))
-            .handleErrorWith(err => logger.error(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
+            .handleErrorWith(err => logger.error(err)(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
+        }
+      }
+      .void
+
+  private def removeOfflinePeers(): F[Unit] =
+    LiftIO[F]
+      .liftIO(dao.cluster.getPeerInfo)
+      .map(_.filter {
+        case (id, pd) => NodeState.offlineStates.contains(pd.peerMetadata.nodeState)
+      })
+      .flatMap {
+        _.values.toList.traverse { p =>
+          LiftIO[F]
+            .liftIO(dao.cluster.removePeer(p))
+            .handleErrorWith(err => logger.error(err)(s"Cannot remove offline peer: ${err.getMessage}"))
         }
       }
       .void
