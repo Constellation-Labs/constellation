@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.13.0] 2020-07-29
 ## Added
 - Possibility to set alias for node in whitelisting file (and including it in cluster/info)
 ## Changed
