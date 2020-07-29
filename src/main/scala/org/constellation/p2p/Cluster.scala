@@ -129,6 +129,8 @@ class Cluster[F[_]](
 
   def id = dao.id
 
+  def alias = dao.alias
+
   private val ownJoinedHeight: Ref[F, Option[Long]] = Ref.unsafe[F, Option[Long]](None)
   private val participatedInGenesisFlow: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
   private val participatedInRollbackFlow: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
@@ -184,7 +186,9 @@ class Cluster[F[_]](
 
   def clusterNodes(): F[List[ClusterNode]] =
     getPeerInfo.map(_.values.toList.map(_.peerMetadata).map(ClusterNode(_))).flatMap { nodes =>
-      getNodeState.map(ClusterNode(dao.id, dao.peerHostPort, _, 0L)).map(nodes ++ List(_))
+      getNodeState
+        .map(ClusterNode(dao.alias.getOrElse(dao.id.short), dao.id, dao.peerHostPort, _, 0L))
+        .map(nodes ++ List(_))
     }
 
   def getPeerInfo: F[Map[Id, PeerData]] = peers.get
@@ -337,13 +341,15 @@ class Cluster[F[_]](
                 existingMajorityHeight <- getPeerInfo.map(
                   _.get(id).map(_.majorityHeight).filter(_.head.isFinite)
                 )
+                alias = dao.nodeConfig.whitelisting.get(id).flatten
                 peerMetadata = PeerMetadata(
                   request.host,
                   request.port,
                   id,
                   nodeState = state.nodeState,
                   auxAddresses = state.addresses,
-                  resourceInfo = request.resourceInfo
+                  resourceInfo = request.resourceInfo,
+                  alias = alias
                 )
                 majorityHeight = MajorityHeight(request.majorityHeight)
                 majorityHeights = existingMajorityHeight
@@ -844,10 +850,12 @@ object Cluster {
     dao: DAO
   ) = new Cluster(ipManager, joiningPeerValidator, apiClient, sessionTokenService, dao)
 
-  case class ClusterNode(id: Id, ip: HostPort, status: NodeState, reputation: Long)
+  case class ClusterNode(alias: String, id: Id, ip: HostPort, status: NodeState, reputation: Long)
 
   object ClusterNode {
-    def apply(pm: PeerMetadata) = new ClusterNode(pm.id, HostPort(pm.host, pm.httpPort), pm.nodeState, 0L)
+
+    def apply(pm: PeerMetadata) =
+      new ClusterNode(pm.alias.getOrElse(pm.id.short), pm.id, HostPort(pm.host, pm.httpPort), pm.nodeState, 0L)
 
     implicit val clusterNodeEncoder: Encoder[ClusterNode] = deriveEncoder
     implicit val clusterNodeDecoder: Decoder[ClusterNode] = deriveDecoder
