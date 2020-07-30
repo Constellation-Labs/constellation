@@ -133,6 +133,7 @@ class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(duration.MILLISECONDS)
     _ <- updateMetricAsync[IO]("id", dao.id.hex)
+    _ <- updateMetricAsync[IO]("alias", dao.alias.getOrElse(dao.id.short))
     _ <- updateMetricAsync[IO]("address", dao.selfAddressStr)
     _ <- updateMetricAsync[IO]("nodeStartTimeMS", currentTime.toString)
     _ <- updateMetricAsync[IO]("nodeStartDate", new DateTime(currentTime).toString)

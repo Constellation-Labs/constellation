@@ -69,6 +69,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
     dao.dbPath shouldReturn f
 
     dao.id shouldReturn Fixtures.id
+    dao.alias shouldReturn None
 
     val rds = mock[RedownloadService[IO]]
     dao.redownloadService shouldReturn rds

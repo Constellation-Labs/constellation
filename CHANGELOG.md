@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Added
+- Alias available in node metrics 
 
 ## [v2.13.0] 2020-07-29
 ## Added
