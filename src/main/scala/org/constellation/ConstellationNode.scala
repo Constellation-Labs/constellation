@@ -273,7 +273,7 @@ object ConstellationNode extends IOApp {
 
   private def getKeyPair[F[_]: Sync](cliConfig: CliConfig): F[KeyPair] =
     KeyStoreUtils
-      .keyPairFromStorePath(cliConfig.keyStorePath, cliConfig.alias)
+      .keyPairFromStorePathAndEnv(cliConfig.keyStorePath, cliConfig.alias)
       .value
       .flatMap({
         case Right(keyPair) => keyPair.pure[F]

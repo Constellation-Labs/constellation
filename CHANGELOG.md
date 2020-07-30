@@ -15,6 +15,10 @@ All notable changes to this project will be documented in this file.
 ## Changed
 - Adjusted PeerHealthCheck 
 
+## Changed
+- Adjusted KeyStoreUtils for CoMakery integration
+- Removed SpongyCastle and replaced it with BouncyCastle
+
 ## [v2.13.0] 2020-07-29
 ## Added
 - Possibility to set alias for node in whitelisting file (and including it in cluster/info)
