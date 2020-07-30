@@ -56,23 +56,7 @@ resource "aws_instance" "node" {
   }
 
   provisioner "file" {
-    content = templatefile("${path.module}/templates/whitelisting_to_targets.sh.tpl", {
-      url = var.whitelisting_file_url
-    })
-    destination = "~/grafana-dashboard/prometheus/whitelisting_to_targets.sh"
-
-    connection {
-      host = self.public_ip
-      type = "ssh"
-      user = local.ssh_user
-      timeout = "30s"
-    }
-  }
-
-  provisioner "file" {
-    content = templatefile("${path.module}/templates/setup.sh.tpl", {
-      discovery_mode = var.discovery_mode
-    })
+    source = "${path.module}/templates/setup.sh"
     destination = "~/grafana-dashboard/prometheus/setup.sh"
 
     connection {

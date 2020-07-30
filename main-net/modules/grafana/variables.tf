@@ -18,14 +18,6 @@ variable "disk_size" {
   type = number
 }
 
-variable "discovery_mode" {
-  type = bool
-}
-
-variable "whitelisting_file_url" {
-  type = string
-}
-
 variable "cluster_info_url" {
   type = string
 }

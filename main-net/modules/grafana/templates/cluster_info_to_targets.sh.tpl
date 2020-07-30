@@ -6,7 +6,7 @@ QUERY='
   map({
     targets: [(.ip.host + ":9000")],
     labels: {
-      alias: "constellation",
+      alias: .alias,
       id: .id.hex
     }
   })
