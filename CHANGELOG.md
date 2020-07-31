@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.13.2] 2020-07-31
+## Fixed
+- Adjusted PeerHealthCheck node statuses 
+
 ## [v2.13.1] 2020-07-31
 ## Added
 - Alias available in node metrics
