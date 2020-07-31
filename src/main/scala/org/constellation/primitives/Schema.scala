@@ -111,6 +111,8 @@ object Schema {
 
     def canUseAPI(current: NodeState): Boolean = !invalidForCommunication.contains(current)
 
+    def canBeCheckedForHealth(current: NodeState): Boolean = readyStates.contains(current)
+
   }
 
   sealed trait NodeType extends EnumEntry
