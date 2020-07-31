@@ -13,7 +13,7 @@ class PeerHealthCheckWatcher(config: Config, peerHealthCheck: PeerHealthCheck[IO
 
   override def trigger(): IO[Unit] = peerHealthCheck.check()
 
-  schedule(15 seconds, ConfigUtil.getDurationFromConfig("constellation.health-check.p2p-interval", 10 seconds, config))
+  schedule(30 seconds, ConfigUtil.getDurationFromConfig("constellation.health-check.p2p-interval", 10 seconds, config))
 }
 
 object PeerHealthCheckWatcher {

@@ -25,12 +25,12 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
   C: Clock[F]
 ) {
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
-  val periodicCheckTimeout: FiniteDuration = 5.seconds
-  val confirmationCheckTimeout: FiniteDuration = 5.seconds
-  val ensureSleepTimeBetweenChecks: FiniteDuration = 3.seconds
+  val periodicCheckTimeout: FiniteDuration = 10.seconds
+  val confirmationCheckTimeout: FiniteDuration = 10.seconds
+  val ensureSleepTimeBetweenChecks: FiniteDuration = 10.seconds
   val ensureDefaultAttempts = 3
   val cacheAfterChecks = ensureDefaultAttempts
-  val cacheForTime = 30.seconds
+  val cacheForTime = 300.seconds
 
   val state: Ref[F, Map[Id, PeerHealthCheckStatus]] = Ref.unsafe(Map.empty)
 
