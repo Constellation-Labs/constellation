@@ -47,7 +47,7 @@ jobs:
             docker/keytool/cl-keytool.jar
             docker/wallet/cl-wallet.jar
             docker/node/cl-node.jar
-            main-net/whitelisting
+            main-net/mainnet-whitelisting
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
