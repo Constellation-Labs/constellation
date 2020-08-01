@@ -1,14 +1,12 @@
 package org.constellation.datastore.swaydb
-import cats.effect.IO
 import org.constellation.consensus.Snapshot
-import org.constellation.primitives.Schema.{CheckpointCache, CheckpointCacheMetadata}
+import org.constellation.primitives.Schema.CheckpointCacheMetadata
 import org.constellation.primitives.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import swaydb.data.slice.Slice
 import swaydb.serializers.Serializer
 
 object SwayDbConversions {
-  implicit def swayIOtoIO[A](io: swaydb.data.IO[A]): IO[A] = IO(io.get)
 
   class SwayDbKryoSerializer[T <: AnyRef] extends Serializer[T] {
 

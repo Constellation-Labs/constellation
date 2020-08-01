@@ -53,6 +53,7 @@ lazy val versions = new {
   val circeEnumeratum = "1.5.23"
   val circeGenericExtras = "0.13.0"
   val fs2 = "2.4.2"
+  val swaydb = "0.14.2"
 }
 
 lazy val http4sDependencies = Seq(
@@ -117,7 +118,8 @@ lazy val coreDependencies = Seq(
   "net.glxn" % "qrgen" % "1.4",
   //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
-  "io.swaydb" %% "swaydb" % "0.7.1",
+  "io.swaydb" %% "swaydb" % versions.swaydb,
+  "io.swaydb" %% "cats-effect" % versions.swaydb,
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.kontainers" %% "micrometer-akka" % "0.10.2",
   "io.prometheus" % "simpleclient" % versions.prometheus,

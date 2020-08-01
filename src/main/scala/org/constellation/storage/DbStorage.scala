@@ -3,20 +3,30 @@ package org.constellation.storage
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.datastore.swaydb.SwayDbConversions._
 import org.constellation.storage.algebra.LookupAlgebra
 import swaydb.data.config.MMAP
 import swaydb.persistent
 import swaydb.serializers.Serializer
 
-abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[K], valueSerializer: Serializer[V])
+import scala.concurrent.ExecutionContext
+
+abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[K],
+                                             valueSerializer: Serializer[V],
+                                             contextShift: ContextShift[IO],
+                                             ec: ExecutionContext)
     extends LookupAlgebra[IO, K, V] {
 
-  val db: swaydb.Map[K, V] = persistent
-    .Map[K, V](dir = dbPath.path, mmapMaps = false, mmapSegments = MMAP.Disabled, mmapAppendix = false)
-    .get
+  implicit val bag =  swaydb.cats.effect.Bag(contextShift, ec)
+
+  val db: swaydb.Map[K, V, Nothing, IO] =
+    persistent.Map[K, V, Nothing, IO](
+        dir = dbPath.path,
+        mmapMaps = false,
+        segmentConfig = persistent.DefaultConfigs.segmentConfig().copy(mmap = MMAP.Disabled),
+        mmapAppendix = false
+      ).unsafeRunSync()
 
   def lookup(key: K): IO[Option[V]] = db.get(key)
 
@@ -24,20 +34,22 @@ abstract class DbStorage[K, V](dbPath: File)(implicit keySerializer: Serializer[
 
   def putSync(key: K, value: V): Unit = put(key, value).unsafeRunSync()
 
-  def put(key: K, value: V): IO[Unit] = IO(db.put(key, value).get).map(_ => ())
+  def put(key: K, value: V): IO[Unit] = db.put(key, value).map(_ => ())
 
-  def putAll(kvs: Iterable[(K, V)]): IO[Unit] = IO(db.put(kvs))
+  def putAll(kvs: Iterable[(K, V)]): IO[Unit] = db.put(kvs).map(_ => ())
 
   def removeSync(key: K): Unit = remove(key).unsafeRunSync()
 
   def remove(key: K): IO[Unit] = db.remove(key).map(_ => ())
 
-  def size: Int = db.size
+  def size: IO[Int] = db.sizeOfBloomFilterEntries
 }
 
 abstract class MidDbStorage[K, V](dbPath: File, capacity: Int)(
   implicit keySerializer: Serializer[K],
-  valueSerializer: Serializer[V]
+  valueSerializer: Serializer[V],
+  contextShift: ContextShift[IO],
+  ec: ExecutionContext
 ) extends DbStorage[K, V](dbPath) {
 
   private val hashQueue: ConcurrentLinkedQueue[K] = new ConcurrentLinkedQueue[K]()

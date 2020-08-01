@@ -8,6 +8,8 @@ import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.datastore.{KVDB, KVDBDatastoreImpl}
 import org.constellation.serializer.KryoSerializer
 
+import scala.util.Try
+
 class SwayDBImpl(dao: DAO) extends KVDB {
 
   implicit val d: DAO = dao
@@ -20,17 +22,17 @@ class SwayDBImpl(dao: DAO) extends KVDB {
   //Create a persistent database. If the directories do not exist, they will be created.
   private val db =
     persistent
-      .Map[String, Array[Byte]](
+      .Map[String, Array[Byte], Nothing, Try](
         dir = (dao.dbPath / "disk1").path,
         mmapMaps = false,
-        mmapSegments = MMAP.Disabled,
+        segmentConfig = persistent.DefaultConfigs.segmentConfig().copy(mmap = MMAP.Disabled),
         mmapAppendix = false
       )
       .get
 
   override def put(key: String, obj: AnyRef): Boolean = {
     val triedMeter = db.put(key, KryoSerializer.serializeAnyRef(obj))
-    tryToMetric(triedMeter.toTry, "dbPutAttempt")
+    tryToMetric(triedMeter, "dbPutAttempt")
 
     /*    val getCheckAttempt = get[AnyRef](key)
     if (getCheckAttempt.isEmpty) {
@@ -42,7 +44,7 @@ class SwayDBImpl(dao: DAO) extends KVDB {
 
   override def get[T <: AnyRef](key: String): Option[T] = {
     val triedMaybeBytes = db.get(key)
-    tryToMetric(triedMaybeBytes.toTry, "dbGetAttempt")
+    tryToMetric(triedMaybeBytes, "dbGetAttempt")
 
     triedMaybeBytes.toOption.flatten.flatMap { ab =>
       tryWithMetric({ KryoSerializer.deserialize(ab).asInstanceOf[T] }, "kryoDeserializeDB").toOption
@@ -79,16 +81,16 @@ class SwayDBDatastore(dao: DAO) extends KVDBDatastoreImpl {
 
 object SwayDBDatastore {
 
-  def duplicateCheckStore(dao: DAO, path: String): swaydb.Set[String] = {
+  def duplicateCheckStore(dao: DAO, path: String): swaydb.Set[String, Nothing, Try] = {
 
     import swaydb._
     import swaydb.serializers.Default._ //import default serializers
 
     persistent
-      .Set[String](
+      .Set[String, Nothing, Try](
         dir = (dao.dbPath / path).path,
         mmapMaps = false,
-        mmapSegments = MMAP.Disabled,
+        segmentConfig = persistent.DefaultConfigs.segmentConfig().copy(mmap = MMAP.Disabled),
         mmapAppendix = false
       )
       .get
