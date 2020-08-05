@@ -79,7 +79,8 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
     val id = o.signedObservationData.data.id
 
     storedReputation.modify { reputation =>
-      val updated = Math.max(reputation.getOrElse(id, 1d) + score, -1d)
+      //    val updated = Math.max(reputation.getOrElse(id, 1d) + score, -1d)
+      val updated = 1d
       (reputation + (id -> updated), ())
     }
   }
