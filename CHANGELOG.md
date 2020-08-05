@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Adjust reputation to observations
 
 ## [v2.13.2] 2020-07-31
 ## Fixed
