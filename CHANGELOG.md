@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.13.4] 2020-08-05
+## Changed
+- Changed ID of one of node operators
+
 ## [v2.13.3] 2020-08-05
 ## Changed
 - Use aliases instead of ips in Grafana
