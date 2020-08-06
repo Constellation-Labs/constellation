@@ -34,7 +34,7 @@ object Wallet extends IOApp {
 
   def getKeypair[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyPair] =
     if (Option(cliParams.loadFromEnvArgs).nonEmpty) {
-      KeyStoreUtils.keyPairFromStorePathAndEnv[F](cliParams.keystore, cliParams.alias)
+      KeyStoreUtils.keyPairFromStorePath[F](cliParams.keystore, cliParams.alias)
     } else {
       KeyStoreUtils.keyPairFromStorePath[F](cliParams.keystore, cliParams.alias, cliParams.storepass, cliParams.keypass)
     }

@@ -89,8 +89,12 @@ lazy val sharedDependencies = Seq(
 
 lazy val keyToolSharedDependencies = Seq(
   "com.google.cloud" % "google-cloud-storage" % "1.91.0",
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.65",
-  "org.bouncycastle" % "bcpkix-jdk15on" % "1.65"
+  "com.madgag.spongycastle" % "core" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
+  "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.65"
 ) ++ sharedDependencies
 
 lazy val walletSharedDependencies = Seq(
@@ -164,14 +168,6 @@ assemblyMergeStrategy in assembly := {
     oldStrategy(x)
 }
 
-lazy val walletKeytoolMergeStrategy =
-  assemblyMergeStrategy in assembly := {
-    case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-    case x =>
-      val oldStrategy = (assemblyMergeStrategy in assembly).value
-      oldStrategy(x)
-  }
-
 lazy val root = (project in file("."))
   .dependsOn(schema)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
@@ -210,7 +206,6 @@ lazy val keytool = (project in file("keytool"))
     buildInfoPackage := "org.constellation.keytool",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.keytool.KeyTool"),
-    walletKeytoolMergeStrategy,
     libraryDependencies ++= keyToolSharedDependencies
   )
 
@@ -226,7 +221,6 @@ lazy val wallet = (project in file("wallet"))
     buildInfoPackage := "org.constellation.wallet",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.wallet.Wallet"),
-    walletKeytoolMergeStrategy,
     libraryDependencies ++= walletSharedDependencies
   )
 

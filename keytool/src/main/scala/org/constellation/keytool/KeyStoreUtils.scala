@@ -2,7 +2,7 @@ package org.constellation.keytool
 
 import java.io._
 import java.security.cert.Certificate
-import java.security.{Key, KeyPair, KeyStore, PrivateKey, Provider}
+import java.security.{Key, KeyPair, KeyStore, PrivateKey}
 
 import cats.data.EitherT
 import cats.effect._
@@ -59,7 +59,7 @@ object KeyStoreUtils {
         Sync[F].delay { pemWriter.writeObject(pemObj) }
       }
 
-  private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair, signFunction: String): F[Array[Certificate]] =
+  private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {
       // TODO: Maybe move to config
       val dn = DistinguishedName(
@@ -69,17 +69,14 @@ object KeyStoreUtils {
 
       val validity = 365 * 1000 // // 1000 years of validity should be enough I guess
 
-      val certificate = SelfSignedCertificate.generate(dn.toString, keyPair, validity, signFunction)
+      val certificate = SelfSignedCertificate.generate(dn.toString, keyPair, validity, KeyUtils.DefaultSignFunc)
       Array(certificate)
     }
 
   private def unlockKeyStore[F[_]: Sync](
     password: Array[Char]
-  )(provider: Option[Provider])(stream: FileInputStream): F[KeyStore] = Sync[F].delay {
-    val keyStore = provider match {
-      case Some(provider) => KeyStore.getInstance(storeType, provider)
-      case None           => KeyStore.getInstance(storeType)
-    }
+  )(stream: FileInputStream): F[KeyStore] = Sync[F].delay {
+    val keyStore = KeyStore.getInstance(storeType)
     keyStore.load(stream, password)
     keyStore
   }
@@ -130,8 +127,7 @@ object KeyStoreUtils {
     path: String,
     alias: String,
     storePassword: Array[Char],
-    keyPassword: Array[Char],
-    signFunction: String = KeyUtils.DefaultSignFunc
+    keyPassword: Array[Char]
   ): EitherT[F, Throwable, KeyStore] =
     writer(withExtension(path))
       .use(
@@ -139,7 +135,7 @@ object KeyStoreUtils {
           for {
             keyStore <- createEmptyKeyStore(storePassword)
             keyPair <- KeyUtils.makeKeyPair().pure[F]
-            chain <- generateCertificateChain(keyPair, signFunction)
+            chain <- generateCertificateChain(keyPair)
             _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
             _ <- store(stream, storePassword)(keyStore)
           } yield keyStore
@@ -151,15 +147,14 @@ object KeyStoreUtils {
     path: String,
     alias: String,
     storePassword: Array[Char],
-    keyPassword: Array[Char],
-    signFunction: String = KeyUtils.DefaultSignFunc
+    keyPassword: Array[Char]
   ): EitherT[F, Throwable, KeyStore] =
     writer(withExtension(path))
       .use(
         stream =>
           for {
             keyStore <- createEmptyKeyStore(storePassword)
-            chain <- generateCertificateChain(keyPair, signFunction)
+            chain <- generateCertificateChain(keyPair)
             _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
             _ <- store(stream, storePassword)(keyStore)
           } yield keyStore
@@ -175,15 +170,14 @@ object KeyStoreUtils {
       keyStore <- keyPairToStorePath(path, alias, env.storepass, env.keypass)
     } yield keyStore
 
-  def keyPairFromStorePathAndEnv[F[_]: Sync](
+  def keyPairFromStorePath[F[_]: Sync](
     path: String,
-    alias: String,
-    provider: Option[Provider] = None
+    alias: String
   ): EitherT[F, Throwable, KeyPair] =
     for {
       env <- loadEnvPasswords
       keyPair <- reader(path)
-        .evalMap(unlockKeyStore[F](env.storepass)(provider))
+        .evalMap(unlockKeyStore[F](env.storepass))
         .evalMap(unlockKeyPair[F](alias, env.keypass))
         .use(_.pure[F])
         .attemptT
@@ -193,11 +187,10 @@ object KeyStoreUtils {
     path: String,
     alias: String,
     storepass: Array[Char],
-    keypass: Array[Char],
-    provider: Option[Provider] = None
+    keypass: Array[Char]
   ): EitherT[F, Throwable, KeyPair] =
     reader(path)
-      .evalMap(unlockKeyStore[F](storepass)(provider))
+      .evalMap(unlockKeyStore[F](storepass))
       .evalMap(unlockKeyPair[F](alias, keypass))
       .use(_.pure[F])
       .attemptT

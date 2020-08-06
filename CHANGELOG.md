@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Changed
+- Revert changes in KeyStoreUtils and the change from SpongyCastle to BouncyCastle - caused errors on linux env
 
 ## [v2.13.4] 2020-08-05
 ## Changed
@@ -10,7 +12,8 @@ All notable changes to this project will be documented in this file.
 ## [v2.13.3] 2020-08-05
 ## Changed
 - Use aliases instead of ips in Grafana
-- Adjust KeyStoreUtils to reuse functionality in comakery-hot-wallet
+- Adjusted KeyStoreUtils for CoMakery integration
+- Removed SpongyCastle and replaced it with BouncyCastle
 - Whitelisted all batch1 operators
 ## Fixed
 - Adjust reputation to observations
@@ -24,10 +27,6 @@ All notable changes to this project will be documented in this file.
 - Alias available in node metrics
 ## Changed
 - Adjusted PeerHealthCheck 
-
-## Changed
-- Adjusted KeyStoreUtils for CoMakery integration
-- Removed SpongyCastle and replaced it with BouncyCastle
 
 ## [v2.13.0] 2020-07-29
 ## Added
