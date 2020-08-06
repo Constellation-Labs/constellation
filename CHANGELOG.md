@@ -1,9 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v2.13.5] 2020-08-06
 ## Changed
 - Revert changes in KeyStoreUtils and the change from SpongyCastle to BouncyCastle - caused errors on linux env
+- Update whitelisting
 
 ## [v2.13.4] 2020-08-05
 ## Changed
