@@ -6,11 +6,11 @@ import java.security.{KeyPair, SecureRandom, Security}
 import java.util.{Calendar, Date}
 
 import org.bouncycastle.jce.provider.BouncyCastleProvider
-import org.bouncycastle.asn1.x500.X500Name
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo
-import org.bouncycastle.cert.X509v3CertificateBuilder
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import org.spongycastle.asn1.x500.X500Name
+import org.spongycastle.asn1.x509.SubjectPublicKeyInfo
+import org.spongycastle.cert.X509v3CertificateBuilder
+import org.spongycastle.cert.jcajce.JcaX509CertificateConverter
+import org.spongycastle.operator.jcajce.JcaContentSignerBuilder
 
 /**
   * KeyStore does not store PublicKeys directly but forces PublicKeys to be wrapped by Certificate.
