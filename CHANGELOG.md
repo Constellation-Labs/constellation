@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Changed
 - Revert changes in KeyStoreUtils and the change from SpongyCastle to BouncyCastle - caused errors on linux env
+- Changed ID of one of node operators
 
 ## [v2.13.4] 2020-08-05
 ## Changed
