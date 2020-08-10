@@ -405,7 +405,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       maxAccepted = accepted.keySet.toList.maximumOption.getOrElse(0L)
 
       toSend = majorityState.filterKeys(_ > lastHeight).filterKeys(_ <= maxAccepted)
-      hashes = toSend.toList
+      hashes = toSend.toList.sortBy { case (height, _) => height }
 
       uploadSnapshots <- hashes.traverse {
         case (height, hash) =>
