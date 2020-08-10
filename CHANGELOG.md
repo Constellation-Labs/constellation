@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+## Fixed
+- Sorting of queued snapshots for cloud backup
+
 ## [v2.13.5] 2020-08-06
 ## Changed
 - Revert changes in KeyStoreUtils and the change from SpongyCastle to BouncyCastle - caused errors on linux env
