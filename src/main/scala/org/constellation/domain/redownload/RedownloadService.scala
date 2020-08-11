@@ -409,16 +409,28 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       uploadSnapshots <- hashes.traverse {
         case (height, hash) =>
-          snapshotStorage.getFile(hash).rethrowT.map {
-            cloudService.enqueueSnapshot(_, height, hash)
-          }
+          snapshotStorage
+            .getFile(hash)
+            .rethrowT
+            .map {
+              cloudService.enqueueSnapshot(_, height, hash)
+            }
+            .handleErrorWith(
+              err => logger.error(err)(s"Cannot enqueue snapshot, height: ${height}, hash: ${hash}").pure[F]
+            )
       }
 
       uploadSnapshotInfos <- hashes.traverse {
         case (height, hash) =>
-          snapshotInfoStorage.getFile(hash).rethrowT.map {
-            cloudService.enqueueSnapshotInfo(_, height, hash)
-          }
+          snapshotInfoStorage
+            .getFile(hash)
+            .rethrowT
+            .map {
+              cloudService.enqueueSnapshotInfo(_, height, hash)
+            }
+            .handleErrorWith(
+              err => logger.error(err)(s"Cannot enqueue snapshot info, height: ${height}, hash: ${hash}").pure[F]
+            )
       }
 
       // For now we do not restore EigenTrust model
