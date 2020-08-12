@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.13.7] 2020-08-12
+## Changed
+- Changed whitelisting file
+
 ## [v2.13.6] 2020-08-11
 ## Fixed
 - Sorting of queued snapshots for cloud backup
