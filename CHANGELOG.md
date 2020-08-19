@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Gaps in cloud queue fixed by calculating diff between majority and already sent
 
 ## [v2.13.7] 2020-08-12
 ## Changed

@@ -1,24 +1,16 @@
 package org.constellation.domain.cloud
 
 import better.files.File
-import cats.data.EitherT
-import cats.implicits._
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
+import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.cloud.CloudService.{
-  CloudServiceEnqueue,
-  DataToSend,
-  GenesisToSend,
-  SnapshotInfoToSend,
-  SnapshotSent,
-  SnapshotToSend
-}
-import org.constellation.domain.cloud.config.{CloudConfig, GCP, Local, S3, S3Compat}
-import org.constellation.domain.cloud.providers.{CloudServiceProvider, GCPProvider, LocalProvider, S3Provider}
-import org.constellation.primitives.Schema.GenesisObservation
 import fs2._
 import fs2.concurrent.Queue
+import org.constellation.domain.cloud.CloudService._
+import org.constellation.domain.cloud.config._
+import org.constellation.domain.cloud.providers.{CloudServiceProvider, GCPProvider, LocalProvider, S3Provider}
+import org.constellation.primitives.Schema.GenesisObservation
 
 class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: Concurrent[F]) {
 
@@ -29,17 +21,19 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
   def cloudSendingQueue(queue: Queue[F, DataToSend]): F[CloudServiceEnqueue[F]] = {
     val send: F[Unit] = queue.dequeue.through(sendFile).compile.drain
 
-    F.start(send).map { fiber =>
+    F.start(send).map { _ =>
       // TODO: fiber -> we may want to cancel a queue
       new CloudServiceEnqueue[F]() {
         def enqueueGenesis(genesis: GenesisObservation): F[Unit] =
           queue.enqueue1(GenesisToSend(genesis)) >> logger.debug(s"Enqueued genesis")
+
         def enqueueSnapshot(snapshot: File, height: Long, hash: String): F[Unit] =
           queue.enqueue1(SnapshotToSend(snapshot, height, hash)) >> logger
-            .debug(s"Enqueued snapshot height=${height} hash=${hash}")
+            .debug(s"Enqueued snapshot height=$height hash=$hash")
+
         def enqueueSnapshotInfo(snapshotInfo: File, height: Long, hash: String): F[Unit] =
           queue.enqueue1(SnapshotInfoToSend(snapshotInfo, height, hash)) >> logger
-            .debug(s"Enqueued snapshot info height=${height} hash=${hash}")
+            .debug(s"Enqueued snapshot info height=$height hash=$hash")
         def getAlreadySent(): F[Set[SnapshotSent]] =
           sentData.get.map(_.filter(snap => snap.snapshot && snap.snapshotInfo))
         def removeSentSnapshot(hash: String): F[Unit] =
@@ -54,35 +48,37 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
   private def sendFile: Pipe[F, DataToSend, Unit] =
     _.evalMap {
       case GenesisToSend(genesis) => sendGenesis(genesis)
-      case s @ SnapshotToSend(_, _, hash) =>
+      case s @ SnapshotToSend(_, height, hash) =>
         sendSnapshot(s) >>= { ops =>
-          if (atLeastOne(ops)) markSnapshotAsSent(hash) else F.unit
+          if (atLeastOne(ops)) markSnapshotAsSent(height, hash) else F.unit
         }
-      case s @ SnapshotInfoToSend(_, _, hash) =>
+      case s @ SnapshotInfoToSend(_, height, hash) =>
         sendSnapshotInfo(s) >>= { ops =>
-          if (atLeastOne(ops)) markSnapshotInfoAsSent(hash) else F.unit
+          if (atLeastOne(ops)) markSnapshotInfoAsSent(height, hash) else F.unit
         }
     }
 
   private def atLeastOne(ops: List[Either[Throwable, Unit]]): Boolean =
     ops.count(_.isRight) > 0
 
-  private def markSnapshotAsSent(hash: String): F[Unit] =
+  private def markSnapshotAsSent(height: Long, hash: String): F[Unit] =
     sentData.modify { s =>
       val updated = s
         .find(_.hash == hash)
-        .fold(s + SnapshotSent(hash, snapshot = true, snapshotInfo = false))(
-          snap => s.filterNot(_.hash == hash) + SnapshotSent(hash, snapshot = true, snapshotInfo = snap.snapshotInfo)
+        .fold(s + SnapshotSent(height, hash, snapshot = true, snapshotInfo = false))(
+          snap =>
+            s.filterNot(_.hash == hash) + SnapshotSent(height, hash, snapshot = true, snapshotInfo = snap.snapshotInfo)
         )
       (updated, ())
     }
 
-  private def markSnapshotInfoAsSent(hash: String): F[Unit] =
+  private def markSnapshotInfoAsSent(height: Long, hash: String): F[Unit] =
     sentData.modify { s =>
       val updated = s
         .find(_.hash == hash)
-        .fold(s + SnapshotSent(hash, snapshot = false, snapshotInfo = true))(
-          snap => s.filterNot(_.hash == hash) + SnapshotSent(hash, snapshot = snap.snapshot, snapshotInfo = true)
+        .fold(s + SnapshotSent(height, hash, snapshot = false, snapshotInfo = true))(
+          snap =>
+            s.filterNot(_.hash == hash) + SnapshotSent(height, hash, snapshot = snap.snapshot, snapshotInfo = true)
         )
       (updated, ())
     }
@@ -161,5 +157,5 @@ object CloudService {
   case class SnapshotToSend(file: File, height: Long, hash: String) extends FileToSend
   case class SnapshotInfoToSend(file: File, height: Long, hash: String) extends FileToSend
 
-  case class SnapshotSent(hash: String, snapshot: Boolean, snapshotInfo: Boolean)
+  case class SnapshotSent(height: Long, hash: String, snapshot: Boolean, snapshotInfo: Boolean)
 }
