@@ -6,21 +6,15 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.ConfigUtil
+import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
-import org.constellation.consensus.{FinishedCheckpoint, StoredSnapshot}
+import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
-import org.constellation.domain.cloud.{CloudService, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
-import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.p2p.Cluster
-import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.domain.storage.FileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, MajorityHeight}
@@ -401,13 +395,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
     val send = for {
       majorityState <- lastMajorityState.get
       accepted <- acceptedSnapshots.get
-      lastHeight <- lastSentHeight.get
+      alreadySent <- cloudService.getAlreadySent().map(_.map(_.height))
+
       maxAccepted = accepted.keySet.toList.maximumOption.getOrElse(0L)
+      toSend = majorityState.filterKeys(_ <= maxAccepted) -- alreadySent
 
-      toSend = majorityState.filterKeys(_ > lastHeight).filterKeys(_ <= maxAccepted)
-      hashes = toSend.toList.sortBy { case (height, _) => height }
+      toSendInOrder = toSend.toList.sortBy { case (height, _) => height }
 
-      uploadSnapshots <- hashes.traverse {
+      uploadSnapshots <- toSendInOrder.traverse {
         case (height, hash) =>
           snapshotStorage
             .getFile(hash)
@@ -420,7 +415,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
             )
       }
 
-      uploadSnapshotInfos <- hashes.traverse {
+      uploadSnapshotInfos <- toSendInOrder.traverse {
         case (height, hash) =>
           snapshotInfoStorage
             .getFile(hash)
@@ -446,10 +441,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
       // For now we do not restore EigenTrust model
       //      _ <- uploadRewards.sequence
 
-      _ <- if (toSend.nonEmpty) {
-        val max = maxHeight(toSend)
-        setLastSentHeight(max)
-      } else F.unit
+      toSendHeights = toSendInOrder.map { case (height, _) => height }
+      majorityHeights = majorityState.keys.toList.sorted
+
+      _ <- logger.debug(
+        s"Enqueued heights: ${toSendHeights} from majority: ${majorityHeights} where maxAccepted=${maxAccepted}."
+      )
 
     } yield ()
 
