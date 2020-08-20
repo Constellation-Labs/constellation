@@ -35,18 +35,22 @@ class MajorityStateChooser(id: Id) {
     flat.mapFilter(identity)
   }
 
-  def findGaps(majorityState: SnapshotsAtHeight, snapshotInterval: Long): Set[Long] =
-    majorityState.toList.sortBy { case (height, _) => height }
-      .sliding(2)
-      .filter { case List((prevHeight, _), (currHeight, _)) => currHeight - prevHeight != snapshotInterval }
-      .flatMap {
-        case List((prevHeight, _), (currHeight, _)) =>
-          val diff = currHeight - prevHeight - snapshotInterval
-          val gapsCount = diff / snapshotInterval
-          val gaps = (1L to gapsCount).map(prevHeight + _ * snapshotInterval)
-          gaps
-      }
-      .toSet
+  def findGaps(majorityState: SnapshotsAtHeight, snapshotInterval: Int): Set[Long] =
+    if (majorityState.size < 2) {
+      Set.empty[Long]
+    } else {
+      majorityState.toList.sortBy { case (height, _) => height }
+        .sliding(2)
+        .filter { case List((prevHeight, _), (currHeight, _)) => currHeight - prevHeight != snapshotInterval }
+        .flatMap {
+          case List((prevHeight, _), (currHeight, _)) =>
+            val diff = currHeight - prevHeight - snapshotInterval
+            val gapsCount = diff / snapshotInterval
+            val gaps = (1L to gapsCount).map(prevHeight + _ * snapshotInterval)
+            gaps
+        }
+        .toSet
+    }
 
   private def getTheMostQuantity(
     proposals: Set[ExtendedSnapshotProposal],

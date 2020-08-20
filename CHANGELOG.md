@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Handle corner cases with gap finding
 
 ## [v2.13.9] 2020-08-20
 ## Added
