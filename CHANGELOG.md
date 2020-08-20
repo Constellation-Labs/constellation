@@ -2,12 +2,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.13.9] 2020-08-20
 ## Added
 - Additional logs for potential gaps in majority state
 ## Fixed
 - Revert health checks during PendingDownload state
 
-## [v2.13.8]
+## [v2.13.8] 2020-08-19
 ## Fixed
 - Gaps in cloud queue fixed by calculating diff between majority and already sent
 
