@@ -33,6 +33,7 @@ import scala.util.Random
 class RedownloadService[F[_]: NonEmptyParallel](
   meaningfulSnapshotsCount: Int,
   redownloadInterval: Int,
+  snapshotInterval: Int,
   isEnabledCloudStorage: Boolean,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
@@ -333,6 +334,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
         peersProposals,
         peersCache
       )
+
+      potentialGaps = majorityStateChooser.findGaps(majorityState, snapshotInterval)
+
+      _ <- if (potentialGaps.isEmpty) {
+        logger.debug("Calculated majority state has no gaps")
+      } else {
+        logger.error(s"Found following gaps ${potentialGaps} in majority: ${majorityState.keys.toList.sorted}")
+      }
 
       maxMajorityHeight = maxHeight(majorityState)
       ignorePoint = getIgnorePoint(maxMajorityHeight)
@@ -642,6 +651,7 @@ object RedownloadService {
   def apply[F[_]: Concurrent: ContextShift: NonEmptyParallel: Timer](
     meaningfulSnapshotsCount: Int,
     redownloadInterval: Int,
+    snapshotInterval: Int,
     isEnabledCloudStorage: Boolean,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
@@ -657,6 +667,7 @@ object RedownloadService {
     new RedownloadService[F](
       meaningfulSnapshotsCount,
       redownloadInterval,
+      snapshotInterval,
       isEnabledCloudStorage,
       cluster,
       majorityStateChooser,
