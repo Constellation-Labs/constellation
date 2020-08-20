@@ -81,6 +81,8 @@ object Schema {
 
     val invalidForCommunication: Set[NodeState] = Set(Offline)
 
+    val validForHealthCheck: Set[NodeState] = readyStates ++ validDuringDownload ++ validForDownload
+
     // TODO: Use initial for allowing joining after leaving
     def canJoin(current: NodeState): Boolean = current == PendingDownload
 
@@ -111,7 +113,7 @@ object Schema {
 
     def canUseAPI(current: NodeState): Boolean = !invalidForCommunication.contains(current)
 
-    def canBeCheckedForHealth(current: NodeState): Boolean = readyStates.contains(current)
+    def canBeCheckedForHealth(current: NodeState): Boolean = validForHealthCheck.contains(current)
 
   }
 
