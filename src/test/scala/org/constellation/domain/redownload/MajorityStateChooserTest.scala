@@ -47,7 +47,7 @@ class MajorityStateChooserTest
       )
 
       val chooser = MajorityStateChooser(ownId)
-      val gaps = chooser.findGaps(majority, 2L)
+      val gaps = chooser.findGaps(majority, 2)
       gaps shouldEqual Set(8L, 14L)
     }
 
@@ -60,8 +60,24 @@ class MajorityStateChooserTest
       )
 
       val chooser = MajorityStateChooser(ownId)
-      val gaps = chooser.findGaps(majority, 2L)
+      val gaps = chooser.findGaps(majority, 2)
       gaps shouldEqual Set(6L, 8L, 10L, 14L)
+    }
+
+    "returns np gaps for empty majority" in {
+      val majority = Map.empty[Long, String]
+      val chooser = MajorityStateChooser(ownId)
+      val gaps = chooser.findGaps(majority, 2)
+      gaps shouldEqual Set.empty[Long]
+    }
+
+    "returns np gaps for single item majority" in {
+      val majority = Map(
+        2L -> "a"
+      )
+      val chooser = MajorityStateChooser(ownId)
+      val gaps = chooser.findGaps(majority, 2)
+      gaps shouldEqual Set.empty[Long]
     }
   }
 
