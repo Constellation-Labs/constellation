@@ -35,6 +35,19 @@ class MajorityStateChooser(id: Id) {
     flat.mapFilter(identity)
   }
 
+  def findGaps(majorityState: SnapshotsAtHeight, snapshotInterval: Long): Set[Long] =
+    majorityState.toList.sortBy { case (height, _) => height }
+      .sliding(2)
+      .filter { case List((prevHeight, _), (currHeight, _)) => currHeight - prevHeight != snapshotInterval }
+      .flatMap {
+        case List((prevHeight, _), (currHeight, _)) =>
+          val diff = currHeight - prevHeight - snapshotInterval
+          val gapsCount = diff / snapshotInterval
+          val gaps = (1L to gapsCount).map(prevHeight + _ * snapshotInterval)
+          gaps
+      }
+      .toSet
+
   private def getTheMostQuantity(
     proposals: Set[ExtendedSnapshotProposal],
     peersCache: PeersCache
@@ -136,6 +149,10 @@ object MajorityStateChooser {
 
     implicit val snapshotProposalEncoder: Encoder[SnapshotProposal] = deriveEncoder
     implicit val snapshotProposalDecoder: Decoder[SnapshotProposal] = deriveDecoder
+  }
+
+  case class MajorityIntegrityError(gaps: Set[Long]) extends Throwable {
+    def message: String = s"Majority state has gaps: ${gaps.toSeq.sorted.mkString(",")}"
   }
 
   case class ExtendedSnapshotProposal(

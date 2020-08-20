@@ -58,6 +58,7 @@ class RedownloadServiceTest
 
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
+  val snapshotInterval = 2
 
   before {
     cluster = mock[Cluster[IO]]
@@ -81,6 +82,7 @@ class RedownloadServiceTest
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,
+      snapshotInterval,
       true,
       cluster,
       majorityStateChooser,
@@ -621,6 +623,7 @@ class RedownloadServiceTest
         val redownloadService = RedownloadService[IO](
           meaningfulSnapshotsCount,
           redownloadInterval,
+          snapshotInterval,
           false,
           cluster,
           majorityStateChooser,

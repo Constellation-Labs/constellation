@@ -35,6 +35,36 @@ class MajorityStateChooserTest
     val toSnapshotProposals = value.mapValues(_.mapValues(SnapshotProposal(_, SortedMap.empty)))
   }
 
+  "find gaps" - {
+    "finds single gaps" in {
+      val majority = Map[Long, String](
+        2L -> "a",
+        4L -> "b",
+        6L -> "c",
+        10L -> "d",
+        12L -> "e",
+        16L -> "f"
+      )
+
+      val chooser = MajorityStateChooser(ownId)
+      val gaps = chooser.findGaps(majority, 2L)
+      gaps shouldEqual Set(8L, 14L)
+    }
+
+    "finds multiple gaps" in {
+      val majority = Map[Long, String](
+        2L -> "a",
+        4L -> "b",
+        12L -> "e",
+        16L -> "f"
+      )
+
+      val chooser = MajorityStateChooser(ownId)
+      val gaps = chooser.findGaps(majority, 2L)
+      gaps shouldEqual Set(6L, 8L, 10L, 14L)
+    }
+  }
+
   "choose majority state" - {
     "returns Map.empty" - {
       "if there are no created snapshots and peers proposals" - {

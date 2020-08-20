@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Added
+- Additional logs for potential gaps in majority state
 
 ## [v2.13.8]
 ## Fixed
