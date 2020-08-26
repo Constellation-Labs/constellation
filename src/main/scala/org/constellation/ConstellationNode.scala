@@ -87,6 +87,18 @@ object ConstellationNode extends IOApp {
       _ <- Resource.liftF(IO { File(s"tmp/${nodeConfig.primaryKeyPair.toId.medium}/peers").nonEmpty }
         .ifM(IO.raiseError(new Throwable("Cannot start, tmp not cleared")), IO.unit))
 
+      _ <- Resource.liftF(
+        IO { new java.io.File(s"./").getUsableSpace }
+          .map(_ / 1024d / 1024 / 1024) // to gigabytes
+          .map(_ < nodeConfig.minRequiredSpace)
+          .ifM(
+            IO.raiseError(
+              new Throwable(s"Cannot start, not enough space. Minimum required is ${nodeConfig.minRequiredSpace}Gb")
+            ),
+            IO.unit
+          )
+      )
+
       requestMethodClassifier = (r: Request[IO]) => Some(r.method.toString.toLowerCase)
 
       registry <- Prometheus.collectorRegistry[IO]
@@ -325,7 +337,8 @@ object ConstellationNode extends IOApp {
           if (cliConfig.testMode) ProcessingConfig.testProcessingConfig.copy(maxWidth = 10) else processingConfig,
         dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
         allocAccountBalances = allocAccountBalances,
-        whitelisting = whitelisting
+        whitelisting = whitelisting,
+        minRequiredSpace = constellationConfig.getInt("min-required-space")
       )
     } yield nodeConfig
 }
