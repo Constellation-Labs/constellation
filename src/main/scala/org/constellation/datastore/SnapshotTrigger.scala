@@ -63,10 +63,17 @@ class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluste
   def resetNodeState(stateSet: SetStateResult): IO[SetStateResult] =
     cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
 
-  def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] =
-    resetNodeState(stateSet) >>
-      IO(logger.warn(s"Snapshot attempt error: ${err.message}"))
-        .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
+  def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] = {
+    implicit val cs = contextShift
+
+    resetNodeState(stateSet).flatMap { _ =>
+      if (err.message.contains("No space left on device"))
+        (IO.shift >> cluster.leave(IO.unit)).start
+      else
+        IO.unit
+    } >> IO(logger.warn(s"Snapshot attempt error: ${err.message}"))
+      .flatMap(_ => dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure))
+  }
 
   override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)
 
