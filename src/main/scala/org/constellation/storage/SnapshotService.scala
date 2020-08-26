@@ -78,6 +78,8 @@ class SnapshotService[F[_]: Concurrent](
 
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
+      _ <- checkDiskSpace()
+
       _ <- validateMaxAcceptedCBHashesInMemory()
       _ <- validateAcceptedCBsSinceSnapshot()
 
@@ -294,6 +296,16 @@ class SnapshotService[F[_]: Concurrent](
       cbHashes <- acceptedCBSinceSnapshot.get.map(_.toList)
       _ <- rateLimiting.reset(cbHashes)(checkpointService)
     } yield ()
+
+  private def checkDiskSpace(): EitherT[F, SnapshotError, Unit] = EitherT {
+    snapshotStorage.getUsableSpace.map { space =>
+      if (space < 1073741824) { // 1Gb in bytes
+        NotEnoughSpace.asLeft[Unit]
+      } else {
+        Right(())
+      }
+    }
+  }
 
   private def validateMaxAcceptedCBHashesInMemory(): EitherT[F, SnapshotError, Unit] = EitherT {
     acceptedCBSinceSnapshot.get.map { accepted =>
@@ -619,6 +631,10 @@ object NoBlocksWithinHeightInterval extends SnapshotError {
 
 object SnapshotIllegalState extends SnapshotError {
   def message: String = "Snapshot illegal state"
+}
+
+object NotEnoughSpace extends SnapshotError {
+  def message: String = "Not enough space left on device"
 }
 
 case class SnapshotIOError(cause: Throwable) extends SnapshotError {
