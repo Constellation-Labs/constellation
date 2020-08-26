@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Changed
+- Auto leave if there is no space left on device for snapshot
 
 ## [v2.13.10] 2020-08-22
 ## Fixed
