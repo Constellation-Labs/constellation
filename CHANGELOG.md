@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.14.0] 2020-08-26
 ## Added
 - Refuse starting node if there is not enough space left on device
 - Auto leave if there is no space left on device for snapshot
