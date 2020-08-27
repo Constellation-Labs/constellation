@@ -3,6 +3,7 @@ package org.constellation.primitives
 import java.security.KeyPair
 import java.time.Instant
 
+import com.google.common.hash.Hashing
 import constellation._
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
@@ -10,6 +11,7 @@ import org.constellation.domain.consensus.ConsensusObject
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
 import org.constellation.schema.Id
+import org.constellation.serializer.KryoSerializer
 import org.constellation.util.HashSignature
 
 case class TransactionCacheData(
@@ -66,6 +68,32 @@ case class Transaction(
   def baseHash: String = edge.signedObservationEdge.baseHash
 
   def hash: String = edge.observationEdge.hash
+
+  private def historicalRunLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
+
+  def historicalDataRunLengthEncoding = {
+    val data = edge.data
+
+    historicalRunLengthEncoding(
+      Seq(
+        data.amount.toHexString,
+        data.lastTxRef.prevHash,
+        data.lastTxRef.ordinal.toString,
+        data.fee.getOrElse(0L).toString,
+        data.salt.toHexString
+      ): _*
+    )
+  }
+
+  def historicalHash: String = {
+    val parents = edge.observationEdge.parents
+    val rle =
+      parents.length +
+        historicalRunLengthEncoding(parents.map(_.hashReference): _*) ++
+        historicalDataRunLengthEncoding
+
+    Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(rle)).toString
+  }
 
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 

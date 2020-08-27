@@ -125,8 +125,8 @@ object EncodableValue {
 }
 
 object Hashable {
-  def hash(a: AnyRef): String = a match {
-    case str: String => Hashing.sha256().hashBytes(str.getBytes(UTF_8)).toString
+  def hash(a: AnyRef, serializeStringWithUTF8: Boolean): String = a match {
+    case str: String if serializeStringWithUTF8 => Hashing.sha256().hashBytes(str.getBytes(UTF_8)).toString
     case _ => Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(a)).toString
   }
 }
@@ -135,7 +135,9 @@ trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
 
-  def hash: String = Hashable.hash(getEncoding)
+  def serializeStringWithUTF8: Boolean = false
+
+  def hash: String = Hashable.hash(getEncoding, serializeStringWithUTF8)
 
   def short: String = hash.slice(0, 5)
 
@@ -190,6 +192,8 @@ case class ObservationEdge(
   parents: Seq[TypedEdgeHash],
   data: TypedEdgeHash
 ) extends Signable {
+  override def serializeStringWithUTF8: Boolean = true
+
   override def getEncoding: String = {
     val numParents = encodeLength(parents.length) //note, we should not use magick number 2 here, state channels can have multiple
     val encodedParentHashRefs = runLengthEncoding(parents.map(p => EncodableASCII(p.hashReference)))

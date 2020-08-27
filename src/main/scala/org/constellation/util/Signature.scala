@@ -17,11 +17,13 @@ trait Signable {
 
   def signInput: Array[Byte] = hash.getBytes()
 
-  def hash: String = hashSerialized(getEncoding)
+  def serializeStringWithUTF8: Boolean = false
+
+  def hash: String = hashSerialized(getEncoding, serializeStringWithUTF8)
 
   def short: String = hash.slice(0, 5)
 
-  def getEncoding: String = hashSerialized(toEncode)
+  def getEncoding: String = hashSerialized(toEncode, serializeStringWithUTF8)
 
   def getHexEncoding = KeyUtils.bytes2hex(hashSerializedBytes(toEncode))
 

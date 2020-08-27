@@ -106,8 +106,8 @@ package object constellation extends POWExt with SignHelpExt {
 
   }
 
-  def hashSerialized(obj: AnyRef) = obj match {
-    case str: String => str.getBytes(UTF_8).sha256
+  def hashSerialized(obj: AnyRef, serializeStringWithUTF8: Boolean) = obj match {
+    case str: String if serializeStringWithUTF8 => str.getBytes(UTF_8).sha256
     case _ => KryoSerializer.serializeAnyRef(obj).sha256
   }
 

@@ -4,6 +4,7 @@ import java.io.{FileInputStream, FileOutputStream}
 import java.security.KeyPair
 
 import cats.effect.Sync
+import com.google.common.hash.Hashing
 import org.constellation.keytool.KeyStoreUtils
 
 case class Transaction(
@@ -23,6 +24,33 @@ case class Transaction(
   def baseHash: String = edge.signedObservationEdge.baseHash
 
   def hash: String = edge.observationEdge.hash
+
+  private def historicalRunLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
+
+  def historicalDataRunLengthEncoding = {
+    val data = edge.data
+
+    historicalRunLengthEncoding(
+      Seq(
+        data.amount.toHexString,
+        data.lastTxRef.prevHash,
+        data.lastTxRef.ordinal.toString,
+        data.fee.getOrElse(0L).toString,
+        data.salt.toHexString
+      ): _*
+    )
+  }
+
+  def historicalHash: String = {
+    val parents = edge.observationEdge.parents
+    val rle =
+      parents.length +
+        historicalRunLengthEncoding(parents.map(_.hashReference): _*) ++
+        historicalDataRunLengthEncoding
+
+    Hashing.sha256().hashBytes(KryoSerializer.serializeAnyRef(rle)).toString
+  }
+
 
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
@@ -54,6 +82,17 @@ object Transaction {
       case None     => throw new Error("Cannot parse transaction data")
     }
 
+  def pickHashForLastTransactionRef(tx: Transaction): LastTransactionRef = {
+    val ordinal = tx.lastTxRef.ordinal + 1
+    val isOldRLE = tx.edge.observationEdge.data.hashReference == tx.historicalDataRunLengthEncoding
+    val isNewRLE = tx.edge.observationEdge.data.hashReference == tx.edge.data.getEncoding
+
+    if (isOldRLE && !isNewRLE)
+      LastTransactionRef(tx.historicalHash, ordinal)
+    else
+      LastTransactionRef(tx.hash, ordinal)
+  }
+
   def createTransaction(
     prevTx: Option[Transaction] = None,
     src: String,
@@ -64,8 +103,9 @@ object Transaction {
   ): Transaction = {
     val lastTxRef =
       prevTx
-        .map(tx => LastTransactionRef(tx.hash, tx.lastTxRef.ordinal + 1))
+        .map(pickHashForLastTransactionRef)
         .getOrElse(LastTransactionRef.empty)
+
     val edge = TransactionEdge.createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
     Transaction(edge, lastTxRef, false, false)
   }

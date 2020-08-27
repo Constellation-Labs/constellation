@@ -55,47 +55,39 @@ class BIP44Test extends FreeSpec with Matchers {
     assert(isBTCValid.isFailure)
   }
 
-  "Transaction should be signed correctly" in {
+  "Expected public key should be generated from the given mnemonic and depth" in {
     val childIndex = 0
     val bip44 = new BIP44(seedCode, childIndex)
     val keyPair = bip44.getChildKeyPairOfDepth()
     val publicKey = keyPair.getPublic
+
+    val expected = "08dda015c42ea066a52d68e2ab2985b5ab255d3d0fd2b90363548cc74963b156e1a6aec5beb1a0c1df86025ffded1dba91afa87ecacdc6e32934421ab6c28d9e"
+    val result = KeyUtils.publicKeyToHex(publicKey)
+
+    result shouldBe expected
+  }
+
+  "Expected private key should be generated from the given mnemonic and depth" in {
+    val childIndex = 0
+    val bip44 = new BIP44(seedCode, childIndex)
+    val keyPair = bip44.getChildKeyPairOfDepth()
     val privateKey = keyPair.getPrivate
-    val address = KeyUtils.publicKeyToAddressString(publicKey)
 
-    val src = address
-    val dst = "DAG48nmxgpKhZzEzyc86y9oHotxxG57G8sBBwj56"
-    val amount = 100000000L
-    val prevHash = "08e6f0c3d65ed0b393604ffe282374bf501956ba447bc1c5ac49bcd2e8cc44fd"
-    val ordinal = 567L
-    val fee = 123456L
-    val salt = 7370566588033602435L
-    val lastTxRef = LastTransactionRef(prevHash, ordinal)
-    val txData = TransactionEdgeData(amount = amount, lastTxRef = lastTxRef, fee = Option(fee), salt = salt)
-    val oe = ObservationEdge(
-      Seq(
-        TypedEdgeHash(src, EdgeHashType.AddressHash),
-        TypedEdgeHash(dst, EdgeHashType.AddressHash)
-      ),
-      TypedEdgeHash(txData.getEncoding, EdgeHashType.TransactionDataHash)
-    )
-    val runLengthEncoding = oe.getEncoding
-    val soe = SignHelp.signedObservationEdge(oe)(keyPair)
-    val tx = Transaction(edge = Edge(oe, soe, txData), lastTxRef = lastTxRef, isDummy = false, isTest = false)
+    val expected = "677c919bf7f5129c2fa245774e08f8c64be16bf6ef4d9d3fcad570c7a503d8cba00706052b8104000aa1440342000408dda015c42ea066a52d68e2ab2985b5ab255d3d0fd2b90363548cc74963b156e1a6aec5beb1a0c1df86025ffded1dba91afa87ecacdc6e32934421ab6c28d9e"
+    val result = KeyUtils.privateKeyToHex(privateKey)
 
-//    val signature = bip44.signData(tx.edge.observationEdge.hash.getBytes())
-//    val signDataManually = KeyUtils.bytes2hex(signature)
+    result shouldBe expected
+  }
 
-    println("mnemonic:              " + seedCode)
-    println("bip44 path:            " + bip44.chainPathPrefix + childIndex)
-    println("withPrefixPriKey:      " + KeyUtils.bytes2hex(privateKey.getEncoded))
-    println("privateKey:            " + KeyUtils.privateKeyToHex(privateKey))
-    println("withPrefixPubKey:      " + KeyUtils.bytes2hex(publicKey.getEncoded))
-    println("publicKey:             " + KeyUtils.publicKeyToHex(publicKey))
-    println("address:               " + address)
-    println("transaction:           " + tx.asJson.noSpaces)
-    println("hex encoded signature: " + tx.edge.signedObservationEdge.signatureBatch.signatures.head.signature)
-    println("runLengthEncoding:     " + runLengthEncoding)
-    println("runLenEnc sha256 hash  " + Hashable.hash(runLengthEncoding))
+  "Expected address should be generated from the given mnemonic and depth" in {
+    val childIndex = 0
+    val bip44 = new BIP44(seedCode, childIndex)
+    val keyPair = bip44.getChildKeyPairOfDepth()
+    val publicKey = keyPair.getPublic
+
+    val expected = "DAG4EqbfJNSYZDDfs7AUzofotJzZXeRYgHaGZ6jQ"
+    val result = KeyUtils.publicKeyToAddressString(publicKey)
+
+    result shouldBe expected
   }
 }

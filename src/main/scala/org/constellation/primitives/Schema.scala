@@ -1,9 +1,11 @@
 package org.constellation.primitives
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.security.KeyPair
 
 import enumeratum._
 import io.circe.{Decoder, Encoder}
+import constellation._
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.schema.Id
 import org.constellation.util._
@@ -218,6 +220,10 @@ object Schema {
     parents: Seq[TypedEdgeHash],
     data: TypedEdgeHash
   ) extends Signable {
+    override def serializeStringWithUTF8: Boolean = true
+
+    override def hash = getEncoding.getBytes(UTF_8).sha256
+
     override def getEncoding: String = {
       val numParents = encodeLength(parents.length) //note, we should not use magick number 2 here, state channels can have multiple
       val encodedParentHashRefs = runLengthEncoding(parents.map(p => EncodableASCII(p.hashReference)))

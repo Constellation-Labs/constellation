@@ -56,6 +56,9 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
 
     walletHash1 shouldBe walletHash2
     nodeHash1 shouldBe nodeHash2
+
+    readTx.historicalHash shouldBe readTx2.historicalHash
+    readTx.historicalDataRunLengthEncoding shouldBe readTx2.historicalDataRunLengthEncoding
   }
 
   "transaction created by wallet should keep proper tx chain" in {
@@ -102,6 +105,6 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
 
     val transaction = WalletTransaction.transactionFromJsonString(jsonString)
 
-    Hashable.hash(readTx.edge.signedObservationEdge) shouldBe Hashable.hash(transaction.edge.signedObservationEdge)
+    Hashable.hash(readTx.edge.signedObservationEdge, false) shouldBe Hashable.hash(transaction.edge.signedObservationEdge, false)
   }
 }

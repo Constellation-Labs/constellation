@@ -30,21 +30,6 @@ class BIP44(seedPrase: String, childIndex: Int = 0, passphrase: String = "", cre
 
   def getChildKeyPairOfDepth(depth: Int = childIndex) = {
     val key: DeterministicKey = getDeterministicKeyOfDepth(depth)
-
-    // For debugging
-    val params = new MainNetParams
-    val mainKey = chain.getKeyByPath(HDUtils.parsePath(chainPathPrefix), true)
-    println(s"seed:             ${chain.getSeed.toHexString}")
-    println(s"mainKeyPriv:      ${mainKey.serializePrivB58(params)}")
-    println(s"mainKeyPublic:    ${mainKey.serializePubB58(params)}")
-    println(s"privChildBase58:  ${key.serializePrivB58(params)}")
-    println(s"pubChildBase58:   ${key.serializePubB58(params)}")
-    println(s"privChildKeyWiF:  ${key.getPrivateKeyAsWiF(params)}")
-    println(s"privChildKey hex: ${KeyUtils.bytes2hex(key.getPrivKeyBytes)}")
-    println(s"pubChildKey hex:  ${KeyUtils.bytes2hex(key.getPubKey)}")
-    println("RAW PRIVATE:      " + KeyUtils.bytes2hex(key.getPrivKey.toByteArray))
-    // end
-
     getECKeyPairFromBip44Key(key)
   }
 }
