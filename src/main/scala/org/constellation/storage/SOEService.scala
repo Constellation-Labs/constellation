@@ -33,7 +33,7 @@ class SOEService[F[_]: Concurrent]() {
   ): F[Option[SignedObservationEdge]] =
     memPool.update(key, updateFunc)
 
-  def applySnapshot(soeHashes: List[String]): F[Unit] =
+  def batchRemove(soeHashes: List[String]): F[Unit] =
     soeHashes.traverse(memPool.remove).void
 
   def clear: F[Unit] =

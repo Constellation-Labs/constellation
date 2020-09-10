@@ -3,11 +3,11 @@ package org.constellation.domain.consensus
 import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.implicits._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
+import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.primitives.concurrency.SingleLock
-import ConsensusStatus.ConsensusStatus
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.storage.{ConcurrentStorageService, PendingMemPool, StorageService}
 
@@ -46,7 +46,7 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
     withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>
       a.traverse(x => withLock("acceptedUpdate", accepted.remove(x.hash))).void
 
-  def applySnapshot(merkleRoot: String): F[Unit] =
+  def removeMerkleRoot(merkleRoot: String): F[Unit] =
     findHashesByMerkleRoot(merkleRoot).flatMap(a => withLock("acceptedUpdate", accepted.remove(a.toSet.flatten))) >>
       withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
 

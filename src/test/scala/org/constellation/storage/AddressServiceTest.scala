@@ -2,12 +2,20 @@ package org.constellation.storage
 
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.AddressCacheData
+import org.constellation.{ConstellationExecutionContext, Fixtures}
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
-class AddressServiceTest extends FreeSpec with BeforeAndAfter with Matchers {
+class AddressServiceTest
+    extends FreeSpec
+    with BeforeAndAfter
+    with Matchers
+    with IdiomaticMockito
+    with IdiomaticMockitoCats
+    with ArgumentMatchersSugar {
 
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 
@@ -15,6 +23,7 @@ class AddressServiceTest extends FreeSpec with BeforeAndAfter with Matchers {
 
   val src = "abc"
   val dst = "def"
+
   val tx =
     Fixtures.manuallyCreateTransaction(src, dst, "", "", Seq.empty, 5L, LastTransactionRef.empty, 1L.some)
 
@@ -22,41 +31,57 @@ class AddressServiceTest extends FreeSpec with BeforeAndAfter with Matchers {
     addressService = new AddressService[IO]
   }
 
-  "clear" - {
-    "should remove all addresses" in {
-      addressService.putUnsafe("abcd", AddressCacheData(100, 100)).unsafeRunSync()
-      addressService.putUnsafe("efgh", AddressCacheData(100, 100)).unsafeRunSync()
+  "setAll" - {
+    "should clear old data" in {
+      val oldKey = "foo"
+      addressService.set(oldKey, AddressCacheData(100, 100)).unsafeRunSync()
 
-      addressService.clear.unsafeRunSync()
+      val balances = Map(
+        src -> AddressCacheData(200, 200),
+        dst -> AddressCacheData(100, 100)
+      )
+      addressService.setAll(balances).unsafeRunSync()
 
-      addressService.toMap.unsafeRunSync().size shouldBe 0
+      addressService.getAll.unsafeRunSync() shouldEqual balances
+      addressService.lookup(oldKey).unsafeRunSync() shouldBe None
     }
   }
 
-  "transfer" - {
+  "clear" - {
+    "should remove all addresses" in {
+      addressService.set("abcd", AddressCacheData(100, 100)).unsafeRunSync()
+      addressService.set("efgh", AddressCacheData(100, 100)).unsafeRunSync()
+
+      addressService.clear.unsafeRunSync()
+
+      addressService.getAll.unsafeRunSync().size shouldBe 0
+    }
+  }
+
+  "transferTransaction" - {
     "should correctly set source and destination address balances" in {
-      (addressService.putUnsafe(src, AddressCacheData(100L, 100L)) >>
-        addressService.putUnsafe(dst, AddressCacheData(100L, 100L)) >>
-        addressService.transfer(tx)).unsafeRunSync
+      (addressService.set(src, AddressCacheData(100L, 100L)) >>
+        addressService.set(dst, AddressCacheData(100L, 100L)) >>
+        addressService.transferTransaction(tx)).unsafeRunSync
 
       val expected = Map(src -> AddressCacheData(94L, 100L), dst -> AddressCacheData(105L, 100L))
-      val result = addressService.toMap.unsafeRunSync
+      val result = addressService.getAll.unsafeRunSync
 
       result shouldBe expected
     }
   }
 
-  "transferSnapshot" - {
+  "transferSnapshotTransaction" - {
     "should correctly set src and dst address balances by latest snapshot" in {
-      (addressService.putUnsafe(src, AddressCacheData(100L, 100L, balanceByLatestSnapshot = 100L)) >>
-        addressService.putUnsafe(dst, AddressCacheData(100L, 100L, balanceByLatestSnapshot = 100L)) >>
-        addressService.transferSnapshot(tx)).unsafeRunSync
+      (addressService.set(src, AddressCacheData(100L, 100L, balanceByLatestSnapshot = 100L)) >>
+        addressService.set(dst, AddressCacheData(100L, 100L, balanceByLatestSnapshot = 100L)) >>
+        addressService.transferSnapshotTransaction(tx)).unsafeRunSync
 
       val expected = Map(
         src -> AddressCacheData(100L, 100L, balanceByLatestSnapshot = 94L),
         dst -> AddressCacheData(100L, 100L, balanceByLatestSnapshot = 105L)
       )
-      val result = addressService.toMap.unsafeRunSync
+      val result = addressService.getAll.unsafeRunSync
 
       result shouldBe expected
     }

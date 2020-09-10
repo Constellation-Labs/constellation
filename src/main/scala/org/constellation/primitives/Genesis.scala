@@ -123,7 +123,7 @@ object Genesis extends StrictLogging {
     go.genesis.transactions.foreach { rtx =>
       val bal = rtx.amount
       dao.addressService
-        .putUnsafe(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+        .set(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
         // TODO: Get rid of unsafeRunSync
         .unsafeRunSync()
     }

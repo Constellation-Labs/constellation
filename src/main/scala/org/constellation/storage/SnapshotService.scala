@@ -3,7 +3,7 @@ package org.constellation.storage
 import cats.Parallel
 import cats.data.EitherT
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync, _}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -23,7 +23,7 @@ import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.SortedMap
 
@@ -187,7 +187,7 @@ class SnapshotService[F[_]: Concurrent](
       accepted <- acceptedCBSinceSnapshot.get
       lastHeight <- lastSnapshotHeight.get
       hashes <- snapshotStorage.list().rethrowT
-      addressCacheData <- addressService.toMap
+      addressCacheData <- addressService.getAll
       tips <- concurrentTipService.toMap
       lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
     } yield
@@ -202,35 +202,16 @@ class SnapshotService[F[_]: Concurrent](
         lastAcceptedTransactionRef = lastAcceptedTransactionRef
       )
 
-  def retainOldData(): F[Unit] =
-    for {
-      snap <- storedSnapshot.get
-      accepted <- acceptedCBSinceSnapshot.get
-      cbs = (snap.snapshot.checkpointBlocks ++ accepted).toList
-      fetched <- getCheckpointBlocksFromSnapshot(cbs)
-      _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.applySnapshot))
-      _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.applySnapshot))
-      soeHashes <- getSOEHashesFrom(cbs)
-      _ <- checkpointService.applySnapshot(cbs)
-      _ <- soeService.applySnapshot(soeHashes)
-      _ <- logger.info(s"Removed soeHashes : $soeHashes")
-    } yield ()
-
-  def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Seq[String]): F[List[CheckpointCache]] =
-    snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
-
-  def getCheckpointAcceptanceService = LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get)
-
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
-      _ <- retainOldData()
+      _ <- removeStoredSnapshotDataFromMempool()
       _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
-      _ <- snapshotInfo.addressCacheData.map { case (k, v) => addressService.putUnsafe(k, v) }.toList.sequence
+      _ <- addressService.setAll(snapshotInfo.addressCacheData)
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
         soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
@@ -253,6 +234,25 @@ class SnapshotService[F[_]: Concurrent](
         s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}"
       )
       _ <- updateMetricsAfterSnapshot()
+    } yield ()
+
+  def getLocalAcceptedCBSinceSnapshotCache(snapHashes: Seq[String]): F[List[CheckpointCache]] =
+    snapHashes.toList.traverse(str => checkpointService.fullData(str)).map(lstOpts => lstOpts.flatten)
+
+  def getCheckpointAcceptanceService = LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get)
+
+  def removeStoredSnapshotDataFromMempool(): F[Unit] =
+    for {
+      snap <- storedSnapshot.get
+      accepted <- acceptedCBSinceSnapshot.get
+      cbs = (snap.snapshot.checkpointBlocks ++ accepted).toList
+      fetched <- getCheckpointBlocksFromSnapshot(cbs)
+      _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.removeMerkleRoot))
+      _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.removeMerkleRoot))
+      soeHashes <- getSOEHashesFrom(cbs)
+      _ <- checkpointService.batchRemove(cbs)
+      _ <- soeService.batchRemove(soeHashes)
+      _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
   def syncBufferAccept(cb: FinishedCheckpoint): F[Unit] =
@@ -471,8 +471,8 @@ class SnapshotService[F[_]: Concurrent](
       }
 
       soeHashes <- getSOEHashesFrom(currentSnapshot.checkpointBlocks.toList)
-      _ <- checkpointService.applySnapshot(currentSnapshot.checkpointBlocks.toList)
-      _ <- soeService.applySnapshot(soeHashes)
+      _ <- checkpointService.batchRemove(currentSnapshot.checkpointBlocks.toList)
+      _ <- soeService.batchRemove(soeHashes)
       _ <- logger.info(s"Removed soeHashes : $soeHashes")
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
       _ <- dao.metrics.incrementMetricAsync(Metrics.snapshotCount)
@@ -519,7 +519,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private def applySnapshotObservations(cbs: List[CheckpointBlockMetadata]): F[Unit] =
     for {
-      _ <- cbs.traverse(c => c.observationsMerkleRoot.traverse(observationService.applySnapshot)).void
+      _ <- cbs.traverse(c => c.observationsMerkleRoot.traverse(observationService.removeMerkleRoot)).void
     } yield ()
 
   private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] =
@@ -530,7 +530,7 @@ class SnapshotService[F[_]: Concurrent](
 
       _ <- txs
         .filterNot(_.isDummy)
-        .traverse(t => addressService.lockForSnapshot(Set(t.src, t.dst), addressService.transferSnapshot(t).void))
+        .traverse(t => addressService.transferSnapshotTransaction(t))
 
       _ <- cbs.traverse(
         _.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _))
