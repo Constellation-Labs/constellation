@@ -3,10 +3,9 @@ package org.constellation.storage
 import cats.effect.Concurrent
 import cats.implicits._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.primitives.Schema.{Address, AddressCacheData}
+import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.primitives.Transaction
 import org.constellation.primitives.concurrency.MultiLock
-import org.constellation.schema.Id
 
 class AddressService[F[_]: Concurrent]() {
 
@@ -16,17 +15,28 @@ class AddressService[F[_]: Concurrent]() {
 
   private val memPool = new StorageService[F, AddressCacheData]("address_mem_pool".some, None)
 
-  def toMap: F[Map[String, AddressCacheData]] = memPool.toMap()
+  def getAll: F[Map[String, AddressCacheData]] = memPool.toMap()
 
-  def putUnsafe(key: String, value: AddressCacheData): F[AddressCacheData] = memPool.put(key, value)
+  def setAll(kv: Map[String, AddressCacheData]): F[Map[String, AddressCacheData]] =
+    withLock(kv.keySet) {
+      clear >> memPool.putAll(kv)
+    }
+
+  def set(key: String, value: AddressCacheData): F[AddressCacheData] = withLock(Set(key)) {
+    memPool.put(key, value)
+  }
 
   def size: F[Long] = memPool.size()
 
   def lookup(key: String): F[Option[AddressCacheData]] =
     memPool.lookup(key)
 
-  def transfer(tx: Transaction): F[AddressCacheData] =
-    locks.acquire(List(tx.src.hash, tx.dst.hash)) {
+  def clear: F[Unit] =
+    memPool.clear
+      .flatTap(_ => logger.info("AddressService has been cleared"))
+
+  def transferTransaction(tx: Transaction): F[AddressCacheData] =
+    withLock(Set(tx.src.hash, tx.dst.hash)) {
       memPool
         .update(tx.src.hash, { a =>
           a.copy(balance = a.balance - tx.amount - tx.feeValue)
@@ -40,7 +50,7 @@ class AddressService[F[_]: Concurrent]() {
     }
 
   def transferRewards(rewardsDistribution: Map[String, Long]): F[Map[String, Long]] =
-    locks.acquire(rewardsDistribution.keys.toList) {
+    withLock(rewardsDistribution.keySet) {
       rewardsDistribution.toList.traverse {
         case (address, reward) =>
           memPool
@@ -58,20 +68,18 @@ class AddressService[F[_]: Concurrent]() {
       }.map(_.toMap)
     }
 
-  def transferSnapshot(tx: Transaction): F[AddressCacheData] =
-    memPool.update(tx.src.hash, { a =>
-      a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount - tx.feeValue)
-    }, AddressCacheData(0L, 0L)) >>
-      memPool.update(tx.dst.hash, { a =>
-        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
-      }, AddressCacheData(tx.amount, 0L))
-
-  def lockForSnapshot(addresses: Set[Address], fn: F[Unit]): F[Unit] =
-    locks.acquire(addresses.map(_.hash).toList) {
-      fn
+  def transferSnapshotTransaction(tx: Transaction): F[AddressCacheData] =
+    withLock(Set(tx.src.hash, tx.dst.hash)) {
+      memPool.update(tx.src.hash, { a =>
+        a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot - tx.amount - tx.feeValue)
+      }, AddressCacheData(0L, 0L)) >>
+        memPool.update(tx.dst.hash, { a =>
+          a.copy(balanceByLatestSnapshot = a.balanceByLatestSnapshot + tx.amount)
+        }, AddressCacheData(tx.amount, 0L))
     }
 
-  def clear: F[Unit] =
-    memPool.clear
-      .flatTap(_ => logger.info("Address MemPool has been cleared"))
+  private[storage] def withLock[R](addresses: Set[String])(thunk: => F[R]): F[R] =
+    locks.acquire(addresses.toList) {
+      thunk
+    }
 }

@@ -429,7 +429,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
   private def transfer(tx: Transaction): F[Unit] =
     shouldTransfer(tx).ifM(
-      addressService.transfer(tx).void,
+      addressService.transferTransaction(tx).void,
       logger.debug(s"[${dao.id.short}] Transaction with hash blocked=${tx.hash} : is dummy=${tx.isDummy}")
     )
 

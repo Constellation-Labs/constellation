@@ -47,6 +47,12 @@ class StorageService[F[_]: Concurrent, V](
   private[storage] def putToCache(key: String, v: V): F[V] =
     Sync[F].delay(lruCache.put(key, v)).map(_ => v)
 
+  // TODO: Check if we need queue for transactions as putAll does not touch queue
+  def putAll(kv: Map[String, V]): F[Map[String, V]] = putAllToCache(kv)
+
+  private[storage] def putAllToCache(kv: Map[String, V]): F[Map[String, V]] =
+    Sync[F].delay(lruCache.putAll(kv)).map(_ => kv)
+
   def put(key: String, v: V): F[V] =
     queueRef.modify {
       case q if q.size >= maxQueueSize => (q.dequeue._2, ())

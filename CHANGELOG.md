@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Fixed
+- Use lock when updating balances in AddressService during redownload/rollback
+- Apply SnapshotInfo balances all at once instead of one by one during redownload
+- Make sure that we clear balances which existed at higher heights in AddressService when redownload moves node back to lower heights
+- Use Set for locking addresses everywhere for consistency and to avoid accidental double-lock
+
+## Changed
+- Use more descriptive names for methods which clear the mempool during snapshot creation/redownload
 
 ## [v2.14.0] 2020-08-26
 ## Added

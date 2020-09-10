@@ -5,11 +5,10 @@ import cats.effect.{Concurrent, ContextShift, IO}
 import cats.implicits._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.{Observation, ObservationService}
 import org.constellation.primitives.Schema.{CheckpointCache, _}
 import org.constellation.primitives.Transaction
+import org.constellation.storage.ConcurrentStorageService
 import org.constellation.storage.algebra.Lookup
-import org.constellation.storage.{ConcurrentStorageService, MessageService, NotificationService}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 class CheckpointService[F[_]: Concurrent](
@@ -42,7 +41,7 @@ class CheckpointService[F[_]: Concurrent](
             .put(cbCache.checkpointBlock.baseHash, CheckpointCacheMetadata(ccm, cbCache.children, cbCache.height))
       )
 
-  def applySnapshot(cbs: List[String]): F[Unit] =
+  def batchRemove(cbs: List[String]): F[Unit] =
     logger
       .debug(s"[${dao.id.short}] applying snapshot for blocks: $cbs from others")
       .flatMap(_ => cbs.map(memPool.remove).sequence.void)
