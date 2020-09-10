@@ -11,10 +11,19 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.domain.transaction.TransactionService
-import org.constellation.primitives.ConcurrentTipService
+import org.constellation.domain.transaction.{LastTransactionRef, TransactionService}
+import org.constellation.primitives.Schema.EdgeHashType.{AddressHash, TransactionDataHash}
+import org.constellation.primitives.{ConcurrentTipService, Edge, Transaction}
+import org.constellation.primitives.Schema.{
+  AddressCacheData,
+  ObservationEdge,
+  SignedObservationEdge,
+  TransactionEdgeData,
+  TypedEdgeHash
+}
 import org.constellation.rewards.EigenTrust
 import org.constellation.trust.TrustManager
+import org.constellation.util.SignatureBatch
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
@@ -105,6 +114,51 @@ class SnapshotServiceTest
 
         snapshotService.exists("dontexist").unsafeRunSync shouldBe false
       }
+    }
+  }
+
+  "recalculateAddressCacheData" - {
+    "should correctly adjust balance based on given transactions" in {
+      val addressCacheData = Map(
+        "DAG123" -> AddressCacheData(1000L, 0L, balanceByLatestSnapshot = 1000L, rewardsBalance = 1000L),
+        "DAG456" -> AddressCacheData(1000L, 0L, balanceByLatestSnapshot = 1000L, rewardsBalance = 1000L),
+        "DAG789" -> AddressCacheData(1000L, 0L, balanceByLatestSnapshot = 1000L, rewardsBalance = 1000L)
+      )
+
+      val txs = Seq(
+        Transaction(
+          Edge[TransactionEdgeData](
+            ObservationEdge(
+              Seq(TypedEdgeHash("DAG456", AddressHash), TypedEdgeHash("DAG789", AddressHash)),
+              TypedEdgeHash("", TransactionDataHash)
+            ),
+            SignedObservationEdge(SignatureBatch("", Seq.empty)),
+            TransactionEdgeData(123L, LastTransactionRef.empty, Option(2L))
+          ),
+          LastTransactionRef.empty
+        ),
+        Transaction(
+          Edge[TransactionEdgeData](
+            ObservationEdge(
+              Seq(TypedEdgeHash("DAG789", AddressHash), TypedEdgeHash("DAG456", AddressHash)),
+              TypedEdgeHash("", TransactionDataHash)
+            ),
+            SignedObservationEdge(SignatureBatch("", Seq.empty)),
+            TransactionEdgeData(223L, LastTransactionRef.empty)
+          ),
+          LastTransactionRef.empty
+        )
+      )
+
+      val expected = Map(
+        "DAG123" -> AddressCacheData(1000L, 0L, balanceByLatestSnapshot = 1000L, rewardsBalance = 1000L),
+        "DAG456" -> AddressCacheData(1098L, 0L, balanceByLatestSnapshot = 1000L, rewardsBalance = 1000L),
+        "DAG789" -> AddressCacheData( 900L, 0L, balanceByLatestSnapshot = 1000L, rewardsBalance = 1000L)
+      )
+
+      val result = SnapshotService.recalculateAddressCacheData(addressCacheData, txs)
+
+      result shouldBe expected
     }
   }
 

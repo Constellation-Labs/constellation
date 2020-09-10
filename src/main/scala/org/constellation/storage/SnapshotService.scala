@@ -16,7 +16,7 @@ import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, NodeState}
 import org.constellation.primitives._
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.Id
@@ -202,16 +202,26 @@ class SnapshotService[F[_]: Concurrent](
         lastAcceptedTransactionRef = lastAcceptedTransactionRef
       )
 
-  def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
+  def setSnapshot(snapshotInfo: SnapshotInfo, isRollback: Boolean = false): F[Unit] =
     for {
       _ <- removeStoredSnapshotDataFromMempool()
       _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
+      _ <- if (isRollback) {
+        val txs = snapshotInfo.snapshotCache.flatMap(_.checkpointBlock.transactions) ++
+          snapshotInfo.acceptedCBSinceSnapshotCache.flatMap(_.checkpointBlock.transactions)
+
+        val recalculatedAddressCacheData =
+          SnapshotService.recalculateAddressCacheData(snapshotInfo.addressCacheData, txs)
+
+        addressService.setAll(recalculatedAddressCacheData)
+      } else {
+        addressService.setAll(snapshotInfo.addressCacheData)
+      }
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
-      _ <- addressService.setAll(snapshotInfo.addressCacheData)
       _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
         soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
           checkpointService.put(h) >>
@@ -603,6 +613,30 @@ object SnapshotService {
       eigenTrust,
       dao
     )
+
+  private[storage] def recalculateAddressCacheData(
+    addressCache: Map[String, AddressCacheData],
+    txs: Seq[Transaction]
+  ): Map[String, AddressCacheData] = {
+    def extractValue(tx: Transaction, address: String): Long = tx match {
+      case t if t.src.address == address => -(t.amount + t.feeValue)
+      case t if t.dst.address == address => t.amount
+      case _                             => 0L
+    }
+
+    addressCache.map {
+      case (address, v) =>
+        val txsBalance =
+          txs
+            .filter(tx => tx.src.address == address || tx.dst.address == address)
+            .toSet
+            .map(t => extractValue(t, address))
+            .sum
+
+        val recalculatedBalance = v.balanceByLatestSnapshot + txsBalance
+        (address, v.copy(balance = recalculatedBalance))
+    }
+  }
 }
 
 sealed trait SnapshotError extends Throwable {
