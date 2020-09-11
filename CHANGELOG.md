@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.14.3] 2020-09-11
 ## Changed
 - Further adjusted rollback process
 
