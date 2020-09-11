@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ## Fixed
 - Lock existing memPool during redownload
+- Adjust rollback process
 
 ## [v2.14.1] 2020-09-11
 ## Changed

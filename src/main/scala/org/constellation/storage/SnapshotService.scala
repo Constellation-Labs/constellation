@@ -634,7 +634,9 @@ object SnapshotService {
             .sum
 
         val recalculatedBalance = v.balanceByLatestSnapshot + txsBalance
-        (address, v.copy(balance = recalculatedBalance))
+        val balance = if(recalculatedBalance >= 0L) recalculatedBalance else 0L
+        val balanceByLatestSnapshot = if(v.balanceByLatestSnapshot >= 0L) v.balanceByLatestSnapshot else 0L
+        (address, v.copy(balance = balance, balanceByLatestSnapshot = balanceByLatestSnapshot))
     }
   }
 }
