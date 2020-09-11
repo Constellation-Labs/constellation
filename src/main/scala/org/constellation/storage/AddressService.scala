@@ -18,8 +18,10 @@ class AddressService[F[_]: Concurrent]() {
   def getAll: F[Map[String, AddressCacheData]] = memPool.toMap()
 
   def setAll(kv: Map[String, AddressCacheData]): F[Map[String, AddressCacheData]] =
-    withLock(kv.keySet) {
-      clear >> memPool.putAll(kv)
+    getAll.flatMap { pool =>
+      withLock(kv.keySet ++ pool.keySet) {
+        clear >> memPool.putAll(kv)
+      }
     }
 
   def set(key: String, value: AddressCacheData): F[AddressCacheData] = withLock(Set(key)) {
