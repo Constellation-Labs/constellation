@@ -104,7 +104,7 @@ class RollbackService[F[_]: Concurrent](
   private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): EitherT[F, Throwable, Unit] =
     for {
       _ <- snapshotInfoLocalStorage.write(snapshotInfo.snapshot.snapshot.hash, snapshotInfo)
-      _ <- snapshotService.setSnapshot(snapshotInfo, isRollback = true).attemptT
+      _ <- snapshotService.setSnapshot(snapshotInfo).attemptT
     } yield ()
 
   private def acceptSnapshot(storedSnapshot: StoredSnapshot, height: Long): EitherT[F, Throwable, Unit] =
