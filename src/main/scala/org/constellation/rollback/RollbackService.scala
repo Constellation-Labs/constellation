@@ -1,6 +1,6 @@
 package org.constellation.rollback
 
-import cats.data.EitherT
+import cats.data.{EitherT, NonEmptyList}
 import cats.effect.{Concurrent, ContextShift}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -28,9 +28,9 @@ class RollbackService[F[_]: Concurrent](
   snapshotService: SnapshotService[F],
   snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
-  snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
-  snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
-  genesisObservationCloudStorage: GenesisObservationS3Storage[F],
+  snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[F, StoredSnapshot]],
+  snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[F, SnapshotInfo]],
+  genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
   redownloadService: RedownloadService[F],
   cluster: Cluster[F]
 )(implicit C: ContextShift[F]) {
@@ -50,12 +50,23 @@ class RollbackService[F[_]: Concurrent](
   def restore(height: Long, hash: String): EitherT[F, Throwable, Unit] =
     validate(height, hash).flatMap(restore(_, height))
 
+  private[rollback] def executeWithFallback[A, B](
+    xs: NonEmptyList[B]
+  )(f: B => EitherT[F, Throwable, A]): EitherT[F, Throwable, A] =
+    xs match {
+      case NonEmptyList(head, Nil) => f(head)
+      case NonEmptyList(head, xs) =>
+        f(head).recoverWith {
+          case _: Throwable => executeWithFallback(NonEmptyList(xs.head, xs.tail))(f)
+        }
+    }
+
   private[rollback] def validate(height: Long, hash: String): EitherT[F, Throwable, RollbackData] =
     for {
       _ <- logger.debug(s"Validating rollback data for height $height and hash $hash").attemptT
-      snapshot <- snapshotCloudStorage.read(height, hash)
-      snapshotInfo <- snapshotInfoCloudStorage.read(height, hash)
-      genesisObservation <- genesisObservationCloudStorage.read()
+      snapshot <- executeWithFallback(snapshotCloudStorage)(_.read(height, hash))
+      snapshotInfo <- executeWithFallback(snapshotInfoCloudStorage)(_.read(height, hash))
+      genesisObservation <- executeWithFallback(genesisObservationCloudStorage)(_.read())
       addressData = snapshotInfo.addressCacheData.map {
         case (address, data) => (address, data.balance)
       }
@@ -79,7 +90,7 @@ class RollbackService[F[_]: Concurrent](
 
   private def getHighest(): EitherT[F, Throwable, (Long, String)] =
     for {
-      snapshotInfos <- snapshotInfoCloudStorage.list()
+      snapshotInfos <- snapshotInfoCloudStorage.head.list()
       highest = snapshotInfos.map {
         _.split('-') match {
           case Array(height, hash) => (height.toLong, hash)

@@ -5,6 +5,7 @@ import cats.effect.{Blocker, ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConfigUtil.AWSStorageConfig
 import org.constellation.checkpoint._
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
@@ -179,30 +180,26 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
     genesisObservationStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
     if (ConfigUtil.isEnabledAWSStorage) {
-      snapshotCloudStorage = SnapshotS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
-      snapshotInfoCloudStorage = SnapshotInfoS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
+      val awsStorageConfigs = ConfigUtil.loadAWSStorageConfigs()
+
+      snapshotCloudStorage = awsStorageConfigs.map {
+        case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
+          SnapshotS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
+      }
+      snapshotInfoCloudStorage = awsStorageConfigs.map {
+        case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
+          SnapshotInfoS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
+      }
       rewardsCloudStorage = RewardsS3Storage(
         ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
         ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
         ConfigUtil.constellation.getString("storage.aws.region"),
         ConfigUtil.constellation.getString("storage.aws.bucket-name")
       )
-      genesisObservationCloudStorage = GenesisObservationS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
+      genesisObservationCloudStorage = awsStorageConfigs.map {
+        case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
+          GenesisObservationS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
+      }
       cloudStorage = new AWSStorageOld[IO](
         ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
         ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
