@@ -2,6 +2,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+## Added
+- Fallback to other buckets while doing rollback
+
 ## Changed
 - Removed libraries: scala-async, akka, storehaus-cache, sway, slick, h2, hasher, grgen
 - Updated libraries: http-request-signer, enumeratum-circe, scaffeine, ext-scalatags, better-files, pureconfig, log4cats-slf4j, logstash-logback-encoder, http4s, prometheus, cats, aws

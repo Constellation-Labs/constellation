@@ -2,6 +2,7 @@ package org.constellation
 
 import java.util.concurrent.Semaphore
 
+import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.checkpoint.{
@@ -189,13 +190,13 @@ trait EdgeDAO {
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
 
   var genesisObservationStorage: GenesisObservationLocalStorage[IO] = _
-  var genesisObservationCloudStorage: GenesisObservationS3Storage[IO] = _
+  var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
 
   var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
-  var snapshotCloudStorage: HeightHashFileStorage[IO, StoredSnapshot] = _
+  var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _
 
   var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
-  var snapshotInfoCloudStorage: HeightHashFileStorage[IO, SnapshotInfo] = _
+  var snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[IO, SnapshotInfo]] = _
 
   var rewardsStorage: LocalFileStorage[IO, StoredRewards] = _
   var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _

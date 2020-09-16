@@ -3,8 +3,10 @@ package org.constellation
 import java.lang
 import java.util.concurrent.TimeUnit
 
+import cats.data.NonEmptyList
 import com.typesafe.config.{Config, ConfigFactory}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
@@ -59,4 +61,29 @@ object ConfigUtil {
 
   def isEnabledCloudStorage: Boolean =
     isEnabledGCPStorage || isEnabledAWSStorage
+
+  case class AWSStorageConfig(accessKey: String, secretKey: String, region: String, bucket: String)
+
+  def loadAWSStorageConfigs(constellationConfig: Config = constellation): NonEmptyList[AWSStorageConfig] = {
+    val accessKey = constellationConfig.getString(s"storage.aws.aws-access-key")
+    val secretKey = constellationConfig.getString(s"storage.aws.aws-secret-key")
+    val region = constellationConfig.getString(s"storage.aws.region")
+
+    def load(bucket: String): AWSStorageConfig =
+      AWSStorageConfig(
+        accessKey = accessKey,
+        secretKey = secretKey,
+        region = region,
+        bucket = bucket
+      )
+
+    val backupStorage: List[String] = Try(
+      constellationConfig.getStringList("storage.aws.backup-buckets-names").asScala.toList
+    ).getOrElse(Nil)
+
+    val base = load(constellationConfig.getString(s"storage.aws.bucket-name"))
+    val backups = backupStorage.map(load)
+
+    NonEmptyList(base, backups)
+  }
 }
