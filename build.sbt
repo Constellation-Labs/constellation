@@ -1,4 +1,3 @@
-import Regression._
 import sbt.Keys.mainClass
 
 // -----------------
@@ -149,7 +148,7 @@ lazy val testDependencies = Seq(
   "org.scalamock" %% "scalamock" % "5.0.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,
   "org.mockito" %% "mockito-scala-cats" % versions.mockito
-).map(_ % "it,test,regression")
+).map(_ % "it,test")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-results/scalatest")
@@ -172,7 +171,6 @@ lazy val root = (project in file("."))
   .dependsOn(schema)
   .disablePlugins(plugins.JUnitXmlReportPlugin)
   .configs(IntegrationTest)
-  .configs(RegressionTest)
   .enablePlugins(BuildInfoPlugin)
   .settings(
     buildInfoKeys := Seq[BuildInfoKey](
@@ -188,7 +186,6 @@ lazy val root = (project in file("."))
     commonSettings,
     name := "constellation",
     coreSettings,
-    Regression.regressionSettings,
     Defaults.itSettings,
     libraryDependencies ++= (coreDependencies ++ testDependencies),
     mainClass := Some("org.constellation.ConstellationNode")
