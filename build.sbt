@@ -101,8 +101,6 @@ lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDep
 
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
-  "com.roundeights" %% "hasher" % "1.2.0",
-  "net.glxn" % "qrgen" % "1.4",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
