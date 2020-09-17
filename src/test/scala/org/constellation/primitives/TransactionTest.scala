@@ -3,9 +3,10 @@ package org.constellation.primitives
 import cats.syntax.all._
 import org.constellation.Fixtures
 import org.constellation.domain.transaction.LastTransactionRef
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class TransactionTest extends FreeSpec with Matchers {
+class TransactionTest extends AnyFreeSpec with Matchers {
   "feeValue" - {
     "should return 0 for negative fee" in {
       val negativeFee = (-10L).some

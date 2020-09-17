@@ -16,10 +16,11 @@ import org.constellation.schema.Id
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{FunSpecLike, Matchers}
+import org.scalatest.funspec.AnyFunSpecLike
+import org.scalatest.matchers.should.Matchers
 
 class FacilitatorFilterTest
-    extends FunSpecLike
+    extends AnyFunSpecLike
     with ArgumentMatchersSugar
     with IdiomaticMockito
     with IdiomaticMockitoCats

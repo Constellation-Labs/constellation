@@ -2,10 +2,12 @@ package org.constellation.rewards
 
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class RewardsManagerTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with BeforeAndAfter
     with IdiomaticMockito
     with IdiomaticMockitoCats

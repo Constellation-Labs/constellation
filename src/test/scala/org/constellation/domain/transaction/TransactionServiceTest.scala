@@ -15,13 +15,15 @@ import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 class TransactionServiceTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers

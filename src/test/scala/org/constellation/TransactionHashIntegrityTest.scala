@@ -3,15 +3,21 @@ package org.constellation
 import cats.effect.{ContextShift, IO}
 import io.circe.generic.auto._
 import io.circe.parser.parse
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.primitives.Schema.EdgeHashType.TransactionDataHash
 import org.constellation.primitives.Schema.{ObservationEdge, TypedEdgeHash}
-import org.constellation.primitives.Transaction
+import org.constellation.primitives.{CheckpointBlock, Transaction}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.wallet.{Hashable, KryoSerializer => WalletKryoSerializer, Transaction => WalletTransaction}
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class TransactionHashIntegrityTest extends FreeSpec with Matchers {
+import scala.collection.SortedMap
+
+class TransactionHashIntegrityTest extends AnyFreeSpec with Matchers {
   implicit val cc: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
   val txPath = "src/test/resources/valid-tx.txt"
 
@@ -103,5 +109,35 @@ class TransactionHashIntegrityTest extends FreeSpec with Matchers {
     val transaction = WalletTransaction.transactionFromJsonString(jsonString)
 
     Hashable.hash(readTx.edge.signedObservationEdge) shouldBe Hashable.hash(transaction.edge.signedObservationEdge)
+  }
+
+  "snapshot info store" in {
+    val sn = Snapshot("", Seq(), SortedMap.empty)
+    val ss = StoredSnapshot(sn, Seq())
+    val snInfo = SnapshotInfo(ss)
+
+    val snInfoS = SnapshotInfoLocalStorage[IO]("src/test/resources")
+    snInfoS.write("snapshot-info-write", snInfo).rethrowT.unsafeRunSync()
+
+    val snInfo2 = snInfoS.read("snapshot-info-write").rethrowT.unsafeRunSync()
+
+    println(snInfo.snapshot.snapshot.hash)
+    println(snInfo2.snapshot.snapshot.hash)
+  }
+
+  "snapshot read" in {
+    val snS = SnapshotLocalStorage[IO]("src/test/resources")
+    val sn = snS.read("snapshot").rethrowT.unsafeRunSync()
+
+    println(sn.snapshot.hash)
+
+  }
+
+  "snapshot info read" in {
+    val snInfoS = SnapshotInfoLocalStorage[IO]("src/test/resources")
+    val snInfo = snInfoS.read("snapshot-info").rethrowT.unsafeRunSync()
+
+    println(snInfo.snapshot.snapshot.hash)
+
   }
 }

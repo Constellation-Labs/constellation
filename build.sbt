@@ -13,10 +13,10 @@ lazy val commonSettings = Seq(
 
 lazy val versions = new {
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.5.4"
+  val micrometer = "1.5.5"
   val prometheus = "0.9.0"
   val cats = "2.2.0"
-  val mockito = "1.5.16"
+  val mockito = "1.15.0"
   val twitterChill = "0.9.3"
   val http4s = "0.21.7"
   val circe = "0.13.0"
@@ -35,7 +35,7 @@ envVars in Test := Map("CL_STOREPASS" -> "storepass", "CL_KEYPASS" -> "keypass")
 enablePlugins(JavaAgent, JavaAppPackaging)
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
 addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
-addCompilerPlugin(("org.scalamacros" % "paradise" % "2.1.0").cross(CrossVersion.full))
+addCompilerPlugin(("org.scalamacros" % "paradise" % "2.1.1").cross(CrossVersion.full))
 
 scalacOptions :=
   Seq(

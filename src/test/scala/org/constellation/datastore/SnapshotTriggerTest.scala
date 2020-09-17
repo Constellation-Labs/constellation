@@ -9,12 +9,14 @@ import org.constellation.primitives.Schema.NodeState
 import org.constellation.storage.{SnapshotCreated, SnapshotError}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
 
 class SnapshotTriggerTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats

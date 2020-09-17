@@ -1,8 +1,9 @@
 package org.constellation.util
 
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class AccountBalanceCSVReaderTest extends FreeSpec with Matchers {
+class AccountBalanceCSVReaderTest extends AnyFreeSpec with Matchers {
 
   private val nonNormalizedCSV = getClass.getResource("/test.csv")
   private val normalizedCSV = getClass.getResource("/test_normalized.csv")

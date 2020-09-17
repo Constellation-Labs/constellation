@@ -7,7 +7,9 @@ import org.constellation.ConstellationExecutionContext
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.CheckpointCache
 import org.constellation.serializer.KryoSerializer
-import org.scalatest.{BeforeAndAfterAll, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContextExecutor
@@ -22,7 +24,7 @@ object CheckOpenedFileDescriptors {
   }
 }
 
-class SnapshotDiskStorageTest extends FreeSpec with Matchers with BeforeAndAfterAll {
+class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
 
   implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
   implicit val cs: ContextShift[IO] = IO.contextShift(ec)

@@ -11,9 +11,11 @@ import org.constellation.session.SessionTokenService.{
   TokenValid,
   TokensDontMatch
 }
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class SessionTokenServiceTest extends FreeSpec with Matchers with BeforeAndAfter {
+class SessionTokenServiceTest extends AnyFreeSpec with Matchers with BeforeAndAfter {
 
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 

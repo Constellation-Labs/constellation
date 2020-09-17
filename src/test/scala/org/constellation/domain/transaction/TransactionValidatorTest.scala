@@ -3,15 +3,23 @@ package org.constellation.domain.transaction
 import cats.data.Validated
 import cats.effect.IO
 import org.constellation.primitives.Schema.EdgeHashType.{AddressHash, TransactionDataHash}
-import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, SignedObservationEdge, TransactionEdgeData, TypedEdgeHash}
+import org.constellation.primitives.Schema.{
+  EdgeHashType,
+  ObservationEdge,
+  SignedObservationEdge,
+  TransactionEdgeData,
+  TypedEdgeHash
+}
 import org.constellation.primitives.{Edge, Transaction}
 import org.constellation.util.SignatureBatch
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class TransactionValidatorTest
-  extends FreeSpec
+    extends AnyFreeSpec
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats
@@ -97,6 +105,7 @@ class TransactionValidatorTest
 }
 
 object TransactionValidatorTest {
+
   def createTransaction(src: String, dst: String, lastTxRef: LastTransactionRef, edgeLastTxRef: LastTransactionRef) =
     Transaction(
       Edge(

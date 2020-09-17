@@ -1,9 +1,9 @@
 package org.constellation.crypto
 
 import org.constellation.keytool.KeyUtils
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
-class KeyTest extends FlatSpec {
+class KeyTest extends AnyFlatSpec {
 
   private val testKeys = Seq.fill(20) { KeyUtils.makeKeyPair() }
 

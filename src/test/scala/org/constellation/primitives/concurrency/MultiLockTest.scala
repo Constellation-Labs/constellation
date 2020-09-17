@@ -3,12 +3,13 @@ package org.constellation.primitives.concurrency
 import java.util.concurrent.atomic.AtomicInteger
 
 import cats.effect.{ContextShift, IO}
-import org.constellation.{ConstellationExecutionContext}
-import org.scalatest.{Matchers, WordSpec}
+import org.constellation.ConstellationExecutionContext
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
 import scala.concurrent.Future
 
-class MultiLockTest extends WordSpec with Matchers {
+class MultiLockTest extends AnyWordSpec with Matchers {
   "MultiLock" should {
     "not allow concurrent modifications on same keys" in {
       implicit val ec = ConstellationExecutionContext.bounded

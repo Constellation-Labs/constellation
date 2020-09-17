@@ -7,10 +7,12 @@ import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class AddressServiceTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with BeforeAndAfter
     with Matchers
     with IdiomaticMockito

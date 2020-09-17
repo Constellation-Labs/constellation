@@ -4,9 +4,10 @@ import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
 import org.mockito.IdiomaticMockito
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class StorageServiceTest extends FunSuite with IdiomaticMockito with Matchers {
+class StorageServiceTest extends AnyFunSuite with IdiomaticMockito with Matchers {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 

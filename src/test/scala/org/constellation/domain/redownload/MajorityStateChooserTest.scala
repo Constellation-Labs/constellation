@@ -13,12 +13,14 @@ import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfterEach, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
 
 class MajorityStateChooserTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats

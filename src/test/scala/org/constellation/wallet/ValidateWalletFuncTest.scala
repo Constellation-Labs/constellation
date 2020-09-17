@@ -1,14 +1,14 @@
 package org.constellation.wallet
 
 import java.security.{KeyPair, PrivateKey, PublicKey}
-import org.scalatest.FlatSpec
 
 import constellation._
 import org.constellation.keytool.KeyUtils._
+import org.scalatest.flatspec.AnyFlatSpec
 
 case class SetSerialize(s: Set[String])
 
-class ValidateWalletFuncTest extends FlatSpec {
+class ValidateWalletFuncTest extends AnyFlatSpec {
 
   val kp: KeyPair = makeKeyPair()
 

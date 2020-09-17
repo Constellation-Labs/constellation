@@ -9,9 +9,11 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
 import org.constellation.primitives.{CheckpointBlock, Edge, Transaction}
 import org.constellation.{ConstellationExecutionContext, Fixtures}
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.should.Matchers
 
-class CheckpointBlockDoubleSpendCheckerTest extends FunSuite with BeforeAndAfter with Matchers {
+class CheckpointBlockDoubleSpendCheckerTest extends AnyFunSuite with BeforeAndAfter with Matchers {
 
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
   private implicit val kp: KeyPair = KeyUtils.makeKeyPair()
