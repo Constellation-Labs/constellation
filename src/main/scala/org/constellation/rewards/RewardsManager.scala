@@ -2,7 +2,7 @@ package org.constellation.rewards
 import cats.data.NonEmptyList
 import cats.effect._
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService

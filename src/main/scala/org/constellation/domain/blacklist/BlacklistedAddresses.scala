@@ -2,7 +2,7 @@ package org.constellation.domain.blacklist
 
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 
 class BlacklistedAddresses[F[_]: Concurrent] {

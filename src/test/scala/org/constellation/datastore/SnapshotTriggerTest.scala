@@ -2,7 +2,7 @@ package org.constellation.datastore
 
 import cats.data.EitherT
 import cats.effect.IO
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.primitives.Schema.NodeState

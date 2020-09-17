@@ -2,7 +2,7 @@ package org.constellation.session
 
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.fuuid.FUUID
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}

@@ -5,7 +5,7 @@ import java.io.ByteArrayInputStream
 import better.files.File
 import cats.data.EitherT
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials}
 import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}

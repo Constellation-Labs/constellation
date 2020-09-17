@@ -1,7 +1,7 @@
 package org.constellation.domain.redownload
 
 import cats.data.NonEmptyList
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{
   PeersCache,

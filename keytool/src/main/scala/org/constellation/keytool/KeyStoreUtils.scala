@@ -6,7 +6,7 @@ import java.security.{Key, KeyPair, KeyStore, PrivateKey}
 
 import cats.data.EitherT
 import cats.effect._
-import cats.implicits._
+import cats.syntax.all._
 import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
 

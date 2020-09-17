@@ -1,7 +1,7 @@
 package org.constellation.datastore
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.domain.exception.InvalidNodeState
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.p2p.{Cluster, SetStateResult}

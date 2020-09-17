@@ -1,6 +1,6 @@
 package org.constellation.primitives
 
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.Fixtures
 import org.constellation.domain.transaction.LastTransactionRef
 import org.scalatest.{FreeSpec, Matchers}

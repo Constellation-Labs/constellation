@@ -2,7 +2,7 @@ package org.constellation.infrastructure.endpoints
 
 import better.files.File
 import cats.effect.{Blocker, Concurrent, ContextShift}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Printer
 import io.circe.syntax._

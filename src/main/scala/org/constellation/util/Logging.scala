@@ -3,7 +3,7 @@ package org.constellation.util
 import java.io.{PrintWriter, StringWriter}
 
 import cats.effect.{Bracket, Clock, IO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.ConstellationExecutionContext
 

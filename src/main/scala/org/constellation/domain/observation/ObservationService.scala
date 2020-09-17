@@ -1,7 +1,7 @@
 package org.constellation.domain.observation
 
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusService

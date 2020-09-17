@@ -5,7 +5,7 @@ import java.security.KeyPair
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import scopt.OParser
 
 object Wallet extends IOApp {

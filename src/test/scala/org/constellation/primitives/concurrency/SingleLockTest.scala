@@ -3,7 +3,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
 import org.scalatest.{Matchers, WordSpec}
 

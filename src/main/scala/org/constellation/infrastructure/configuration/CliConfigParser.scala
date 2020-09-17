@@ -2,7 +2,7 @@ package org.constellation.infrastructure.configuration
 
 import better.files.File
 import cats.effect.Sync
-import cats.implicits._
+import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.BuildInfo
 import org.constellation.domain.configuration.CliConfig

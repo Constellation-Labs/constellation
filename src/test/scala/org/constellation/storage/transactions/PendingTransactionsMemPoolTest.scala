@@ -1,8 +1,13 @@
 package org.constellation.storage.transactions
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
-import org.constellation.domain.transaction.{LastTransactionRef, PendingTransactionsMemPool, TransactionChainService, TransactionService}
+import cats.syntax.all._
+import org.constellation.domain.transaction.{
+  LastTransactionRef,
+  PendingTransactionsMemPool,
+  TransactionChainService,
+  TransactionService
+}
 import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
 import org.constellation.primitives.{Edge, Transaction, TransactionCacheData}
 import org.constellation.storage.RateLimiting

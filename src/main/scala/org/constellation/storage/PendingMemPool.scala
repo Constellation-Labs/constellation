@@ -1,6 +1,6 @@
 package org.constellation.storage
 
-import cats.implicits._
+import cats.syntax.all._
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import org.constellation.storage.algebra.LookupAlgebra

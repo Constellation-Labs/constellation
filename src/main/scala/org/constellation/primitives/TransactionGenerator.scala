@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import cats.data.EitherT
 import cats.effect.{Async, Concurrent, LiftIO}
-import cats.implicits._
+import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger

@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import better.files.File
 import cats.effect.{IO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import com.google.common.util.concurrent.AtomicDouble
 import com.typesafe.scalalogging.Logger
 import constellation._

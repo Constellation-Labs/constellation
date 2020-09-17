@@ -2,7 +2,7 @@ package org.constellation.domain.observation
 
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.consensus.Consensus.RoundId
 
 sealed trait ObservationEvent

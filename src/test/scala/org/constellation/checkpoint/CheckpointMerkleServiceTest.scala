@@ -1,7 +1,7 @@
 //package org.constellation.checkpoint
 //
 //import cats.effect.{ContextShift, IO}
-//import cats.implicits._
+//import cats.syntax.all._
 //import org.constellation.domain.consensus.ConsensusStatus
 //import org.constellation.p2p.PeerNotification
 //import org.constellation.primitives.Schema.{CheckpointCache, Height, SignedObservationEdge}

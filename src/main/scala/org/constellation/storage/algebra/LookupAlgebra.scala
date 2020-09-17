@@ -1,7 +1,7 @@
 package org.constellation.storage.algebra
 
 import cats.effect.Sync
-import cats.implicits._
+import cats.syntax.all._
 
 trait LookupAlgebra[F[_], K, V] {
   def lookup(key: K): F[Option[V]]

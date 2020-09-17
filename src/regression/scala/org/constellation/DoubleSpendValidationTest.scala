@@ -3,7 +3,7 @@ package org.constellation
 import java.security.KeyPair
 
 import cats.effect.IO
-import cats.implicits._
+import cats.syntax.all._
 import cats.effect.concurrent.Ref
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionValidator}

@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}

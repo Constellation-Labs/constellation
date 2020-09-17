@@ -2,7 +2,7 @@ package org.constellation.storage.transactions
 
 import cats.effect.{ContextShift, IO, Timer}
 import cats.effect.concurrent.Semaphore
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus

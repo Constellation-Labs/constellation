@@ -1,6 +1,6 @@
 package org.constellation.domain.redownload
 
-import cats.implicits._
+import cats.syntax.all._
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
 import io.circe.syntax._

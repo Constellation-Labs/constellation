@@ -1,7 +1,7 @@
 package org.constellation.primitives
 
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO

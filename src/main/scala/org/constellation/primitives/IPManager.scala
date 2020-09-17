@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.primitives.IPManager.IP
 
 import scala.collection.Set

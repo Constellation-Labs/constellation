@@ -1,7 +1,7 @@
 package org.constellation.domain.cloud.providers
 
 import better.files.File
-import cats.implicits._
+import cats.syntax.all._
 import cats.data.EitherT
 import cats.effect.Concurrent
 import org.constellation.domain.cloud.config.Local

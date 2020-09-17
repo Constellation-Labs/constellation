@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats

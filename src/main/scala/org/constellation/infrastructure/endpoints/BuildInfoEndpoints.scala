@@ -1,7 +1,7 @@
 package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import io.circe.{Decoder, Encoder}
 import org.constellation.BuildInfo
 import org.http4s.HttpRoutes

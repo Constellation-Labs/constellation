@@ -2,7 +2,7 @@ package org.constellation.checkpoint
 
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
 import cats.effect.{IO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
@@ -22,7 +22,7 @@ object CheckpointBlockValidator {
   type ValidationResult[A] = ValidatedNel[CheckpointBlockValidation, A]
   type AddressBalance = Map[String, Long]
 
-  import cats.implicits._
+  import cats.syntax.all._
 
   def validateDuplicatedTransactions(
     t: Iterable[Transaction]

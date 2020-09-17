@@ -3,7 +3,7 @@
 //import java.security.KeyPair
 //
 //import cats.effect.IO
-//import cats.implicits._
+//import cats.syntax.all._
 //import com.typesafe.scalalogging.Logger
 //import constellation._
 //import org.constellation.domain.snapshot.SnapshotInfo

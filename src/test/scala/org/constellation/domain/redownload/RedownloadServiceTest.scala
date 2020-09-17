@@ -3,7 +3,7 @@ package org.constellation.domain.redownload
 import better.files.File
 import cats.data.{EitherT, Kleisli, NonEmptyList}
 import cats.effect.{ContextShift, IO, Timer}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.StoredSnapshot

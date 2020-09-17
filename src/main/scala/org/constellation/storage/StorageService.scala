@@ -2,7 +2,7 @@ package org.constellation.storage
 
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
 import org.constellation.storage.algebra.StorageAlgebra
 import org.constellation.util.Metrics

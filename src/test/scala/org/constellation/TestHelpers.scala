@@ -5,7 +5,7 @@ import java.util.UUID
 
 import better.files.File
 import cats.effect.IO
-import cats.implicits._
+import cats.syntax.all._
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger

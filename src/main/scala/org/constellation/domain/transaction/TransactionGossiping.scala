@@ -1,7 +1,7 @@
 package org.constellation.domain.transaction
 
 import cats.effect.{Clock, Concurrent, LiftIO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.DAO

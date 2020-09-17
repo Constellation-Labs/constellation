@@ -1,6 +1,6 @@
 package org.constellation.util
 
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.primitives.{CheckpointBlock, Transaction}
 

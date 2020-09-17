@@ -1,7 +1,7 @@
 package org.constellation.trust
 
 import cats.effect.IO
-import cats.implicits._
+import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.schema.Id

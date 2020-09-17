@@ -2,7 +2,7 @@ package org.constellation.domain.transaction
 
 import cats.data.ValidatedNel
 import cats.effect.Sync
-import cats.implicits._
+import cats.syntax.all._
 import constellation._
 import org.constellation.primitives.Transaction
 
@@ -52,8 +52,7 @@ class TransactionValidator[F[_]: Sync](
     }
 
   def validateLastTransactionRef(tx: Transaction): F[ValidationResult[Transaction]] =
-    transactionService
-      .transactionChainService
+    transactionService.transactionChainService
       .getLastAcceptedTransactionRef(tx.src.address)
       .map { lastTxRef =>
         lazy val comparedOrdinals = tx.lastTxRef.ordinal.compare(lastTxRef.ordinal)
@@ -178,28 +177,28 @@ sealed trait IncorrectLastTransactionRef extends TransactionValidationError {
 }
 
 case class InconsistentLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
-  extends IncorrectLastTransactionRef
+    extends IncorrectLastTransactionRef
 
 object InconsistentLastTxRef {
   def apply(tx: Transaction) = new InconsistentLastTxRef(tx.hash, tx.lastTxRef)
 }
 
 case class LastTxRefOrdinalLowerThenStoredLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
-  extends IncorrectLastTransactionRef
+    extends IncorrectLastTransactionRef
 
 object LastTxRefOrdinalLowerThenStoredLastTxRef {
   def apply(tx: Transaction) = new LastTxRefOrdinalLowerThenStoredLastTxRef(tx.hash, tx.lastTxRef)
 }
 
 case class SameOrdinalButDifferentHashForLastTxRef(txHash: String, lastTransactionRef: LastTransactionRef)
-  extends IncorrectLastTransactionRef
+    extends IncorrectLastTransactionRef
 
 object SameOrdinalButDifferentHashForLastTxRef {
   def apply(tx: Transaction) = new SameOrdinalButDifferentHashForLastTxRef(tx.hash, tx.lastTxRef)
 }
 
 case class NonZeroOrdinalButEmptyHash(txHash: String, lastTransactionRef: LastTransactionRef)
-  extends IncorrectLastTransactionRef
+    extends IncorrectLastTransactionRef
 
 object NonZeroOrdinalButEmptyHash {
   def apply(tx: Transaction) = new NonZeroOrdinalButEmptyHash(tx.hash, tx.lastTxRef)

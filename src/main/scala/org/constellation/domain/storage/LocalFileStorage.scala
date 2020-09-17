@@ -5,7 +5,7 @@ import java.io.{File => JFile}
 import better.files._
 import cats.data.EitherT
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.serializer.KryoSerializer
 import org.slf4j.Logger

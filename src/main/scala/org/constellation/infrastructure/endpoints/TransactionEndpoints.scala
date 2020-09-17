@@ -2,7 +2,7 @@ package org.constellation.infrastructure.endpoints
 
 import cats.data.Validated.{Invalid, Valid}
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._

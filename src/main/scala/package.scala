@@ -4,7 +4,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
 import cats.effect.Sync
-import cats.implicits._
+import cats.syntax.all._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.keytool.KeyUtils._

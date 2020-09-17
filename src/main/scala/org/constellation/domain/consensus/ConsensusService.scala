@@ -2,7 +2,7 @@ package org.constellation.domain.consensus
 
 import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus

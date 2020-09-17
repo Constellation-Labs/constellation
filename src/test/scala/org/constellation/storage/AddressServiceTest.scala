@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.primitives.Schema.AddressCacheData
 import org.constellation.{ConstellationExecutionContext, Fixtures}

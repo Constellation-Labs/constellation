@@ -1,7 +1,7 @@
 package org.constellation.util
 
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.consensus.ConsensusManager
 import org.constellation.infrastructure.p2p.ClientInterpreter

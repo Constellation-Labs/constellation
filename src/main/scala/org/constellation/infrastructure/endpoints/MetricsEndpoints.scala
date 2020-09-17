@@ -3,7 +3,7 @@ package org.constellation.infrastructure.endpoints
 import java.io.{StringWriter, Writer}
 
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import io.prometheus.client.exporter.common.TextFormat
 import io.circe.syntax._
 import org.constellation.primitives.Schema.MetricsResult

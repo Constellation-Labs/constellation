@@ -1,7 +1,7 @@
 package org.constellation.infrastructure.redownload
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.util.Logging.logThread
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.util.PeriodicIO

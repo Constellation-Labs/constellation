@@ -4,7 +4,7 @@ import java.security.KeyPair
 
 import cats.effect.IO
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionValidator}
 import org.constellation.keytool.KeyUtils
