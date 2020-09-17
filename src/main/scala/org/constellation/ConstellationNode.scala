@@ -3,10 +3,6 @@ package org.constellation
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
-import akka.actor.ActorSystem
-import akka.http.scaladsl.server.Directive0
-import akka.http.scaladsl.server.directives.{DebuggingDirectives, LoggingMagnet}
-import akka.stream.ActorMaterializer
 import better.files.File
 import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp, Resource, Sync}
 import cats.implicits._
@@ -17,7 +13,6 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Decoder
 import io.prometheus.client.CollectorRegistry
-import org.constellation.CustomDirectives.printResponseTime
 import org.constellation.domain.cloud.CloudService
 import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend, FileToSend}
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
@@ -61,8 +56,6 @@ object ConstellationNode extends IOApp {
 
   import constellation._
 
-  implicit val system: ActorSystem = ActorSystem("Constellation")
-  implicit val materializer: ActorMaterializer = ActorMaterializer()
   implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
   implicit val clock: Clock[IO] = Clock.create[IO]
 
@@ -350,10 +343,7 @@ class ConstellationNode(
   registry: CollectorRegistry,
   sessionTokenService: SessionTokenService[IO]
 )(
-  implicit val system: ActorSystem,
-  implicit val materialize: ActorMaterializer,
   implicit val C: ContextShift[IO]
-//  implicit val executionContext: ExecutionContext
 ) extends StrictLogging {
 
   implicit val dao: DAO = new DAO()
@@ -377,11 +367,6 @@ class ConstellationNode(
   val ipManager: IPManager[IO] =
     IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
 
-  // TODO: Unused, can be used for timing information but adds a lot to logs
-  private val logReqResp: Directive0 = DebuggingDirectives.logRequestResult(
-    LoggingMagnet(printResponseTime(logger))
-  )
-
   def getIPData: ValidPeerIPData =
     ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
@@ -390,11 +375,7 @@ class ConstellationNode(
 
   def shutdown(): Unit = {
 
-    val unbindTimeout = ConfigUtil.getDurationFromConfig("akka.http.unbind-api-timeout")
-
-    val gracefulShutdown = IO(logger.info("Shutdown procedure starts")) >>
-      IO.fromFuture(IO(system.terminate())) >>
-      IO(logger.info("Shutdown completed"))
+    val gracefulShutdown = IO(logger.info("Shutdown procedure starts")) >> IO(logger.info("Shutdown completed"))
 
     dao.cluster
       .leave(gracefulShutdown.void)

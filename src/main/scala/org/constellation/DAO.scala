@@ -1,7 +1,5 @@
 package org.constellation
 
-import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import better.files.File
 import cats.effect.{Blocker, Concurrent, ConcurrentEffect, ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
@@ -67,8 +65,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
   var node: ConstellationNode = _
 
-  var actorMaterializer: ActorMaterializer = _
-
   var transactionAcceptedAfterDownload: Long = 0L
   var downloadFinishedTime: Long = System.currentTimeMillis()
 
@@ -104,13 +100,11 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def initialize(
     nodeConfigInit: NodeConfig = NodeConfig(),
     cloudService: CloudServiceEnqueue[IO]
-  )(implicit materialize: ActorMaterializer = null): Unit = {
+  ): Unit = {
     implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
     initialNodeConfig = nodeConfigInit
     nodeConfig = nodeConfigInit
-    actorMaterializer = materialize
-    standardTimeout = Timeout(nodeConfig.defaultTimeoutSeconds seconds)
 
     if (nodeConfig.isLightNode) {
       nodeType = NodeType.Light
@@ -372,12 +366,8 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
   def unsafeShutdown(): Unit = {
     if (node != null) {
       implicit val ec = ConstellationExecutionContext.unbounded
-
-//      node.peerApiBinding.flatMap(_.terminate(1.second))
-//      node.apiBinding.flatMap(_.terminate(1.second))
-      node.system.terminate()
     }
-    if (actorMaterializer != null) actorMaterializer.shutdown()
+
     List(
       peerHealthCheckWatcher,
       snapshotWatcher,

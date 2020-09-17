@@ -1,7 +1,7 @@
 package org.constellation.util
 
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
+import io.circe.{Decoder, Encoder}
 
 case class HostPort(
   host: String,

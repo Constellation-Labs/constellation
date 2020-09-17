@@ -3,10 +3,6 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
 
-import akka.http.scaladsl.model.HttpResponse
-import akka.http.scaladsl.unmarshalling.Unmarshal
-import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import cats.effect.Sync
 import cats.implicits._
 import com.google.common.hash.Hashing
@@ -22,8 +18,6 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt with SignHelpExt {
-
-  implicit var standardTimeout: Timeout = Timeout(15, TimeUnit.SECONDS)
 
   final val MinimumTime: Long = 1518898908367L
 
@@ -78,11 +72,6 @@ package object constellation extends POWExt with SignHelpExt {
     cc.getClass.getDeclaredFields.map(_.getName -> values.next).toList
   }
 
-  implicit class HTTPHelp(httpResponse: HttpResponse)(implicit val materialize: ActorMaterializer) {
-
-    def unmarshal: Future[String] = Unmarshal(httpResponse.entity).to[String]
-  }
-
   def pprintInet(inetSocketAddress: InetSocketAddress): String =
     s"address: ${inetSocketAddress.getAddress}, hostname: ${inetSocketAddress.getAddress.getHostAddress}, " +
       s"hostString: ${inetSocketAddress.getHostString}, port: ${inetSocketAddress.getPort}"
@@ -110,19 +99,6 @@ package object constellation extends POWExt with SignHelpExt {
 
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))
-
-  def wrapFutureWithMetric[T](
-    t: Future[T],
-    metricPrefix: String
-  )(implicit dao: DAO, ec: ExecutionContext): Future[T] = {
-    t.onComplete {
-      case Success(_) =>
-        dao.metrics.incrementMetric(metricPrefix + "_success")
-      case Failure(e) =>
-        dao.metrics.incrementMetric(metricPrefix + "_failure")
-    }
-    t
-  }
 
   def withMetric[F[_]: Sync, A](fa: F[A], prefix: String)(implicit dao: DAO): F[A] =
     fa.flatTap(_ => dao.metrics.incrementMetricAsync[F](s"${prefix}_success")).handleErrorWith { err =>
@@ -154,95 +130,6 @@ package object constellation extends POWExt with SignHelpExt {
     attempt
   }
 
-  def attemptWithRetry(t: => Boolean, maxRetries: Int = 10, delay: Long = 2000): Boolean = {
-
-    var retries = 0
-    var done = false
-
-    do {
-      retries += 1
-      done = t
-      val normalizedDelay = delay + Random.nextInt((delay * (scala.math.pow(2, retries))).toInt)
-      Thread.sleep(normalizedDelay)
-    } while (!done && retries < maxRetries)
-    done
-  }
-
-  def withTimeout[T](fut: Future[T])(implicit ec: ExecutionContext, after: Duration): Future[T] = {
-    val prom = Promise[T]()
-    val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
-    val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut.onComplete { case result => timeout.cancel() }
-    combinedFut
-  }
-
-  import scala.concurrent.duration._
-
-  def withTimeoutSecondsAndMetric[T](
-    fut: Future[T],
-    metricPrefix: String,
-    timeoutSeconds: Int = 5,
-    onError: => Unit = ()
-  )(implicit ec: ExecutionContext, dao: DAO): Future[T] = {
-    val prom = Promise[T]()
-    val after = timeoutSeconds.seconds
-    val timeout = TimeoutScheduler.scheduleTimeout(prom, after)
-    val combinedFut = Future.firstCompletedOf(List(fut, prom.future))
-    fut.onComplete { _ =>
-      timeout.cancel()
-    }
-    prom.future.onComplete { result =>
-      onError
-      if (result.isSuccess) {
-        dao.metrics.incrementMetric(metricPrefix + s"_timeoutAfter${timeoutSeconds}seconds")
-      }
-      if (result.isFailure) {
-        dao.metrics.incrementMetric(
-          metricPrefix + s"_timeoutFAILUREDEBUGAfter${timeoutSeconds}seconds"
-        )
-      }
-    }
-
-    combinedFut
-  }
-
-  def futureTryWithTimeoutMetric[T](
-    t: => T,
-    metricPrefix: String,
-    timeoutSeconds: Int = 5,
-    onError: => Unit = ()
-  )(implicit ec: ExecutionContext, dao: DAO): Future[Try[T]] =
-    withTimeoutSecondsAndMetric(
-      Future {
-        val originalName = Thread.currentThread().getName
-        Thread.currentThread().setName(metricPrefix + Random.nextInt(10000))
-        val attempt = tryWithMetric(t, metricPrefix) // This is an inner try as opposed to an onComplete so we can
-        // Have different metrics for timeout vs actual failure.
-        Thread.currentThread().setName(originalName)
-        attempt
-      }(ec),
-      metricPrefix,
-      timeoutSeconds = timeoutSeconds
-    )
-
-  def withRetries(
-    err: String,
-    t: => Boolean,
-    maxRetries: Int = 10,
-    delay: Long = 10000
-  ): Boolean = {
-
-    var retries = 0
-    var done = false
-
-    do {
-      retries += 1
-      done = t
-      Thread.sleep(delay)
-    } while (!done && retries < maxRetries)
-    done
-  }
-
   implicit class PublicKeyExt(publicKey: PublicKey) {
 
     def toId: Id = Id(hex)
@@ -256,30 +143,4 @@ package object constellation extends POWExt with SignHelpExt {
       if (self) Some(value) else None
   }
 
-}
-
-object TimeoutScheduler {
-
-  import java.util.concurrent.{TimeUnit, TimeoutException}
-
-  import org.jboss.netty.util.{HashedWheelTimer, Timeout, TimerTask}
-
-  import scala.concurrent.Promise
-  import scala.concurrent.duration.Duration
-
-  val timer = new HashedWheelTimer(10, TimeUnit.MILLISECONDS)
-
-  def scheduleTimeout(promise: Promise[_], after: Duration) =
-    timer.newTimeout(
-      new TimerTask {
-
-        def run(timeout: Timeout) {
-          promise.failure(
-            new TimeoutException("Operation timed out after " + after.toMillis + " millis")
-          )
-        }
-      },
-      after.toNanos,
-      TimeUnit.NANOSECONDS
-    )
 }

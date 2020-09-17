@@ -1,10 +1,5 @@
 package org.constellation.util
 
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
-import akka.http.scaladsl.server.Directives.{complete, extractUnmatchedPath, get, getFromResource, pathPrefix, _}
-import akka.http.scaladsl.server.{Route, StandardRoute}
-import com.typesafe.scalalogging.Logger
-import org.constellation.DAO
 import scalacss.defaults.Exports
 import scalacss.internal.mutable.Settings
 import scalatags.Text.TypedTag
@@ -200,56 +195,5 @@ trait ServeUI {
         script(jsApplicationMain, `type` := "text/javascript")
       )
     ).render
-
-  def jsRequest: Route =
-    pathPrefix("ui") {
-      get {
-        extractUnmatchedPath { path =>
-          val resPath = "ui/ui" + path
-
-          if (debugMode) getFromFile("./ui/target/scala-2.12/ui" + path) // For debugging more quickly
-          else getFromResource(resPath)
-        }
-      }
-    }
-
-  def servePage(page: String, optPrimary: Option[TypedTag[String]] = None): StandardRoute = {
-
-    val html = defaultIndexPage(page, optPrimary)
-    val entity = HttpEntity(ContentTypes.`text/html(UTF-8)`, html)
-    complete(entity)
-  }
-
-  val serveMainPage: Route = get {
-    path("view" / Segment) { page =>
-      servePage(page)
-    } ~
-      path("view" / Segment / "channel") { _ =>
-        servePage("")
-      } ~
-      path("view" / Segment / "message") { msgHash =>
-        import constellation._
-
-        servePage(
-          "",
-          Some(
-            div(
-              id := "message-view",
-              ""
-            )
-          )
-        )
-      } ~
-      path("") { servePage("") }
-  }
-
-  val imageRoute: Route = get {
-    pathPrefix("img") {
-      path(Segment) { s =>
-        println("Image request " + s)
-        getFromResource(s"ui/img/$s")
-      }
-    }
-  }
 
 }

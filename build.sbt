@@ -37,9 +37,6 @@ lazy val coreSettings = Seq(
 )
 
 lazy val versions = new {
-  val akka = "2.5.25"
-  val akkaHttp = "10.1.9"
-  val akkaHttpCors = "0.4.1"
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.2.1"
   val prometheus = "0.6.0"
@@ -107,18 +104,12 @@ lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDep
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
-  "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-remote" % versions.akka,
-  "com.typesafe.akka" %% "akka-slf4j" % versions.akka,
-  "ch.megard" %% "akka-http-cors" % versions.akkaHttpCors,
-  "de.heikoseeberger" %% "akka-http-json4s" % "1.27.0",
   //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
   //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
   "com.twitter" %% "storehaus-cache" % "0.15.0",
   "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
-  "io.kontainers" %% "micrometer-akka" % "0.10.2",
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
   "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
@@ -145,9 +136,7 @@ lazy val testDependencies = Seq(
   "org.scalactic" %% "scalactic" % "3.0.8",
   "org.scalamock" %% "scalamock" % "4.4.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,
-  "org.mockito" %% "mockito-scala-cats" % versions.mockito,
-  "com.typesafe.akka" %% "akka-http-testkit" % versions.akkaHttp,
-  "com.typesafe.akka" %% "akka-testkit" % versions.akka
+  "org.mockito" %% "mockito-scala-cats" % versions.mockito
 ).map(_ % "it,test,regression")
 
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
