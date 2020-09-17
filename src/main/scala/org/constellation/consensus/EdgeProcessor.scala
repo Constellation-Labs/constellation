@@ -20,7 +20,6 @@ import org.constellation.util.Validation.EnrichedFuture
 import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
-import scala.async.Async.{async, await}
 import scala.collection.SortedMap
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
