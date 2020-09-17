@@ -2,7 +2,6 @@ package org.constellation.primitives
 
 import java.util.concurrent.TimeUnit
 
-import akka.util.Timeout
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.implicits._
@@ -64,8 +63,6 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
   private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
 
   private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
-
-  implicit var shortTimeout: Timeout = Timeout(3, TimeUnit.SECONDS)
 
   def set(newTips: Map[String, TipData]): F[Unit] =
     tipsRef.modify(_ => (newTips, ()))

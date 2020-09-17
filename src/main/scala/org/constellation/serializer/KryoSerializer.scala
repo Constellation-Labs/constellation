@@ -2,7 +2,6 @@ package org.constellation.serializer
 
 import java.io.{FileOutputStream, OutputStream}
 
-import akka.util.ByteString
 import com.esotericsoftware.kryo.io.{Input, InputChunked, Output, OutputChunked}
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
 
