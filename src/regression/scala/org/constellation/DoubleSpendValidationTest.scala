@@ -12,10 +12,11 @@ import org.constellation.primitives.{CheckpointBlock, Genesis, TransactionCacheD
 import org.constellation.primitives.Schema.{AddressCacheData, GenesisObservation, SignedObservationEdge}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class DoubleSpendValidationTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats
