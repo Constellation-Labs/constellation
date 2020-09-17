@@ -5,7 +5,7 @@ import java.time.LocalDateTime
 import cats.data.{EitherT, NonEmptyList, OptionT}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
-import cats.implicits._
+import cats.syntax.all._
 import cats.kernel.Order
 import constellation._
 import enumeratum._

@@ -4,7 +4,7 @@ import cats.NonEmptyParallel
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Timer}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}

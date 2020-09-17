@@ -3,7 +3,7 @@ package org.constellation.domain.cloud
 import better.files.File
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import fs2._
 import fs2.concurrent.Queue

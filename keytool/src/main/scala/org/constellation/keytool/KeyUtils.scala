@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.codec.binary.Base64.decodeBase64
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
-import cats.implicits._
+import cats.syntax.all._
 
 /**
   * Need to compare this to:

@@ -3,7 +3,7 @@ package org.constellation.domain.cloud.providers
 import java.io.FileInputStream
 
 import better.files.File
-import cats.implicits._
+import cats.syntax.all._
 import cats.data.EitherT
 import cats.effect.Concurrent
 import com.google.auth.oauth2.GoogleCredentials

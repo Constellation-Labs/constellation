@@ -3,7 +3,7 @@ package org.constellation.domain.transaction
 import java.security.KeyPair
 
 import cats.effect.{Concurrent, IO}
-import cats.implicits._
+import cats.syntax.all._
 import constellation.signedObservationEdge
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -151,7 +151,8 @@ class TransactionChainServiceTest
 
   "applySnapshotInfo" - {
     "should override map of last accepted transactions" in {
-      val lastAcceptedTransactionRef = Map("DAG123" -> LastTransactionRef("abc", 1), "DAG456"-> LastTransactionRef("def", 1))
+      val lastAcceptedTransactionRef =
+        Map("DAG123" -> LastTransactionRef("abc", 1), "DAG456" -> LastTransactionRef("def", 1))
       val snapshotInfo = mock[SnapshotInfo]
       snapshotInfo.lastAcceptedTransactionRef shouldReturn lastAcceptedTransactionRef
       val applySnapshotInfo = service.applySnapshotInfo(snapshotInfo)

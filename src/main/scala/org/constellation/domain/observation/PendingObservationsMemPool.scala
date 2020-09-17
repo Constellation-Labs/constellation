@@ -1,7 +1,7 @@
 package org.constellation.domain.observation
 
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.storage.PendingMemPool
 
 class PendingObservationsMemPool[F[_]: Concurrent]() extends PendingMemPool[F, String, Observation] {

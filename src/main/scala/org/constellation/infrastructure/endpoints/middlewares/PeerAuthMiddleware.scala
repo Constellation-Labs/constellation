@@ -6,7 +6,7 @@ import java.security.{KeyPair, MessageDigest, PrivateKey, PublicKey}
 import cats.data.{Kleisli, OptionT}
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, Resource, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import fs2.{Chunk, Stream}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils

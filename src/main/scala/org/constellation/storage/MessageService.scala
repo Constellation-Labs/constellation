@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.effect.{Concurrent, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}

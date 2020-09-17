@@ -1,7 +1,7 @@
 package org.constellation.checkpoint
 
 import cats.effect.Sync
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
@@ -35,7 +35,9 @@ class CheckpointParentService[F[_]: Sync](
             logger
               .debug(s"SOEHash $soeHash missing from soeService for cb: ${cb.baseHash}")
               .flatTap(_ => dao.metrics.incrementMetricAsync("parentSOEServiceQueryFailed"))
-              .map(_ => cb.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap { _.baseHash })
+              .map(
+                _ => cb.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap { _.baseHash }
+              )
               .flatTap(
                 parentDirect =>
                   if (parentDirect.isEmpty) dao.metrics.incrementMetricAsync("parentDirectTipReferenceMissing")

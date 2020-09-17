@@ -1,7 +1,7 @@
 package org.constellation.domain.checkpointBlock
 
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.transaction.TransactionChainService
 import org.constellation.primitives.{CheckpointBlock, Genesis, Transaction}

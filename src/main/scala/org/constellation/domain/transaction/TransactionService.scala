@@ -3,7 +3,7 @@ package org.constellation.domain.transaction
 import java.security.KeyPair
 
 import cats.effect._
-import cats.implicits._
+import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO

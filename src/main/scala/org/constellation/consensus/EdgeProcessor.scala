@@ -5,7 +5,7 @@ import java.nio.file.NoSuchFileException
 import cats.data.Validated.{Invalid, Valid}
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.circe.{Decoder, Encoder}

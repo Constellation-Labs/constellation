@@ -1,7 +1,7 @@
 package org.constellation.consensus
 
 import cats.effect.IO
-import cats.implicits._
+import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
 import org.constellation.p2p.Cluster

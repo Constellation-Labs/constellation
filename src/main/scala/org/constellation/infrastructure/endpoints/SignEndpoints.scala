@@ -3,7 +3,7 @@ package org.constellation.infrastructure.endpoints
 import java.security.KeyPair
 
 import cats.effect.{Concurrent, ContextShift}
-import cats.implicits._
+import cats.syntax.all._
 import io.circe.syntax._
 import org.constellation.p2p.{Cluster, PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.util.{HostPort, SignHelp, SingleHashSignature}

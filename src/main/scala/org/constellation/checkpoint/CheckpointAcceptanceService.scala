@@ -2,7 +2,7 @@ package org.constellation.checkpoint
 
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
-import cats.implicits._
+import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger

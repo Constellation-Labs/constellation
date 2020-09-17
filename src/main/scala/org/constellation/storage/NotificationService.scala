@@ -1,5 +1,5 @@
 package org.constellation.storage
-import cats.implicits._
+import cats.syntax.all._
 import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO}
 import org.constellation.ConstellationExecutionContext

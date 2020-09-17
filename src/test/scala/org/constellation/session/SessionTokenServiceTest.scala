@@ -1,10 +1,16 @@
 package org.constellation.session
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.fuuid.FUUID
 import org.constellation.ConstellationExecutionContext
-import org.constellation.session.SessionTokenService.{EmptyHeaderToken, EmptyPeerToken, Token, TokenValid, TokensDontMatch}
+import org.constellation.session.SessionTokenService.{
+  EmptyHeaderToken,
+  EmptyPeerToken,
+  Token,
+  TokenValid,
+  TokensDontMatch
+}
 import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
 
 class SessionTokenServiceTest extends FreeSpec with Matchers with BeforeAndAfter {

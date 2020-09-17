@@ -2,7 +2,7 @@ package org.constellation.consensus
 
 import cats.data.NonEmptyList
 import cats.effect.{Blocker, IO}
-import cats.implicits._
+import cats.syntax.all._
 import com.typesafe.config.ConfigFactory
 import org.constellation._
 import org.constellation.consensus.Consensus.{ConsensusDataProposal, FacilitatorId, RoundData, RoundId}

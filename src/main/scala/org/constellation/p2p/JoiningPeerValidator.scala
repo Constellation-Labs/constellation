@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import cats.data.ValidatedNel
 import cats.effect.{Concurrent, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.infrastructure.p2p.ClientInterpreter

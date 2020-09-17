@@ -4,7 +4,7 @@ import java.io.ByteArrayInputStream
 
 import better.files.File
 import cats.data.EitherT
-import cats.implicits._
+import cats.syntax.all._
 import cats.effect.Concurrent
 import com.amazonaws.auth.{AWSStaticCredentialsProvider, BasicAWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration

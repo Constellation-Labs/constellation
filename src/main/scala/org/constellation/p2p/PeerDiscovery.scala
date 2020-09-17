@@ -3,7 +3,7 @@ package org.constellation.p2p
 import cats.data._
 import cats.effect.{Concurrent, ContextShift}
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
 import org.constellation.infrastructure.p2p.ClientInterpreter

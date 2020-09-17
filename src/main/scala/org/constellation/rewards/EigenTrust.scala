@@ -13,7 +13,7 @@ import org.constellation.trust.{DataGeneration, TrustEdge, TrustManager, TrustNo
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.domain.rewards.StoredRewards

@@ -1,7 +1,7 @@
 //package org.constellation.primitives
 //
 //import cats.effect.{ContextShift, IO, Timer}
-//import cats.implicits._
+//import cats.syntax.all._
 //import com.typesafe.scalalogging.Logger
 //import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 //import org.constellation.checkpoint.{CheckpointParentService, CheckpointService}

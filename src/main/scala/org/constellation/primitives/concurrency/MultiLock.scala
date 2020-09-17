@@ -1,7 +1,7 @@
 package org.constellation.primitives.concurrency
 
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 
 import scala.collection.concurrent.TrieMap
 

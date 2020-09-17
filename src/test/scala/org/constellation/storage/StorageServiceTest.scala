@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
 import org.mockito.IdiomaticMockito
 import org.scalatest.{FunSuite, Matchers}

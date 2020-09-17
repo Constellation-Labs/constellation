@@ -1,7 +1,7 @@
 package org.constellation.infrastructure.endpoints
 
 import cats.effect.{Concurrent, IO}
-import cats.implicits._
+import cats.syntax.all._
 import io.circe.syntax._
 import io.circe.Encoder
 import io.circe.generic.semiauto._

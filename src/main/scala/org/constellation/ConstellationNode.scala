@@ -5,7 +5,7 @@ import java.security.KeyPair
 
 import better.files.File
 import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp, Resource, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
 import fs2.concurrent.Queue

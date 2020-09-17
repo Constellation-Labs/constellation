@@ -4,7 +4,7 @@ import java.io.FileInputStream
 
 import better.files.File
 import cats.effect.{Concurrent, Sync}
-import cats.implicits._
+import cats.syntax.all._
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.storage.{Blob, Bucket, Storage, StorageOptions}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger

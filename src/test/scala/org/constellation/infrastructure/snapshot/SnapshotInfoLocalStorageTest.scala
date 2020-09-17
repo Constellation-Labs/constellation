@@ -2,7 +2,7 @@ package org.constellation.infrastructure.snapshot
 
 import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.snapshot.SnapshotInfo

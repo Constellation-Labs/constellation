@@ -2,7 +2,7 @@ package org.constellation.primitives.concurrency
 
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.Concurrent
-import cats.implicits._
+import cats.syntax.all._
 
 class SingleLock[F[_], R](name: String, lock: Semaphore[F])(implicit F: Concurrent[F]) {
 

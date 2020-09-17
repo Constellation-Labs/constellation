@@ -1,7 +1,7 @@
 package org.constellation.infrastructure.redownload
 
 import cats.effect.IO
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.Cluster
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

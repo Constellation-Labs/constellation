@@ -2,7 +2,7 @@ package org.constellation.infrastructure.snapshot
 
 import better.files._
 import cats.effect.{ContextShift, IO}
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.primitives.Schema.CheckpointCache

@@ -1,7 +1,7 @@
 package org.constellation.genesis
 
 import cats.data.EitherT
-import cats.implicits._
+import cats.syntax.all._
 import cats.effect.Concurrent
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.storage.LocalFileStorage

@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import java.security.KeyPair
 
-import cats.implicits._
+import cats.syntax.all._
 import constellation.signedObservationEdge
 import io.circe.Decoder
 import org.constellation.DAO

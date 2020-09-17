@@ -1,6 +1,6 @@
 package org.constellation.rollback
 
-import cats.implicits._
+import cats.syntax.all._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.primitives.Schema.GenesisObservation

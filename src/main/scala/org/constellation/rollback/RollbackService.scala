@@ -2,7 +2,7 @@ package org.constellation.rollback
 
 import cats.data.EitherT
 import cats.effect.{Concurrent, ContextShift}
-import cats.implicits._
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.consensus.StoredSnapshot
