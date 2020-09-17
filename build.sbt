@@ -1,6 +1,33 @@
 import Regression._
 import sbt.Keys.mainClass
 
+// -----------------
+
+lazy val _version = "2.14.3"
+
+lazy val commonSettings = Seq(
+  version := _version,
+  scalaVersion := "2.12.10",
+  organization := "org.constellation"
+)
+
+lazy val versions = new {
+  val spongyCastle = "1.58.0.0"
+  val micrometer = "1.2.1"
+  val prometheus = "0.6.0"
+  val cats = "2.0.0"
+  val mockito = "1.5.16"
+  val twitterChill = "0.9.3"
+  val http4s = "0.21.2"
+  val circe = "0.13.0"
+  val circeEnumeratum = "1.5.23"
+  val circeGenericExtras = "0.13.0"
+  val fs2 = "2.4.2"
+  val httpSigner = "0.3.3"
+}
+
+// -----------------
+
 envVars in Test := Map("CL_STOREPASS" -> "storepass", "CL_KEYPASS" -> "keypass")
 enablePlugins(JavaAgent, JavaAppPackaging)
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3")
@@ -19,14 +46,6 @@ scalacOptions :=
   )
 javaAgents += "org.aspectj" % "aspectjweaver" % "1.9.4" % "runtime"
 
-lazy val _version = "2.14.3"
-
-lazy val commonSettings = Seq(
-  version := _version,
-  scalaVersion := "2.12.10",
-  organization := "org.constellation"
-)
-
 lazy val coreSettings = Seq(
   parallelExecution in Test := false,
   resolvers += "Artima Maven Repository".at("https://repo.artima.com/releases"),
@@ -36,19 +55,7 @@ lazy val coreSettings = Seq(
   resolvers += Resolver.bintrayRepo("abankowski", "maven")
 )
 
-lazy val versions = new {
-  val spongyCastle = "1.58.0.0"
-  val micrometer = "1.2.1"
-  val prometheus = "0.6.0"
-  val cats = "2.0.0"
-  val mockito = "1.5.16"
-  val twitterChill = "0.9.3"
-  val http4s = "0.21.2"
-  val circe = "0.13.0"
-  val circeEnumeratum = "1.5.23"
-  val circeGenericExtras = "0.13.0"
-  val fs2 = "2.4.2"
-}
+// -----------------
 
 lazy val http4sDependencies = Seq(
   "org.http4s" %% "http4s-blaze-server",
@@ -73,24 +80,43 @@ lazy val fs2Dependencies = Seq(
   "co.fs2" %% "fs2-reactive-streams"
 ).map(_ % versions.fs2)
 
-lazy val sharedDependencies = Seq(
-  "com.github.scopt" %% "scopt" % "4.0.0-RC2",
+lazy val loggingDependencies = Seq(
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
-  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
-  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc(),
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
-) ++ circeDependencies
+)
 
-lazy val keyToolSharedDependencies = Seq(
-  "com.google.cloud" % "google-cloud-storage" % "1.91.0",
+lazy val catsDependencies = Seq(
+  ("org.typelevel" %% "cats-core" % versions.cats).withSources().withJavadoc(),
+  ("org.typelevel" %% "cats-effect" % versions.cats).withSources().withJavadoc()
+)
+
+lazy val spongyCastleDependencies = Seq(
   "com.madgag.spongycastle" % "core" % versions.spongyCastle,
   "com.madgag.spongycastle" % "prov" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpkix-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bcpg-jdk15on" % versions.spongyCastle,
   "com.madgag.spongycastle" % "bctls-jdk15on" % versions.spongyCastle,
   "org.bouncycastle" % "bcprov-jdk15on" % "1.65"
-) ++ sharedDependencies
+)
+
+lazy val prometheusDependencies = Seq(
+  "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
+  "io.prometheus" % "simpleclient" % versions.prometheus,
+  "io.prometheus" % "simpleclient_common" % versions.prometheus,
+  "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
+  "io.prometheus" % "simpleclient_logback" % versions.prometheus
+)
+
+// -----------------
+
+lazy val sharedDependencies = Seq(
+  "com.github.scopt" %% "scopt" % "4.0.0-RC2"
+) ++ circeDependencies ++ catsDependencies ++ loggingDependencies
+
+lazy val keyToolSharedDependencies = Seq(
+  "com.google.cloud" % "google-cloud-storage" % "1.91.0"
+) ++ spongyCastleDependencies ++ sharedDependencies
 
 lazy val walletSharedDependencies = Seq(
   "com.twitter" %% "chill" % versions.twitterChill,
@@ -101,22 +127,16 @@ lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDep
 
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
-  "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
-  "io.prometheus" % "simpleclient" % versions.prometheus,
-  "io.prometheus" % "simpleclient_common" % versions.prometheus,
-  "io.prometheus" % "simpleclient_caffeine" % versions.prometheus,
-  "io.prometheus" % "simpleclient_logback" % versions.prometheus,
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
-  "com.github.djelenc" % "alpha-testbed" % "1.0.3",
+  "com.github.djelenc" % "alpha-testbed" % "1.0.3", // eigen trust
   ("com.github.blemale" %% "scaffeine" % "3.1.0").withSources().withJavadoc(),
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
-  "org.perf4j" % "perf4j" % "0.9.16",
-  "pl.abankowski" %% "http-request-signer-core" % "0.3.3",
-  "pl.abankowski" %% "http4s-request-signer" % "0.3.3",
+  "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
+  "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
   "com.github.pureconfig" %% "pureconfig" % "0.12.3",
   "io.chrisdavenport" %% "fuuid" % "0.4.0"
-) ++ http4sDependencies ++ schemaSharedDependencies
+) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
