@@ -1,4 +1,4 @@
-package org.constellation
+package org.constellation.regression
 
 import java.security.KeyPair
 
@@ -8,13 +8,15 @@ import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionValidator}
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.{CheckpointBlock, Genesis}
 import org.constellation.primitives.Schema.{AddressCacheData, GenesisObservation, SignedObservationEdge}
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.constellation.primitives.{CheckpointBlock, Genesis}
+import org.constellation.{DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+// TODO: Consider moving to transaction validation test suite
 class TransactionMaxValueTest
     extends AnyFreeSpec
     with Matchers

@@ -1,9 +1,11 @@
-package org.constellation
+package org.constellation.regression
 
+import org.constellation.Fixtures
 import org.constellation.util.{SignHelp, SingleHashSignature}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+// TODO: Consider moving to hash signature test suite
 class SingleHashSignatureTest extends AnyFreeSpec with Matchers {
   "#995" - {
     "single hash signature validation" - {

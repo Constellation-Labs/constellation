@@ -20,4 +20,4 @@ jobs:
 
       - name: Test
         run: |
-          sbt -J-Xss128m -J-Xmx3200m keytool/test wallet/test regression:test test:test
+          sbt -J-Xss128m -J-Xmx3200m keytool/test wallet/test test:test
