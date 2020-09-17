@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ## Changed
-- Removed libraries: scala-async, akka, storehaus-cache, sway, slick, h2
+- Removed libraries: scala-async, akka, storehaus-cache, sway, slick, h2, hasher, grgen
 - Updated libraries: http-request-signer
 
 ## [v2.14.3] 2020-09-11
