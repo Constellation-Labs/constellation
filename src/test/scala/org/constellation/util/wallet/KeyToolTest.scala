@@ -7,7 +7,9 @@ import cats.effect.IO
 import org.constellation.Fixtures
 import org.constellation.Fixtures._
 import org.constellation.keytool.{KeyStoreUtils, KeyTool, KeyUtils}
-import org.scalatest._
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.flatspec.AsyncFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 class KeyToolTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
   val keyTool = KeyTool

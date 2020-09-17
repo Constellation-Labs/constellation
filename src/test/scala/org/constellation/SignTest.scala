@@ -3,13 +3,13 @@ package org.constellation
 import com.typesafe.scalalogging.Logger
 import org.constellation.keytool.KeyUtils
 import org.constellation.util.Signable
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
 case class TestSignable(a: String, b: Int) extends Signable
 
 import constellation._
 
-class SignTest extends FlatSpec {
+class SignTest extends AnyFlatSpec {
 
   val logger = Logger("SignTest")
 

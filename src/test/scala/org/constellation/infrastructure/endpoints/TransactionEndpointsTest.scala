@@ -10,10 +10,12 @@ import org.constellation.util.Metrics
 import org.http4s.{HttpRoutes, Method, Request, Status}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class TransactionEndpointsTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers

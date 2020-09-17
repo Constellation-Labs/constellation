@@ -138,7 +138,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(Class.forName("scala.collection.immutable.Set$EmptySet$"), 1019)
     kryo.register(Class.forName("scala.collection.IndexedSeqLike$Elements"))
     kryo.register(Class.forName("scala.collection.immutable.$colon$colon"), 1020)
-    kryo.register(Class.forName("akka.util.ByteString$ByteString1C"))
     kryo.register(Class.forName("scala.None$"), 1021)
     kryo.register(Class.forName("scala.collection.immutable.Nil$"), 1022)
     kryo.register(Class.forName("scala.collection.immutable.Map$EmptyMap$"), 1023)

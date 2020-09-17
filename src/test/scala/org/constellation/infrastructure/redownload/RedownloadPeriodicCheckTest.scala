@@ -6,10 +6,12 @@ import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.Cluster
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class RedownloadPeriodicCheckTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats

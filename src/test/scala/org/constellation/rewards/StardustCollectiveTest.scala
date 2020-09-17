@@ -2,12 +2,14 @@ package org.constellation.rewards
 
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, MockitoSugar}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.util.Random
 
 class StardustCollectiveTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with IdiomaticMockitoCats
     with ArgumentMatchersSugar
     with MockitoSugar

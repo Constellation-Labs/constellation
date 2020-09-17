@@ -7,9 +7,9 @@ import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.domain.transaction.TransactionValidator
 import org.constellation.util.{SignHelp, SingleHashSignature}
-import org.scalatest.FlatSpec
+import org.scalatest.flatspec.AnyFlatSpec
 
-class TXValidationBenchmark extends FlatSpec {
+class TXValidationBenchmark extends AnyFlatSpec {
   val logger = Logger("TXValidationBenchmark")
 
   val batchSize = 500

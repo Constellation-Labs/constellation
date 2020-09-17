@@ -7,12 +7,14 @@ import org.constellation.trust.{DataGeneration, SelfAvoidingWalk, TrustManager, 
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.should.Matchers
 
 import scala.util.Try
 
 class TrustManagerTest
-    extends FlatSpec
+    extends AnyFlatSpec
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers
@@ -57,10 +59,8 @@ class TrustManagerTest
     val scores = peerTrustScores :+ TrustDataInternal(id, reputation)
     val (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
     val dummyTrustNodes = DataGeneration.generateTestData(3)
-    val nodeMap = dummyTrustNodes.zipWithIndex.toMap.map{ case (k, v) => (v, k)}
-    val doWalk = Try { SelfAvoidingWalk.walk(1, 2,
-      nodeMap,
-      1, 0,  Set.empty[Int], 1d) }
+    val nodeMap = dummyTrustNodes.zipWithIndex.toMap.map { case (k, v) => (v, k) }
+    val doWalk = Try { SelfAvoidingWalk.walk(1, 2, nodeMap, 1, 0, Set.empty[Int], 1d) }
     assert(doWalk.isSuccess)
   }
 }

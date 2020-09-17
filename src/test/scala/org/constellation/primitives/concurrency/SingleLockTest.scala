@@ -5,12 +5,13 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
-import org.scalatest.{Matchers, WordSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 
-class SingleLockTest extends WordSpec with Matchers {
+class SingleLockTest extends AnyWordSpec with Matchers {
   "SingleLock" should {
     implicit val ec = ConstellationExecutionContext.bounded
     implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)

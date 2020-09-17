@@ -13,10 +13,12 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.{BuildInfo, ConstellationExecutionContext}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class JoiningPeerValidatorTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with ArgumentMatchersSugar
     with BeforeAndAfter
     with IdiomaticMockito

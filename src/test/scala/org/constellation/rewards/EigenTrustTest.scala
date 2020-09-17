@@ -15,10 +15,12 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import org.constellation.serializer.KryoSerializer
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class EigenTrustTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers

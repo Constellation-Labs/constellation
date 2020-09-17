@@ -4,10 +4,12 @@ import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 class EigenTrustAgentsTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with BeforeAndAfter
     with IdiomaticMockito
     with IdiomaticMockitoCats

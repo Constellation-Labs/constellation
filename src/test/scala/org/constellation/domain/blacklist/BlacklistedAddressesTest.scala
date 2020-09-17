@@ -2,9 +2,11 @@ package org.constellation.domain.blacklist
 
 import cats.effect.{ContextShift, IO}
 import org.constellation.ConstellationExecutionContext
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class BlacklistedAddressesTest extends FreeSpec with BeforeAndAfter with Matchers {
+class BlacklistedAddressesTest extends AnyFreeSpec with BeforeAndAfter with Matchers {
 
   private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
 

@@ -1,9 +1,11 @@
 package org.constellation.rollback
 
 import org.mockito.ArgumentMatchersSugar
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class RollbackLoaderTest extends FreeSpec with ArgumentMatchersSugar with BeforeAndAfter with Matchers {
+class RollbackLoaderTest extends AnyFreeSpec with ArgumentMatchersSugar with BeforeAndAfter with Matchers {
 
   private val existingFolder: String = getClass.getResource("/rollback_data/").getPath
   private val notExistingFolder: String = getClass.getResource("/rollback_data/").getPath + "foobar/"

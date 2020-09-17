@@ -25,12 +25,14 @@ import org.constellation.storage.ConcurrentStorageService
 import org.constellation.util.{Metrics, SignatureBatch}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfterEach, FunSpecLike, Matchers}
+import org.scalatest.funspec.AnyFunSpecLike
+import org.scalatest.{BeforeAndAfterEach}
+import org.scalatest.matchers.should.Matchers
 
 import scala.io.Source
 
 class ConsensusManagerTest
-    extends FunSpecLike
+    extends AnyFunSpecLike
     with Matchers
     with IdiomaticMockito
     with IdiomaticMockitoCats

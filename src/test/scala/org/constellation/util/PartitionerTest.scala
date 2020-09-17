@@ -3,13 +3,15 @@ package org.constellation.util
 import java.security.KeyPair
 
 import constellation.SHA256Ext
-import org.scalatest.{AsyncFlatSpecLike, BeforeAndAfterAll, BeforeAndAfterEach, Matchers}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.constellation.Fixtures.{dummyTx, _}
 import Partitioner._
 import org.constellation.DAO
 import org.constellation.keytool.KeyUtils
 import org.constellation.primitives.{Schema, Transaction}
 import org.constellation.primitives.Schema.SendToAddress
+import org.scalatest.flatspec.AsyncFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 
 import scala.util.Random
 

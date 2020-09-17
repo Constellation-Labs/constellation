@@ -27,6 +27,7 @@ import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
+import org.http4s.metrics.prometheus.Prometheus
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 
@@ -53,98 +54,102 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
 
   def randomHash: String = Hashing.sha256.hashBytes(UUID.randomUUID().toString.getBytes).toString
 
-  def prepareMockedDAO(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO = {
-    import constellation._
+  def prepareMockedDAO(facilitators: Map[Id, PeerData] = prepareFacilitators(1)): DAO =
+    Prometheus
+      .collectorRegistry[IO]
+      .use { registry =>
+        import constellation._
 
-    implicit val kp: KeyPair = makeKeyPair()
+        implicit val kp: KeyPair = makeKeyPair()
 
-    val dao: DAO = mock[DAO]
+        val dao: DAO = mock[DAO]
 
-    dao.nodeConfig shouldReturn NodeConfig()
+        dao.nodeConfig shouldReturn NodeConfig()
 
-    dao.apiClient shouldReturn mock[ClientInterpreter[IO]]
+        dao.apiClient shouldReturn mock[ClientInterpreter[IO]]
 
-    val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
-    f.createDirectoryIfNotExists()
-    dao.dbPath shouldReturn f
+        val f = File(s"tmp/${kp.getPublic.toId.medium}/db")
+        f.createDirectoryIfNotExists()
+        dao.dbPath shouldReturn f
 
-    dao.id shouldReturn Fixtures.id
-    dao.alias shouldReturn None
+        dao.id shouldReturn Fixtures.id
+        dao.alias shouldReturn None
 
-    val rds = mock[RedownloadService[IO]]
-    dao.redownloadService shouldReturn rds
-    dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
-    dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
+        val rds = mock[RedownloadService[IO]]
+        dao.redownloadService shouldReturn rds
+        dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
+        dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
 
-    val ss = mock[SOEService[IO]]
-    dao.soeService shouldReturn ss
+        val ss = mock[SOEService[IO]]
+        dao.soeService shouldReturn ss
 
-    val ns = mock[NotificationService[IO]]
-    dao.notificationService shouldReturn ns
+        val ns = mock[NotificationService[IO]]
+        dao.notificationService shouldReturn ns
 
-    val ms = mock[MessageService[IO]]
-    dao.messageService shouldReturn ms
+        val ms = mock[MessageService[IO]]
+        dao.messageService shouldReturn ms
 
-    val ts = mock[TransactionService[IO]]
-    dao.transactionService shouldReturn ts
+        val ts = mock[TransactionService[IO]]
+        dao.transactionService shouldReturn ts
 
-    val cts = mock[ConcurrentTipService[IO]]
-    dao.concurrentTipService shouldReturn cts
+        val cts = mock[ConcurrentTipService[IO]]
+        dao.concurrentTipService shouldReturn cts
 
-    val rl = mock[RateLimiting[IO]]
-    dao.rateLimiting shouldReturn rl
+        val rl = mock[RateLimiting[IO]]
+        dao.rateLimiting shouldReturn rl
 
-    val rs = mock[ConsensusRemoteSender[IO]]
-    dao.consensusRemoteSender shouldReturn rs
+        val rs = mock[ConsensusRemoteSender[IO]]
+        dao.consensusRemoteSender shouldReturn rs
 
-    val cs = mock[CheckpointService[IO]]
-    dao.checkpointService shouldReturn cs
+        val cs = mock[CheckpointService[IO]]
+        dao.checkpointService shouldReturn cs
 
-    val cas = mock[CheckpointAcceptanceService[IO]]
-    dao.checkpointAcceptanceService shouldReturn cas
+        val cas = mock[CheckpointAcceptanceService[IO]]
+        dao.checkpointAcceptanceService shouldReturn cas
 
-    val os = mock[ObservationService[IO]]
-    dao.observationService shouldReturn os
+        val os = mock[ObservationService[IO]]
+        dao.observationService shouldReturn os
 
-    val snapS = mock[SnapshotService[IO]]
-    dao.snapshotService shouldReturn snapS
+        val snapS = mock[SnapshotService[IO]]
+        dao.snapshotService shouldReturn snapS
 
-    val keyPair = KeyUtils.makeKeyPair()
-    dao.keyPair shouldReturn keyPair
+        val keyPair = KeyUtils.makeKeyPair()
+        dao.keyPair shouldReturn keyPair
 
-    dao.cluster shouldReturn mock[Cluster[IO]]
-    dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
+        dao.cluster shouldReturn mock[Cluster[IO]]
+        dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
-    val metrics = new Metrics(CollectorRegistry.defaultRegistry, 1)(dao)
-    dao.metrics shouldReturn metrics
+        val metrics = new Metrics(registry, 1)(dao)
+        dao.metrics shouldReturn metrics
 
-    val cluster = mock[Cluster[IO]]
-    cluster.getNodeState shouldReturnF NodeState.Ready
-    dao.cluster shouldReturn cluster
+        val cluster = mock[Cluster[IO]]
+        cluster.getNodeState shouldReturnF NodeState.Ready
+        dao.cluster shouldReturn cluster
 
-    val ba = mock[BlacklistedAddresses[IO]]
-    dao.blacklistedAddresses shouldReturn ba
+        val ba = mock[BlacklistedAddresses[IO]]
+        dao.blacklistedAddresses shouldReturn ba
 
-    val tcs = mock[TransactionChainService[IO]]
-    dao.transactionChainService shouldReturn tcs
+        val tcs = mock[TransactionChainService[IO]]
+        dao.transactionChainService shouldReturn tcs
 
-    val as = mock[AddressService[IO]]
-    dao.addressService shouldReturn as
+        val as = mock[AddressService[IO]]
+        dao.addressService shouldReturn as
 
-    val ds = mock[DownloadService[IO]]
-    dao.downloadService shouldReturn ds
+        val ds = mock[DownloadService[IO]]
+        dao.downloadService shouldReturn ds
 
-    dao.miscLogger shouldReturn Logger("miscLogger")
+        dao.miscLogger shouldReturn Logger("miscLogger")
 
-    dao.readyPeers shouldReturn IO.pure(facilitators)
+        dao.readyPeers shouldReturn IO.pure(facilitators)
 
-    val dr = mock[DataResolver[IO]]
-    dao.dataResolver shouldReturn dr
+        val dr = mock[DataResolver[IO]]
+        dao.dataResolver shouldReturn dr
 
-    val tsmmp = mock[ThreadSafeMessageMemPool]
-    dao.threadSafeMessageMemPool shouldReturn tsmmp
+        val tsmmp = mock[ThreadSafeMessageMemPool]
+        dao.threadSafeMessageMemPool shouldReturn tsmmp
 
-    dao
-  }
+        IO(dao)
+      }
+      .unsafeRunSync()
 
 }

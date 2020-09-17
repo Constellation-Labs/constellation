@@ -14,10 +14,12 @@ import org.constellation.primitives.{Edge, Schema, Transaction}
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{BeforeAndAfter, FreeSpec, Matchers}
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.should.Matchers
 
 class TransactionChainServiceTest
-    extends FreeSpec
+    extends AnyFreeSpec
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers

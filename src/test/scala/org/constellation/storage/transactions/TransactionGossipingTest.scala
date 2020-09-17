@@ -13,13 +13,14 @@ import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class TransactionGossipingTest
-    extends FunSuite
+    extends AnyFunSuite
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers
