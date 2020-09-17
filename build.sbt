@@ -143,10 +143,10 @@ lazy val coreDependencies = Seq(
 
 //Test dependencies
 lazy val testDependencies = Seq(
-  "org.scalacheck" %% "scalacheck" % "1.14.0",
-  "org.scalatest" %% "scalatest" % "3.0.8",
-  "org.scalactic" %% "scalactic" % "3.0.8",
-  "org.scalamock" %% "scalamock" % "4.4.0",
+  "org.scalacheck" %% "scalacheck" % "1.14.3",
+  "org.scalatest" %% "scalatest" % "3.2.2",
+  "org.scalactic" %% "scalactic" % "3.2.2",
+  "org.scalamock" %% "scalamock" % "5.0.0",
   "org.mockito" %% "mockito-scala" % versions.mockito,
   "org.mockito" %% "mockito-scala-cats" % versions.mockito
 ).map(_ % "it,test,regression")
