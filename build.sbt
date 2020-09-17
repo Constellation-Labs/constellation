@@ -114,8 +114,8 @@ lazy val coreDependencies = Seq(
   "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
   "org.perf4j" % "perf4j" % "0.9.16",
-  "pl.abankowski" %% "http-request-signer-core" % "0.3.2",
-  "pl.abankowski" %% "http4s-request-signer" % "0.3.2",
+  "pl.abankowski" %% "http-request-signer-core" % "0.3.3",
+  "pl.abankowski" %% "http4s-request-signer" % "0.3.3",
   "com.github.pureconfig" %% "pureconfig" % "0.12.3",
   "io.chrisdavenport" %% "fuuid" % "0.4.0"
 ) ++ http4sDependencies ++ schemaSharedDependencies
