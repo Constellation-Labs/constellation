@@ -106,7 +106,6 @@ lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDep
 
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
-  "org.scala-lang.modules" %% "scala-async" % "0.10.0",
   "com.roundeights" %% "hasher" % "1.2.0",
   "com.typesafe.akka" %% "akka-http" % versions.akkaHttp,
   "com.typesafe.akka" %% "akka-remote" % versions.akka,
