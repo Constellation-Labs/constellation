@@ -40,9 +40,7 @@ lazy val versions = new {
   val spongyCastle = "1.58.0.0"
   val micrometer = "1.2.1"
   val prometheus = "0.6.0"
-  val sttp = "1.6.6"
   val cats = "2.0.0"
-  val json4s = "3.6.7"
   val mockito = "1.5.16"
   val twitterChill = "0.9.3"
   val http4s = "0.21.2"
@@ -104,11 +102,7 @@ lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDep
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
   "com.roundeights" %% "hasher" % "1.2.0",
-  //  "org.typelevel" %% "alleycats-core" % versions.cats withSources() withJavadoc(),
   "net.glxn" % "qrgen" % "1.4",
-  //  "com.softwaremill.macmemo" %% "macros" % "0.4" withJavadoc() withSources(),
-  "com.twitter" %% "storehaus-cache" % "0.15.0",
-  "io.swaydb" %% "swaydb" % "0.7.1",
   "io.micrometer" % "micrometer-registry-prometheus" % versions.micrometer,
   "io.prometheus" % "simpleclient" % versions.prometheus,
   "io.prometheus" % "simpleclient_common" % versions.prometheus,
