@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ## Changed
-- Removed scala-async, akka, storehaus-cache and sway library
+- Removed libraries: scala-async, akka, storehaus-cache, sway, slick, h2
 
 ## [v2.14.3] 2020-09-11
 ## Changed
