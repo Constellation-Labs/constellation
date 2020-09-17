@@ -13,17 +13,20 @@ lazy val commonSettings = Seq(
 
 lazy val versions = new {
   val spongyCastle = "1.58.0.0"
-  val micrometer = "1.2.1"
-  val prometheus = "0.6.0"
+  val micrometer = "1.5.4"
+  val prometheus = "0.9.0"
   val cats = "2.0.0"
   val mockito = "1.5.16"
   val twitterChill = "0.9.3"
-  val http4s = "0.21.2"
+  val http4s = "0.21.7"
   val circe = "0.13.0"
-  val circeEnumeratum = "1.5.23"
+  val circeEnumeratum = "1.6.1"
   val circeGenericExtras = "0.13.0"
   val fs2 = "2.4.2"
   val httpSigner = "0.3.3"
+  val scaffeine = "4.0.1"
+  val betterFiles = "3.9.1"
+  val pureconfig = "0.13.0"
 }
 
 // -----------------
@@ -83,7 +86,7 @@ lazy val fs2Dependencies = Seq(
 lazy val loggingDependencies = Seq(
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.0.0"
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.1.1"
 )
 
 lazy val catsDependencies = Seq(
@@ -126,15 +129,15 @@ lazy val walletSharedDependencies = Seq(
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
 
 lazy val coreDependencies = Seq(
-  ("com.github.pathikrit" %% "better-files" % "3.8.0").withSources().withJavadoc(),
-  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.5.6",
+  ("com.github.pathikrit" %% "better-files" % versions.betterFiles).withSources().withJavadoc(),
+  "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.6.1",
   "com.github.djelenc" % "alpha-testbed" % "1.0.3", // eigen trust
-  ("com.github.blemale" %% "scaffeine" % "3.1.0").withSources().withJavadoc(),
-  "net.logstash.logback" % "logstash-logback-encoder" % "5.1",
+  ("com.github.blemale" %% "scaffeine" % versions.scaffeine).withSources().withJavadoc(),
+  "net.logstash.logback" % "logstash-logback-encoder" % "6.4",
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
-  "com.github.pureconfig" %% "pureconfig" % "0.12.3",
+  "com.github.pureconfig" %% "pureconfig" % versions.pureconfig,
   "io.chrisdavenport" %% "fuuid" % "0.4.0"
 ) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies
 
