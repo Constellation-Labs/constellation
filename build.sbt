@@ -134,7 +134,7 @@ lazy val coreDependencies = Seq(
   "com.github.djelenc" % "alpha-testbed" % "1.0.3", // eigen trust
   ("com.github.blemale" %% "scaffeine" % versions.scaffeine).withSources().withJavadoc(),
   "net.logstash.logback" % "logstash-logback-encoder" % "6.4",
-  "com.amazonaws" % "aws-java-sdk-s3" % "1.11.665",
+  "com.amazonaws" % "aws-java-sdk-s3" % "1.11.863",
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
   "com.github.pureconfig" %% "pureconfig" % versions.pureconfig,
