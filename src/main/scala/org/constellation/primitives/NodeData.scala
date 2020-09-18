@@ -3,13 +3,10 @@ package org.constellation.primitives
 import java.net.InetSocketAddress
 import java.security.KeyPair
 
-import better.files.File
 import com.typesafe.scalalogging.Logger
 import constellation._
-import org.constellation.ResourceInfo
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.keytool.KeyUtils
-import org.constellation.p2p.PeerRegistrationRequest
 import org.constellation.schema.Id
 import org.constellation.util.Metrics
 

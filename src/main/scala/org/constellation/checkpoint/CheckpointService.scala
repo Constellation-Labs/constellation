@@ -5,8 +5,8 @@ import cats.effect.{Concurrent, ContextShift, IO}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.primitives.Schema.{CheckpointCache, _}
-import org.constellation.primitives.Transaction
+import org.constellation.schema.checkpoint.{CheckpointCache, CheckpointCacheMetadata}
+import org.constellation.schema.transaction.Transaction
 import org.constellation.storage.ConcurrentStorageService
 import org.constellation.storage.algebra.Lookup
 import org.constellation.{ConstellationExecutionContext, DAO}

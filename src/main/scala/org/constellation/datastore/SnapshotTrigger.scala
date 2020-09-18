@@ -5,7 +5,7 @@ import cats.syntax.all._
 import org.constellation.domain.exception.InvalidNodeState
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 import org.constellation.p2p.{Cluster, SetStateResult}
-import org.constellation.primitives.Schema.NodeState
+import org.constellation.schema.NodeState
 import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState}
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._

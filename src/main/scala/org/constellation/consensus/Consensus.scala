@@ -18,13 +18,17 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.domain.consensus.ConsensusStatus
-import org.constellation.domain.observation.{Observation, ObservationService}
-import org.constellation.p2p.{PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, EdgeHashType, NodeState, TypedEdgeHash}
+import org.constellation.domain.observation.ObservationService
+import org.constellation.p2p.PeerData
+import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.primitives._
-import org.constellation.schema.Id
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.consensus.RoundId
+import org.constellation.schema.observation.Observation
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.{ChannelMessage, Id, NodeState, PeerNotification}
 import org.constellation.storage._
 import org.constellation.util.PeerApiClient
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -533,13 +537,6 @@ object Consensus {
   object FacilitatorId {
     implicit val facilitatorIdEncoder: Encoder[FacilitatorId] = deriveEncoder
     implicit val facilitatorIdDecoder: Decoder[FacilitatorId] = deriveDecoder
-  }
-
-  case class RoundId(id: String) extends AnyVal
-
-  object RoundId {
-    implicit val roundIdEncoder: Encoder[RoundId] = deriveEncoder
-    implicit val roundIdDecoder: Decoder[RoundId] = deriveDecoder
   }
 
   case class UnionProposals(state: StageState)

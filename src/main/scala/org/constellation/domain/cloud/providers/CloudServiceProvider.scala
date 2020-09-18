@@ -2,8 +2,7 @@ package org.constellation.domain.cloud.providers
 
 import better.files.File
 import cats.data.EitherT
-import cats.effect.Concurrent
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.GenesisObservation
 
 trait CloudServiceProvider[F[_]] {
   val name: String

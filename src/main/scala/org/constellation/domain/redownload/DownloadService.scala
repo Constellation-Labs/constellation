@@ -10,7 +10,7 @@ import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Genesis
-import org.constellation.primitives.Schema.{GenesisObservation, NodeState}
+import org.constellation.schema.NodeState
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics

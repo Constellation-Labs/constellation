@@ -1,4 +1,5 @@
 package org.constellation.domain.checkpointBlock
+
 import cats.data.Validated
 import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
@@ -6,11 +7,14 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointParentService, InsufficientBalance}
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionService, TransactionValidator}
-import org.constellation.primitives.Schema._
-import org.constellation.primitives.{CheckpointBlock, Edge, Transaction}
+import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
+import org.constellation.schema.Schema._
+import org.constellation.schema.address.AddressCacheData
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointEdge, CheckpointEdgeData}
+import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.edge.{Edge, ObservationEdge, SignedObservationEdge}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
-import org.constellation.util.HashSignature
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

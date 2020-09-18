@@ -3,13 +3,12 @@ package org.constellation.trust
 import cats.effect.IO
 import cats.syntax.all._
 import com.typesafe.config.Config
-import org.constellation.{ConfigUtil, DAO}
-import org.constellation.schema.Id
-import org.constellation.domain.trust.{TrustData, TrustDataInternal}
+import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.NodeState
+import org.constellation.schema.{Id, NodeState}
 import org.constellation.util.PeriodicIO
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
 

@@ -7,10 +7,11 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
-import org.constellation.primitives.Schema.TransactionEdgeData
-import org.constellation.primitives.{Edge, Transaction}
+import org.constellation.schema.transaction.TransactionEdgeData
 import cats.effect.Sync
 import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
+import org.constellation.schema.edge.Edge
 
 class TransactionChainService[F[_]: Concurrent] {
 

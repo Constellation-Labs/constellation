@@ -1,10 +1,9 @@
 package org.constellation.domain.redownload
 
 import cats.syntax.all._
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import io.circe.syntax._
-import org.constellation.domain.redownload.MajorityStateChooser.{ExtendedSnapshotProposal, SnapshotProposal}
+import io.circe.{Decoder, Encoder}
+import org.constellation.domain.redownload.MajorityStateChooser.ExtendedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{
   PeersCache,
   PeersProposals,

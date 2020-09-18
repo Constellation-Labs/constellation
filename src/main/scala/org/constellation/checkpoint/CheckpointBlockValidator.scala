@@ -9,10 +9,12 @@ import io.circe.{Decoder, Encoder}
 import io.circe.syntax._
 import io.circe.generic.semiauto._
 import org.constellation.domain.transaction.TransactionValidator
-import org.constellation.primitives.Schema.{CheckpointCache, ObservationEdge, SignedObservationEdge}
-import org.constellation.primitives.{CheckpointBlock, Transaction}
+import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.edge.{ObservationEdge, SignedObservationEdge}
+import org.constellation.schema.transaction.Transaction
 import org.constellation.storage.{AddressService, SnapshotService}
-import org.constellation.util.{HashSignature, Metrics}
+import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, DAO}
 
 object CheckpointBlockValidator {

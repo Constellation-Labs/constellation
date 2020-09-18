@@ -1,11 +1,8 @@
-package org.constellation.primitives
+package org.constellation.schema.edge
 
 import java.security.KeyPair
 
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.semiauto._
-import org.constellation.primitives.Schema._
-import org.constellation.util.{HashSignature, Signable}
+import org.constellation.schema.signature.{HashSignature, Signable}
 
 case class Edge[+D <: Signable](
   observationEdge: ObservationEdge,

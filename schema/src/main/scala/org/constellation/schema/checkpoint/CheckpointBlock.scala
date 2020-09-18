@@ -1,26 +1,20 @@
-package org.constellation.primitives
+package org.constellation.schema.checkpoint
 
 import java.security.KeyPair
 
-import cats.syntax.all._
-import constellation.signedObservationEdge
 import io.circe.Decoder
-import org.constellation.DAO
-import org.constellation.domain.observation.Observation
-import org.constellation.p2p.PeerNotification
-import org.constellation.primitives.Schema._
-import org.constellation.schema.Id
-import org.constellation.util.HashSignature
+import org.constellation.schema._
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.observation.Observation
+import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.transaction.Transaction
+
+import org.constellation.schema.signature.SignHelp.signedObservationEdge
 
 abstract class CheckpointEdgeLike(val checkpoint: CheckpointEdge) {
   def baseHash: String = checkpoint.edge.baseHash
 
   def parentSOEHashes: Seq[String] = checkpoint.edge.parentHashes
-
-  def parentSOEBaseHashes()(implicit dao: DAO): Seq[String] =
-    checkpoint.edge.parentHashes.flatMap { key =>
-      dao.soeService.lookup(key).unsafeRunSync
-    }.map(_.baseHash)
 
   def soe: SignedObservationEdge = checkpoint.edge.signedObservationEdge
 
@@ -106,7 +100,6 @@ object CheckpointBlock {
 
   import io.circe.Encoder
   import io.circe.generic.semiauto._
-  import io.circe.parser.parse
   import io.circe.syntax._
 
   implicit val checkpointBlockEncoder: Encoder[CheckpointBlock] = deriveEncoder

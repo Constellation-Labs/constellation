@@ -18,9 +18,8 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, MajorityHeight}
-import org.constellation.primitives.Schema.NodeState
 import org.constellation.rewards.RewardsManager
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, NodeState}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Logging.stringifyStackTrace

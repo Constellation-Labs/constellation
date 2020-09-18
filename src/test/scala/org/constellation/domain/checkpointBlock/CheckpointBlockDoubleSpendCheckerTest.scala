@@ -4,11 +4,13 @@ import java.security.KeyPair
 
 import cats.effect.{ContextShift, IO}
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService}
+import org.constellation.domain.transaction.TransactionChainService
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
-import org.constellation.primitives.{CheckpointBlock, Edge, Transaction}
-import org.constellation.{ConstellationExecutionContext, Fixtures}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.transaction
+import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
@@ -80,6 +82,6 @@ class CheckpointBlockDoubleSpendCheckerTest extends AnyFunSuite with BeforeAndAf
     )
     val soe = signedObservationEdge(oe)(Fixtures.tempKey)
 
-    Transaction(Edge(oe, soe, data), LastTransactionRef(lastHash, lastOrdinal))
+    transaction.Transaction(Edge(oe, soe, data), LastTransactionRef(lastHash, lastOrdinal))
   }
 }

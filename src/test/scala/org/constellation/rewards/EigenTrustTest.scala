@@ -7,13 +7,13 @@ import cats.effect.concurrent.Ref
 import scala.collection.JavaConverters._
 import cats.effect.{ContextShift, IO}
 import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.domain.observation.{CheckpointBlockWithMissingSoe, ObservationData}
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, observation}
 import org.constellation.trust.{TrustEdge, TrustManager}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import org.constellation.schema.observation.{CheckpointBlockWithMissingSoe, ObservationData}
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
@@ -165,10 +165,10 @@ class EigenTrustTest
   "TrustManager to EigenTrust mappings" - {
     "should convert ObservationEvent to Experience" in {
       val observations: List[ObservationData] = List(
-        ObservationData(agent1, CheckpointBlockWithMissingSoe(agent1.address), 123),
-        ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
-        ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
-        ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123)
+        observation.ObservationData(agent1, CheckpointBlockWithMissingSoe(agent1.address), 123),
+        observation.ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
+        observation.ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123),
+        observation.ObservationData(agent2, CheckpointBlockWithMissingSoe(agent2.address), 123)
       )
 
       val experiences = eigenTrust.convertToExperiences(observations, agents)

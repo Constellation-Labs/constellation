@@ -4,7 +4,6 @@ import java.security.KeyPair
 
 import org.constellation.ProcessingConfig
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.IPManager.IP
 import org.constellation.schema.Id
 import org.constellation.util.{AccountBalance, HostPort}
 

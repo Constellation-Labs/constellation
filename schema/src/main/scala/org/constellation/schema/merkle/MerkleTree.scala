@@ -1,4 +1,4 @@
-package org.constellation.util
+package org.constellation.schema.merkle
 
 case class MerkleNode(hash: String, leftChild: String, rightChild: String) {
 
@@ -31,7 +31,7 @@ case class MerkleResult(inputs: Seq[String], nodes: Seq[MerkleNode]) {
 }
 
 import com.typesafe.scalalogging.StrictLogging
-import constellation.SHA256Ext
+import org.constellation.schema.SHA256Ext
 
 // This should be changed to an actual tree structure in memory. Just skipping that for now
 // Either that or replace this with a pre-existing implementation

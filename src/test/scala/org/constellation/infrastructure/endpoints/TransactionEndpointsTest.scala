@@ -5,7 +5,8 @@ import io.circe.generic.auto._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.implicits._
 import org.constellation.ConstellationExecutionContext
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.schema.transaction.LastTransactionRef
 import org.constellation.util.Metrics
 import org.http4s.{HttpRoutes, Method, Request, Status}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

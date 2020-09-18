@@ -9,14 +9,17 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointParentService, CheckpointService}
 import org.constellation.consensus.Consensus._
-import org.constellation.domain.observation.{Observation, ObservationService}
-import org.constellation.p2p.{Cluster, DataResolver, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState, NodeType}
+import org.constellation.domain.observation.ObservationService
+import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.primitives.concurrency.SingleLock
-import org.constellation.primitives.{ChannelMessage, CheckpointBlock, ConcurrentTipService, Transaction}
-import org.constellation.schema.Id
+import org.constellation.primitives.ConcurrentTipService
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.consensus.RoundId
+import org.constellation.schema.observation.Observation
+import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.{ChannelMessage, Id, NodeState, NodeType, PeerNotification}
 import org.constellation.storage._
 import org.constellation.util.{Distance, Metrics, PeerApiClient}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}

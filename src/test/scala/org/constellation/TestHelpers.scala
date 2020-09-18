@@ -22,7 +22,7 @@ import org.constellation.domain.transaction.{TransactionChainService, Transactio
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator, PeerData}
 import org.constellation.primitives.{ConcurrentTipService, IPManager, ThreadSafeMessageMemPool}
-import org.constellation.primitives.Schema.{NodeState, NodeType}
+import org.constellation.schema.{NodeState, NodeType}
 import org.constellation.schema.Id
 import org.constellation.storage._
 import org.constellation.trust.TrustManager

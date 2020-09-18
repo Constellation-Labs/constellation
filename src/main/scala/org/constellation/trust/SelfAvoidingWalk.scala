@@ -2,7 +2,6 @@ package org.constellation.trust
 
 import com.typesafe.scalalogging.StrictLogging
 
-import scala.annotation.tailrec
 import scala.util.Random
 
 /**

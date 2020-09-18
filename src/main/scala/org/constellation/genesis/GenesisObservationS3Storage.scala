@@ -3,7 +3,7 @@ package org.constellation.genesis
 import cats.data.EitherT
 import cats.effect.Concurrent
 import org.constellation.domain.cloud.S3Storage
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.GenesisObservation
 
 class GenesisObservationS3Storage[F[_]: Concurrent](
   accessKey: String,

@@ -8,18 +8,18 @@ import cats.syntax.all._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.keytool.KeyUtils._
-import org.constellation.primitives.Schema._
+import org.constellation.schema.Schema._
 import org.constellation.schema.Id
+import org.constellation.schema.address.AddressMetaData
+import org.constellation.schema.signature.SignHelpExt
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.{POWExt, SignHelpExt}
+import org.constellation.util.POWExt
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.{Failure, Random, Success, Try}
 
 package object constellation extends POWExt with SignHelpExt {
-
-  final val MinimumTime: Long = 1518898908367L
 
   implicit class EasyFutureBlock[T](f: Future[T]) {
 

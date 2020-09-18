@@ -17,9 +17,7 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.primitives.IPManager
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.Schema.NodeState.broadcastStates
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, NodeState, PeerNotification}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -29,6 +27,7 @@ import scala.util.Random
 import io.circe.syntax._
 import io.circe.parser._
 import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, SnapshotProposalsAtHeight}
+import org.constellation.schema.signature.Signable
 import org.constellation.session.SessionTokenService
 import org.constellation.session.SessionTokenService.Token
 
@@ -81,13 +80,6 @@ case object GetPeerInfo
 case class UpdatePeerInfo(peerData: PeerData)
 case class ChangePeerState(id: Id, state: NodeState)
 
-case class PeerNotification(id: Id, state: PeerState, timestamp: LocalDateTime = LocalDateTime.now()) extends Signable
-
-object PeerNotification {
-  implicit val peerNotificationEncoder: Encoder[PeerNotification] = deriveEncoder
-  implicit val peerNotificationDecoder: Decoder[PeerNotification] = deriveDecoder
-}
-
 case class MajorityHeight(joined: Option[Long], left: Option[Long] = None) {
   def isFinite = joined.isDefined && left.isDefined
 }
@@ -105,14 +97,6 @@ object MajorityHeight {
     majorityHeights.exists(isHeightBetween(height, _))
 }
 
-sealed trait PeerState extends EnumEntry
-
-object PeerState extends Enum[PeerState] with CirceEnum[PeerState] {
-  case object Join extends PeerState
-  case object Leave extends PeerState
-
-  val values = findValues
-}
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
 class Cluster[F[_]](
@@ -777,7 +761,7 @@ class Cluster[F[_]](
           else F.unit
       )
       .flatTap {
-        case SetStateResult(_, true) if !skipBroadcast && broadcastStates.contains(newState) =>
+        case SetStateResult(_, true) if !skipBroadcast && NodeState.broadcastStates.contains(newState) =>
           broadcastNodeState(newState)
         case _ => F.unit
       }

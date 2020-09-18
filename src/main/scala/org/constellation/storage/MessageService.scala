@@ -1,10 +1,10 @@
 package org.constellation.storage
 
-import cats.effect.{Concurrent, Sync}
+import cats.effect.Concurrent
 import cats.syntax.all._
-import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.primitives.{ChannelMessageMetadata, ChannelMetadata}
+import org.constellation.schema.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 class MessageService[F[_]: Concurrent]()(implicit dao: DAO)
     extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {

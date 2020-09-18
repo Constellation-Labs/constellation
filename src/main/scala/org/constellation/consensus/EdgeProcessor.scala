@@ -2,33 +2,25 @@ package org.constellation.consensus
 
 import java.nio.file.NoSuchFileException
 
-import cats.data.Validated.{Invalid, Valid}
-import cats.data.{EitherT, NonEmptyList}
+import cats.data.EitherT
 import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
 import cats.syntax.all._
 import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.keytool.KeyUtils
-import org.constellation.p2p.PeerData
-import org.constellation.primitives.Schema._
-import org.constellation.primitives._
-import org.constellation.schema.Id
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, CheckpointEdge}
+import org.constellation.schema.signature.{HashSignature, Signable}
+import org.constellation.schema.{ChannelMessageMetadata, Height, Id}
 import org.constellation.serializer.KryoSerializer
-import org.constellation.util.Validation.EnrichedFuture
-import org.constellation.util._
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.SortedMap
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.Try
 
 case class CreateCheckpointEdgeResponse(
   checkpointEdge: CheckpointEdge,
   transactionsUsed: Set[String],
-  // filteredValidationTips: Seq[SignedObservationEdge],
   updatedTransactionMemPoolThresholdMet: Set[String]
 )
 

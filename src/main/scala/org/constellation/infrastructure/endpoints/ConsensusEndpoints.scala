@@ -16,18 +16,16 @@ import org.constellation.consensus.Consensus.{
 }
 import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
 import org.constellation.consensus.{ConsensusManager, RoundDataRemote}
-import org.constellation.domain.observation.ObservationEvent
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.PeerData
 import org.constellation.storage.SnapshotService
 import org.http4s._
 import org.http4s.circe._
-
-import ObservationEvent._
 import RoundDataRemote._
 import ConsensusDataProposal._
 import UnionBlockProposal._
 import SelectedUnionBlock._
+import org.constellation.schema.observation.ObservationEvent
 
 class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 

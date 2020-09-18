@@ -9,14 +9,11 @@ import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.primitives
-import org.constellation.primitives.Transaction
 import org.constellation.util.Metrics
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import org.constellation.primitives.TransactionCacheData._
-import org.constellation.domain.transaction.LastTransactionRef._
-import Transaction._
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 
 class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
@@ -53,7 +50,7 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
           response <- validation match {
             case Invalid(e) => BadRequest(e.toString.asJson)
             case Valid(tx) =>
-              transactionService.put(primitives.TransactionCacheData(tx)).map(_.hash.asJson).flatMap(Ok(_))
+              transactionService.put(TransactionCacheData(tx)).map(_.hash.asJson).flatMap(Ok(_))
           }
           _ <- if (validation.isValid) {
             logger.info(s"Received transaction hash=${tx.hash} is valid")

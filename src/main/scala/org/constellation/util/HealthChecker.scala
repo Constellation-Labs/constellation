@@ -1,15 +1,12 @@
 package org.constellation.util
 
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.consensus.ConsensusManager
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.p2p.Cluster
 import org.constellation.primitives.ConcurrentTipService
-import org.constellation.primitives.Schema.{NodeState, NodeType}
-import org.constellation.schema.Id
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.schema.{Id, NodeState}
+import org.constellation.{ConfigUtil, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
 case class HeightEmpty(nodeId: String) extends MetricFailure(s"Empty height found for node: $nodeId")

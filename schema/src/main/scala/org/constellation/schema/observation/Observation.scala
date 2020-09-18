@@ -1,14 +1,14 @@
-package org.constellation.domain.observation
+package org.constellation.schema.observation
 
 import java.security.KeyPair
 
-import org.constellation.domain.consensus.ConsensusObject
-import constellation._
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.primitives.SignedData
-import org.constellation.schema.Id
+import io.circe.{Decoder, Encoder}
+import org.constellation.schema
+import org.constellation.schema.consensus.ConsensusObject
+import org.constellation.schema.{Id, SignedData}
 import org.joda.time.{DateTime, DateTimeUtils}
+import org.constellation.schema.signature.SignHelp.hashSignBatchZeroTyped
 
 case class Observation(
   signedObservationData: SignedData[ObservationData]
@@ -28,7 +28,7 @@ object Observation {
   ): Observation = {
     val data = ObservationData(id, event, time)
     Observation(
-      SignedData(data, hashSignBatchZeroTyped(data, keyPair))
+      schema.SignedData(data, hashSignBatchZeroTyped(data, keyPair))
     )
   }
 }

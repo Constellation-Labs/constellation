@@ -2,7 +2,8 @@ package org.constellation.util
 
 import cats.syntax.all._
 import org.constellation.consensus.StoredSnapshot
-import org.constellation.primitives.{CheckpointBlock, Transaction}
+import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.transaction.Transaction
 
 object AccountBalances {
 

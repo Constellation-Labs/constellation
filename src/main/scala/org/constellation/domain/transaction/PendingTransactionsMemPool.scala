@@ -5,8 +5,8 @@ import cats.effect.concurrent.Semaphore
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
-import org.constellation.primitives.Schema.Address
-import org.constellation.primitives.TransactionCacheData
+import org.constellation.schema.address.Address
+import org.constellation.schema.transaction.{LastTransactionRef, TransactionCacheData}
 import org.constellation.storage.{PendingMemPool, RateLimiting}
 
 import scala.annotation.tailrec

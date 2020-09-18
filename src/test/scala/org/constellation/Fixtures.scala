@@ -8,18 +8,12 @@ import java.util.Random
 import cats.effect.{ContextShift, IO}
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionService}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema.{
-  EdgeHashType,
-  ObservationEdge,
-  SignedObservationEdge,
-  TransactionEdgeData,
-  TypedEdgeHash
-}
-import org.constellation.primitives.{Edge, Transaction}
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.signature.{HashSignature, SignatureBatch}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 import org.constellation.schema.Id
-import org.constellation.util.{HashSignature, SignatureBatch}
 
 import scala.util.{Random => ScalaRandom}
 

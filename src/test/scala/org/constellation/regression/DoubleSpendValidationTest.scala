@@ -6,10 +6,14 @@ import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointBlockValidator
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionChainService, TransactionValidator}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionValidator}
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema.{AddressCacheData, GenesisObservation, SignedObservationEdge}
-import org.constellation.primitives.{CheckpointBlock, Genesis}
+import org.constellation.primitives.Genesis
+import org.constellation.schema.GenesisObservation
+import org.constellation.schema.address.AddressCacheData
+import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.edge.SignedObservationEdge
+import org.constellation.schema.transaction.LastTransactionRef
 import org.constellation.{DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

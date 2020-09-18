@@ -11,17 +11,21 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
 import org.constellation.PeerMetadata
-import org.constellation.consensus.Consensus.{FacilitatorId, RoundData, RoundId}
+import org.constellation.consensus.Consensus.{FacilitatorId, RoundData}
 import org.constellation.consensus.ConsensusManager.{
   BroadcastConsensusDataProposal,
   BroadcastSelectedUnionBlock,
   BroadcastUnionBlockProposal
 }
-import org.constellation.domain.observation.{Observation, ObservationService, RequestTimeoutOnConsensus}
+import org.constellation.domain.observation.ObservationService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{MajorityHeight, PeerData}
-import org.constellation.primitives.{ChannelMessage, TipSoe, Transaction}
+import org.constellation.primitives.TipSoe
+import org.constellation.schema.ChannelMessage
+import org.constellation.schema.consensus.RoundId
+import org.constellation.schema.observation.{Observation, RequestTimeoutOnConsensus}
+import org.constellation.schema.transaction.Transaction
 
 class ConsensusRemoteSender[F[_]: Concurrent](
   contextShift: ContextShift[F],

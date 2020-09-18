@@ -6,4 +6,4 @@ case class RedownloadPlan(
   toDownload: SnapshotsAtHeight,
   toRemove: SnapshotsAtHeight,
   toLeave: SnapshotsAtHeight
-) {}
+)

@@ -6,7 +6,7 @@ import cats.effect.Concurrent
 import cats.syntax.all._
 import io.prometheus.client.exporter.common.TextFormat
 import io.circe.syntax._
-import org.constellation.primitives.Schema.MetricsResult
+import org.constellation.schema.MetricsResult
 import org.constellation.util.Metrics
 import org.http4s.HttpRoutes
 import org.http4s.circe._

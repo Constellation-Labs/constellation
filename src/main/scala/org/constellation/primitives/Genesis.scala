@@ -6,11 +6,14 @@ import com.typesafe.scalalogging.StrictLogging
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.transaction.LastTransactionRef
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema._
+import org.constellation.schema.address.AddressCacheData
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.edge.{EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
+import org.constellation.schema.{GenesisObservation, Height}
 import org.constellation.util.AccountBalance
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.{ConstellationExecutionContext, DAO}
 
 object Genesis extends StrictLogging {
 

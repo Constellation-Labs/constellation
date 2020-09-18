@@ -1,18 +1,10 @@
 package org.constellation
 
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
-import java.util.concurrent.{
-  Executors,
-  ForkJoinPool,
-  LinkedBlockingQueue,
-  SynchronousQueue,
-  ThreadFactory,
-  ThreadPoolExecutor,
-  TimeUnit
-}
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent._
 
-import cats.effect.{Concurrent, ContextShift, IO}
 import cats.effect.concurrent.Semaphore
+import cats.effect.{Concurrent, ContextShift, IO}
 
 import scala.concurrent.ExecutionContext
 

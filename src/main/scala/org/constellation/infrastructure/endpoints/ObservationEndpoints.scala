@@ -8,7 +8,6 @@ import org.constellation.util.Metrics
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import org.constellation.domain.observation.Observation._
 
 class ObservationEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
