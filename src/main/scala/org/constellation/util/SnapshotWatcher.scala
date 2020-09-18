@@ -1,7 +1,7 @@
 package org.constellation.util
 
 import cats.effect.IO
-import cats.syntax.all._
+
 import scala.concurrent.duration._
 
 class SnapshotWatcher(healthChecker: HealthChecker[IO]) extends PeriodicIO("SnapshotWatcher") {

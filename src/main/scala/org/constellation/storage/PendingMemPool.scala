@@ -1,8 +1,8 @@
 package org.constellation.storage
 
-import cats.syntax.all._
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
+import cats.syntax.all._
 import org.constellation.storage.algebra.LookupAlgebra
 
 abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F, K, V] {

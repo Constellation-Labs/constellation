@@ -14,7 +14,7 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.p2p.Cluster
 import org.constellation.primitives.Genesis
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.GenesisObservation
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances

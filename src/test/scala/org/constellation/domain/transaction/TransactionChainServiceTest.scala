@@ -9,9 +9,10 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
-import org.constellation.primitives.Schema.{EdgeHashType, ObservationEdge, TransactionEdgeData, TypedEdgeHash}
-import org.constellation.primitives.{Edge, Schema, Transaction}
-import org.constellation.{ConstellationExecutionContext, Fixtures}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.transaction
+import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.freespec.AnyFreeSpec
@@ -210,7 +211,7 @@ class TransactionChainServiceTest
 
     for {
       last <- service.getLastTransactionRef(src)
-      tx = Transaction(Edge(oe, soe, txData), LastTransactionRef(last.prevHash, last.ordinal))
+      tx = transaction.Transaction(Edge(oe, soe, txData), LastTransactionRef(last.prevHash, last.ordinal))
     } yield tx
   }
 

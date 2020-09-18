@@ -3,15 +3,13 @@ package org.constellation.infrastructure.p2p
 import cats.ApplicativeError
 import cats.data.Kleisli
 import cats.effect.{Concurrent, ContextShift}
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.schema.Id
 import org.constellation.session.SessionTokenService
-import org.http4s.{EntityDecoder, Method, Request, Uri}
+import org.http4s.Method._
 import org.http4s.Uri.{Authority, Path, RegName, Scheme}
 import org.http4s.client.Client
-import org.http4s.Method._
+import org.http4s.{EntityDecoder, Method, Request, Uri}
 
 object PeerResponse {
   type PeerResponse[F[_], A] = Kleisli[F, PeerClientMetadata, A]

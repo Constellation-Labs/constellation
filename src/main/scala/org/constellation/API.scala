@@ -1,11 +1,9 @@
 package org.constellation
 
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
+import io.circe.{Decoder, Encoder}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.Schema.NodeType
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, NodeState, NodeType}
 import org.constellation.util._
 
 case class PeerMetadata(

@@ -6,15 +6,19 @@ import org.constellation.consensus.RoundDataRemote
 import org.constellation.domain.p2p.client.ConsensusClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
+import org.constellation.schema.observation.ObservationEvent
 import org.http4s.client.Client
-import org.constellation.domain.observation.ObservationEvent
 import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
+
 import scala.language.reflectiveCalls
 
-class ConsensusClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]) extends ConsensusClientAlgebra[F] {
+class ConsensusClientInterpreter[F[_]: Concurrent: ContextShift](
+  client: Client[F],
+  sessionTokenService: SessionTokenService[F]
+) extends ConsensusClientAlgebra[F] {
   import ObservationEvent._
   import RoundDataRemote._
 
@@ -41,6 +45,9 @@ class ConsensusClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[
 
 object ConsensusClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): ConsensusClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): ConsensusClientInterpreter[F] =
     new ConsensusClientInterpreter[F](client, sessionTokenService)
 }

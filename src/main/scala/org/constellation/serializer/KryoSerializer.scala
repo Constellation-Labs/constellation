@@ -1,11 +1,6 @@
 package org.constellation.serializer
 
-import java.io.{FileOutputStream, OutputStream}
-
-import com.esotericsoftware.kryo.io.{Input, InputChunked, Output, OutputChunked}
 import com.twitter.chill.{KryoPool, ScalaKryoInstantiator}
-
-import scala.util.Random
 
 object KryoSerializer {
 

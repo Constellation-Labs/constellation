@@ -1,8 +1,8 @@
-package org.constellation.domain.transaction
+package org.constellation.schema.transaction
 
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.util.Signable
+import io.circe.{Decoder, Encoder}
+import org.constellation.schema.signature.Signable
 
 case class LastTransactionRef(
   prevHash: String,

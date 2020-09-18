@@ -8,7 +8,6 @@ import io.circe.generic.semiauto._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.TipData
 import org.constellation.primitives.ConcurrentTipService
-import org.constellation.primitives.Schema.Height._
 import org.constellation.schema.Id
 import org.http4s.HttpRoutes
 import org.http4s.circe._

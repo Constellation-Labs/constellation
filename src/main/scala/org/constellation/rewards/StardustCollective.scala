@@ -1,10 +1,5 @@
 package org.constellation.rewards
 
-import java.security.SecureRandom
-
-import org.constellation.keytool.KeyUtils
-import org.constellation.schema.Id
-
 import scala.util.Random
 
 trait StardustCollective {
@@ -31,8 +26,7 @@ object StardustCollective extends StardustCollective {
     val stardustWeights = distribution
       .mapValues(_ * (percentage.toDouble / 100.0))
 
-    val weighted = distribution
-      .transform { case (id, reward) => reward - stardustWeights(id) }
+    val weighted = distribution.transform { case (id, reward) => reward - stardustWeights(id) }
 
     val totalStardustReward = stardustWeights.values.sum
 
@@ -40,5 +34,5 @@ object StardustCollective extends StardustCollective {
   }
 
   def createDecidatedAddress(): String =
-     "DAG" + "STARDUSTCOLLECTIVE" + Random.alphanumeric.filter(_.isLetter).take(30).mkString.toUpperCase
+    "DAG" + "STARDUSTCOLLECTIVE" + Random.alphanumeric.filter(_.isLetter).take(30).mkString.toUpperCase
 }

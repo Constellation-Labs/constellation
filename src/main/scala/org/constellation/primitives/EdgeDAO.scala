@@ -4,7 +4,6 @@ import java.util.concurrent.Semaphore
 
 import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
-import fs2.concurrent.Queue
 import org.constellation.checkpoint.{
   CheckpointAcceptanceService,
   CheckpointBlockValidator,
@@ -14,15 +13,15 @@ import org.constellation.checkpoint.{
 import org.constellation.consensus._
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend}
-import org.constellation.domain.cloud.{CloudService, CloudStorage, CloudStorageOld, HeightHashFileStorage}
+import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
+import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.domain.storage.{FileStorage, LocalFileStorage}
+import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -33,10 +32,10 @@ import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObserva
 import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator}
-import org.constellation.primitives.Schema._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.{RollbackLoader, RollbackService}
-import org.constellation.schema.Id
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.{ChannelMessage, ChannelSendRequest, GenesisObservation, Height, Id}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{Metrics, SnapshotWatcher}

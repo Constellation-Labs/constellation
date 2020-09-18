@@ -6,7 +6,7 @@ import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.freespec.AnyFreeSpec

@@ -5,14 +5,14 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.primitives.{Schema, Transaction}
-
-import scala.math.ceil
+import org.constellation.schema.address.Address
+import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.transaction.Transaction
 
 class RateLimiting[F[_]: Concurrent]() {
   val logger = Slf4jLogger.getLogger[F]
 
-  private[storage] val counter: Ref[F, Map[Schema.Address, Int]] = Ref.unsafe[F, Map[Schema.Address, Int]](Map())
+  private[storage] val counter: Ref[F, Map[Address, Int]] = Ref.unsafe[F, Map[Address, Int]](Map())
   private[storage] val blacklisted: StorageService[F, Int] = new StorageService("rate_limiting_blacklist".some)
 
   def update(txs: List[Transaction]): F[Unit] =
@@ -27,7 +27,7 @@ class RateLimiting[F[_]: Concurrent]() {
 
   def reset(cbHashes: List[String])(checkpointService: CheckpointService[F]): F[Unit] =
     for {
-      cbs <- cbHashes.map(checkpointService.fullData).sequence[F, Option[Schema.CheckpointCache]].map(_.flatten)
+      cbs <- cbHashes.map(checkpointService.fullData).sequence[F, Option[CheckpointCache]].map(_.flatten)
       txs = cbs.flatMap(_.checkpointBlock.transactions.toList)
       filtered = txs.filterNot(_.isDummy)
       grouped = filtered.groupBy(_.src).mapValues(_.size)
@@ -41,7 +41,7 @@ class RateLimiting[F[_]: Concurrent]() {
       _ <- blacklist()
     } yield ()
 
-  def available(address: Schema.Address): F[Int] =
+  def available(address: Address): F[Int] =
     for {
       c <- counter.get
       addressTxs <- counter.get.map(_.getOrElse(address, 0))

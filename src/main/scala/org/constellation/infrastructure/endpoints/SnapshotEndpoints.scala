@@ -11,7 +11,7 @@ import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeigh
 import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.NodeState
+import org.constellation.schema.NodeState
 import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService

@@ -1,8 +1,9 @@
 package org.constellation.domain.snapshot
 
 import org.constellation.consensus.{StoredSnapshot, TipData}
-import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache}
+import org.constellation.schema.address.AddressCacheData
+import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.transaction.LastTransactionRef
 
 case class SnapshotInfo(
   snapshot: StoredSnapshot,

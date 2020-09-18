@@ -6,6 +6,7 @@ import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import cats.syntax.all._
+import org.constellation.schema.transaction.Transaction
 import scopt.OParser
 
 object Wallet extends IOApp {
@@ -56,10 +57,10 @@ object Wallet extends IOApp {
   ): EitherT[F, Throwable, Transaction] =
     for {
       prevTx <- KeyStoreUtils
-        .readFromFileStream[F, Option[Transaction]](cliParams.prevTxPath, Transaction.transactionParser[F])
+        .readFromFileStream[F, Option[Transaction]](cliParams.prevTxPath, TransactionExt.transactionParser[F])
       tx <- EitherT.liftF[F, Throwable, Transaction] {
         F.delay {
-          Transaction.createTransaction(
+          TransactionExt.createTransaction(
             prevTx,
             getAddress(keypair),
             cliParams.destination,
@@ -75,7 +76,7 @@ object Wallet extends IOApp {
     implicit F: Sync[F]
   ): EitherT[F, Throwable, Unit] =
     for {
-      buffer <- EitherT.liftF(Transaction.transactionWriter[F](transaction).pure[F])
+      buffer <- EitherT.liftF(TransactionExt.transactionWriter[F](transaction).pure[F])
       _ <- KeyStoreUtils.storeWithFileStream[F](cliParams.txPath, buffer)
     } yield ()
 

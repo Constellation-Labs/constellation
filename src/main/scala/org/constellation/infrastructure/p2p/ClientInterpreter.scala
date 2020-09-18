@@ -1,34 +1,8 @@
 package org.constellation.infrastructure.p2p
 
 import cats.effect.{Concurrent, ContextShift}
-import org.constellation.domain.p2p.client.{
-  BuildInfoClientAlgebra,
-  CheckpointClientAlgebra,
-  ClusterClientAlgebra,
-  ConsensusClientAlgebra,
-  MetricsClientAlgebra,
-  NodeMetadataClientAlgebra,
-  ObservationClientAlgebra,
-  SignClientAlgebra,
-  SnapshotClientAlgebra,
-  SoeClientAlgebra,
-  TipsClientAlgebra,
-  TransactionClientAlgebra
-}
-import org.constellation.infrastructure.p2p.client.{
-  BuildInfoClientInterpreter,
-  CheckpointClientInterpreter,
-  ClusterClientInterpreter,
-  ConsensusClientInterpreter,
-  MetricsClientInterpreter,
-  NodeMetadataClientInterpreter,
-  ObservationClientInterpreter,
-  SignClientInterpreter,
-  SnapshotClientInterpreter,
-  SoeClientInterpreter,
-  TipsClientInterpreter,
-  TransactionClientInterpreter
-}
+import org.constellation.domain.p2p.client._
+import org.constellation.infrastructure.p2p.client._
 import org.constellation.session.SessionTokenService
 import org.http4s.client.Client
 

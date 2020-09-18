@@ -1,19 +1,15 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
+import org.constellation.domain.p2p.client.SignClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.http4s.client.Client
-import org.constellation.domain.p2p.client.SignClientAlgebra
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
-import org.constellation.schema.Id
-import org.constellation.session.Registration.`X-Id`
-import org.constellation.session.SessionTokenService
-import org.constellation.util.SingleHashSignature
-import org.http4s.{Header, Headers}
+import org.constellation.schema.signature.SingleHashSignature
+import org.http4s.Method._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
-import org.http4s.Method._
+import org.http4s.client.Client
 
 import scala.language.reflectiveCalls
 

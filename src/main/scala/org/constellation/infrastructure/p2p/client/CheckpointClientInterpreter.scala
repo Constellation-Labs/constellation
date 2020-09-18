@@ -5,22 +5,24 @@ import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, Signat
 import org.constellation.domain.p2p.client.CheckpointClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.primitives.Schema.{CheckpointCache, GenesisObservation}
-import org.http4s.client.Client
-import org.constellation.domain.observation.ObservationEvent
+import org.constellation.schema.GenesisObservation
+import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.session.SessionTokenService
+import org.http4s.Method._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
-import org.http4s.Method._
+import org.http4s.client.Client
+
 import scala.language.reflectiveCalls
 
-class CheckpointClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])
-    extends CheckpointClientAlgebra[F] {
-  import ObservationEvent._
-  import GenesisObservation._
+class CheckpointClientInterpreter[F[_]: Concurrent: ContextShift](
+  client: Client[F],
+  sessionTokenService: SessionTokenService[F]
+) extends CheckpointClientAlgebra[F] {
   import CheckpointCache._
-  import SignatureResponse._
   import FinishedCheckpoint._
+  import GenesisObservation._
+  import SignatureResponse._
 
   def getGenesis(): PeerResponse[F, Option[GenesisObservation]] =
     PeerResponse[F, Option[GenesisObservation]]("genesis")(client, sessionTokenService)
@@ -41,6 +43,9 @@ class CheckpointClientInterpreter[F[_]: Concurrent: ContextShift](client: Client
 
 object CheckpointClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): CheckpointClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): CheckpointClientInterpreter[F] =
     new CheckpointClientInterpreter[F](client, sessionTokenService)
 }

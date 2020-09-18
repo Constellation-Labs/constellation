@@ -1,11 +1,11 @@
 package org.constellation.domain.cloud.providers
 
 import better.files.File
-import cats.syntax.all._
 import cats.data.EitherT
 import cats.effect.Concurrent
+import cats.syntax.all._
 import org.constellation.domain.cloud.config.Local
-import org.constellation.primitives.Schema
+import org.constellation.schema.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
 class LocalProvider[F[_]](config: Local)(implicit F: Concurrent[F]) extends CloudServiceProvider[F] {
@@ -21,7 +21,7 @@ class LocalProvider[F[_]](config: Local)(implicit F: Concurrent[F]) extends Clou
   def storeSnapshotInfo(snapshotInfo: File, height: Long, hash: String): EitherT[F, Throwable, Unit] =
     writeFile("snapshots", s"/${height}-${hash}".some, s"${hash}-snapshot_info", snapshotInfo)
 
-  def storeGenesis(genesisObservation: Schema.GenesisObservation): EitherT[F, Throwable, Unit] =
+  def storeGenesis(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
     writeClass("genesis", None, "genesis", genesisObservation)
 
   private def createDirectoryIfNotExists(path: File): EitherT[F, Throwable, Unit] =

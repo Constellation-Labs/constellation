@@ -2,7 +2,7 @@ package org.constellation.primitives
 
 import cats.syntax.all._
 import org.constellation.Fixtures
-import org.constellation.domain.transaction.LastTransactionRef
+import org.constellation.schema.transaction.LastTransactionRef
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 

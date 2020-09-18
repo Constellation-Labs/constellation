@@ -6,28 +6,43 @@ import com.twitter.chill.IKryoRegistrar
 import org.constellation.consensus._
 import org.constellation.domain.observation._
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.p2p.PeerNotification
-import org.constellation.primitives.Schema._
-import org.constellation.primitives.{SignedData, _}
-import org.constellation.schema.Id
-import org.constellation.util.{HashSignature, SignatureBatch}
+import org.constellation.schema.{
+  ChannelMessage,
+  ChannelMessageData,
+  CommonMetadata,
+  GenesisObservation,
+  Height,
+  Id,
+  PeerNotification,
+  SignedData
+}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
-import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
-import org.constellation.primitives.Schema.EdgeHashType
-import org.constellation.rewards.EigenTrustAgents
-import atb.trustmodel.{EigenTrust => EigenTrustJ}
-import cern.jet.random.engine.MersenneTwister
-import com.esotericsoftware.kryo.serializers.DefaultArraySerializers.IntArraySerializer
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
-import org.constellation.primitives.IPManager.IP
 import org.constellation.rewards.EigenTrustAgents
-import org.constellation.session.Registration.JoinRequestPayload
+import org.constellation.schema.address.{Address, AddressCacheData, AddressMetaData}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, CheckpointEdge, CheckpointEdgeData}
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.observation.{
+  CheckpointBlockInvalid,
+  CheckpointBlockWithMissingParents,
+  CheckpointBlockWithMissingSoe,
+  Observation,
+  ObservationData,
+  RequestTimeoutOnConsensus,
+  RequestTimeoutOnResolving
+}
+import org.constellation.schema.signature.{HashSignature, SignatureBatch}
+import org.constellation.schema.transaction.{
+  LastTransactionRef,
+  Transaction,
+  TransactionCacheData,
+  TransactionEdgeData,
+  TransactionGossip
+}
 
 import scala.collection.SortedMap
-import scala.collection.immutable.TreeMap
 
 class ConstellationKryoRegistrar extends IKryoRegistrar {
   private val printRegistrationIDs = false
@@ -49,8 +64,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
   def registerClasses(kryo: Kryo): Unit = {
     kryo.register(classOf[ChannelMessageData], 145)
     kryo.register(classOf[SignedData[ChannelMessageData]], 146)
-    kryo.register(classOf[SignedData[ObservationData]]) // todo
-    kryo.register(classOf[SignedData[ObservationData]]) // todo
     kryo.register(classOf[ChannelMessage], 147)
     kryo.register(classOf[Seq[ChannelMessage]], 148)
     kryo.register(classOf[StoredSnapshot], 149)
@@ -59,22 +72,8 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Height], 152)
     kryo.register(classOf[Option[Height]], 153)
     kryo.register(classOf[CommonMetadata], 154)
-    kryo.register(classOf[Seq[CheckpointBlock]]) // todo
-    kryo.register(classOf[Seq[Transaction]]) // todo
-    kryo.register(classOf[SignedData[ObservationData]]) // todo
-    kryo.register(classOf[Seq[CheckpointCache]]) // todo
     kryo.register(classOf[Map[String, AddressCacheData]], 155)
-    kryo.register(classOf[Map[String, TipData]]) // todo
-    kryo.register(classOf[Map[String, LastTransactionRef]]) // todo
-    kryo.register(classOf[Map[Id, Double]]) // todo
-    kryo.register(classOf[Map[IP, Id]]) // todo
     kryo.register(classOf[SortedMap[Id, Double]], 156)
-    kryo.register(classOf[TreeMap[Id, Double]]) // todo
-    kryo.register(classOf[Seq[(String, AddressCacheData)]]) // todo
-    kryo.register(classOf[Seq[(String, TipData)]]) // todo
-    kryo.register(classOf[Seq[(String, LastTransactionRef)]]) // todo
-    kryo.register(classOf[Seq[(Id, Double)]]) // todo
-    kryo.register(classOf[Seq[(IP, Id)]]) // todo
     kryo.register(classOf[Address], 157)
     kryo.register(classOf[CheckpointEdge], 158)
     kryo.register(classOf[AddressCacheData], 159)
@@ -90,7 +89,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[ObservationEdge], 1002)
     kryo.register(classOf[CheckpointBlock], 163)
     kryo.register(classOf[PeerNotification], 164)
-    kryo.register(classOf[Seq[PeerNotification]])
     kryo.register(classOf[TypedEdgeHash], 1004)
     kryo.register(classOf[Enumeration#Value], 1008)
     kryo.register(classOf[TransactionEdgeData], 1009)
@@ -105,9 +103,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[RequestTimeoutOnResolving], 172)
     kryo.register(classOf[CheckpointBlockInvalid], 173)
     kryo.register(classOf[Observation], 174)
-    kryo.register(classOf[Seq[Observation]]) // todo
     kryo.register(classOf[scala.collection.mutable.ArrayBuffer[String]], 175)
-    kryo.register(classOf[Seq[String]]) // todo
     kryo.register(classOf[Set[String]], 176)
 
     kryo.register(classOf[Id], 1011)
@@ -133,7 +129,6 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
 
     kryo.register(Class.forName("scala.math.LowPriorityOrderingImplicits$$anon$3"), 188)
     kryo.register(Class.forName("scala.Predef$$anon$2"), 189)
-    kryo.register(scala.math.Ordering.String.getClass) // todo
 
     kryo.register(EdgeHashType.AddressHash.getClass, 1024)
     kryo.register(EdgeHashType.CheckpointDataHash.getClass, 1025)

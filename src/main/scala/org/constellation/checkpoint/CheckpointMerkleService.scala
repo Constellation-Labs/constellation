@@ -1,15 +1,20 @@
 package org.constellation.checkpoint
 
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.Concurrent
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation.Observation
-import org.constellation.p2p.{DataResolver, PeerNotification}
-import org.constellation.primitives.Schema.{CheckpointCache, _}
-import org.constellation.primitives._
+import org.constellation.p2p.DataResolver
+import org.constellation.schema.PeerNotification
+import org.constellation.schema.checkpoint.{
+  CheckpointBlock,
+  CheckpointBlockMetadata,
+  CheckpointCache,
+  CheckpointCacheMetadata
+}
+import org.constellation.schema.merkle.MerkleTree
+import org.constellation.schema.observation.Observation
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.storage.algebra.MerkleStorageAlgebra
-import org.constellation.util.MerkleTree
-import org.constellation.{ConstellationExecutionContext, DAO}
 
 class CheckpointMerkleService[F[_]: Concurrent](
   transactionService: MerkleStorageAlgebra[F, String, TransactionCacheData],

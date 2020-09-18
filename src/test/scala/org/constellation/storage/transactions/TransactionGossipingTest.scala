@@ -1,14 +1,13 @@
 package org.constellation.storage.transactions
 
 import cats.effect.{ContextShift, IO, Timer}
-import cats.effect.concurrent.Semaphore
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService}
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.{Transaction, TransactionCacheData}
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
@@ -16,7 +15,6 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class TransactionGossipingTest

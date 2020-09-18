@@ -1,16 +1,17 @@
-package org.constellation.primitives
+package org.constellation.schema.transaction
 
 import java.security.KeyPair
 import java.time.Instant
 
-import constellation._
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.domain.consensus.ConsensusObject
-import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.primitives.Schema.{Address, TransactionEdgeData}
+import io.circe.{Decoder, Encoder}
 import org.constellation.schema.Id
-import org.constellation.util.HashSignature
+import org.constellation.schema.address.Address
+import org.constellation.schema.consensus.ConsensusObject
+import org.constellation.schema.edge.Edge
+import org.constellation.schema.signature.HashSignature
+
+import org.constellation.schema._
 
 case class TransactionCacheData(
   transaction: Transaction,

@@ -1,7 +1,7 @@
 package org.constellation.domain.p2p.client
 
-import org.constellation.domain.observation.Observation
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
+import org.constellation.schema.observation.Observation
 
 trait ObservationClientAlgebra[F[_]] {
   def getObservation(hash: String): PeerResponse[F, Option[Observation]]

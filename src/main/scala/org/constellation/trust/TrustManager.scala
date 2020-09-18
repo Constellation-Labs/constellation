@@ -4,11 +4,10 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.domain.observation._
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.observation._
 
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 

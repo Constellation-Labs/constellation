@@ -3,7 +3,8 @@ package org.constellation.domain.checkpointBlock
 import cats.effect.{Concurrent, Sync}
 import cats.syntax.all._
 import org.constellation.domain.transaction.TransactionChainService
-import org.constellation.primitives.{CheckpointBlock, Transaction}
+import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.transaction.Transaction
 
 object CheckpointBlockDoubleSpendChecker {
 

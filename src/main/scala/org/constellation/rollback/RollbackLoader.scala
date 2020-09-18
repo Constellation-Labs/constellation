@@ -3,7 +3,7 @@ package org.constellation.rollback
 import better.files.File
 import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
 import scala.util.Try

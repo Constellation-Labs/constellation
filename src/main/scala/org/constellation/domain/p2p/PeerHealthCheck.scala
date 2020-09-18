@@ -5,15 +5,13 @@ import cats.effect.{Clock, Concurrent, ContextShift, Sync, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import io.circe.syntax._
+import io.circe.{Decoder, Encoder}
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
-import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, NodeState}
 import org.constellation.util.Metrics
 
 import scala.concurrent.duration._

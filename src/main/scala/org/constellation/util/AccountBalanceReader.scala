@@ -1,6 +1,6 @@
 package org.constellation.util
 
-import org.constellation.primitives.Schema
+import org.constellation.schema.Schema
 
 import scala.io.Source
 

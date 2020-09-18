@@ -1,19 +1,11 @@
 package org.constellation.util
 
-import java.security.KeyPair
-
-import constellation.SHA256Ext
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
-import org.constellation.Fixtures.{dummyTx, _}
+import org.constellation.Fixtures._
 import Partitioner._
-import org.constellation.DAO
-import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.{Schema, Transaction}
-import org.constellation.primitives.Schema.SendToAddress
+import org.constellation.schema.transaction.Transaction
 import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-
-import scala.util.Random
 
 class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 

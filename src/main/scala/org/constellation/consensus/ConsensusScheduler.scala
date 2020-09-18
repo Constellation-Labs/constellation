@@ -5,9 +5,9 @@ import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.NodeState
+import org.constellation.schema.NodeState
 import org.constellation.util.PeriodicIO
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.duration._
 

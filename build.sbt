@@ -113,7 +113,8 @@ lazy val prometheusDependencies = Seq(
 // -----------------
 
 lazy val sharedDependencies = Seq(
-  "com.github.scopt" %% "scopt" % "4.0.0-RC2"
+  "com.github.scopt" %% "scopt" % "4.0.0-RC2",
+  "joda-time" % "joda-time" % "1.6"
 ) ++ circeDependencies ++ catsDependencies ++ loggingDependencies
 
 lazy val keyToolSharedDependencies = Seq(
@@ -150,6 +151,8 @@ lazy val testDependencies = Seq(
   "org.mockito" %% "mockito-scala-cats" % versions.mockito
 ).map(_ % "it,test")
 
+// -----------------
+
 testOptions in Test += Tests.Setup(() => System.setProperty("macmemo.disable", "true"))
 testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", "target/test-results/scalatest")
 
@@ -166,6 +169,49 @@ assemblyMergeStrategy in assembly := {
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
 }
+
+// -----------------
+
+lazy val keytool = (project in file("keytool"))
+  .enablePlugins(BuildInfoPlugin)
+  .settings(
+    commonSettings,
+    name := "keytool",
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation.keytool",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    mainClass := Some("org.constellation.keytool.KeyTool"),
+    libraryDependencies ++= keyToolSharedDependencies
+  )
+
+lazy val schema = (project in file("schema"))
+  .enablePlugins(BuildInfoPlugin)
+  .dependsOn(keytool)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation.schema",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    libraryDependencies ++= schemaSharedDependencies
+  )
+
+lazy val wallet = (project in file("wallet"))
+  .enablePlugins(BuildInfoPlugin)
+  .dependsOn(schema)
+  .settings(
+    commonSettings,
+    name := "wallet",
+    buildInfoKeys := Seq[BuildInfoKey](
+      version
+    ),
+    buildInfoPackage := "org.constellation.wallet",
+    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
+    mainClass := Some("org.constellation.wallet.Wallet"),
+    libraryDependencies ++= walletSharedDependencies
+  )
 
 lazy val root = (project in file("."))
   .dependsOn(schema)
@@ -190,46 +236,4 @@ lazy val root = (project in file("."))
     libraryDependencies ++= (coreDependencies ++ testDependencies),
     mainClass := Some("org.constellation.ConstellationNode")
     // other settings here
-  )
-
-lazy val keytool = (project in file("keytool"))
-  .enablePlugins(BuildInfoPlugin)
-  .settings(
-    commonSettings,
-    name := "keytool",
-    buildInfoKeys := Seq[BuildInfoKey](
-      version
-    ),
-    buildInfoPackage := "org.constellation.keytool",
-    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
-    mainClass := Some("org.constellation.keytool.KeyTool"),
-    libraryDependencies ++= keyToolSharedDependencies
-  )
-
-lazy val wallet = (project in file("wallet"))
-  .enablePlugins(BuildInfoPlugin)
-  .dependsOn(keytool)
-  .settings(
-    commonSettings,
-    name := "wallet",
-    buildInfoKeys := Seq[BuildInfoKey](
-      version
-    ),
-    buildInfoPackage := "org.constellation.wallet",
-    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
-    mainClass := Some("org.constellation.wallet.Wallet"),
-    libraryDependencies ++= walletSharedDependencies
-  )
-
-lazy val schema = (project in file("schema"))
-  .dependsOn(keytool)
-  .dependsOn(wallet)
-  .enablePlugins(BuildInfoPlugin)
-  .settings(
-    buildInfoKeys := Seq[BuildInfoKey](
-      version
-    ),
-    buildInfoPackage := "org.constellation.schema",
-    buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
-    libraryDependencies ++= schemaSharedDependencies
   )

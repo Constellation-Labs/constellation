@@ -5,9 +5,9 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.util.PeriodicIO
+import org.constellation.schema.NodeState
 import org.constellation.util.Logging._
+import org.constellation.util.PeriodicIO
 
 import scala.concurrent.duration._
 

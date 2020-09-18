@@ -6,15 +6,13 @@ import io.circe.{Encoder, KeyEncoder}
 import io.circe.syntax._
 import io.circe.generic.semiauto._
 import org.constellation.p2p.{Cluster, MajorityHeight}
-import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
-import org.constellation.schema.Id
+import org.constellation.schema.{Id, NodeState, NodeType}
 import org.constellation.storage.AddressService
 import org.constellation.util.NodeStateInfo
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import NodeStateInfo._
-import AddressCacheData._
 
 class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 

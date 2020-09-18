@@ -9,8 +9,10 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusService
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Schema._
-import org.constellation.primitives.{Edge, Schema, Transaction, TransactionCacheData}
+import org.constellation.schema.Schema
+import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
 import org.constellation.storage.RateLimiting
 
 class TransactionService[F[_]: Concurrent](

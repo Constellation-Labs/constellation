@@ -1,20 +1,22 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
+import org.constellation.domain.p2p.client.TransactionClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.http4s.client.Client
-import org.constellation.domain.p2p.client.TransactionClientAlgebra
-import org.constellation.domain.transaction.LastTransactionRef
-import org.constellation.primitives.TransactionCacheData
+import org.constellation.schema.transaction.{LastTransactionRef, TransactionCacheData}
 import org.constellation.session.SessionTokenService
+import org.http4s.Method._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
-import org.http4s.Method._
+import org.http4s.client.Client
+
 import scala.language.reflectiveCalls
 
-class TransactionClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])
-    extends TransactionClientAlgebra[F] {
+class TransactionClientInterpreter[F[_]: Concurrent: ContextShift](
+  client: Client[F],
+  sessionTokenService: SessionTokenService[F]
+) extends TransactionClientAlgebra[F] {
 
   def getTransaction(hash: String): PeerResponse[F, Option[TransactionCacheData]] =
     PeerResponse(s"transaction/$hash")(client, sessionTokenService)
@@ -30,6 +32,9 @@ class TransactionClientInterpreter[F[_]: Concurrent: ContextShift](client: Clien
 
 object TransactionClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): TransactionClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): TransactionClientInterpreter[F] =
     new TransactionClientInterpreter[F](client, sessionTokenService)
 }

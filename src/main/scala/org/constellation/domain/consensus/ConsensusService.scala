@@ -6,8 +6,9 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.primitives.concurrency.SingleLock
+import org.constellation.schema.consensus.ConsensusObject
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.storage.{ConcurrentStorageService, PendingMemPool, StorageService}
 

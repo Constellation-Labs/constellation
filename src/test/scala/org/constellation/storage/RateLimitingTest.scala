@@ -8,8 +8,8 @@ import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.matchers.should.Matchers
 import org.constellation.Fixtures
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.primitives.CheckpointBlock
-import org.constellation.primitives.Schema.{Address, CheckpointCache}
+import org.constellation.schema.address.Address
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.concurrent.ExecutionContext

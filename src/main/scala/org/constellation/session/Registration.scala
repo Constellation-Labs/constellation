@@ -1,7 +1,7 @@
 package org.constellation.session
 
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import io.circe.{Decoder, Encoder}
 import org.http4s.util.CaseInsensitiveString
 
 object Registration {

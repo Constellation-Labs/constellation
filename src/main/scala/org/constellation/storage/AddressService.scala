@@ -3,9 +3,9 @@ package org.constellation.storage
 import cats.effect.Concurrent
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.primitives.Schema.AddressCacheData
-import org.constellation.primitives.Transaction
+import org.constellation.schema.address.AddressCacheData
 import org.constellation.primitives.concurrency.MultiLock
+import org.constellation.schema.transaction.Transaction
 
 class AddressService[F[_]: Concurrent]() {
 

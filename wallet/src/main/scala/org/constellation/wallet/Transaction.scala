@@ -5,37 +5,36 @@ import java.security.KeyPair
 
 import cats.effect.Sync
 import org.constellation.keytool.KeyStoreUtils
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.signature.SignHelp
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 
-case class Transaction(
-  edge: Edge[TransactionEdgeData],
-  lastTxRef: LastTransactionRef,
-  isDummy: Boolean,
-  isTest: Boolean
-) {
-  def signatures: Seq[HashSignature] = edge.signedObservationEdge.signatureBatch.signatures
-
-  // TODO: Add proper exception on empty option
-
-  def amount: Long = edge.data.amount
-
-  def fee: Option[Long] = edge.data.fee
-
-  def baseHash: String = edge.signedObservationEdge.baseHash
-
-  def hash: String = edge.observationEdge.hash
-
-  def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
-
-  def isValid = signatures.exists { hs ⇒
-    hs.address == edge.parents.head.hashReference && hs.valid(signaturesHash) && hash == signaturesHash
-  }
-}
-
-object Transaction {
+object TransactionExt {
 
   import io.circe.generic.auto._
   import io.circe.parser.parse
   import io.circe.syntax._
+
+  def createTransactionEdge(
+    src: String,
+    dst: String,
+    lastTxRef: LastTransactionRef,
+    amount: Long,
+    keyPair: KeyPair,
+    fee: Option[Double] = None
+  ): Edge[TransactionEdgeData] = {
+    val feeToUse = fee.map(_ * 1e8.toLong).map(_.toLong)
+    val txData = TransactionEdgeData(amount, lastTxRef, feeToUse)
+    val oe = ObservationEdge(
+      Seq(
+        TypedEdgeHash(src, EdgeHashType.AddressHash),
+        TypedEdgeHash(dst, EdgeHashType.AddressHash)
+      ),
+      TypedEdgeHash(txData.getEncoding, EdgeHashType.TransactionDataHash)
+    )
+    val soe = SignHelp.signedObservationEdge(oe)(keyPair)
+    Edge(oe, soe, txData)
+  }
 
   def transactionParser[F[_]](fis: FileInputStream)(implicit F: Sync[F]): F[Option[Transaction]] =
     KeyStoreUtils.parseFileOfTypeOp[F, Transaction](parse(_).map(_.as[Transaction]).toOption.flatMap(_.toOption))(fis)
@@ -66,7 +65,7 @@ object Transaction {
       prevTx
         .map(tx => LastTransactionRef(tx.hash, tx.lastTxRef.ordinal + 1))
         .getOrElse(LastTransactionRef.empty)
-    val edge = TransactionEdge.createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
+    val edge = createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
     Transaction(edge, lastTxRef, false, false)
   }
 

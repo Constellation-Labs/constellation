@@ -10,14 +10,17 @@ import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, SignatureResponse}
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
-import org.constellation.domain.observation.{CheckpointBlockInvalid, Observation, ObservationService}
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives.Schema.{CheckpointCache, Height, NodeState}
 import org.constellation.primitives._
-import org.constellation.schema.Id
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation}
+import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.{ChannelMessageMetadata, Height, Id, NodeState}
 import org.constellation.storage._
-import org.constellation.util.{HashSignature, Metrics, PeerApiClient}
+import org.constellation.util.{Metrics, PeerApiClient}
 import org.constellation.{ConstellationExecutionContext, DAO}
 
 import scala.concurrent.duration._

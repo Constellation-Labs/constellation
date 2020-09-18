@@ -6,16 +6,16 @@ import cats.effect.{Concurrent, ContextShift}
 import cats.syntax.all._
 import io.circe.syntax._
 import org.constellation.p2p.{Cluster, PeerAuthSignRequest, PeerRegistrationRequest}
-import org.constellation.util.{HostPort, SignHelp, SingleHashSignature}
+import org.constellation.util.HostPort
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import PeerAuthSignRequest._
-import SingleHashSignature._
 import PeerRegistrationRequest._
 import HostPort._
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.schema.Id
+import org.constellation.schema.signature.{SignHelp, SingleHashSignature}
 import org.constellation.session.Registration.JoinRequestPayload
 
 class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {

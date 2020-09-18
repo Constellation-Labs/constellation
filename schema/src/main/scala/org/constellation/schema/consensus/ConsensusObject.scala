@@ -1,4 +1,4 @@
-package org.constellation.domain.consensus
+package org.constellation.schema.consensus
 
 trait ConsensusObject {
   def hash: String

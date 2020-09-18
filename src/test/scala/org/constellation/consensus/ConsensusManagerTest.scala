@@ -5,28 +5,23 @@ import cats.effect.{Blocker, IO}
 import cats.syntax.all._
 import com.typesafe.config.ConfigFactory
 import org.constellation._
-import org.constellation.consensus.Consensus.{ConsensusDataProposal, FacilitatorId, RoundData, RoundId}
+import org.constellation.consensus.Consensus.{ConsensusDataProposal, FacilitatorId, RoundData}
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
-import org.constellation.domain.observation.{CheckpointBlockInvalid, Observation, ObservationEvent}
 import org.constellation.p2p.{MajorityHeight, PeerData}
-import org.constellation.primitives.Schema.{CheckpointEdge, EdgeHashType, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.primitives.Schema.NodeType.Light
-import org.constellation.primitives.{
-  ChannelMessageMetadata,
-  CheckpointBlock,
-  Edge,
-  PulledTips,
-  TipSoe,
-  Transaction,
-  TransactionCacheData
-}
-import org.constellation.schema.Id
+import org.constellation.primitives.{PulledTips, TipSoe}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointEdge}
+import org.constellation.schema.consensus.RoundId
+import org.constellation.schema.edge.{Edge, SignedObservationEdge}
+import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation}
+import org.constellation.schema.signature.SignatureBatch
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.{ChannelMessageMetadata, Id, NodeType}
 import org.constellation.storage.ConcurrentStorageService
-import org.constellation.util.{Metrics, SignatureBatch}
+import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.funspec.AnyFunSpecLike
-import org.scalatest.{BeforeAndAfterEach}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.should.Matchers
 
 import scala.io.Source
@@ -156,7 +151,7 @@ class ConsensusManagerTest
       dao.concurrentTipService.pull(*)(*) shouldReturnF tips
       dao.threadSafeMessageMemPool.pull(*) shouldReturn None
       dao.observationService.pullForConsensus(*) shouldReturnF List(obs1)
-      dao.readyPeers(Light) shouldReturnF Map.empty
+      dao.readyPeers(NodeType.Light) shouldReturnF Map.empty
       val mockedArbitraryPool = mock[ConcurrentStorageService[IO, ChannelMessageMetadata]]
       mockedArbitraryPool.toMap shouldReturnF Map.empty
       dao.messageService.arbitraryPool shouldReturn mockedArbitraryPool

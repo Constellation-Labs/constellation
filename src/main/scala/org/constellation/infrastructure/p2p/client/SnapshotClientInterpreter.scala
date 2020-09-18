@@ -1,23 +1,23 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import io.circe.{Decoder, Encoder}
+import io.circe.Decoder
 import io.circe.generic.semiauto._
 import org.constellation.domain.p2p.client.SnapshotClientAlgebra
 import org.constellation.domain.redownload.RedownloadService.{
   LatestMajorityHeight,
   SnapshotProposalsAtHeight,
-  SnapshotsAtHeight
+  SnapshotsAtHeight,
+  _
 }
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
+import org.constellation.session.SessionTokenService
 import org.http4s.Method._
 import org.http4s.Status.Successful
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.client.Client
-import org.constellation.domain.redownload.RedownloadService._
-import org.constellation.session.SessionTokenService
 
 import scala.collection.SortedMap
 import scala.language.reflectiveCalls

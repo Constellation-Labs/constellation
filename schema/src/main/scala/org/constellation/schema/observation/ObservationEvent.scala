@@ -1,9 +1,8 @@
-package org.constellation.domain.observation
+package org.constellation.schema.observation
 
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import cats.syntax.all._
-import org.constellation.consensus.Consensus.RoundId
+import io.circe.{Decoder, Encoder}
+import org.constellation.schema.consensus.RoundId
 
 sealed trait ObservationEvent
 

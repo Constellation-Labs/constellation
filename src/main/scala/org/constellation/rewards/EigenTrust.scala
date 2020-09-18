@@ -7,18 +7,14 @@ import atb.interfaces.{Experience, Opinion}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
-import org.constellation.domain.observation.{Observation, ObservationData, ObservationEvent}
+import cats.syntax.all._
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.schema.Id
+import org.constellation.schema.observation.{Observation, ObservationData, ObservationEvent}
 import org.constellation.trust.{DataGeneration, TrustEdge, TrustManager, TrustNode}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
-import cats.syntax.all._
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
-import org.constellation.domain.rewards.StoredRewards
-import org.constellation.rewards.EigenTrust.{opinionSampleNum, opinionSampleSD, satisfactoryThreshold, weight}
-
 import scala.util.Random
 
 /**

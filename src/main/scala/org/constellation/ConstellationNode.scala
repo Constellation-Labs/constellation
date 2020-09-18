@@ -23,9 +23,9 @@ import org.constellation.infrastructure.endpoints._
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.primitives.IPManager.IP
-import org.constellation.primitives.Schema.{GenesisObservation, NodeState, ValidPeerIPData}
 import org.constellation.primitives._
-import org.constellation.schema.Id
+import org.constellation.schema.{GenesisObservation, Id, NodeState}
+import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.session.SessionTokenService
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
 import org.http4s.Request
@@ -366,9 +366,6 @@ class ConstellationNode(
 
   val ipManager: IPManager[IO] =
     IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
-
-  def getIPData: ValidPeerIPData =
-    ValidPeerIPData(nodeConfig.hostName, nodeConfig.peerHttpPort)
 
   def getInetSocketAddress: InetSocketAddress =
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)

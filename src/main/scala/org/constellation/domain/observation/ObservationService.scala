@@ -2,10 +2,10 @@ package org.constellation.domain.observation
 
 import cats.effect.Concurrent
 import cats.syntax.all._
-import io.chrisdavenport.log4cats.Logger
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusService
-import org.constellation.primitives.Schema.CheckpointCache
+import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.observation.Observation
 import org.constellation.trust.TrustManager
 
 class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: DAO)

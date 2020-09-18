@@ -16,10 +16,13 @@ import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
+import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.NodeState
 import org.constellation.primitives._
 import org.constellation.rewards.EigenTrust
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockMetadata}
 import org.constellation.schema.Id
+import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics

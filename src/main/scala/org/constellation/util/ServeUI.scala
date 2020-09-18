@@ -37,7 +37,7 @@ package object example {
   val CssSettings: Exports with Settings = scalacss.devOrProdDefaults
 }
 
-import example.CssSettings._
+import org.constellation.util.example.CssSettings._
 
 object MyStandalone extends StyleSheet.Standalone {
   import dsl._
@@ -49,8 +49,8 @@ object MyStandalone extends StyleSheet.Standalone {
 }
 
 object MyStyles extends StyleSheet.Inline {
-  import dsl._
   import Colors._
+  import dsl._
 
   val hoverDark: StyleA = style("hover-dark")(
     backgroundColor(Color(ansiGrey)),

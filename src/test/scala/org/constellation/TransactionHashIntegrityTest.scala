@@ -1,16 +1,24 @@
+/**
+  * CREATE SEPARATE INTEGRATION TEST FOR THAT
+  */
+
+/*
 package org.constellation
 
 import cats.effect.{ContextShift, IO}
 import io.circe.generic.auto._
 import io.circe.parser.parse
+import org.constellation.consensus.{Snapshot, StoredSnapshot}
+import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.domain.storage.StorageItemKind.GenesisObservation
+import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.primitives.Schema.EdgeHashType.TransactionDataHash
-import org.constellation.primitives.Schema.{ObservationEdge, TypedEdgeHash}
-import org.constellation.primitives.Transaction
+import org.constellation.schema.transaction.Transaction
 import org.constellation.serializer.KryoSerializer
-import org.constellation.wallet.{Hashable, KryoSerializer => WalletKryoSerializer, Transaction => WalletTransaction}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.collection.SortedMap
 
 class TransactionHashIntegrityTest extends AnyFreeSpec with Matchers {
   implicit val cc: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
@@ -106,3 +114,5 @@ class TransactionHashIntegrityTest extends AnyFreeSpec with Matchers {
     Hashable.hash(readTx.edge.signedObservationEdge) shouldBe Hashable.hash(transaction.edge.signedObservationEdge)
   }
 }
+
+**/

@@ -8,18 +8,20 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointAcceptanceService
-import org.constellation.consensus.Consensus.RoundId
 import org.constellation.domain.consensus.ConsensusStatus
-import org.constellation.domain.observation.{Observation, ObservationService, RequestTimeoutOnResolving}
+import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.{PeerClientMetadata, PeerResponse}
-import org.constellation.primitives.Schema.{CheckpointCache, NodeState}
-import org.constellation.primitives.TransactionCacheData
 import org.constellation.storage.SOEService
 import org.constellation.util.Logging._
 import org.constellation.util.Distance
 import DataResolver._
+import org.constellation.schema.NodeState
+import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.consensus.RoundId
+import org.constellation.schema.observation.{Observation, RequestTimeoutOnResolving}
+import org.constellation.schema.transaction.TransactionCacheData
 
 class DataResolver[F[_]](
   keyPair: KeyPair,

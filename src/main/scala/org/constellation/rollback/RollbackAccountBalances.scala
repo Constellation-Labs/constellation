@@ -3,11 +3,10 @@ package org.constellation.rollback
 import cats.syntax.all._
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
 import org.constellation.domain.snapshot.SnapshotInfo
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.GenesisObservation
 import org.constellation.util.AccountBalances
 import org.constellation.util.AccountBalances.AccountBalances
 
-import scala.annotation.tailrec
 import scala.util.Try
 
 class RollbackAccountBalances {

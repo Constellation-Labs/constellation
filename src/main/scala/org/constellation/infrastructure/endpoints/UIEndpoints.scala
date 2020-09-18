@@ -14,7 +14,7 @@ import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 
-import org.constellation.primitives.ChannelMessageMetadata._
+import org.constellation.schema.ChannelMessageMetadata._
 
 class UIEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 

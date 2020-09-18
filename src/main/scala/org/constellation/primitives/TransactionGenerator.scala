@@ -11,10 +11,12 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.primitives.Schema.{AddressCacheData, NodeState, NodeType}
-import org.constellation.domain.transaction.{LastTransactionRef, TransactionGossiping, TransactionService}
+import org.constellation.schema.{NodeState, NodeType}
+import org.constellation.domain.transaction.{TransactionGossiping, TransactionService}
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
+import org.constellation.schema.address.AddressCacheData
 import org.constellation.schema.Id
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.storage.AddressService
 import org.constellation.util.Distance
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}

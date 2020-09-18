@@ -3,21 +3,22 @@ package org.constellation.infrastructure.p2p.client
 import cats.effect.{Concurrent, ContextShift}
 import io.circe.Decoder
 import io.circe.generic.semiauto._
+import org.constellation.consensus.TipData
+import org.constellation.consensus.TipData._
+import org.constellation.domain.p2p.client.TipsClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.http4s.client.Client
-import org.constellation.consensus.TipData
-import org.constellation.domain.p2p.client.TipsClientAlgebra
-import org.constellation.primitives.Schema.Height
-import org.constellation.schema.Id
-import org.http4s.circe.CirceEntityDecoder._
-import org.http4s.circe.CirceEntityEncoder._
-import org.http4s.Method._
-import TipData._
+import org.constellation.schema.{Height, Id}
 import org.constellation.session.SessionTokenService
+import org.http4s.circe.CirceEntityDecoder._
+import org.http4s.client.Client
+
 import scala.language.reflectiveCalls
 
-class TipsClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]) extends TipsClientAlgebra[F] {
+class TipsClientInterpreter[F[_]: Concurrent: ContextShift](
+  client: Client[F],
+  sessionTokenService: SessionTokenService[F]
+) extends TipsClientAlgebra[F] {
 
   implicit val tipDataMapDecoder: Decoder[Map[String, TipData]] = Decoder.decodeMap[String, TipData]
   implicit val idLongDecoder: Decoder[(Id, Long)] = deriveDecoder[(Id, Long)]
@@ -34,6 +35,9 @@ class TipsClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], s
 
 object TipsClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): TipsClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): TipsClientInterpreter[F] =
     new TipsClientInterpreter[F](client, sessionTokenService)
 }

@@ -3,13 +3,13 @@ package org.constellation.domain.cloud.providers
 import java.io.FileInputStream
 
 import better.files.File
-import cats.syntax.all._
 import cats.data.EitherT
 import cats.effect.Concurrent
+import cats.syntax.all._
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.storage.StorageOptions
 import org.constellation.domain.cloud.config.{GCP, GCPInherit, PermissionFile}
-import org.constellation.primitives.Schema.GenesisObservation
+import org.constellation.schema.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
 class GCPProvider[F[_]](credentials: GoogleCredentials, bucketName: String)(implicit F: Concurrent[F])

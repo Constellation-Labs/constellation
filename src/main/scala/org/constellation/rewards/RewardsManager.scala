@@ -1,4 +1,5 @@
 package org.constellation.rewards
+
 import cats.data.NonEmptyList
 import cats.effect._
 import cats.effect.concurrent.Ref
@@ -7,13 +8,11 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Snapshot
-import org.constellation.domain.observation.Observation
-import org.constellation.domain.redownload.MajorityStateChooser
-import org.constellation.domain.redownload.RedownloadService.PeersProposals
-import org.constellation.p2p.{Cluster, MajorityHeight, PeerData, PeerNotification}
-import org.constellation.primitives.Schema.CheckpointEdge
-import org.constellation.primitives.{ChannelMessage, Schema, Transaction}
-import org.constellation.schema.Id
+import org.constellation.p2p.{Cluster, MajorityHeight}
+import org.constellation.schema.checkpoint.CheckpointEdge
+import org.constellation.schema.observation.Observation
+import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.{ChannelMessage, PeerNotification, Schema}
 import org.constellation.storage.AddressService
 import org.constellation.trust.TrustEdge
 import org.constellation.util.Metrics

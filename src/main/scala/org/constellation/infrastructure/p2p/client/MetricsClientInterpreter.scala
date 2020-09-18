@@ -4,15 +4,16 @@ import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.MetricsClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.primitives.Schema.MetricsResult
+import org.constellation.schema.MetricsResult
 import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.client.Client
-import org.http4s.Method._
+
 import scala.language.reflectiveCalls
 
-class MetricsClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])(implicit F: Concurrent[F])
-    extends MetricsClientAlgebra[F] {
+class MetricsClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])(
+  implicit F: Concurrent[F]
+) extends MetricsClientAlgebra[F] {
 
   def checkHealth(): PeerResponse[F, Unit] =
     PeerResponse.successful[F]("health", "Cannot check health")(client, sessionTokenService)
@@ -23,6 +24,9 @@ class MetricsClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTok
 
 object MetricsClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): MetricsClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): MetricsClientInterpreter[F] =
     new MetricsClientInterpreter[F](client, sessionTokenService)
 }

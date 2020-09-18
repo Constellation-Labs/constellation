@@ -2,7 +2,7 @@ package org.constellation
 
 import com.typesafe.scalalogging.Logger
 import org.constellation.keytool.KeyUtils
-import org.constellation.util.Signable
+import org.constellation.schema.signature.Signable
 import org.scalatest.flatspec.AnyFlatSpec
 
 case class TestSignable(a: String, b: Int) extends Signable

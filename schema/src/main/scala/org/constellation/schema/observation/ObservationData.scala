@@ -1,9 +1,9 @@
-package org.constellation.domain.observation
+package org.constellation.schema.observation
 
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
+import io.circe.{Decoder, Encoder}
 import org.constellation.schema.Id
-import org.constellation.util.Signable
+import org.constellation.schema.signature.Signable
 
 case class ObservationData(
   id: Id,

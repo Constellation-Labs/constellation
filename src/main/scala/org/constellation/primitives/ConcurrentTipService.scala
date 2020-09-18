@@ -1,20 +1,19 @@
 package org.constellation.primitives
 
-import java.util.concurrent.TimeUnit
-
 import cats.effect.concurrent.{Ref, Semaphore}
-import cats.effect.{Clock, Concurrent, ContextShift, IO, LiftIO, Sync}
+import cats.effect.{Clock, Concurrent, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
+import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.consensus.TipData
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.Schema.{Height, SignedObservationEdge}
 import org.constellation.primitives.concurrency.SingleLock
-import org.constellation.schema.Id
+import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.edge.SignedObservationEdge
+import org.constellation.schema.{Height, Id}
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO}

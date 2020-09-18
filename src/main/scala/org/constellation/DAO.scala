@@ -1,10 +1,8 @@
 package org.constellation
 
 import better.files.File
-import cats.effect.{Blocker, Concurrent, ConcurrentEffect, ContextShift, IO, Timer}
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
-import constellation._
-import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint._
@@ -12,13 +10,11 @@ import org.constellation.consensus._
 import org.constellation.crypto.SimpleWalletLike
 import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.cloud.CloudService
-import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, FileToSend}
+import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
-import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -37,22 +33,14 @@ import org.constellation.infrastructure.snapshot.{
   SnapshotS3Storage
 }
 import org.constellation.p2p._
-import org.constellation.primitives.Schema.NodeState
-import org.constellation.primitives.Schema.NodeType
-import org.constellation.primitives.Schema._
 import org.constellation.primitives._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.rollback.{RollbackAccountBalances, RollbackLoader, RollbackService}
-import org.constellation.schema.Id
+import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
+import org.constellation.schema.{Id, NodeState, NodeType}
 import org.constellation.session.SessionTokenService
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
 import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
-import org.http4s.client.Client
-import org.http4s.client.blaze.BlazeClientBuilder
-
-import scala.concurrent.Future
-import scala.concurrent.duration._
 
 class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
 
