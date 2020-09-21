@@ -1,8 +1,7 @@
-package org.constellation.domain.snapshot
+package org.constellation.schema.snapshot
 
-import org.constellation.consensus.{StoredSnapshot, TipData}
 import org.constellation.schema.address.AddressCacheData
-import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.checkpoint.{CheckpointCache, TipData}
 import org.constellation.schema.transaction.LastTransactionRef
 
 case class SnapshotInfo(
@@ -17,5 +16,3 @@ case class SnapshotInfo(
   snapshotCache: Seq[CheckpointCache] = Seq(),
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map()
 )
-
-object SnapshotInfo {}

@@ -1,7 +1,6 @@
 package org.constellation.infrastructure.endpoints.middlewares
 
-import java.io.ByteArrayOutputStream
-import java.security.{KeyPair, MessageDigest, PrivateKey, PublicKey}
+import java.security.{PrivateKey, PublicKey}
 
 import cats.data.{Kleisli, OptionT}
 import cats.effect.concurrent.Ref
@@ -10,29 +9,27 @@ import cats.syntax.all._
 import fs2.{Chunk, Stream}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
-import org.constellation.p2p.Cluster
-import org.constellation.primitives.IPManager.IP
 import org.constellation.schema.Id
-import org.constellation.session.SessionTokenService
 import org.constellation.session.Registration.`X-Id`
+import org.constellation.session.SessionTokenService
 import org.constellation.session.SessionTokenService.{Token, TokenValid, `X-Session-Token`}
 import org.http4s._
 import org.http4s.client.Client
 import org.http4s.dsl.io._
-import pl.abankowski.httpsigner.{HttpCryptoConfig, SignatureValid}
 import pl.abankowski.httpsigner.http4s.{
   Http4sRequestSigner,
   Http4sRequestVerifier,
   Http4sResponseSigner,
   Http4sResponseVerifier
 }
-import pl.abankowski.httpsigner.signature.{Generator, Verifier}
 import pl.abankowski.httpsigner.signature.generic.{GenericGenerator, GenericVerifier}
+import pl.abankowski.httpsigner.signature.{Generator, Verifier}
+import pl.abankowski.httpsigner.{HttpCryptoConfig, SignatureValid}
 
 object PeerAuthMiddleware {
 
   def enforceKnownPeersMiddleware[F[_]: Sync](
-    knownPeer: IP => F[Option[Id]],
+    knownPeer: String => F[Option[Id]],
     whitelistedId: Id => Boolean
   )(http: HttpRoutes[F]): HttpRoutes[F] =
     Kleisli { req: Request[F] =>
@@ -195,7 +192,7 @@ object PeerAuthMiddleware {
     }
 
   def requestVerifierMiddleware[F[_]](
-    knownPeer: IP => F[Option[Id]],
+    knownPeer: String => F[Option[Id]],
     whitelistedId: Id => Boolean
   )(http: HttpRoutes[F])(implicit C: ContextShift[F], F: Concurrent[F]): HttpRoutes[F] =
     Kleisli { req: Request[F] =>

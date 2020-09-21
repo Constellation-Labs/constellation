@@ -1,4 +1,4 @@
-package org.constellation.primitives.concurrency
+package org.constellation.concurrency
 
 import java.util.concurrent.atomic.AtomicInteger
 

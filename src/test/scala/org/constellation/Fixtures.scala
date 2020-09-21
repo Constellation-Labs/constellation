@@ -10,6 +10,7 @@ import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.keytool.KeyUtils
+import org.constellation.keytool.KeyUtils.publicKeyToAddressString
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.schema.signature.{HashSignature, SignatureBatch}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
@@ -26,7 +27,11 @@ object Fixtures {
   val kp1: KeyPair = KeyUtils.makeKeyPair()
 
   def tx: Transaction =
-    TransactionService.createTransaction[IO](kp.address, kp1.address, 1L, kp)(TransactionChainService[IO]).unsafeRunSync
+    TransactionService
+      .createTransaction[IO](publicKeyToAddressString(kp.getPublic), publicKeyToAddressString(kp1.getPublic), 1L, kp)(
+        TransactionChainService[IO]
+      )
+      .unsafeRunSync
 
   def loadKeyPairUnsafe(
     keystorePath: String,

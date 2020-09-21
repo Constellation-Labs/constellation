@@ -1,9 +1,8 @@
-package org.constellation.primitives
+package org.constellation.genesis
 
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
 import cats.syntax.all._
+import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
 import com.typesafe.scalalogging.StrictLogging
-import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
@@ -11,7 +10,7 @@ import org.constellation.schema.address.AddressCacheData
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.edge.{EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
-import org.constellation.schema.{GenesisObservation, Height}
+import org.constellation.schema.{GenesisObservation, Height, PublicKeyExt}
 import org.constellation.util.AccountBalance
 import org.constellation.{ConstellationExecutionContext, DAO}
 

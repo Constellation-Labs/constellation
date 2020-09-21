@@ -5,10 +5,8 @@ import cats.syntax.all._
 import io.circe.syntax._
 import io.circe.Encoder
 import io.circe.generic.semiauto._
-import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState
@@ -20,10 +18,10 @@ import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 
 import scala.collection.SortedMap
-
 import Id._
 import RedownloadService._
 import LatestMajorityHeight._
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 
 class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 

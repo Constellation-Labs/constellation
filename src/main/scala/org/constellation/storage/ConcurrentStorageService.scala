@@ -2,7 +2,7 @@ package org.constellation.storage
 
 import cats.effect.Concurrent
 import cats.effect.concurrent.Semaphore
-import org.constellation.primitives.concurrency.SingleLock
+import org.constellation.concurrency.SingleLock
 
 class ConcurrentStorageService[F[_]: Concurrent, V](
   semaphore: Semaphore[F],

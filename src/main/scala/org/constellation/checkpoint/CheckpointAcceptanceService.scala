@@ -7,21 +7,32 @@ import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
-import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, SignatureResponse}
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.genesis.Genesis
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.primitives._
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation}
-import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.signature.{HashSignature, SignatureRequest, SignatureResponse}
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.schema.{ChannelMessageMetadata, Height, Id, NodeState}
 import org.constellation.storage._
-import org.constellation.util.{Metrics, PeerApiClient}
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.util.Metrics
+import org.constellation.{
+  CheckpointAcceptBlockAlreadyStored,
+  ConstellationExecutionContext,
+  ContainsInvalidTransactionsException,
+  DAO,
+  HeightBelow,
+  MissingCheckpointBlockException,
+  MissingHeightException,
+  MissingParents,
+  MissingTransactionReference,
+  PendingAcceptance,
+  PendingDownloadException
+}
 
 import scala.concurrent.duration._
 
@@ -106,13 +117,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     }
 
   def accept(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] = {
-    val obtainPeers = cluster.getPeerInfo.map { allPeers =>
-      val filtered = allPeers.filter(t => checkpoint.facilitators.contains(t._1))
-      (if (filtered.isEmpty) allPeers else filtered)
-        .map(p => PeerApiClient(p._1, p._2.peerMetadata.toPeerClientMetadata))
-        .toList
-    }
-
     val cb = checkpoint.checkpointCacheData.checkpointBlock
     val acceptance = for {
       _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)

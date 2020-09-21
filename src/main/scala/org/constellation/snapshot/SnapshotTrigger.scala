@@ -1,4 +1,4 @@
-package org.constellation.datastore
+package org.constellation.snapshot
 
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._

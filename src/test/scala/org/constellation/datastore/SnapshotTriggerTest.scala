@@ -6,6 +6,7 @@ import cats.syntax.all._
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
+import org.constellation.snapshot.SnapshotTrigger
 import org.constellation.storage.{SnapshotCreated, SnapshotError}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats

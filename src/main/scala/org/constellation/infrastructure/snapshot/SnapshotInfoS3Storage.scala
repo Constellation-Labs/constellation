@@ -2,7 +2,7 @@ package org.constellation.infrastructure.snapshot
 
 import cats.effect.Concurrent
 import org.constellation.domain.cloud.{HeightHashFileStorage, S3Storage}
-import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.schema.snapshot.SnapshotInfo
 
 class SnapshotInfoS3Storage[F[_]: Concurrent](accessKey: String, secretKey: String, region: String, bucket: String)
     extends S3Storage[F, SnapshotInfo](accessKey, secretKey, region, bucket, Some("snapshots"))

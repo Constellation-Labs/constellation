@@ -8,7 +8,6 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.primitives
 import org.constellation.util.Metrics
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._

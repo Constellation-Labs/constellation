@@ -8,7 +8,6 @@ import org.constellation._
 import org.constellation.consensus.Consensus.{ConsensusDataProposal, FacilitatorId, RoundData}
 import org.constellation.consensus.ConsensusManager.{ConsensusStartError, generateRoundId}
 import org.constellation.p2p.{MajorityHeight, PeerData}
-import org.constellation.primitives.{PulledTips, TipSoe}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointEdge}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.edge.{Edge, SignedObservationEdge}
@@ -16,7 +15,7 @@ import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation
 import org.constellation.schema.signature.SignatureBatch
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.schema.{ChannelMessageMetadata, Id, NodeType}
-import org.constellation.storage.ConcurrentStorageService
+import org.constellation.storage.{ConcurrentStorageService, PulledTips, TipSoe}
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

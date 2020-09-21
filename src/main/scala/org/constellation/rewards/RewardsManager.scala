@@ -7,10 +7,10 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.Snapshot
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.schema.checkpoint.CheckpointEdge
 import org.constellation.schema.observation.Observation
+import org.constellation.schema.snapshot.Snapshot
 import org.constellation.schema.transaction.Transaction
 import org.constellation.schema.{ChannelMessage, PeerNotification, Schema}
 import org.constellation.storage.AddressService

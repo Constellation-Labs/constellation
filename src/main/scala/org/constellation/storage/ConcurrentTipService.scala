@@ -1,4 +1,4 @@
-package org.constellation.primitives
+package org.constellation.storage
 
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.effect.{Clock, Concurrent, Sync}
@@ -8,12 +8,12 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.CheckpointParentService
-import org.constellation.consensus.TipData
+import org.constellation.concurrency.SingleLock
+import org.constellation.consensus.FacilitatorFilter
 import org.constellation.p2p.PeerData
-import org.constellation.primitives.concurrency.SingleLock
-import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.checkpoint.{CheckpointBlock, TipData}
 import org.constellation.schema.edge.SignedObservationEdge
-import org.constellation.schema.{Height, Id}
+import org.constellation.schema.{Height, Id, checkpoint}
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO}
@@ -109,7 +109,7 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
                 case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
                   remove(block.baseHash)(dao.metrics)
                 case Some(TipData(block, numUses, tipHeight)) =>
-                  putUnsafe(block.baseHash, TipData(block, numUses + 1, tipHeight))(dao.metrics)
+                  putUnsafe(block.baseHash, checkpoint.TipData(block, numUses + 1, tipHeight))(dao.metrics)
                     .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
               }
             } yield ()
@@ -122,7 +122,7 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         .flatMap(
           min =>
             if (isGenesis || min < height.min)
-              putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
+              putUnsafe(checkpointBlock.baseHash, checkpoint.TipData(checkpointBlock, 0, height))(dao.metrics)
             else logger.debug(s"Block height: ${height.min} below min tip: $min update skipped")
         )
         .recoverWith {

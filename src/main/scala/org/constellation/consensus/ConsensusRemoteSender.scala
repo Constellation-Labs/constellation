@@ -21,11 +21,11 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{MajorityHeight, PeerData}
-import org.constellation.primitives.TipSoe
 import org.constellation.schema.ChannelMessage
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.{Observation, RequestTimeoutOnConsensus}
 import org.constellation.schema.transaction.Transaction
+import org.constellation.storage.TipSoe
 
 class ConsensusRemoteSender[F[_]: Concurrent](
   contextShift: ContextShift[F],

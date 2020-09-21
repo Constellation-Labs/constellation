@@ -1,4 +1,4 @@
-package org.constellation.primitives
+package org.constellation.consensus
 
 import cats.effect.Concurrent
 import cats.syntax.all._
@@ -7,6 +7,7 @@ import org.constellation.DAO
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.PeerData
 import org.constellation.schema.Id
+import org.constellation.storage.TipSoe
 
 import scala.util.Random
 

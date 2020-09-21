@@ -5,7 +5,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.primitives.Genesis
+import org.constellation.genesis.Genesis
 import org.constellation.schema.Height
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCacheMetadata}
 import org.constellation.storage.SOEService

@@ -3,9 +3,6 @@ package org.constellation.serializer
 import atb.common.DefaultRandomGenerator
 import com.esotericsoftware.kryo.Kryo
 import com.twitter.chill.IKryoRegistrar
-import org.constellation.consensus._
-import org.constellation.domain.observation._
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.schema.{
   ChannelMessage,
   ChannelMessageData,
@@ -22,7 +19,13 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.rewards.EigenTrustAgents
 import org.constellation.schema.address.{Address, AddressCacheData, AddressMetaData}
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, CheckpointEdge, CheckpointEdgeData}
+import org.constellation.schema.checkpoint.{
+  CheckpointBlock,
+  CheckpointCache,
+  CheckpointEdge,
+  CheckpointEdgeData,
+  TipData
+}
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.schema.observation.{
   CheckpointBlockInvalid,
@@ -34,6 +37,7 @@ import org.constellation.schema.observation.{
   RequestTimeoutOnResolving
 }
 import org.constellation.schema.signature.{HashSignature, SignatureBatch}
+import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.transaction.{
   LastTransactionRef,
   Transaction,

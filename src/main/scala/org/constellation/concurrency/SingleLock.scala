@@ -1,4 +1,4 @@
-package org.constellation.primitives.concurrency
+package org.constellation.concurrency
 
 import cats.effect.Concurrent
 import cats.effect.concurrent.Semaphore

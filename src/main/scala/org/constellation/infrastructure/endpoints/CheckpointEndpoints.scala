@@ -6,17 +6,17 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
-import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import org.constellation.consensus.SignatureRequest._
-import org.constellation.consensus.SignatureResponse._
-import FinishedCheckpoint._
+import org.constellation.schema.signature.SignatureRequest._
+import org.constellation.schema.signature.SignatureResponse._
+import org.constellation.schema.checkpoint.FinishedCheckpoint
 import org.constellation.schema.{GenesisObservation, Height}
 import org.constellation.schema.observation.ObservationEvent
+import org.constellation.schema.signature.SignatureRequest
 
 class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 

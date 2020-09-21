@@ -9,7 +9,7 @@ import cats.effect.{ContextShift, IO}
 import io.circe.generic.auto._
 import io.circe.parser.parse
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
-import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.schema.snapshot.SnapshotInfo
 import org.constellation.domain.storage.StorageItemKind.GenesisObservation
 import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
 import org.constellation.keytool.KeyStoreUtils
