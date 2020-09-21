@@ -76,8 +76,8 @@ class EigenTrustTest
   "EigenTrustJ serialization/deserialization" - {
 
     "serializes and deserializes instance" in {
-      val serialized = KryoSerializer.serialize[EigenTrustJ](etj)
-      val deserialized = KryoSerializer.deserialize(serialized)
+      val serialized = KryoSerializer.serializeAnyRef(etj)
+      val deserialized = KryoSerializer.deserializeCast[EigenTrustJ](serialized)
       deserialized.isInstanceOf[EigenTrustJ] shouldBe true
     }
 
@@ -98,7 +98,7 @@ class EigenTrustTest
 
       etj.processExperiences(experiencesA.asJava)
 
-      val serialized = KryoSerializer.serialize[EigenTrustJ](etj)
+      val serialized = KryoSerializer.serializeAnyRef(etj)
       val deserialized = KryoSerializer.deserializeCast[EigenTrustJ](serialized)
 
       etj.getTrust(0).equals(deserialized.getTrust(0)) shouldBe true
@@ -130,7 +130,7 @@ class EigenTrustTest
 
       etj.processExperiences(experiencesA.asJava)
 
-      val serialized = KryoSerializer.serialize[EigenTrustJ](etj)
+      val serialized = KryoSerializer.serializeAnyRef(etj)
       val deserialized = KryoSerializer.deserializeCast[EigenTrustJ](serialized)
 
       etj

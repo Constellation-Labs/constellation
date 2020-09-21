@@ -16,7 +16,7 @@ import org.constellation.serializer.KryoSerializer
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
-abstract class S3Storage[F[_], A](
+abstract class S3Storage[F[_], A <: AnyRef](
   accessKey: String,
   secretKey: String,
   region: String,
@@ -82,7 +82,7 @@ abstract class S3Storage[F[_], A](
 
   override def write(path: String, a: A): EitherT[F, Throwable, Unit] =
     F.delay {
-      KryoSerializer.serialize[A](a)
+      KryoSerializer.serializeAnyRef(a)
     }.attemptT.flatMap(write(path, _))
 
   override def write(file: File): EitherT[F, Throwable, Unit] =

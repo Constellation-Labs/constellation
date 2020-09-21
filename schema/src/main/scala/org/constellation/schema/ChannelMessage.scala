@@ -1,16 +1,10 @@
 package org.constellation.schema
 
-import java.security.KeyPair
-import java.util.concurrent.Semaphore
-
 import com.typesafe.scalalogging.StrictLogging
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
-import org.constellation.schema
 import org.constellation.schema.merkle.MerkleProof
 import org.constellation.schema.signature.{Signable, SignatureBatch}
-
-import scala.concurrent.Future
 
 // Should channelId be associated with a unique keyPair or not?
 

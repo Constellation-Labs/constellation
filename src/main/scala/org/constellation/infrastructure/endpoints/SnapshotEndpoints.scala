@@ -110,7 +110,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "info" => {
         val getSnapshotInfo = snapshotService.getSnapshotInfoWithFullData.flatMap { si =>
-          F.delay(KryoSerializer.serialize[SnapshotInfo](si))
+          F.delay(KryoSerializer.serializeAnyRef(si))
         }
 
         val result = cluster.getNodeState

@@ -44,9 +44,9 @@ class S3Provider[F[_]](client: AmazonS3, bucketName: String)(implicit F: Concurr
       }.attemptT
     } yield ()
 
-  private def writeClass[A](path: String, a: A): EitherT[F, Throwable, Unit] =
+  private def writeClass[A <: AnyRef](path: String, a: A): EitherT[F, Throwable, Unit] =
     F.delay {
-      KryoSerializer.serialize[A](a)
+      KryoSerializer.serializeAnyRef(a)
     }.attemptT.flatMap(write(path, _))
 
   def writeFile(path: String, file: File): EitherT[F, Throwable, Unit] =
