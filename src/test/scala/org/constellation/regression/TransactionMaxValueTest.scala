@@ -7,8 +7,8 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{TransactionChainService, TransactionValidator}
+import org.constellation.genesis.Genesis
 import org.constellation.keytool.KeyUtils
-import org.constellation.primitives.Genesis
 import org.constellation.schema.GenesisObservation
 import org.constellation.schema.address.AddressCacheData
 import org.constellation.schema.checkpoint.CheckpointBlock

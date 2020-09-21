@@ -13,15 +13,14 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.primitives.concurrency.SingleLock
-import org.constellation.primitives.ConcurrentTipService
+import org.constellation.concurrency.SingleLock
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
 import org.constellation.schema.transaction.Transaction
 import org.constellation.schema.{ChannelMessage, Id, NodeState, NodeType, PeerNotification}
-import org.constellation.storage._
-import org.constellation.util.{Distance, Metrics, PeerApiClient}
+import org.constellation.storage.{ConcurrentTipService, _}
+import org.constellation.util.{Distance, Metrics}
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.concurrent.ExecutionContext

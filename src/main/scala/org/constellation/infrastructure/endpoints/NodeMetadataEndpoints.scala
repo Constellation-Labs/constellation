@@ -21,17 +21,16 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
   def peerEndpoints(
     cluster: Cluster[F],
     addressService: AddressService[F],
-    addresses: Seq[String],
     nodeType: NodeType
   ) =
-    getNodeState(cluster, addresses, nodeType) <+>
+    getNodeState(cluster, nodeType) <+>
       getAddressBalance(addressService) <+>
       getNodePeers(cluster)
 
-  private def getNodeState(cluster: Cluster[F], addresses: Seq[String], nodeType: NodeType): HttpRoutes[F] =
+  private def getNodeState(cluster: Cluster[F], nodeType: NodeType): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "state" =>
-        cluster.getNodeState.map(NodeStateInfo(_, addresses, nodeType)).map(_.asJson).flatMap(Ok(_))
+        cluster.getNodeState.map(NodeStateInfo(_, Seq(), nodeType)).map(_.asJson).flatMap(Ok(_))
     }
 
   private def getAddressBalance(addressService: AddressService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -67,10 +66,9 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
   def ownerEndpoints(
     cluster: Cluster[F],
     addressService: AddressService[F],
-    addresses: Seq[String],
     nodeType: NodeType
   ) =
-    getNodeState(cluster, addresses, nodeType) <+>
+    getNodeState(cluster, nodeType) <+>
       getAddressBalance(addressService) <+>
       getNodePeers(cluster) <+>
       getPeersMajorityHeights(cluster)
@@ -85,16 +83,14 @@ object NodeMetadataEndpoints {
   def peerEndpoints[F[_]: Concurrent](
     cluster: Cluster[F],
     addressService: AddressService[F],
-    addresses: Seq[String],
     nodeType: NodeType
   ): HttpRoutes[F] =
-    new NodeMetadataEndpoints[F]().peerEndpoints(cluster, addressService, addresses, nodeType)
+    new NodeMetadataEndpoints[F]().peerEndpoints(cluster, addressService, nodeType)
 
   def ownerEndpoints[F[_]: Concurrent](
     cluster: Cluster[F],
     addressService: AddressService[F],
-    addresses: Seq[String],
     nodeType: NodeType
   ): HttpRoutes[F] =
-    new NodeMetadataEndpoints[F]().ownerEndpoints(cluster, addressService, addresses, nodeType)
+    new NodeMetadataEndpoints[F]().ownerEndpoints(cluster, addressService, nodeType)
 }

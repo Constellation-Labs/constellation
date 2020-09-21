@@ -5,17 +5,15 @@ import cats.effect.{Concurrent, ContextShift}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.{ConfigUtil, DAO}
-import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.HeightHashFileStorage
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.rewards.StoredRewards
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Genesis
 import org.constellation.schema.GenesisObservation
 import org.constellation.rewards.{EigenTrust, RewardsManager}
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
 
@@ -27,18 +25,11 @@ case class RollbackData(
 
 class RollbackService[F[_]: Concurrent](
   dao: DAO,
-  rollbackBalances: RollbackAccountBalances,
   snapshotService: SnapshotService[F],
-  rollbackLoader: RollbackLoader,
-  rewardsManager: RewardsManager[F],
-  eigenTrust: EigenTrust[F],
   snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
   snapshotCloudStorage: HeightHashFileStorage[F, StoredSnapshot],
   snapshotInfoCloudStorage: HeightHashFileStorage[F, SnapshotInfo],
-  rewardsLocalStorage: LocalFileStorage[F, StoredRewards],
-  rewardsCloudStorage: HeightHashFileStorage[F, StoredRewards],
-  genesisObservationLocalStorage: GenesisObservationLocalStorage[F],
   genesisObservationCloudStorage: GenesisObservationS3Storage[F],
   redownloadService: RedownloadService[F],
   cluster: Cluster[F]
@@ -125,12 +116,6 @@ class RollbackService[F[_]: Concurrent](
 
       _ <- redownloadService.setLastMajorityState(Map(height -> storedSnapshot.snapshot.hash)).attemptT
       _ <- redownloadService.setLastSentHeight(height).attemptT
-    } yield ()
-
-  private def acceptRewards(storedRewards: StoredRewards, height: Long): EitherT[F, Throwable, Unit] =
-    for {
-      _ <- eigenTrust.setModel(storedRewards.model).attemptT
-      _ <- rewardsManager.setLastRewardedHeight(height).attemptT
     } yield ()
 
   private def validateAccountBalance(accountBalances: AccountBalances): EitherT[F, Throwable, Unit] =

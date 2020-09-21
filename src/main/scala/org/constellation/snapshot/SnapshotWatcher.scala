@@ -1,6 +1,7 @@
-package org.constellation.util
+package org.constellation.snapshot
 
 import cats.effect.IO
+import org.constellation.util.{HealthChecker, PeriodicIO}
 
 import scala.concurrent.duration._
 

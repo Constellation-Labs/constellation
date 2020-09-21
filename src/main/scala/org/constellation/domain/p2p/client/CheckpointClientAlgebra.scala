@@ -1,9 +1,9 @@
 package org.constellation.domain.p2p.client
 
-import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, SignatureResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.GenesisObservation
-import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.checkpoint.{CheckpointCache, FinishedCheckpoint}
+import org.constellation.schema.signature.{SignatureRequest, SignatureResponse}
 
 trait CheckpointClientAlgebra[F[_]] {
   def getGenesis(): PeerResponse[F, Option[GenesisObservation]]

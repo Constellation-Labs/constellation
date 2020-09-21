@@ -6,7 +6,7 @@
 //import cats.syntax.all._
 //import com.typesafe.scalalogging.Logger
 //import constellation._
-//import org.constellation.domain.snapshot.SnapshotInfo
+//import org.constellation.schema.snapshot.SnapshotInfo
 //import org.constellation.keytool.KeyUtils._
 //import org.constellation.primitives.Schema._
 //import org.constellation.primitives._

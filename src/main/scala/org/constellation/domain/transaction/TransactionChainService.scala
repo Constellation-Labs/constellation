@@ -9,9 +9,9 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
 import org.constellation.schema.transaction.TransactionEdgeData
 import cats.effect.Sync
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import org.constellation.schema.edge.Edge
+import org.constellation.schema.snapshot.SnapshotInfo
 
 class TransactionChainService[F[_]: Concurrent] {
 

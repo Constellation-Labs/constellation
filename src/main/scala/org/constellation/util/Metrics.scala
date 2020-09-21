@@ -6,7 +6,6 @@ import better.files.File
 import cats.effect.{IO, Sync}
 import cats.syntax.all._
 import com.google.common.util.concurrent.AtomicDouble
-import com.typesafe.scalalogging.Logger
 import constellation._
 import io.micrometer.core.instrument.Metrics.globalRegistry
 import io.micrometer.core.instrument.binder.jvm._
@@ -20,7 +19,7 @@ import org.constellation.{BuildInfo, ConstellationExecutionContext, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{Future, duration}
+import scala.concurrent.duration._
 
 /** For Grafana usage. */
 object Metrics {
@@ -112,9 +111,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
   * @param dao: Data access object
   */
 class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(implicit dao: DAO)
-    extends Periodic[Unit]("Metrics", periodSeconds) {
-
-  val logger = Logger("Metrics")
+    extends PeriodicIO("Metrics") {
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
   private val countMetrics: TrieMap[String, AtomicLong] = TrieMap()
@@ -131,7 +128,7 @@ class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(
   implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   val init = for {
-    currentTime <- cats.effect.Clock[IO].realTime(duration.MILLISECONDS)
+    currentTime <- cats.effect.Clock[IO].realTime(MILLISECONDS)
     _ <- updateMetricAsync[IO]("id", dao.id.hex)
     _ <- updateMetricAsync[IO]("alias", dao.alias.getOrElse(dao.id.short))
     _ <- updateMetricAsync[IO]("address", dao.selfAddressStr)
@@ -260,7 +257,7 @@ class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(
       updateObservationServiceMetrics() >>
       updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) >>
       updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) >>
-      updateMetricAsync[IO]("metricsRound", round) >>
+      updateMetricAsync[IO]("metricsRound", executionNumber.get()) >>
       dao.addressService.size.flatMap(size => updateMetricAsync[IO]("addressCount", size)) >>
       updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) >>
       updateTransactionServiceMetrics()
@@ -268,5 +265,8 @@ class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(
   /**
     * Recalculates window based / periodic metrics
     */
-  override def trigger(): Future[Unit] = updatePeriodicMetrics().unsafeToFuture()
+  override def trigger(): IO[Unit] =
+    updatePeriodicMetrics()
+
+  schedule(0.seconds, periodSeconds.seconds)
 }

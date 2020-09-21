@@ -16,7 +16,6 @@ import org.constellation._
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
-import org.constellation.primitives.IPManager
 import org.constellation.schema.{Id, NodeState, PeerNotification}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging._
@@ -100,7 +99,6 @@ object MajorityHeight {
 case class UpdatePeerNotifications(notifications: Seq[PeerNotification])
 
 class Cluster[F[_]](
-  ipManager: IPManager[F],
   joiningPeerValidator: JoiningPeerValidator[F],
   apiClient: ClientInterpreter[F],
   sessionTokenService: SessionTokenService[F],
@@ -418,7 +416,6 @@ class Cluster[F[_]](
       for {
         _ <- peers.modify(p => (p + (peerData.peerMetadata.id -> peerData), p))
         ip = peerData.peerMetadata.host
-        _ <- ipManager.addKnownIP(ip)
         _ <- logger.debug(s"Added $ip to known peers.")
         _ <- LiftIO[F].liftIO(dao.registerAgent(peerData.peerMetadata.id))
         _ <- updateMetrics()
@@ -536,7 +533,6 @@ class Cluster[F[_]](
             p <- peers.get
             pm = pd.peerMetadata
 
-            _ <- ipManager.removeKnownIP(pm.host)
             _ <- peers.modify(a => (a - pm.id, a - pm.id))
             // Technically we shouldn't remove it from eigenTrust if we want to keep the trained model for that node
             //        _ <- LiftIO[F].liftIO(dao.eigenTrust.unregisterAgent(pm.id))
@@ -737,8 +733,6 @@ class Cluster[F[_]](
 
         _ <- compareAndSet(NodeState.all, NodeState.Offline)
 
-        ips <- ipManager.listKnownIPs
-        _ <- ips.toList.traverse(ipManager.removeKnownIP)
         _ <- peers.modify(_ => (Map.empty, Map.empty))
         _ <- sessionTokenService.clearOwnToken()
         _ <- if (dao.nodeConfig.isGenesisNode) setOwnJoinedHeight(0L) else clearOwnJoinedHeight()
@@ -827,12 +821,11 @@ object Cluster {
 
   def apply[F[_]: Concurrent: Timer: ContextShift](
     metrics: () => Metrics,
-    ipManager: IPManager[F],
     joiningPeerValidator: JoiningPeerValidator[F],
     apiClient: ClientInterpreter[F],
     sessionTokenService: SessionTokenService[F],
     dao: DAO
-  ) = new Cluster(ipManager, joiningPeerValidator, apiClient, sessionTokenService, dao)
+  ) = new Cluster(joiningPeerValidator, apiClient, sessionTokenService, dao)
 
   case class ClusterNode(alias: String, id: Id, ip: HostPort, status: NodeState, reputation: Long)
 

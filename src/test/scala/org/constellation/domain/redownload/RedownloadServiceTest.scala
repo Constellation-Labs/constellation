@@ -6,13 +6,11 @@ import cats.effect.{ContextShift, IO, Timer}
 import cats.syntax.all._
 import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
 import org.constellation.checkpoint.CheckpointAcceptanceService
-import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.domain.rewards.StoredRewards
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -20,6 +18,7 @@ import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats

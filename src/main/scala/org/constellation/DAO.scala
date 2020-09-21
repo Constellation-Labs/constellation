@@ -7,8 +7,6 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint._
 import org.constellation.consensus._
-import org.constellation.crypto.SimpleWalletLike
-import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.configuration.NodeConfig
@@ -33,16 +31,16 @@ import org.constellation.infrastructure.snapshot.{
   SnapshotS3Storage
 }
 import org.constellation.p2p._
-import org.constellation.primitives._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.rollback.{RollbackAccountBalances, RollbackService}
+import org.constellation.rollback.RollbackService
 import org.constellation.schema.{Id, NodeState, NodeType}
 import org.constellation.session.SessionTokenService
+import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{HealthChecker, HostPort, SnapshotWatcher}
+import org.constellation.util.{HealthChecker, HostPort}
 
-class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLogging {
+class DAO() extends NodeData with EdgeDAO with StrictLogging {
 
   var sessionTokenService: SessionTokenService[IO] = _
 
@@ -112,8 +110,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     joiningPeerValidator = JoiningPeerValidator[IO](apiClient)
 
-    ipManager = IPManager[IO]()
-    cluster = Cluster[IO](() => metrics, ipManager, joiningPeerValidator, apiClient, sessionTokenService, this)
+    cluster = Cluster[IO](() => metrics, joiningPeerValidator, apiClient, sessionTokenService, this)
 
     trustManager = TrustManager[IO](id, cluster)
 
@@ -161,11 +158,6 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
     redownloadPeriodicCheck = new RedownloadPeriodicCheck(
       processingConfig.redownloadPeriodicCheckTimeSeconds
     )(this)
-
-    transactionGeneratorTrigger = new TransactionGeneratorTrigger(
-      ConfigUtil.constellation.getInt("transaction.generator.randomTransactionLoopTimeSeconds"),
-      this
-    )
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](
       IO.contextShift(ConstellationExecutionContext.bounded),
@@ -327,24 +319,15 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
 
     trustDataPollingScheduler = TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, apiClient, this)
 
-    transactionGenerator =
-      TransactionGenerator[IO](addressService, transactionGossiping, transactionService, cluster, this)
     consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
 
     rollbackService = new RollbackService[IO](
       this,
-      new RollbackAccountBalances,
       snapshotService,
-      rollbackLoader,
-      rewardsManager,
-      eigenTrust,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotCloudStorage,
       snapshotInfoCloudStorage,
-      rewardsStorage,
-      rewardsCloudStorage,
-      genesisObservationStorage,
       genesisObservationCloudStorage,
       redownloadService,
       cluster
@@ -363,8 +346,7 @@ class DAO() extends NodeData with EdgeDAO with SimpleWalletLike with StrictLoggi
       consensusScheduler,
       consensusWatcher,
       snapshotTrigger,
-      redownloadPeriodicCheck,
-      transactionGeneratorTrigger
+      redownloadPeriodicCheck
     ).filter(_ != null)
       .foreach(_.cancel().unsafeRunSync())
   }

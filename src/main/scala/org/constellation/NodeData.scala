@@ -1,4 +1,4 @@
-package org.constellation.primitives
+package org.constellation
 
 import java.net.InetSocketAddress
 import java.security.KeyPair

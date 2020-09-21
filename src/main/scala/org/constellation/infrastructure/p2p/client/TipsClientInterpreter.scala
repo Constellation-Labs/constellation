@@ -3,11 +3,11 @@ package org.constellation.infrastructure.p2p.client
 import cats.effect.{Concurrent, ContextShift}
 import io.circe.Decoder
 import io.circe.generic.semiauto._
-import org.constellation.consensus.TipData
-import org.constellation.consensus.TipData._
+import org.constellation.schema.checkpoint.TipData._
 import org.constellation.domain.p2p.client.TipsClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
+import org.constellation.schema.checkpoint.TipData
 import org.constellation.schema.{Height, Id}
 import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._

@@ -4,8 +4,8 @@ import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.primitives.ConcurrentTipService
 import org.constellation.schema.{Id, NodeState}
+import org.constellation.storage.ConcurrentTipService
 import org.constellation.{ConfigUtil, DAO}
 
 class MetricFailure(message: String) extends Exception(message)

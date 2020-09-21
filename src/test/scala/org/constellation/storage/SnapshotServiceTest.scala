@@ -5,15 +5,14 @@ import cats.data.EitherT
 import cats.effect.{ContextShift, IO, Timer}
 import org.constellation._
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.consensus.{ConsensusManager, Snapshot, StoredSnapshot}
+import org.constellation.consensus.ConsensusManager
 import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.rewards.StoredRewards
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.primitives.ConcurrentTipService
 import org.constellation.rewards.EigenTrust
+import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.trust.TrustManager
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

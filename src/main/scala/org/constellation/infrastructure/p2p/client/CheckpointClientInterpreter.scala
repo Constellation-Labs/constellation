@@ -1,12 +1,12 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import org.constellation.consensus.{FinishedCheckpoint, SignatureRequest, SignatureResponse}
 import org.constellation.domain.p2p.client.CheckpointClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.GenesisObservation
-import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.checkpoint.{CheckpointCache, FinishedCheckpoint}
+import org.constellation.schema.signature.{SignatureRequest, SignatureResponse}
 import org.constellation.session.SessionTokenService
 import org.http4s.Method._
 import org.http4s.circe.CirceEntityDecoder._

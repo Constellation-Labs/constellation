@@ -17,13 +17,12 @@ import org.constellation.domain.cloud.CloudService
 import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend, FileToSend}
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.domain.cloud.config.CloudConfig
+import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.configuration.CliConfigParser
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.infrastructure.endpoints._
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.primitives.IPManager.IP
-import org.constellation.primitives._
 import org.constellation.schema.{GenesisObservation, Id, NodeState}
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.session.SessionTokenService
@@ -77,7 +76,7 @@ object ConstellationNode extends IOApp {
 
       nodeConfig <- Resource.liftF(getNodeConfig[IO](cliConfig, config))
 
-      _ <- Resource.liftF(IO { File(s"tmp/${nodeConfig.primaryKeyPair.toId.medium}/peers").nonEmpty }
+      _ <- Resource.liftF(IO { File(s"tmp/${nodeConfig.primaryKeyPair.getPublic.toId.medium}/peers").nonEmpty }
         .ifM(IO.raiseError(new Throwable("Cannot start, tmp not cleared")), IO.unit))
 
       _ <- Resource.liftF(
@@ -143,7 +142,7 @@ object ConstellationNode extends IOApp {
 
       peerPublicEndpoints = SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
         BuildInfoEndpoints.peerEndpoints[IO]() <+> MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
-        NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType)
+        NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.nodeType)
 
       peerWhitelistedEndpoints = CheckpointEndpoints.peerEndpoints[IO](
         getGenesisObservation(dao),
@@ -172,11 +171,11 @@ object ConstellationNode extends IOApp {
         MetricsEndpoints.ownerEndpoints[IO](dao.metrics) <+>
         UIEndpoints.ownerEndpoints[IO](dao.messageService) <+>
         StatisticsEndpoints.ownerEndpoints[IO](dao.recentBlockTracker, dao.transactionService, dao.cluster) <+>
-        NodeMetadataEndpoints.ownerEndpoints[IO](dao.cluster, dao.addressService, dao.addresses, dao.nodeType) <+>
+        NodeMetadataEndpoints.ownerEndpoints[IO](dao.cluster, dao.addressService, dao.nodeType) <+>
         SignEndpoints.ownerEndpoints[IO](dao.cluster) <+>
         SnapshotEndpoints.ownerEndpoints[IO](dao.snapshotStorage, dao.redownloadService)
 
-      getKnownPeerId = { (ip: IP) =>
+      getKnownPeerId = { (ip: String) =>
         dao.cluster
           .getPeerData(ip)
           .map(_.filter(pd => NodeState.canUseAPI(pd.peerMetadata.nodeState)).map(_.peerMetadata.id))
@@ -363,9 +362,6 @@ class ConstellationNode(
   logger.info(
     s"Node init with API ${nodeConfig.httpInterface} ${nodeConfig.httpPort} peerPort: ${nodeConfig.peerHttpPort}"
   )
-
-  val ipManager: IPManager[IO] =
-    IPManager[IO]()(IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded)))
 
   def getInetSocketAddress: InetSocketAddress =
     new InetSocketAddress(nodeConfig.hostName, nodeConfig.peerHttpPort)

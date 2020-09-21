@@ -9,16 +9,15 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
-import org.constellation.consensus.StoredSnapshot
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService

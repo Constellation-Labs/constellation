@@ -23,15 +23,22 @@ import org.constellation.p2p.PeerData
 import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.primitives._
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.schema.{ChannelMessage, Id, NodeState, PeerNotification}
 import org.constellation.storage._
-import org.constellation.util.PeerApiClient
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.{
+  CheckpointAcceptBlockAlreadyStored,
+  ConfigUtil,
+  ConstellationExecutionContext,
+  ContainsInvalidTransactionsException,
+  DAO,
+  MissingParents,
+  MissingTransactionReference,
+  PendingAcceptance
+}
 
 import scala.concurrent.duration._
 
@@ -394,9 +401,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def mergeConsensusDataProposalsAndBroadcastBlock(): F[Unit] =
     for {
-      allPeers <- LiftIO[F].liftIO(
-        dao.peerInfo.map(_.mapValues(p => PeerApiClient(p.peerMetadata.id, p.peerMetadata.toPeerClientMetadata)))
-      )
       proposals <- withLock(consensusDataProposals.get)
 
       messages = List.empty[ChannelMessage]

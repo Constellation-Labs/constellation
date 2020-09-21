@@ -5,6 +5,7 @@ import cats.data.EitherT
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
+import constellation.withMetric
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
@@ -12,21 +13,23 @@ import org.constellation.consensus._
 import org.constellation.domain.cloud.CloudStorageOld
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.rewards.StoredRewards
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.Cluster
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.NodeState
-import org.constellation.primitives._
+import org.constellation.schema.checkpoint.{
+  CheckpointBlock,
+  CheckpointBlockMetadata,
+  CheckpointCache,
+  FinishedCheckpoint
+}
+import org.constellation.schema.{Id, NodeState, snapshot}
 import org.constellation.rewards.EigenTrust
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockMetadata}
-import org.constellation.schema.Id
+import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
-import org.constellation.{ConfigUtil, DAO}
+import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.SortedMap
 
@@ -406,7 +409,7 @@ class SnapshotService[F[_]: Concurrent](
   ): F[Snapshot] =
     storedSnapshot.get
       .map(_.snapshot.hash)
-      .map(hash => Snapshot(hash, hashesForNextSnapshot, SortedMap(publicReputation.toSeq: _*)))
+      .map(hash => snapshot.Snapshot(hash, hashesForNextSnapshot, SortedMap(publicReputation.toSeq: _*)))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
@@ -422,7 +425,56 @@ class SnapshotService[F[_]: Concurrent](
   }
 
   def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
-    Snapshot.writeSnapshot[F](snapshot)
+    for {
+      serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(storedSnapshot)).attempt)
+      write <- EitherT(
+        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(snapshot, serialized).value)
+      )
+    } yield write
+
+  def isOverDiskCapacity(bytesLengthToAdd: Long): F[Boolean] = {
+    val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
+    if (sizeDiskLimit == 0) return false.pure[F]
+
+    val isOver = for {
+      occupiedSpace <- snapshotStorage.getOccupiedSpace
+      usableSpace <- snapshotStorage.getUsableSpace
+      isOverSpace = occupiedSpace + bytesLengthToAdd > sizeDiskLimit || usableSpace < bytesLengthToAdd
+    } yield isOverSpace
+
+    isOver.flatTap { over =>
+      Sync[F].delay {
+        if (over) {
+          logger.warn(
+            s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit}"
+          )
+        }
+      }
+    }
+  }
+
+  private def writeSnapshot(
+    storedSnapshot: StoredSnapshot,
+    serialized: Array[Byte],
+    trialNumber: Int = 0
+  ): EitherT[F, Throwable, Unit] =
+    trialNumber match {
+      case x if x >= 3 => EitherT.leftT[F, Unit](new Throwable(s"Unable to write snapshot"))
+      case _ =>
+        isOverDiskCapacity(serialized.length).attemptT.flatMap { isOver =>
+          if (isOver) {
+            EitherT.leftT[F, Unit](new Throwable(s"Unable to write snapshot, not enough space"))
+          } else {
+            withMetric(
+              snapshotStorage
+                .write(storedSnapshot.snapshot.hash, serialized)
+                .value
+                .flatMap(Sync[F].fromEither),
+              "writeSnapshot"
+            ).attemptT
+          }
+        }
+    }
 
   def writeSnapshotToDisk(
     currentSnapshot: Snapshot
@@ -447,16 +499,13 @@ class SnapshotService[F[_]: Concurrent](
 
         case maybeBlocks =>
           val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.baseHash)
-          Snapshot
-            .writeSnapshot(StoredSnapshot(currentSnapshot, flatten))
+          addSnapshotToDisk(StoredSnapshot(currentSnapshot, flatten))
             .biSemiflatMap(
               t =>
                 dao.metrics
                   .incrementMetricAsync(Metrics.snapshotWriteToDisk + Metrics.failure)
-                  .map { _ =>
-                    logger.debug("t.getStackTrace: " + t.getStackTrace)
-                    SnapshotIOError(t)
-                  },
+                  .flatTap(_ => logger.debug("t.getStackTrace: " + t.getStackTrace.mkString("Array(", ", ", ")")))
+                  .map(_ => SnapshotIOError(t)),
               _ =>
                 logger
                   .debug(s"Snapshot written: ${currentSnapshot.hash}")

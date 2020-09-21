@@ -5,12 +5,11 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
-import org.constellation.consensus.StoredSnapshot
-import org.constellation.domain.snapshot.SnapshotInfo
+import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
-import org.constellation.primitives.Genesis
 import org.constellation.schema.NodeState
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics

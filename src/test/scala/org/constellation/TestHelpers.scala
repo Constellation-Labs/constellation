@@ -5,31 +5,25 @@ import java.util.UUID
 
 import better.files.File
 import cats.effect.IO
-import cats.syntax.all._
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.prometheus.client.CollectorRegistry
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.keytool.KeyUtils
-import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator, PeerData}
-import org.constellation.primitives.{ConcurrentTipService, IPManager, ThreadSafeMessageMemPool}
-import org.constellation.schema.{NodeState, NodeType}
-import org.constellation.schema.Id
+import org.constellation.keytool.KeyUtils
+import org.constellation.keytool.KeyUtils.makeKeyPair
+import org.constellation.p2p.{Cluster, DataResolver, PeerData}
+import org.constellation.schema.{Id, NodeState}
 import org.constellation.storage._
-import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.http4s.metrics.prometheus.Prometheus
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 
 object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with ArgumentMatchersSugar {
 
@@ -119,15 +113,17 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         dao.cluster shouldReturn mock[Cluster[IO]]
         dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
-        val metrics = new Metrics(registry, 1)(dao)
+        val ba = mock[BlacklistedAddresses[IO]]
+        dao.blacklistedAddresses shouldReturn ba
+
+        dao.peerInfo shouldReturn IO.pure(Map.empty)
+
+        val metrics = new Metrics(registry, 600)(dao)
         dao.metrics shouldReturn metrics
 
         val cluster = mock[Cluster[IO]]
         cluster.getNodeState shouldReturnF NodeState.Ready
         dao.cluster shouldReturn cluster
-
-        val ba = mock[BlacklistedAddresses[IO]]
-        dao.blacklistedAddresses shouldReturn ba
 
         val tcs = mock[TransactionChainService[IO]]
         dao.transactionChainService shouldReturn tcs

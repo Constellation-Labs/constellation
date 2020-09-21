@@ -1,4 +1,4 @@
-package org.constellation.primitives
+package org.constellation
 
 import java.util.concurrent.Semaphore
 
@@ -11,7 +11,6 @@ import org.constellation.checkpoint.{
   CheckpointService
 }
 import org.constellation.consensus._
-import org.constellation.datastore.SnapshotTrigger
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
@@ -20,7 +19,6 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.rewards.StoredRewards
-import org.constellation.domain.snapshot.SnapshotInfo
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.{
   TransactionChainService,
@@ -33,13 +31,14 @@ import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator}
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.rollback.{RollbackLoader, RollbackService}
+import org.constellation.rollback.RollbackService
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.{ChannelMessage, ChannelSendRequest, GenesisObservation, Height, Id}
+import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{Metrics, SnapshotWatcher}
-import org.constellation.{ConstellationExecutionContext, DAO, ProcessingConfig}
+import org.constellation.util.Metrics
 
 import scala.collection.concurrent.TrieMap
 
@@ -78,11 +77,6 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
       }}")
       Some(flat)
     }
-  }
-
-  def batchPutDebug(messagesToAdd: Seq[ChannelMessage]): Boolean = this.synchronized {
-    //messages ++= messagesToAdd
-    true
   }
 
   def put(message: Seq[ChannelMessage], overrideLimit: Boolean = false)(implicit dao: DAO): Boolean =
@@ -182,7 +176,6 @@ trait EdgeDAO {
 
   var cloudService: CloudServiceEnqueue[IO] = _
 
-  var ipManager: IPManager[IO] = _
   var cluster: Cluster[IO] = _
   var dataResolver: DataResolver[IO] = _
   var trustManager: TrustManager[IO] = _
@@ -190,7 +183,6 @@ trait EdgeDAO {
   var blacklistedAddresses: BlacklistedAddresses[IO] = _
   var transactionChainService: TransactionChainService[IO] = _
   var transactionGossiping: TransactionGossiping[IO] = _
-  var transactionGenerator: TransactionGenerator[IO] = _
   var observationService: ObservationService[IO] = _
   var checkpointService: CheckpointService[IO] = _
   var checkpointParentService: CheckpointParentService[IO] = _
@@ -231,7 +223,6 @@ trait EdgeDAO {
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
   var snapshotTrigger: SnapshotTrigger = _
   var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
-  var transactionGeneratorTrigger: TransactionGeneratorTrigger = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
@@ -241,8 +232,6 @@ trait EdgeDAO {
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
-
-  var rollbackLoader: RollbackLoader = _
 
   def maxWidth: Int = processingConfig.maxWidth
 
