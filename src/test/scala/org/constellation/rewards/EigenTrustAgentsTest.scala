@@ -1,9 +1,8 @@
 package org.constellation.rewards
 
-import org.constellation.schema.Id
 import org.constellation.serializer.KryoSerializer
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -51,7 +50,7 @@ class EigenTrustAgentsTest
 
       val updated = agents.registerAgent(addr1).registerAgent(addr2)
 
-      val serialized = KryoSerializer.serialize[EigenTrustAgents](updated)
+      val serialized = KryoSerializer.serializeAnyRef(updated)
       val deserialized = KryoSerializer.deserializeCast[EigenTrustAgents](serialized)
 
       deserialized.getAllAsAddresses() shouldEqual Map(

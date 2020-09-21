@@ -69,7 +69,7 @@ class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with Before
         val snapshotInfo = SnapshotInfo(storedSnapshot)
 
         val hash = "abc123"
-        val bytes = KryoSerializer.serialize(snapshotInfo)
+        val bytes = KryoSerializer.serializeAnyRef(snapshotInfo)
 
         (snapshotInfosDir / hash).writeBytes(bytes.toIterator)
 

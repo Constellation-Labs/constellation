@@ -2,7 +2,13 @@ package org.constellation.schema
 
 import com.twitter.chill.{IKryoRegistrar, Kryo, KryoPool, ScalaKryoInstantiator}
 import org.constellation.schema.address.{Address, AddressCacheData, AddressMetaData}
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, CheckpointEdge, CheckpointEdgeData}
+import org.constellation.schema.checkpoint.{
+  CheckpointBlock,
+  CheckpointCache,
+  CheckpointEdge,
+  CheckpointEdgeData,
+  TipData
+}
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.schema.observation.{
   CheckpointBlockInvalid,
@@ -14,6 +20,7 @@ import org.constellation.schema.observation.{
   RequestTimeoutOnResolving
 }
 import org.constellation.schema.signature.{HashSignature, SignatureBatch}
+import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.transaction.{
   LastTransactionRef,
   Transaction,
@@ -24,15 +31,33 @@ import org.constellation.schema.transaction.{
 
 import scala.collection.SortedMap
 
-class ConstellationKryoRegistrar extends IKryoRegistrar {
-  override def apply(kryo: Kryo): Unit =
+class ConstellationKryoRegistrar(additionalRegistrar: IKryoRegistrar = null) extends IKryoRegistrar {
+  override def apply(kryo: Kryo): Unit = {
     this.registerClasses(kryo)
+    if (additionalRegistrar != null) additionalRegistrar.apply(kryo)
+  }
 
-  def registerClasses(kryo: Kryo): Unit = {
+  /***
+    // UNCOMMENT TO PRINT REGISTERED IDS
+    */
+  /*
+    val nextId = kryo.getNextRegistrationId
+    println(s"Next ID: $nextId")
+
+    (0 until nextId).foreach { i =>
+      val registration = kryo.getRegistration(i)
+      println(s"ID: ${registration.getId}, ${registration.getType.getName}")
+    }
+   */
+
+  private def registerClasses(kryo: Kryo): Unit = {
     kryo.register(classOf[ChannelMessageData], 145)
     kryo.register(classOf[SignedData[ChannelMessageData]], 146)
     kryo.register(classOf[ChannelMessage], 147)
     kryo.register(classOf[Seq[ChannelMessage]], 148)
+    kryo.register(classOf[StoredSnapshot], 149)
+    kryo.register(classOf[SnapshotInfo], 150)
+    kryo.register(classOf[TipData], 151)
     kryo.register(classOf[Height], 152)
     kryo.register(classOf[Option[Height]], 153)
     kryo.register(classOf[CommonMetadata], 154)
@@ -56,6 +81,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
     kryo.register(classOf[Enumeration#Value], 1008)
     kryo.register(classOf[TransactionEdgeData], 1009)
     kryo.register(classOf[CheckpointEdgeData], 165)
+    kryo.register(classOf[Snapshot], 166)
     kryo.register(classOf[GenesisObservation], 167)
     kryo.register(classOf[LastTransactionRef], 1010)
     kryo.register(classOf[ObservationData], 168)
@@ -103,7 +129,7 @@ class ConstellationKryoRegistrar extends IKryoRegistrar {
   }
 }
 
-object KryoSerializer {
+object Kryo {
 
   def guessThreads: Int = {
     val cores = Runtime.getRuntime.availableProcessors
@@ -111,12 +137,18 @@ object KryoSerializer {
     GUESS_THREADS_PER_CORE * cores
   }
 
-  val kryoPool = KryoPool.withByteArrayOutputStream(
-    10,
-    new ScalaKryoInstantiator()
+  def init(registrar: IKryoRegistrar = null) = {
+    val instance = new ScalaKryoInstantiator()
       .setRegistrationRequired(true)
-      .withRegistrar(new ConstellationKryoRegistrar())
-  )
+      .withRegistrar(new ConstellationKryoRegistrar(registrar))
+
+    KryoPool.withByteArrayOutputStream(
+      10,
+      instance
+    )
+  }
+
+  val kryoPool = init()
 
   def serializeAnyRef(anyRef: AnyRef): Array[Byte] =
     kryoPool.toBytesWithClass(anyRef)

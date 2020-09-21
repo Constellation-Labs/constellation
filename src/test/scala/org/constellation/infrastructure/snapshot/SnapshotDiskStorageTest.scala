@@ -89,7 +89,7 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
         val storedSnapshot = StoredSnapshot(snapshot, Seq.empty[CheckpointCache])
 
         val hash = "abc123"
-        val bytes = KryoSerializer.serialize(storedSnapshot)
+        val bytes = KryoSerializer.serializeAnyRef(storedSnapshot)
 
         (snapshotsDir / hash).writeBytes(bytes.toIterator)
 

@@ -62,9 +62,14 @@ class LocalProvider[F[_]](config: Local)(implicit F: Concurrent[F]) extends Clou
     }.attemptT
       .flatMap(write(path, prefix, filename, _))
 
-  private def writeClass[A](path: String, prefix: Option[String], fileName: String, a: A): EitherT[F, Throwable, Unit] =
+  private def writeClass[A <: AnyRef](
+    path: String,
+    prefix: Option[String],
+    fileName: String,
+    a: A
+  ): EitherT[F, Throwable, Unit] =
     F.delay {
-      KryoSerializer.serialize[A](a)
+      KryoSerializer.serializeAnyRef(a)
     }.attemptT.flatMap {
       write(path, prefix, fileName, _)
     }

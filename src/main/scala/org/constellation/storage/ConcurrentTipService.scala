@@ -122,7 +122,7 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         .flatMap(
           min =>
             if (isGenesis || min < height.min)
-              putUnsafe(checkpointBlock.baseHash, checkpoint.TipData(checkpointBlock, 0, height))(dao.metrics)
+              putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
             else logger.debug(s"Block height: ${height.min} below min tip: $min update skipped")
         )
         .recoverWith {

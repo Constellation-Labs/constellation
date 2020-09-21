@@ -30,8 +30,8 @@ package object schema {
 
   }
 
-  def hashSerialized(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256
-  def hashSerializedBytes(obj: AnyRef) = KryoSerializer.serializeAnyRef(obj).sha256Bytes
+  def hashSerialized(obj: AnyRef) = Kryo.serializeAnyRef(obj).sha256
+  def hashSerializedBytes(obj: AnyRef) = Kryo.serializeAnyRef(obj).sha256Bytes
 
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))
@@ -40,7 +40,7 @@ package object schema {
     AddressMetaData(publicKeyToAddressString(key))
 
   implicit class KryoSerExt(anyRef: AnyRef) {
-    def kryo: Array[Byte] = KryoSerializer.serializeAnyRef(anyRef)
+    def kryo: Array[Byte] = Kryo.serializeAnyRef(anyRef)
   }
 
   implicit class SHA256Ext(s: String) {

@@ -409,7 +409,7 @@ class SnapshotService[F[_]: Concurrent](
   ): F[Snapshot] =
     storedSnapshot.get
       .map(_.snapshot.hash)
-      .map(hash => snapshot.Snapshot(hash, hashesForNextSnapshot, SortedMap(publicReputation.toSeq: _*)))
+      .map(hash => Snapshot(hash, hashesForNextSnapshot, SortedMap(publicReputation.toSeq: _*)))
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>

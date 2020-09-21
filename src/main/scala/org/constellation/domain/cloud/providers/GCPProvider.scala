@@ -29,9 +29,9 @@ class GCPProvider[F[_]](credentials: GoogleCredentials, bucketName: String)(impl
   private def write(path: String, bytes: Array[Byte]): EitherT[F, Throwable, Unit] =
     F.delay { storage.get(bucketName).create(path, bytes) }.void.attemptT
 
-  private def writeClass[A](path: String, a: A): EitherT[F, Throwable, Unit] =
+  private def writeClass[A <: AnyRef](path: String, a: A): EitherT[F, Throwable, Unit] =
     F.delay {
-      KryoSerializer.serialize[A](a)
+      KryoSerializer.serializeAnyRef(a)
     }.attemptT.flatMap(write(path, _))
 
   private def writeFile(path: String, file: File): EitherT[F, Throwable, Unit] =

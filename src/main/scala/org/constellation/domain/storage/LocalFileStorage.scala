@@ -10,7 +10,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.serializer.KryoSerializer
 import org.slf4j.Logger
 
-abstract class LocalFileStorage[F[_], A](baseDir: String)(implicit F: Concurrent[F])
+abstract class LocalFileStorage[F[_], A <: AnyRef](baseDir: String)(implicit F: Concurrent[F])
     extends FileStorage[F, A]
     with DiskSpace[F] {
 
@@ -91,7 +91,7 @@ abstract class LocalFileStorage[F[_], A](baseDir: String)(implicit F: Concurrent
 
   def write(fileName: String, a: A): EitherT[F, Throwable, Unit] =
     F.delay {
-      KryoSerializer.serialize[A](a)
+      KryoSerializer.serializeAnyRef(a)
     }.attemptT.flatMap {
       write(fileName, _)
     }
