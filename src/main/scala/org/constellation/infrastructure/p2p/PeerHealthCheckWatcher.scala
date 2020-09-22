@@ -2,14 +2,17 @@ package org.constellation.infrastructure.p2p
 
 import cats.effect.IO
 import com.typesafe.config.Config
-import org.constellation.ConfigUtil
+import org.constellation.{ConfigUtil, ConstellationExecutionContext}
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.util.PeriodicIO
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
 class PeerHealthCheckWatcher(config: Config, peerHealthCheck: PeerHealthCheck[IO])
     extends PeriodicIO("PeerHealthCheckWatcher") {
+
+  override val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.peerHealthCheckPool
 
   override def trigger(): IO[Unit] = peerHealthCheck.check()
 

@@ -26,13 +26,15 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   def publicEndpoints(cluster: Cluster[F]) =
     infoEndpoint(cluster)
 
-  def peerEndpoints(cluster: Cluster[F], trustManager: TrustManager[F], peerHealthCheck: PeerHealthCheck[F]) =
+  def peerEndpoints(cluster: Cluster[F], trustManager: TrustManager[F]) =
     infoEndpoint(cluster) <+>
       setNodeStatusEndpoint(cluster) <+>
       setJoiningHeightEndpoint(cluster) <+>
       deregisterEndpoint(cluster) <+>
-      trustEndpoint(trustManager) <+>
-      checkPeerResponsiveness(peerHealthCheck)
+      trustEndpoint(trustManager)
+
+  def peerHealthCheckEndpoints(peerHealthCheck: PeerHealthCheck[F]) =
+    checkPeerResponsiveness(peerHealthCheck)
 
   private def infoEndpoint(cluster: Cluster[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -89,8 +91,12 @@ object ClusterEndpoints {
 
   def peerEndpoints[F[_]: Concurrent](
     cluster: Cluster[F],
-    trustManager: TrustManager[F],
+    trustManager: TrustManager[F]
+  ): HttpRoutes[F] =
+    new ClusterEndpoints[F].peerEndpoints(cluster, trustManager)
+
+  def peerHealthCheckEndpoints[F[_]: Concurrent](
     peerHealthCheck: PeerHealthCheck[F]
   ): HttpRoutes[F] =
-    new ClusterEndpoints[F].peerEndpoints(cluster, trustManager, peerHealthCheck)
+    new ClusterEndpoints[F].peerHealthCheckEndpoints(peerHealthCheck)
 }

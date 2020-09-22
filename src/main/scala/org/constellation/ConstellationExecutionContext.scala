@@ -51,16 +51,23 @@ object ConstellationExecutionContext {
     )
   )
 
-  val callbacks = ExecutionContext.fromExecutor(
-    new ThreadPoolExecutor(
+  val peerHealthCheckPool = ExecutionContext.fromExecutor(
+    Executors.newFixedThreadPool(
       4,
-      4,
-      0L,
-      TimeUnit.MILLISECONDS,
-      new LinkedBlockingQueue[Runnable],
-      new DefaultThreadFactory("callbacks")
+      new DefaultThreadFactory("peerHealthCheck")
     )
   )
+
+//  val callbacks = ExecutionContext.fromExecutor(
+//    new ThreadPoolExecutor(
+//      4,
+//      4,
+//      0L,
+//      TimeUnit.MILLISECONDS,
+//      new LinkedBlockingQueue[Runnable],
+//      new DefaultThreadFactory("callbacks")
+//    )
+//  )
 
   def createSemaphore[F[_]: Concurrent](permits: Long = 1): Semaphore[F] = {
     implicit val cs: ContextShift[IO] = IO.contextShift(bounded)
