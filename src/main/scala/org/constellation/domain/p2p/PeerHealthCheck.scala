@@ -41,6 +41,7 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
         .map(_.filter { case (_, pd) => NodeState.canBeCheckedForHealth(pd.peerMetadata.nodeState) })
       statuses <- peers.values.toList
         .traverse(pd => checkPeer(pd.peerMetadata.toPeerClientMetadata, periodicCheckTimeout).map(pd -> _))
+      _ <- CS.shift
       unresponsiveStatuses = statuses.filter { case (_, status) => status.isInstanceOf[PeerUnresponsive] }.map {
         case (pd, _) => pd
       }
@@ -78,7 +79,8 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
       {
         val check: F[PeerHealthCheckStatus] = apiClient.metrics
           .checkHealth()
-          .run(peer)
+          .run(peer.copy(port = "9003"))
+          // should we also shift here, or let it run on unbounded, I guess the second one
           .flatMap(_ => getClock)
           .map[PeerHealthCheckStatus](clock => PeerAvailable(clock))
           .flatTap { status =>
@@ -131,14 +133,19 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
 
   private def confirmUnresponsivePeers(peers: List[PeerData]): F[List[PeerData]] =
     peers.traverse { pd =>
+      val setPortAndCheckPeerResponsiveness =
+        (p: PeerClientMetadata) =>
+          apiClient.cluster.checkPeerResponsiveness(pd.peerMetadata.id).run(p.copy(port = "9003"))
+
       for {
         _ <- logger.debug(
           s"Waiting for network confirmation before marking a dead peer as offline: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host})"
         )
         statuses <- cluster.broadcast[PeerHealthCheckStatus](
-          apiClient.cluster.checkPeerResponsiveness(pd.peerMetadata.id).run,
+          setPortAndCheckPeerResponsiveness,
           Set(pd.peerMetadata.id)
         )
+        _ <- CS.shift
         clock <- getClock
         howManyAvailable = statuses
           .mapValues(_.getOrElse(PeerUnresponsive(clock, 1)))

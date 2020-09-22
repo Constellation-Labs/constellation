@@ -16,10 +16,22 @@ import MetricsResult._
 
 class MetricsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
-  def endpoints(metrics: Metrics) =
+  def publicEndpoints(metrics: Metrics) =
     healthEndpoint() <+>
       metricsEndpoint(metrics) <+>
       micrometerMetricsEndpoint(metrics)
+
+  def peerEndpoints(metrics: Metrics) =
+    metricsEndpoint(metrics) <+>
+      micrometerMetricsEndpoint(metrics)
+
+  def ownerEndpoints(metrics: Metrics) =
+    healthEndpoint() <+>
+      metricsEndpoint(metrics) <+>
+      micrometerMetricsEndpoint(metrics)
+
+  def peerHealthCheckEndpoints() =
+    healthEndpoint()
 
   private def healthEndpoint(): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -45,11 +57,14 @@ class MetricsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 object MetricsEndpoints {
 
   def publicEndpoints[F[_]: Concurrent](metrics: Metrics): HttpRoutes[F] =
-    new MetricsEndpoints[F]().endpoints(metrics)
+    new MetricsEndpoints[F]().publicEndpoints(metrics)
 
   def peerEndpoints[F[_]: Concurrent](metrics: Metrics): HttpRoutes[F] =
-    new MetricsEndpoints[F]().endpoints(metrics)
+    new MetricsEndpoints[F]().peerEndpoints(metrics)
 
   def ownerEndpoints[F[_]: Concurrent](metrics: Metrics): HttpRoutes[F] =
-    new MetricsEndpoints[F]().endpoints(metrics)
+    new MetricsEndpoints[F]().ownerEndpoints(metrics)
+
+  def peerHealthCheckEndpoints[F[_]: Concurrent](): HttpRoutes[F] =
+    new MetricsEndpoints[F]().peerHealthCheckEndpoints()
 }

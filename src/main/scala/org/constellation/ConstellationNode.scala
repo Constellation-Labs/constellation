@@ -27,7 +27,7 @@ import org.constellation.schema.{GenesisObservation, Id, NodeState}
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.session.SessionTokenService
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, Logging, Metrics}
-import org.http4s.Request
+import org.http4s.{HttpApp, HttpRoutes, Request}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.implicits._
@@ -55,7 +55,6 @@ object ConstellationNode extends IOApp {
 
   import constellation._
 
-  implicit val executionContext: ExecutionContext = ConstellationExecutionContext.bounded
   implicit val clock: Clock[IO] = Clock.create[IO]
 
   def run(args: List[String]): IO[ExitCode] = {
@@ -96,12 +95,19 @@ object ConstellationNode extends IOApp {
       registry <- Prometheus.collectorRegistry[IO]
       metrics <- Prometheus.metricsOps[IO](registry, "org_http4s_client")
 
-      apiClient <- BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded)
-        .withConnectTimeout(30.seconds)
-        .withMaxTotalConnections(1024)
-        .withMaxWaitQueueLimit(512)
-        .resource
-        .map(org.http4s.client.middleware.Metrics[IO](metrics, requestMethodClassifier))
+      contextShiftApiClient = IO.contextShift(ConstellationExecutionContext.unbounded)
+      concurrentEffectApiClient = IO.ioConcurrentEffect(contextShiftApiClient)
+
+      apiClient <- {
+        implicit val ce = concurrentEffectApiClient
+
+        BlazeClientBuilder[IO](ConstellationExecutionContext.unbounded)
+          .withConnectTimeout(30.seconds)
+          .withMaxTotalConnections(1024)
+          .withMaxWaitQueueLimit(512)
+          .resource
+          .map(org.http4s.client.middleware.Metrics[IO](metrics, requestMethodClassifier))
+      }
 
       logger = org.http4s.client.middleware.Logger[IO](logHeaders = true, logBody = false)(_)
 
@@ -114,7 +120,7 @@ object ConstellationNode extends IOApp {
           nodeConfig.hostName,
           sessionTokenService,
           nodeConfig.primaryKeyPair.getPublic.toId
-        )
+        )(concurrentEffectApiClient, contextShiftApiClient)
 
       cloudService <- Resource.liftF(IO.delay { CloudService[IO](cloudConfig) })
       cloudQueue <- Resource.liftF(Queue.unbounded[IO, DataToSend])
@@ -151,7 +157,7 @@ object ConstellationNode extends IOApp {
         dao.metrics,
         dao.snapshotService
       ) <+>
-        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager, dao.peerHealthCheck) <+>
+        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
         ConsensusEndpoints
           .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
         ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
@@ -207,24 +213,61 @@ object ConstellationNode extends IOApp {
 
       responseLogger = middleware.Logger.httpApp[IO](logHeaders = true, logBody = false)(_)
 
-      _ <- BlazeServerBuilder[IO]
+      _ <- BlazeServerBuilder[IO](scala.concurrent.ExecutionContext.global)
         .bindHttp(9000, "0.0.0.0")
         .withHttpApp(responseLogger(publicRouter))
         .withoutBanner
         .resource
 
-      _ <- BlazeServerBuilder[IO]
+      _ <- BlazeServerBuilder[IO](scala.concurrent.ExecutionContext.global)
         .bindHttp(9001, "0.0.0.0")
         .withHttpApp(responseLogger(peerRouter))
         .withoutBanner
         .resource
 
-      _ <- BlazeServerBuilder[IO]
+      _ <- BlazeServerBuilder[IO](scala.concurrent.ExecutionContext.global)
         .bindHttp(9002, "0.0.0.0")
         .withHttpApp(responseLogger(ownerRouter))
         .withoutBanner
         .resource
+
+      _ <- createPeerHealthCheckServer(dao, getKnownPeerId, isIdWhitelisted, metricsMiddleware, responseLogger)
     } yield ()
+
+  private def createPeerHealthCheckServer(
+    dao: DAO,
+    getKnownPeerId: String => IO[Option[Id]],
+    isIdWhitelisted: Id => Boolean,
+    metricsMiddleware: HttpRoutes[IO] => HttpRoutes[IO],
+    responseLogger: HttpApp[IO] => HttpApp[IO]
+  ) = {
+    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.peerHealthCheckPool)
+    implicit val timer = IO.timer(ConstellationExecutionContext.peerHealthCheckPool)
+
+    for {
+      _ <- Resource.liftF(IO.unit)
+
+      signedPeerHealthCheckEndpoints = PeerAuthMiddleware
+        .responseSignerMiddleware(dao.keyPair.getPrivate, dao.sessionTokenService)(
+          PeerAuthMiddleware.requestVerifierMiddleware(getKnownPeerId, isIdWhitelisted)(
+            MetricsEndpoints.peerHealthCheckEndpoints[IO]() <+>
+              PeerAuthMiddleware.requestTokenVerifierMiddleware(dao.sessionTokenService)(
+                PeerAuthMiddleware.enforceKnownPeersMiddleware(getKnownPeerId, isIdWhitelisted)(
+                  ClusterEndpoints.peerHealthCheckEndpoints[IO](dao.peerHealthCheck)
+                )
+              )
+          )
+        )
+
+      peerHealthCheckRouter = Router("" -> metricsMiddleware(signedPeerHealthCheckEndpoints)).orNotFound
+
+      peerHealtCheckServer <- BlazeServerBuilder[IO](ConstellationExecutionContext.peerHealthCheckPool)
+          .bindHttp(9003, "0.0.0.0")
+          .withHttpApp(responseLogger(peerHealthCheckRouter))
+          .withoutBanner
+          .resource
+    } yield peerHealtCheckServer
+  }
 
   private def getHostName[F[_]: Sync](cliConfig: CliConfig): F[String] = {
     import io.circe.generic.semiauto._
@@ -347,7 +390,12 @@ class ConstellationNode(
 
   implicit val dao: DAO = new DAO()
   dao.sessionTokenService = sessionTokenService
-  dao.apiClient = ClientInterpreter[IO](client, dao.sessionTokenService)
+  dao.apiClient = {
+    val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
+    val ce = IO.ioConcurrentEffect(cs)
+
+    ClientInterpreter[IO](client, dao.sessionTokenService)(ce, cs)
+  }
   dao.nodeConfig = nodeConfig
   dao.metrics = new Metrics(registry, periodSeconds = nodeConfig.processingConfig.metricCheckInterval)
   dao.initialize(nodeConfig, cloudService)

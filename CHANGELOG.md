@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Removed libraries: scala-async, akka, storehaus-cache, sway, slick, h2, hasher, grgen
 - Updated libraries: http-request-signer, enumeratum-circe, scaffeine, ext-scalatags, better-files, pureconfig, log4cats-slf4j, logstash-logback-encoder, http4s, prometheus, cats, aws
 - Updated scala test versions
+- Run peer health check on a separate server with a separate thread pool
 
 ## [v2.14.3] 2020-09-11
 ## Changed
