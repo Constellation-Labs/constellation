@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.15.0] 2020-09-25
 ### Breaking changes
 - New service port: 9003
 
