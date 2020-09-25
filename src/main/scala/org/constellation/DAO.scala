@@ -100,6 +100,7 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
     idDir.createDirectoryIfNotExists(createParents = true)
 
     implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ioConcurrentEffect = IO.ioConcurrentEffect(contextShift)
 
     rateLimiting = new RateLimiting[IO]
 
@@ -353,8 +354,6 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
     ).filter(_ != null)
       .foreach(_.cancel().unsafeRunSync())
   }
-
-  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 

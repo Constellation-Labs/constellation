@@ -4,7 +4,7 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 
 import better.files.File
-import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp, Resource, Sync}
+import cats.effect.{Clock, ContextShift, ExitCode, IO, IOApp, Resource, Sync, Timer}
 import cats.syntax.all._
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
@@ -14,7 +14,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Decoder
 import io.prometheus.client.CollectorRegistry
 import org.constellation.domain.cloud.CloudService
-import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend, FileToSend}
+import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend}
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.genesis.Genesis
@@ -48,14 +48,23 @@ import scala.util.Try
   * Main entry point for starting a node
   */
 object ConstellationNode extends IOApp {
+
+  def run(args: List[String]): IO[ExitCode] =
+    IO.shift(ConstellationExecutionContext.unbounded) >> ConstellationNodeUnbounded.run(args)
+}
+
+object ConstellationNodeUnbounded {
+  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   final val LocalConfigFile = "local_config"
   final val preferencesPath = ".dag"
 
-  import constellation._
-
   implicit val clock: Clock[IO] = Clock.create[IO]
+
+  import constellation._
 
   def run(args: List[String]): IO[ExitCode] = {
     val s = for {
@@ -126,7 +135,7 @@ object ConstellationNode extends IOApp {
       cloudQueue <- Resource.liftF(Queue.unbounded[IO, DataToSend])
       cloudQueueInstance <- Resource.liftF(cloudService.cloudSendingQueue(cloudQueue))
 
-      node = new ConstellationNode(nodeConfig, cloudQueueInstance, signedApiClient, registry, sessionTokenService)
+      node = new ConstellationNode(nodeConfig, cloudQueueInstance, signedApiClient, registry, sessionTokenService)(cs)
 
       server <- createServer(node.dao, registry)
     } yield server
@@ -256,7 +265,8 @@ object ConstellationNode extends IOApp {
     metricsMiddleware: HttpRoutes[IO] => HttpRoutes[IO],
     responseLogger: HttpApp[IO] => HttpApp[IO]
   ) = {
-    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.callbacksHealth)
+    val contextShift = IO.contextShift(ConstellationExecutionContext.callbacksHealth)
+    implicit val ce = IO.ioConcurrentEffect(contextShift)
     implicit val timer = IO.timer(ConstellationExecutionContext.callbacksHealth)
 
     for {

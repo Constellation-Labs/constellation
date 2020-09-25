@@ -22,7 +22,7 @@ import org.constellation.schema.checkpoint.{
   CheckpointCache,
   FinishedCheckpoint
 }
-import org.constellation.schema.{Id, NodeState, snapshot}
+import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.transaction.TransactionCacheData
@@ -426,7 +426,7 @@ class SnapshotService[F[_]: Concurrent](
 
   def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
     for {
-      serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(storedSnapshot)).attempt)
+      serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot)).attempt)
       write <- EitherT(
         C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(snapshot, serialized).value)
       )
