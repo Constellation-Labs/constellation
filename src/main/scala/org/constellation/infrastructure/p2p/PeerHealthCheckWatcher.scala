@@ -12,7 +12,7 @@ import scala.concurrent.duration._
 class PeerHealthCheckWatcher(config: Config, peerHealthCheck: PeerHealthCheck[IO])
     extends PeriodicIO("PeerHealthCheckWatcher") {
 
-  override val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.peerHealthCheckPool
+  override val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.unboundedHealth
 
   override def trigger(): IO[Unit] = peerHealthCheck.check()
 

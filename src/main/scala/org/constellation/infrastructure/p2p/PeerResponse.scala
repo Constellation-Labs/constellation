@@ -2,7 +2,8 @@ package org.constellation.infrastructure.p2p
 
 import cats.ApplicativeError
 import cats.data.Kleisli
-import cats.effect.{Concurrent, ContextShift}
+import cats.effect.{Blocker, Concurrent, ContextShift}
+import org.constellation.ConstellationExecutionContext.unboundedBlocker
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.schema.Id
 import org.constellation.session.SessionTokenService
@@ -76,4 +77,9 @@ object PeerResponse {
     )(implicit A: ApplicativeError[F, Throwable], F: Concurrent[F], C: ContextShift[F]): PeerResponse[F, Unit] =
       apply(PeerAuthMiddleware.responseTokenVerifierMiddleware(client, sessionTokenService))
   }
+
+  def run[F[_], A, B](f: Kleisli[F, A, B], blocker: Blocker = unboundedBlocker)(
+    a: A
+  )(implicit contextShift: ContextShift[F]): F[B] =
+    blocker.blockOn(f(a))
 }

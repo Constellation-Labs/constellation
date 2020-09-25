@@ -150,9 +150,9 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
     addressService = new AddressService[IO]()
 
     peerHealthCheck = {
-      val cs = IO.contextShift(ConstellationExecutionContext.peerHealthCheckPool)
+      val cs = IO.contextShift(ConstellationExecutionContext.unboundedHealth)
       val ce = IO.ioConcurrentEffect(cs)
-      val timer = IO.timer(ConstellationExecutionContext.peerHealthCheckPool)
+      val timer = IO.timer(ConstellationExecutionContext.unboundedHealth)
 
       PeerHealthCheck[IO](cluster, apiClient, metrics)(ce, timer, cs)
     }

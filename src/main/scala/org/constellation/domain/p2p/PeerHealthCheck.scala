@@ -7,8 +7,9 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
+import org.constellation.ConstellationExecutionContext.{unboundedBlocker, unboundedHealthBlocker}
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.{Id, NodeState}
@@ -41,7 +42,6 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
         .map(_.filter { case (_, pd) => NodeState.canBeCheckedForHealth(pd.peerMetadata.nodeState) })
       statuses <- peers.values.toList
         .traverse(pd => checkPeer(pd.peerMetadata.toPeerClientMetadata, periodicCheckTimeout).map(pd -> _))
-      _ <- CS.shift
       unresponsiveStatuses = statuses.filter { case (_, status) => status.isInstanceOf[PeerUnresponsive] }.map {
         case (pd, _) => pd
       }
@@ -77,32 +77,35 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
   private def checkPeer(peer: PeerClientMetadata, timeout: FiniteDuration): F[PeerHealthCheckStatus] =
     timeoutTo(
       {
-        val check: F[PeerHealthCheckStatus] = apiClient.metrics
-          .checkHealth()
-          .run(peer.copy(port = "9003"))
-          // should we also shift here, or let it run on unbounded, I guess the second one
-          .flatMap(_ => getClock)
-          .map[PeerHealthCheckStatus](clock => PeerAvailable(clock))
-          .flatTap { status =>
-            state.modify { m =>
-              val updated = m.updated(peer.id, status)
-              (updated, ())
-            }
-          }
-          .handleErrorWith(
-            _ =>
-              getClock.flatMap { clock =>
-                state.modify { m =>
-                  val status = m.get(peer.id).fold(PeerUnresponsive(clock, 1)) {
-                    case PeerAvailable(_)            => PeerUnresponsive(clock, 1)
-                    case PeerUnresponsive(_, checks) => PeerUnresponsive(clock, checks + 1)
-                  }
-
-                  val updated = m.updated(peer.id, status)
-                  (updated, status)
-                }
+        val check: F[PeerHealthCheckStatus] =
+          PeerResponse
+            .run(
+              apiClient.metrics
+                .checkHealth(),
+              unboundedHealthBlocker
+            )(peer.copy(port = "9003"))
+            .flatMap(_ => getClock)
+            .map[PeerHealthCheckStatus](clock => PeerAvailable(clock))
+            .flatTap { status =>
+              state.modify { m =>
+                val updated = m.updated(peer.id, status)
+                (updated, ())
               }
-          )
+            }
+            .handleErrorWith(
+              _ =>
+                getClock.flatMap { clock =>
+                  state.modify { m =>
+                    val status = m.get(peer.id).fold(PeerUnresponsive(clock, 1)) {
+                      case PeerAvailable(_)            => PeerUnresponsive(clock, 1)
+                      case PeerUnresponsive(_, checks) => PeerUnresponsive(clock, checks + 1)
+                    }
+
+                    val updated = m.updated(peer.id, status)
+                    (updated, status)
+                  }
+                }
+            )
 
         state.get.flatMap[PeerHealthCheckStatus](_.get(peer.id).fold(check) {
           case PeerAvailable(_) => check
@@ -135,17 +138,20 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
     peers.traverse { pd =>
       val setPortAndCheckPeerResponsiveness =
         (p: PeerClientMetadata) =>
-          apiClient.cluster.checkPeerResponsiveness(pd.peerMetadata.id).run(p.copy(port = "9003"))
+          PeerResponse.run(apiClient.cluster.checkPeerResponsiveness(pd.peerMetadata.id), unboundedHealthBlocker)(
+            p.copy(port = "9003")
+          )
 
       for {
         _ <- logger.debug(
           s"Waiting for network confirmation before marking a dead peer as offline: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host})"
         )
-        statuses <- cluster.broadcast[PeerHealthCheckStatus](
-          setPortAndCheckPeerResponsiveness,
-          Set(pd.peerMetadata.id)
+        statuses <- unboundedHealthBlocker.blockOn(
+          cluster.broadcast[PeerHealthCheckStatus](
+            setPortAndCheckPeerResponsiveness,
+            Set(pd.peerMetadata.id)
+          )
         )
-        _ <- CS.shift
         clock <- getClock
         howManyAvailable = statuses
           .mapValues(_.getOrElse(PeerUnresponsive(clock, 1)))
@@ -160,7 +166,7 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
       (for {
         _ <- logger.info(s"Marking dead peer: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host}) as offline")
         _ <- F.start(cluster.broadcastOfflineNodeState(pd.peerMetadata.id))
-        _ <- cluster.markOfflinePeer(pd.peerMetadata.id)
+        _ <- unboundedHealthBlocker.blockOn(cluster.markOfflinePeer(pd.peerMetadata.id))
         _ <- metrics.updateMetricAsync("deadPeer", pd.peerMetadata.host)
       } yield ())
         .handleErrorWith(_ => logger.error("Cannot mark peer as offline - error / skipping to next peer if available"))

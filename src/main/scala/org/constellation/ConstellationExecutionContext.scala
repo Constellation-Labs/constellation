@@ -4,9 +4,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent._
 
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 sealed class DefaultThreadFactory(prefix: String) extends ThreadFactory {
   private val poolNumber: AtomicInteger = new AtomicInteger(1)
@@ -38,9 +38,9 @@ object ConstellationExecutionContext {
   val callbacks = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
    */
 
-  val bounded = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
+  val bounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
 
-  val unbounded = ExecutionContext.fromExecutor(
+  val unbounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(
     new ThreadPoolExecutor(
       0,
       Integer.MAX_VALUE,
@@ -51,23 +51,37 @@ object ConstellationExecutionContext {
     )
   )
 
-  val peerHealthCheckPool = ExecutionContext.fromExecutor(
-    Executors.newFixedThreadPool(
+  val callbacks: ExecutionContextExecutor = ExecutionContext.fromExecutor(
+    new ThreadPoolExecutor(
       4,
-      new DefaultThreadFactory("peerHealthCheck")
+      4,
+      0L,
+      TimeUnit.MILLISECONDS,
+      new LinkedBlockingQueue[Runnable],
+      new DefaultThreadFactory("callbacks")
     )
   )
 
-//  val callbacks = ExecutionContext.fromExecutor(
-//    new ThreadPoolExecutor(
-//      4,
-//      4,
-//      0L,
-//      TimeUnit.MILLISECONDS,
-//      new LinkedBlockingQueue[Runnable],
-//      new DefaultThreadFactory("callbacks")
-//    )
-//  )
+  val callbacksHealth: ExecutionContextExecutor = ExecutionContext.fromExecutor(
+    new ThreadPoolExecutor(
+      2,
+      2,
+      0L,
+      TimeUnit.MILLISECONDS,
+      new LinkedBlockingQueue[Runnable],
+      new DefaultThreadFactory("callbacks-health")
+    )
+  )
+
+  val unboundedHealth: ExecutionContextExecutor = ExecutionContext.fromExecutor(
+    Executors.newFixedThreadPool(
+      4,
+      new DefaultThreadFactory("unbounded-health")
+    )
+  )
+
+  val unboundedBlocker: Blocker = Blocker.liftExecutionContext(unbounded)
+  val unboundedHealthBlocker: Blocker = Blocker.liftExecutionContext(unboundedHealth)
 
   def createSemaphore[F[_]: Concurrent](permits: Long = 1): Semaphore[F] = {
     implicit val cs: ContextShift[IO] = IO.contextShift(bounded)

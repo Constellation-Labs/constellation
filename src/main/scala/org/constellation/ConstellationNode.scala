@@ -213,23 +213,38 @@ object ConstellationNode extends IOApp {
 
       responseLogger = middleware.Logger.httpApp[IO](logHeaders = true, logBody = false)(_)
 
-      _ <- BlazeServerBuilder[IO](scala.concurrent.ExecutionContext.global)
-        .bindHttp(9000, "0.0.0.0")
-        .withHttpApp(responseLogger(publicRouter))
-        .withoutBanner
-        .resource
+      _ <- {
+        implicit val cs = IO.contextShift(ConstellationExecutionContext.callbacks)
+        implicit val ce = IO.ioConcurrentEffect(cs)
 
-      _ <- BlazeServerBuilder[IO](scala.concurrent.ExecutionContext.global)
-        .bindHttp(9001, "0.0.0.0")
-        .withHttpApp(responseLogger(peerRouter))
-        .withoutBanner
-        .resource
+        BlazeServerBuilder[IO](ConstellationExecutionContext.callbacks)
+          .bindHttp(9000, "0.0.0.0")
+          .withHttpApp(responseLogger(publicRouter))
+          .withoutBanner
+          .resource
+      }
 
-      _ <- BlazeServerBuilder[IO](scala.concurrent.ExecutionContext.global)
-        .bindHttp(9002, "0.0.0.0")
-        .withHttpApp(responseLogger(ownerRouter))
-        .withoutBanner
-        .resource
+      _ <- {
+        implicit val cs = IO.contextShift(ConstellationExecutionContext.callbacks)
+        implicit val ce = IO.ioConcurrentEffect(cs)
+
+        BlazeServerBuilder[IO](ConstellationExecutionContext.callbacks)
+          .bindHttp(9001, "0.0.0.0")
+          .withHttpApp(responseLogger(peerRouter))
+          .withoutBanner
+          .resource
+      }
+
+      _ <- {
+        implicit val cs = IO.contextShift(ConstellationExecutionContext.callbacks)
+        implicit val ce = IO.ioConcurrentEffect(cs)
+
+        BlazeServerBuilder[IO](ConstellationExecutionContext.callbacks)
+          .bindHttp(9002, "0.0.0.0")
+          .withHttpApp(responseLogger(ownerRouter))
+          .withoutBanner
+          .resource
+      }
 
       _ <- createPeerHealthCheckServer(dao, getKnownPeerId, isIdWhitelisted, metricsMiddleware, responseLogger)
     } yield ()
@@ -241,8 +256,8 @@ object ConstellationNode extends IOApp {
     metricsMiddleware: HttpRoutes[IO] => HttpRoutes[IO],
     responseLogger: HttpApp[IO] => HttpApp[IO]
   ) = {
-    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.peerHealthCheckPool)
-    implicit val timer = IO.timer(ConstellationExecutionContext.peerHealthCheckPool)
+    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.callbacksHealth)
+    implicit val timer = IO.timer(ConstellationExecutionContext.callbacksHealth)
 
     for {
       _ <- Resource.liftF(IO.unit)
@@ -261,11 +276,11 @@ object ConstellationNode extends IOApp {
 
       peerHealthCheckRouter = Router("" -> metricsMiddleware(signedPeerHealthCheckEndpoints)).orNotFound
 
-      peerHealtCheckServer <- BlazeServerBuilder[IO](ConstellationExecutionContext.peerHealthCheckPool)
-          .bindHttp(9003, "0.0.0.0")
-          .withHttpApp(responseLogger(peerHealthCheckRouter))
-          .withoutBanner
-          .resource
+      peerHealtCheckServer <- BlazeServerBuilder[IO](ConstellationExecutionContext.callbacksHealth)
+        .bindHttp(9003, "0.0.0.0")
+        .withHttpApp(responseLogger(peerHealthCheckRouter))
+        .withoutBanner
+        .resource
     } yield peerHealtCheckServer
   }
 
