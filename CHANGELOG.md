@@ -2,29 +2,37 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-## Added
+### Breaking changes
+- New service port: 9003
+
+### Added
 - Fallback to other buckets while doing rollback
 
-## Changed
+### Changed
 - Removed libraries: scala-async, akka, storehaus-cache, sway, slick, h2, hasher, grgen
 - Updated libraries: http-request-signer, enumeratum-circe, scaffeine, ext-scalatags, better-files, pureconfig, log4cats-slf4j, logstash-logback-encoder, http4s, prometheus, cats, aws
 - Updated scala test versions
+- Run API calls on unbounded thread pool
+- Run http4s server on callbacks thread pool
 - Run peer health check on a separate server with a separate thread pool
+- Extracted schema out of the root project
+- Extracted kryo registration out of the root project
+- Changed from ioapp to unbounded thread pool
 
 ## [v2.14.3] 2020-09-11
-## Changed
+### Changed
 - Further adjusted rollback process
 
 ## [v2.14.2] 2020-09-11
-## Fixed
+### Fixed
 - Lock existing memPool during redownload
 - Adjust rollback process
 
 ## [v2.14.1] 2020-09-11
-## Changed
+### Changed
 - Use more descriptive names for methods which clear the mempool during snapshot creation/redownload
 
-## Fixed
+### Fixed
 - Use lock when updating balances in AddressService during redownload/rollback
 - Apply SnapshotInfo balances all at once instead of one by one during redownload
 - Make sure that we clear balances which existed at higher heights in AddressService when redownload moves node back to lower heights
@@ -32,160 +40,160 @@ All notable changes to this project will be documented in this file.
 - Improvements for rollback process
 
 ## [v2.14.0] 2020-08-26
-## Added
+### Added
 - Refuse starting node if there is not enough space left on device
 - Auto leave if there is no space left on device for snapshot
 
 ## [v2.13.10] 2020-08-22
-## Fixed
+### Fixed
 - Handle corner cases with gap finding
 
 ## [v2.13.9] 2020-08-20
-## Added
+### Added
 - Additional logs for potential gaps in majority state
-## Fixed
+### Fixed
 - Revert health checks during PendingDownload state
 
 ## [v2.13.8] 2020-08-19
-## Fixed
+### Fixed
 - Gaps in cloud queue fixed by calculating diff between majority and already sent
 
 ## [v2.13.7] 2020-08-12
-## Changed
+### Changed
 - Changed whitelisting file
 
 ## [v2.13.6] 2020-08-11
-## Fixed
+### Fixed
 - Sorting of queued snapshots for cloud backup
 
 ## [v2.13.5] 2020-08-06
-## Changed
+### Changed
 - Revert changes in KeyStoreUtils and the change from SpongyCastle to BouncyCastle - caused errors on linux env
 - Update whitelisting
 
 ## [v2.13.4] 2020-08-05
-## Changed
+### Changed
 - Changed ID of one of node operators
 
 ## [v2.13.3] 2020-08-05
-## Changed
+### Changed
 - Use aliases instead of ips in Grafana
 - Adjusted KeyStoreUtils for CoMakery integration
 - Removed SpongyCastle and replaced it with BouncyCastle
 - Whitelisted all batch1 operators
-## Fixed
+### Fixed
 - Adjust reputation to observations
 
 ## [v2.13.2] 2020-07-31
-## Fixed
+### Fixed
 - Adjusted PeerHealthCheck node statuses 
 
 ## [v2.13.1] 2020-07-31
-## Added
+### Added
 - Alias available in node metrics
-## Changed
+### Changed
 - Adjusted PeerHealthCheck 
 
 ## [v2.13.0] 2020-07-29
-## Added
+### Added
 - Possibility to set alias for node in whitelisting file (and including it in cluster/info)
-## Changed
+### Changed
 - Remove IP from whitelisting and introduce dynamic IP to Id mapping
 - Remove offline peers after snapshot
 - Whitelisted new operators
 
 ## [v2.12.0] 2020-07-17
-## Changed
+### Changed
 - New operators whitelisted
 
 ## [v2.12.0-rc1] 2020-07-16
-## Changed
+### Changed
 - Adjustment for SelfAvoidingWalk
 
 ## [v2.11.3] - 2020-07-09
-## Changed
+### Changed
 - Change IP of node operator
 
 ## [v2.11.2] - 2020-07-03
-## Fixed
+### Fixed
 - Calculate stale tips using max of next snapshot heights
 
 ## [v2.11.1] - 2020-07-03
-## Fixed
+### Fixed
 - Mark snapshot as sent only if sent to at least one provider
 - Do not send and reward unaccepted majority snapshots
 - Calculate stale tips by the occurrences
 
 ## [v2.11.0] - 2020-07-02
-## Changed
+### Changed
 - Revert: remove stale tips at higher height
 - Change `snapshotPerMinute` from `4` to `2` as rewards adjustment
 
 ## [v2.10.0] - 2020-06-30
-## Added
+### Added
 - Whitelist new operators
-## Changed
+### Changed
 - Remove stale tips at higher height
 
 ## [v2.10.0-rc1] - 2020-06-29
-## Added
+### Added
 - Support for cloud providers and queue sending
 - Additional logs for batch-fetching by merkle root
 - Session token for communication between peers #1284
-## Fixed
+### Fixed
 - Remove snapshot only if snapshot was send to cloud
 - Distinct trust nodes for SelfAvoidingWalk
 
 ## [v2.9.1] - 2020-06-17 
-## Fixed
+### Fixed
 - Fix union checkpoint block creation during consensus
 - Fix stack overflow in SelfAvoidingWalk
 - Fix broadcasting finished checkpoint block
 
 ## [v2.9.1-rc1] - 2020-06-12
-## Fixed
+### Fixed
 - Fixed missing parents in consensus
 - Fixed circe mappings for ADTs
 
 ## [v2.9.0] - 2020-06-11
-## Changed
+### Changed
 - Added @tailrec for SelfAvoidingWalk
 - Changed scheduler delay for stale checks
 
 ## [v2.9.0-rc2] - 2020-06-10
-## Fixed
+### Fixed
 - Check blocks below the snapshot height before missing parents 
 
 ## [v2.9.0-rc1] - 2020-06-10
-## Added
+### Added
 - Dead peer caching #1239
-## Changed
+### Changed
 - Circe update to v0.13.0
 - Get rid of circe auto derivation
 - Data resolver refactor
 - Different reputation does not change snapshot hash #1258
-## Fixed
+### Fixed
 - Pull only consecutive transactions chain for consensus #1241
 - Handle transactions with positive fee correctly #1201
 - Self avoiding walk: missing edges and negative 0d
 - No active tips issue and consensus hanging
 
 ## [v2.8.3] - 2020-06-16
-## Changed
+### Changed
 - Whitelisting - change operator IP
-## Fixed
+### Fixed
 - Broadcast joining height multiple times #1261
 - Fixed missing parents metric
 
 ## [v2.8.2] - 2020-05-26
-## Added
+### Added
 - Owner endpoint for observing majority heights
-## Fixed
+### Fixed
 - Disallow offline nodes for communication
 - Do not propose offline nodes for peer discovery
 
 ## [v2.8.1] - 2020-05-22
-## Fixed
+### Fixed
 - Do not remove creating snapshot
 - ChannelStorage database disabled 
 - Increased timeouts for dead peers
