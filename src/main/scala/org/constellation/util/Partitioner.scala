@@ -3,6 +3,12 @@ package org.constellation.util
 import com.google.common.hash.Hashing
 import org.constellation.schema.Id
 import org.constellation.schema.transaction.Transaction
+import org.constellation.domain.trust.TrustDataInternal
+import com.twitter.algebird.{MinPlus, MinPlusSemiring, MinPlusValue, Monoid}
+import com.twitter.algebird.MinPlus.rig
+import org.constellation.trust.TrustNode
+
+import scala.collection.immutable
 
 /**
   * First pass at facilitator selection. Need to impl proper epidemic model. For checkpoint blocks, in lieu of min-cut,
@@ -50,4 +56,46 @@ object Partitioner {
     }
     facilitatorId
   }
+
+  /**
+    * todo add path field so we can dynamically take top K paths
+    * Note we essentailly have two tuples for our Min-plus matrix, (src, order), (dst, score)
+    * @param src
+    * @param dst
+    * @param order
+    * @param score
+    */
+  case class DirectedHyperEdge(src: Id, dst: Id, order: Int, score: Double)
+
+  /**
+    * todo trustGraph Vector or Map
+    * @param trustGraph
+    * @param monoid
+    * @param ord
+    */
+  implicit class ShortestPathPartitioner(trustGraph: List[TrustDataInternal])
+                                        (implicit monoid: Monoid[DirectedHyperEdge], ord: Ordering[DirectedHyperEdge]){
+    implicit val ring = new MinPlusSemiring
+
+    implicit def toMinPlus(e: DirectedHyperEdge): MinPlus[DirectedHyperEdge] = MinPlusValue(e)
+
+    //todo tail call position
+    def directedEdges(startNode: TrustDataInternal = trustGraph.head, hyperEdgeOrder: Int = 1): Iterable[DirectedHyperEdge] = {
+      val firstOrderLaplacian = laplacian(startNode, hyperEdgeOrder)
+      val secondOrderLaplacian = trustGraph.tail.foldLeft(firstOrderLaplacian){
+        case (prevLap, trustDataInternal) => prevLap ++ directedEdges(trustDataInternal, hyperEdgeOrder + 1)
+      }
+      firstOrderLaplacian ++ secondOrderLaplacian
+    }
+
+    def laplacian(fixedNode: TrustDataInternal = trustGraph.head, hyperEdgeOrder: Int = 1): immutable.Iterable[DirectedHyperEdge] = fixedNode.view.map {
+      case (id, score) => DirectedHyperEdge(fixedNode.id, id, hyperEdgeOrder, score)
+    }
+
+    def shortestPath(maxLength: Int = trustGraph.length): MinPlus[DirectedHyperEdge] =
+      directedEdges().map(toMinPlus).reduce(ring.plus)
+
+    def shortestKPaths(maxLength: Int = trustGraph.length) = ???
+  }
 }
+
