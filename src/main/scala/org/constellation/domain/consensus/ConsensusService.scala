@@ -18,8 +18,6 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-
   protected[domain] val merklePool =
     new ConcurrentStorageService[F, Seq[String]](
       ConstellationExecutionContext.createSemaphore(),

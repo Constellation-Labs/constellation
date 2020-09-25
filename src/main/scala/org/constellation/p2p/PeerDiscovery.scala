@@ -6,7 +6,7 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.schema.Id
 
@@ -21,9 +21,11 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
 
   def discoverFrom(peerMetadata: PeerMetadata): F[Unit] =
     for {
-      peers <- apiClient.nodeMetadata
-        .getPeers()
-        .run(peerMetadata.toPeerClientMetadata)
+      peers <- PeerResponse
+        .run(
+          apiClient.nodeMetadata
+            .getPeers()
+        )(peerMetadata.toPeerClientMetadata)
         .handleErrorWith(_ => F.pure(Seq.empty[PeerMetadata]))
 
       knownPeers <- cluster.getPeerInfo
@@ -46,10 +48,10 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
     } >>= { nextPeer =>
       val join = for {
         peer <- EitherT.fromOption[F](nextPeer, new Throwable("Next peer is empty")).rethrowT
-        registrationRequest <- apiClient.sign.getRegistrationRequest().run(peer)
+        registrationRequest <- PeerResponse.run(apiClient.sign.getRegistrationRequest())(peer)
         _ <- cluster.pendingRegistration(peer.host, registrationRequest)
         prr <- cluster.pendingRegistrationRequest
-        _ <- apiClient.sign.register(prr).run(peer)
+        _ <- PeerResponse.run(apiClient.sign.register(prr))(peer)
       } yield ()
 
       if (nextPeer.isDefined) {

@@ -73,7 +73,7 @@ object Genesis extends StrictLogging {
   def createGenesisObservation(
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
   )(implicit dao: DAO): GenesisObservation = {
-    implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+    implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
     for {
       genesis <- createDistributionTransactions[IO](allocAccountBalances)
         .map(createGenesisBlock)

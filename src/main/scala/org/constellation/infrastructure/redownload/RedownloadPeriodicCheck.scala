@@ -11,8 +11,6 @@ import scala.concurrent.duration._
 class RedownloadPeriodicCheck(periodSeconds: Int = 30)(implicit dao: DAO)
     extends PeriodicIO("RedownloadPeriodicCheck") {
 
-  val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-
   private def triggerRedownloadCheck(): IO[Unit] =
     for {
       _ <- dao.redownloadService.fetchAndUpdatePeersProposals()

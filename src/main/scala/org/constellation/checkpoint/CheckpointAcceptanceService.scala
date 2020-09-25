@@ -53,9 +53,6 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 ) {
   import CheckpointAcceptanceService._
 
-  val contextShift: ContextShift[IO] =
-    IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
-
   val awaiting: Ref[F, Set[CheckpointCache]] = Ref.unsafe(Set())
   val pendingAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set())
   val pendingAcceptanceFromOthers: Ref[F, Set[String]] = Ref.unsafe(Set())

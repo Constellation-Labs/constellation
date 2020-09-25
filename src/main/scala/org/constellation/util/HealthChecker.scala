@@ -3,7 +3,7 @@ package org.constellation.util
 import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.storage.ConcurrentTipService
 import org.constellation.{ConfigUtil, DAO}
@@ -93,9 +93,11 @@ class HealthChecker[F[_]: Concurrent](
         .map(_.peerMetadata.toPeerClientMetadata)
         .traverse(
           a =>
-            apiClient.snapshot
-              .getNextSnapshotHeight()
-              .run(a)
+            PeerResponse
+              .run(
+                apiClient.snapshot
+                  .getNextSnapshotHeight()
+              )(a)
               .handleErrorWith(_ => (a.id, -1L).pure[F])
         )
         .map(_.filter { case (_, height) => height >= 0L })

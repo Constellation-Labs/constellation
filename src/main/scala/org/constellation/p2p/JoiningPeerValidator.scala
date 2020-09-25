@@ -1,14 +1,14 @@
 package org.constellation.p2p
 
 import cats.data.ValidatedNel
-import cats.effect.{Concurrent, Sync}
+import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 
-class JoiningPeerValidator[F[_]: Concurrent](apiClient: ClientInterpreter[F]) {
+class JoiningPeerValidator[F[_]: Concurrent](apiClient: ClientInterpreter[F])(implicit val CS: ContextShift[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -22,7 +22,7 @@ class JoiningPeerValidator[F[_]: Concurrent](apiClient: ClientInterpreter[F]) {
 
   private def validateBuildInfo(peerClientMetadata: PeerClientMetadata): F[ValidationResult[String]] = {
     val validate: F[ValidationResult[String]] = for {
-      peerBuildInfo <- apiClient.buildInfo.getBuildInfo().run(peerClientMetadata)
+      peerBuildInfo <- PeerResponse.run(apiClient.buildInfo.getBuildInfo())(peerClientMetadata)
       _ <- logger.debug(s"BuildInfo (peer): ${peerBuildInfo}")
 
       buildInfo = BuildInfoJson()
@@ -43,6 +43,6 @@ class JoiningPeerValidator[F[_]: Concurrent](apiClient: ClientInterpreter[F]) {
 
 object JoiningPeerValidator {
 
-  def apply[F[_]: Concurrent](apiClient: ClientInterpreter[F]): JoiningPeerValidator[F] =
+  def apply[F[_]: Concurrent](apiClient: ClientInterpreter[F])(implicit CS: ContextShift[F]): JoiningPeerValidator[F] =
     new JoiningPeerValidator(apiClient)
 }

@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.domain.trust.TrustDataInternal
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.util.PeriodicIO
@@ -26,9 +26,11 @@ class TrustDataPollingScheduler(
       .flatMap(
         _.traverse(
           pd =>
-            apiClient.cluster
-              .getTrust()
-              .run(pd.peerMetadata.toPeerClientMetadata)
+            PeerResponse
+              .run(
+                apiClient.cluster
+                  .getTrust()
+              )(pd.peerMetadata.toPeerClientMetadata)
               .map(trust => TrustDataInternal(pd.peerMetadata.id, trust.view))
               .handleError(_ => TrustDataInternal(pd.peerMetadata.id, Map.empty[Id, Double]))
         )

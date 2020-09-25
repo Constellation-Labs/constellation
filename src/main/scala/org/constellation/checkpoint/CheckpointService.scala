@@ -23,9 +23,6 @@ class CheckpointService[F[_]: Concurrent](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  val contextShift
-    : ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki pass from F
-
   def update(
     baseHash: String,
     update: CheckpointCacheMetadata => CheckpointCacheMetadata

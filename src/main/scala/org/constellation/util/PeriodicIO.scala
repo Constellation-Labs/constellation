@@ -3,7 +3,7 @@ package org.constellation.util
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.ConstellationExecutionContext
 
@@ -13,7 +13,9 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 abstract class PeriodicIO(taskName: String) extends StrictLogging {
 
   val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
-  val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.bounded
+  val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(taskPool)
+
   val executionNumber: AtomicLong = new AtomicLong(0)
   val cancellationToken: AtomicBoolean = new AtomicBoolean(false)
 

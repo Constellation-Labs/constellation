@@ -13,7 +13,7 @@ import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
@@ -162,44 +162,56 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   // TODO: Extract to HTTP layer
   private[redownload] def fetchAcceptedSnapshots(client: PeerClientMetadata): F[SnapshotsAtHeight] =
-    apiClient.snapshot
-      .getAcceptedSnapshots()
-      .run(client)
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getAcceptedSnapshots()
+      )(client)
       .handleErrorWith(_ => F.pure(Map.empty))
 
   // TODO: Extract to HTTP layer
   private def fetchCreatedSnapshots(client: PeerClientMetadata): F[SnapshotProposalsAtHeight] =
-    apiClient.snapshot
-      .getCreatedSnapshots()
-      .run(client)
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getCreatedSnapshots()
+      )(client)
       .handleErrorWith { e =>
         logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty)
       }
 
   // TODO: Extract to HTTP layer
   private def fetchStoredSnapshots(client: PeerClientMetadata): F[List[String]] =
-    apiClient.snapshot
-      .getStoredSnapshots()
-      .run(client)
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getStoredSnapshots()
+      )(client)
       .handleErrorWith(_ => F.pure(List.empty))
 
   // TODO: Extract to HTTP layer
   private[redownload] def fetchSnapshotInfo(client: PeerClientMetadata): F[SnapshotInfoSerialized] =
-    apiClient.snapshot
-      .getSnapshotInfo()
-      .run(client)
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getSnapshotInfo()
+      )(client)
 
   // TODO: Extract to HTTP layer
   private def fetchSnapshotInfo(hash: String)(client: PeerClientMetadata): F[SnapshotInfoSerialized] =
-    apiClient.snapshot
-      .getSnapshotInfo(hash)
-      .run(client)
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getSnapshotInfo(hash)
+      )(client)
 
   // TODO: Extract to HTTP layer
   private[redownload] def fetchSnapshot(hash: String)(client: PeerClientMetadata): F[SnapshotSerialized] =
-    apiClient.snapshot
-      .getStoredSnapshot(hash)
-      .run(client)
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getStoredSnapshot(hash)
+      )(client)
 
   private def fetchAndStoreMissingSnapshots(
     snapshotsToDownload: SnapshotsAtHeight

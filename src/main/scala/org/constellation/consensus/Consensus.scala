@@ -22,7 +22,7 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.PeerData
 import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
@@ -60,8 +60,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  implicit val contextShift: ContextShift[IO] =
-    IO.contextShift(ConstellationExecutionContext.bounded) // TODO: wkoszycki apply from calculationContext[F]
+//  implicit val contextShift: ContextShift[IO] =
+//    IO.contextShift(ConstellationExecutionContext.unbounded) // TODO: wkoszycki apply from calculationContext[F]
 
   implicit val shadowDAO: DAO = dao
 
@@ -103,10 +103,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
         notifications,
         observations
       )
-      _ <- calculationContext.blockOn(remoteCall)(
-        remoteSender.broadcastConsensusDataProposal(
-          BroadcastConsensusDataProposal(roundData.roundId, roundData.peers, proposal)
-        )
+      _ <- remoteSender.broadcastConsensusDataProposal(
+        BroadcastConsensusDataProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addConsensusDataProposal(proposal)
     } yield ()
@@ -297,10 +295,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- if (finalResult.cb.isEmpty) {
         List.empty[Boolean].pure[F]
       } else {
-        calculationContext.blockOn(remoteCall)(
-          broadcastSignedBlockToNonFacilitators(
-            FinishedCheckpoint(cache, proposals.keySet.map(_.id))
-          )
+        broadcastSignedBlockToNonFacilitators(
+          FinishedCheckpoint(cache, proposals.keySet.map(_.id))
         )
       }
 
@@ -355,9 +351,11 @@ class Consensus[F[_]: Concurrent: ContextShift](
         s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${baseHash}"
       )
       responses <- nonFacilitators.traverse { pd =>
-        apiClient.checkpoint
-          .sendFinishedCheckpoint(finishedCheckpoint)
-          .run(pd.peerMetadata.toPeerClientMetadata)
+        PeerResponse
+          .run(
+            apiClient.checkpoint
+              .sendFinishedCheckpoint(finishedCheckpoint)
+          )(pd.peerMetadata.toPeerClientMetadata)
           .handleErrorWith { error =>
             logger.warn(error)(
               s"Cannot broadcast finished checkpoint block hash=${baseHash} to: ${pd.peerMetadata.host}"
@@ -390,10 +388,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
         "resolveMajorityCheckpointBlockUniquesCount_" + uniques
       )
 
-      _ <- calculationContext.blockOn(remoteCall)(
-        remoteSender.broadcastSelectedUnionBlock(
-          BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
-        )
+      _ <- remoteSender.broadcastSelectedUnionBlock(
+        BroadcastSelectedUnionBlock(roundData.roundId, roundData.peers, selectedCheckpointBlock)
       )
       _ <- addSelectedBlockProposal(selectedCheckpointBlock)
     } yield ()
@@ -423,10 +419,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
           (roundData.observations ++ proposals.flatMap(_._2.observations))
         )(dao.keyPair)
       )
-      _ <- calculationContext.blockOn(remoteCall)(
-        remoteSender.broadcastBlockUnion(
-          BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
-        )
+      _ <- remoteSender.broadcastBlockUnion(
+        BroadcastUnionBlockProposal(roundData.roundId, roundData.peers, proposal)
       )
       _ <- addBlockProposal(proposal)
     } yield ()

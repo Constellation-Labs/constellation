@@ -167,7 +167,7 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
     )(this)
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](
-      IO.contextShift(ConstellationExecutionContext.bounded),
+      IO.contextShift(ConstellationExecutionContext.unbounded),
       observationService,
       apiClient,
       keyPair
@@ -315,7 +315,7 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       this,
       ConfigUtil.config,
       Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.bounded),
+      IO.contextShift(ConstellationExecutionContext.unbounded),
       metrics = metrics
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
@@ -354,7 +354,7 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       .foreach(_.cancel().unsafeRunSync())
   }
 
-  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val context: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
 

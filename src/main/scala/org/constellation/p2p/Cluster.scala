@@ -13,7 +13,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
 import org.constellation._
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.schema.{Id, NodeState, PeerNotification}
@@ -286,7 +286,7 @@ class Cluster[F[_]](
             request.port,
             request.id
           )
-          val req = apiClient.sign.sign(authSignRequest).run(peerClientMetadata)
+          val req = PeerResponse.run(apiClient.sign.sign(authSignRequest))(peerClientMetadata)
 
           req.flatTap { sig =>
             if (sig.hashSignature.id != request.id) {
@@ -316,7 +316,7 @@ class Cluster[F[_]](
 
               for {
                 state <- withMetric(
-                  apiClient.nodeMetadata.getNodeState().run(peerClientMetadata),
+                  PeerResponse.run(apiClient.nodeMetadata.getNodeState())(peerClientMetadata),
                   "nodeState"
                 )
                 id = sig.hashSignature.id
@@ -360,9 +360,11 @@ class Cluster[F[_]](
       maxMajorityHeight <- clients
         .traverse(
           pm =>
-            apiClient.snapshot
-              .getLatestMajorityHeight()
-              .run(pm.toPeerClientMetadata)
+            PeerResponse
+              .run(
+                apiClient.snapshot
+                  .getLatestMajorityHeight()
+              )(pm.toPeerClientMetadata)
               .map(_.some)
               .handleError(_ => none[LatestMajorityHeight])
         )
@@ -386,12 +388,16 @@ class Cluster[F[_]](
       _ <- logger.debug(s"Broadcasting own joined height - step1: height=$height")
       ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
-      _ <- broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
+      _ <- broadcast(PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight))))
       _ <- F.start(
-        T.sleep(10.seconds) >> broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
+        T.sleep(10.seconds) >> broadcast(
+          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)))
+        )
       )
       _ <- F.start(
-        T.sleep(30.seconds) >> broadcast(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)).run)
+        T.sleep(30.seconds) >> broadcast(
+          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)))
+        )
       )
     } yield ()
   }
@@ -469,9 +475,11 @@ class Cluster[F[_]](
         proposals <- notOfflinePeers.toList.traverse {
           case (_, pd) =>
             timeoutTo(
-              apiClient.snapshot
-                .getPeerProposals(leavingPeerId)
-                .run(pd.peerMetadata.toPeerClientMetadata)
+              PeerResponse
+                .run(
+                  apiClient.snapshot
+                    .getPeerProposals(leavingPeerId)
+                )(pd.peerMetadata.toPeerClientMetadata)
                 .handleErrorWith(
                   _ =>
                     logger.debug(
@@ -639,14 +647,16 @@ class Cluster[F[_]](
               .contains(peerClientMetadata.id)
               .pure[F]
               .ifM(
-                apiClient.sign
-                  .getRegistrationRequest()
-                  .run(peerClientMetadata)
+                PeerResponse
+                  .run(
+                    apiClient.sign
+                      .getRegistrationRequest()
+                  )(peerClientMetadata)
                   .flatMap { registrationRequest =>
                     for {
                       _ <- pendingRegistration(peerClientMetadata.host, registrationRequest)
                       prr <- pendingRegistrationRequest
-                      response <- apiClient.sign.register(prr).run(peerClientMetadata)
+                      response <- PeerResponse.run(apiClient.sign.register(prr))(peerClientMetadata)
                     } yield response
                   }
                   .handleErrorWith { err =>
@@ -663,9 +673,7 @@ class Cluster[F[_]](
       "cluster_attemptRegisterPeer"
     )
 
-  def rejoin(): F[Unit] = {
-    implicit val ec = ConstellationExecutionContext.bounded
-
+  def rejoin(): F[Unit] =
     //    def attemptRejoin(lastKnownAPIClients: Seq[HostPort]): F[Unit] =
     //      lastKnownAPIClients match {
     //        case Nil => F.raiseError(new RuntimeException("Couldn't rejoin the cluster"))
@@ -676,7 +684,6 @@ class Cluster[F[_]](
     //              attemptRejoin(remainingHostPorts)
     //            })
     //      }
-
     for {
       _ <- logger.warn("Trying to rejoin the cluster...")
 
@@ -689,7 +696,6 @@ class Cluster[F[_]](
 
       //      _ <- attemptRejoin(lastKnownPeers)
     } yield ()
-  }
 
   private def clearServicesBeforeJoin(): F[Unit] =
     for {
@@ -763,7 +769,7 @@ class Cluster[F[_]](
   private def broadcastLeaveRequest(majorityHeight: Long): F[Unit] = {
     def peerUnregister(c: PeerClientMetadata) =
       PeerUnregister(dao.peerHostPort.host, dao.peerHostPort.port, dao.id, majorityHeight)
-    broadcast(c => apiClient.cluster.deregister(peerUnregister(c)).run(c)).void
+    broadcast(c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)))(c)).void
   }
 
   def broadcastOfflineNodeState(nodeId: Id = dao.id): F[Unit] =
@@ -771,7 +777,7 @@ class Cluster[F[_]](
 
   private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
     logThread(
-      broadcast(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)).run, Set(nodeId)).flatTap {
+      broadcast(PeerResponse.run(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState))), Set(nodeId)).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
         }

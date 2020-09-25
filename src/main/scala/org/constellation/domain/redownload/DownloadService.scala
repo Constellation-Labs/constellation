@@ -6,7 +6,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.genesis.Genesis
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
@@ -102,7 +102,7 @@ class DownloadService[F[_]](
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
       _ <- cluster
-        .broadcast(apiClient.checkpoint.getGenesis().run)
+        .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis()))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
         .flatTap(genesis => F.delay { Genesis.acceptGenesis(genesis) })

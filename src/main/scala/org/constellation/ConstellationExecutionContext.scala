@@ -83,9 +83,7 @@ object ConstellationExecutionContext {
   val unboundedBlocker: Blocker = Blocker.liftExecutionContext(unbounded)
   val unboundedHealthBlocker: Blocker = Blocker.liftExecutionContext(unboundedHealth)
 
-  def createSemaphore[F[_]: Concurrent](permits: Long = 1): Semaphore[F] = {
-    implicit val cs: ContextShift[IO] = IO.contextShift(bounded)
+  def createSemaphore[F[_]: Concurrent](permits: Long = 1): Semaphore[F] =
     Semaphore.in[IO, F](permits).unsafeRunSync()
-  }
 
 }

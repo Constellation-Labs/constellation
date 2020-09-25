@@ -18,7 +18,7 @@ import org.constellation.consensus.ConsensusManager.{
   BroadcastUnionBlockProposal
 }
 import org.constellation.domain.observation.ObservationService
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{MajorityHeight, PeerData}
 import org.constellation.schema.ChannelMessage
@@ -35,23 +35,26 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 ) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  implicit val _contextShift: ContextShift[F] = contextShift
 
   def notifyFacilitators(roundData: RoundData): F[List[Boolean]] =
     sendToAll(
-      apiClient.consensus
-        .participateInNewRound(
-          RoundDataRemote(
-            roundData.roundId,
-            roundData.peers.map(pd => (pd.peerMetadata, pd.majorityHeight)),
-            roundData.lightPeers.map(pd => (pd.peerMetadata, pd.majorityHeight)),
-            roundData.facilitatorId,
-            roundData.transactions,
-            roundData.tipsSOE,
-            roundData.messages,
-            roundData.observations
-          )
-        )
-        .run,
+      PeerResponse
+        .run(
+          apiClient.consensus
+            .participateInNewRound(
+              RoundDataRemote(
+                roundData.roundId,
+                roundData.peers.map(pd => (pd.peerMetadata, pd.majorityHeight)),
+                roundData.lightPeers.map(pd => (pd.peerMetadata, pd.majorityHeight)),
+                roundData.facilitatorId,
+                roundData.transactions,
+                roundData.tipsSOE,
+                roundData.messages,
+                roundData.observations
+              )
+            )
+        ),
       roundData.roundId,
       roundData.peers.toList,
       "NotifyFacilitators"
@@ -59,7 +62,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
   def broadcastConsensusDataProposal(cmd: BroadcastConsensusDataProposal): F[Unit] =
     sendToAll(
-      apiClient.consensus.addConsensusDataProposal(cmd.consensusDataProposal).run,
+      PeerResponse.run(apiClient.consensus.addConsensusDataProposal(cmd.consensusDataProposal)),
       cmd.roundId,
       cmd.peers.toList,
       "BroadcastConsensusDataProposal"
@@ -67,7 +70,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
   def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): F[Unit] =
     sendToAll(
-      apiClient.consensus.addUnionBlock(cmd.proposal).run,
+      PeerResponse.run(apiClient.consensus.addUnionBlock(cmd.proposal)),
       cmd.roundId,
       cmd.peers.toList,
       "BroadcastUnionBlockProposal"
@@ -75,7 +78,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
   def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): F[Unit] =
     sendToAll(
-      apiClient.consensus.addSelectedUnionBlock(cmd.cb).run,
+      PeerResponse.run(apiClient.consensus.addSelectedUnionBlock(cmd.cb)),
       cmd.roundId,
       cmd.peers.toList,
       "BroadcastSelectedUnionBlock"

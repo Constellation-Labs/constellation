@@ -11,7 +11,7 @@ import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.{PeerClientMetadata, PeerResponse}
 import org.constellation.storage.SOEService
 import org.constellation.util.Logging._
@@ -228,7 +228,7 @@ class DataResolver[F[_]](
     endpoint: String => PeerResponse[F, Option[T]],
     peerClientMetadata: PeerClientMetadata
   ): F[Option[T]] =
-    endpoint(hash).run(peerClientMetadata).onError {
+    PeerResponse.run(endpoint(hash))(peerClientMetadata).onError {
       case _: SocketTimeoutException =>
         observationService
           .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(List(hash)))(keyPair))
@@ -240,8 +240,8 @@ class DataResolver[F[_]](
     endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
     peerClientMetadata: PeerClientMetadata
   ): F[List[(String, A)]] =
-    endpoint(hashes)
-      .run(peerClientMetadata)
+    PeerResponse
+      .run(endpoint(hashes))(peerClientMetadata)
       .map(_.mapFilter {
         case (hash, data) => data.map((hash, _))
       })
