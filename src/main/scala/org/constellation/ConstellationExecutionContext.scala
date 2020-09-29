@@ -74,8 +74,12 @@ object ConstellationExecutionContext {
   )
 
   val unboundedHealth: ExecutionContextExecutor = ExecutionContext.fromExecutor(
-    Executors.newFixedThreadPool(
-      4,
+    new ThreadPoolExecutor(
+      0,
+      Integer.MAX_VALUE,
+      60L,
+      TimeUnit.SECONDS,
+      new SynchronousQueue[Runnable],
       new DefaultThreadFactory("unbounded-health")
     )
   )
