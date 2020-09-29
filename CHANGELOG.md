@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.15.1] 2020-09-29
 ### Fixed
 - ConstellationNode init (execution context)
 

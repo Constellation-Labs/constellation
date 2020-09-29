@@ -256,7 +256,7 @@ object ConstellationNode extends IOApp with IOApp.WithContext {
     metricsMiddleware: HttpRoutes[IO] => HttpRoutes[IO],
     responseLogger: HttpApp[IO] => HttpApp[IO]
   ) = {
-    val contextShift = IO.contextShift(ConstellationExecutionContext.callbacksHealth)
+    implicit val contextShift = IO.contextShift(ConstellationExecutionContext.callbacksHealth)
     implicit val ce = IO.ioConcurrentEffect(contextShift)
     implicit val timer = IO.timer(ConstellationExecutionContext.callbacksHealth)
 
