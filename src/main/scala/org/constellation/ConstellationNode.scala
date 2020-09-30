@@ -95,6 +95,17 @@ object ConstellationNode extends IOApp with IOApp.WithContext {
           )
       )
 
+      _ <- Resource.liftF(
+        IO { Runtime.getRuntime.availableProcessors }
+          .map(_ >= 4)
+          .ifM(
+            IO.unit,
+            IO.raiseError(
+              new Throwable(s"Cannot start, at least 4 available CPU cores are required")
+            )
+          )
+      )
+
       requestMethodClassifier = (r: Request[IO]) => Some(r.method.toString.toLowerCase)
 
       registry <- Prometheus.collectorRegistry[IO]

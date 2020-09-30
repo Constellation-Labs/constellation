@@ -3,7 +3,7 @@ package org.constellation.domain.redownload
 import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.DAO
+import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -61,10 +61,20 @@ class DownloadService[F[_]](
           accepted <- redownloadService.fetchAcceptedSnapshots(client)
           acceptedSnapshots <- accepted.values.toList
             .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
-            .map(snapshotsSerialized => snapshotsSerialized.map(KryoSerializer.deserializeCast[StoredSnapshot]))
+            .flatMap { snapshotsSerialized =>
+              snapshotsSerialized.traverse { snapshot =>
+                C.evalOn(ConstellationExecutionContext.bounded)(F.delay {
+                  KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
+                })
+              }
+            }
           snapshotInfoFromMemPool <- redownloadService
             .fetchSnapshotInfo(client)
-            .map(KryoSerializer.deserializeCast[SnapshotInfo])
+            .flatMap { snapshotInfo =>
+              C.evalOn(ConstellationExecutionContext.bounded)(F.delay {
+                KryoSerializer.deserializeCast[SnapshotInfo](snapshotInfo)
+              })
+            }
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
 
@@ -78,13 +88,23 @@ class DownloadService[F[_]](
             (updated, ())
           }
 
-          _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
-            logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
-              .accept(b)
-              .handleErrorWith(
-                error => logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
-              )
-          }
+          _ <- C
+            .evalOn(ConstellationExecutionContext.bounded) {
+              F.delay {
+                TopologicalSort.sortBlocksTopologically(blocksToAccept).toList
+              }
+            }
+            .flatMap {
+              _.traverse { b =>
+                logger.debug(s"Accepting block above majority: ${b.height}") >>
+                  C.evalOn(ConstellationExecutionContext.bounded) {
+                      checkpointAcceptanceService.accept(b)
+                    }
+                    .handleErrorWith { error =>
+                      logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
+                    }
+              }
+            }
         } yield ()
       }
     } yield ()
@@ -105,7 +125,11 @@ class DownloadService[F[_]](
         .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis()))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
-        .flatTap(genesis => F.delay { Genesis.acceptGenesis(genesis) })
+        .flatTap { genesis =>
+          ContextShift[F].evalOn(ConstellationExecutionContext.bounded)(F.delay {
+            Genesis.acceptGenesis(genesis)
+          })
+        }
         .void
     } yield ()
 }

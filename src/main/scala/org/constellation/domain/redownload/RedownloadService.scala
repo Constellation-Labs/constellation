@@ -8,6 +8,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
+import org.constellation.ConstellationExecutionContext.bounded
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
@@ -177,7 +178,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
           .getCreatedSnapshots()
       )(client)
       .handleErrorWith { e =>
-        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty)
+        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty[Long, SnapshotProposal])
       }
 
   // TODO: Extract to HTTP layer
@@ -276,10 +277,16 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
           acceptedSnapshots <- acceptedSnapshotHashesAboveMajority.toList
             .traverse(hash => fetchSnapshot(hash)(client))
-            .map(snapshotsSerialized => snapshotsSerialized.map(KryoSerializer.deserializeCast[StoredSnapshot]))
+            .flatMap(
+              snapshotsSerialized =>
+                snapshotsSerialized.traverse { s =>
+                  C.evalOn(bounded)(F.delay { KryoSerializer.deserializeCast[StoredSnapshot](s) })
+                }
+            )
 
-          snapshotInfoFromMemPool <- fetchSnapshotInfo(client)
-            .map(KryoSerializer.deserializeCast[SnapshotInfo])
+          snapshotInfoFromMemPool <- fetchSnapshotInfo(client).flatMap { s =>
+            C.evalOn(bounded)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
+          }
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
 
@@ -293,12 +300,16 @@ class RedownloadService[F[_]: NonEmptyParallel](
             (updated, ())
           }
 
-          _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
-            logger.debug(s"Accepting block above majority: ${b.height}") >> checkpointAcceptanceService
-              .accept(b)
-              .handleErrorWith(
-                error => logger.warn(error)(s"Error during blocks acceptance after redownload") >> F.unit
-              )
+          sorted <- C.evalOn(bounded)(F.delay { TopologicalSort.sortBlocksTopologically(blocksToAccept) })
+          _ <- sorted.toList.traverse { b =>
+            logger.debug(s"Accepting block above majority: ${b.height}") >>
+              C.evalOn(bounded) {
+                  checkpointAcceptanceService
+                    .accept(b)
+                }
+                .handleErrorWith(
+                  error => logger.warn(error)(s"Error during blocks acceptance after redownload") >> F.unit
+                )
           }
         } yield ()
       }.attemptT

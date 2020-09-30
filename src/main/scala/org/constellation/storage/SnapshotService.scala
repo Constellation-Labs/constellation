@@ -8,6 +8,7 @@ import cats.syntax.all._
 import constellation.withMetric
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConstellationExecutionContext.bounded
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
 import org.constellation.domain.cloud.CloudStorageOld
@@ -131,7 +132,11 @@ class SnapshotService[F[_]: Concurrent](
           s"conclude snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} with height ${nextHeightInterval}"
         )
       )
-      _ <- applySnapshot()
+      _ <- C
+        .evalOn(bounded)(applySnapshot().rethrowT)
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
       _ <- lastSnapshotHeight
         .set(nextHeightInterval.toInt)
         .attemptT
@@ -175,7 +180,9 @@ class SnapshotService[F[_]: Concurrent](
       if (info.snapshot.snapshot == Snapshot.snapshotZero) {
         EitherT.liftF[F, Throwable, Unit](Sync[F].unit)
       } else {
-        snapshotInfoStorage.write(hash, KryoSerializer.serializeAnyRef(info))
+        C.evalOn(bounded)(Sync[F].delay { KryoSerializer.serializeAnyRef(info) }).attemptT.flatMap {
+          snapshotInfoStorage.write(hash, _)
+        }
       }
     }.leftMap(SnapshotInfoIOError)
 
@@ -210,24 +217,26 @@ class SnapshotService[F[_]: Concurrent](
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
-      _ <- removeStoredSnapshotDataFromMempool()
+      _ <- C.evalOn(bounded)(removeStoredSnapshotDataFromMempool())
       _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
-      _ <- addressService.setAll(snapshotInfo.addressCacheData)
-      _ <- (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-        soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
-          checkpointService.put(h) >>
-          dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
-          h.checkpointBlock.transactions.toList.traverse { tx =>
-            transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
-          } >>
-          h.checkpointBlock.observations.toList.traverse { obs =>
-            observationService.applyAfterRedownload(obs, Some(h))
-          }
+      _ <- C.evalOn(bounded)(addressService.setAll(snapshotInfo.addressCacheData))
+      _ <- C.evalOn(bounded) {
+        (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
+          soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
+            checkpointService.put(h) >>
+            dao.metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
+            h.checkpointBlock.transactions.toList.traverse { tx =>
+              transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
+            } >>
+            h.checkpointBlock.observations.toList.traverse { obs =>
+              observationService.applyAfterRedownload(obs, Some(h))
+            }
+        }
       }
       _ <- dao.metrics.updateMetricAsync[F](
         "acceptedCBCacheMatchesAcceptedSize",
@@ -426,7 +435,9 @@ class SnapshotService[F[_]: Concurrent](
 
   def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
     for {
-      serialized <- EitherT(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot)).attempt)
+      serialized <- EitherT(
+        C.evalOn(ConstellationExecutionContext.bounded)(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot))).attempt
+      )
       write <- EitherT(
         C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(snapshot, serialized).value)
       )
@@ -515,7 +526,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): EitherT[F, SnapshotError, Unit] = {
     val applyAfter = for {
-      _ <- acceptSnapshot(currentSnapshot)
+      _ <- C.evalOn(bounded)(acceptSnapshot(currentSnapshot))
 
       _ <- totalNumCBsInSnapshots.modify(t => (t + currentSnapshot.checkpointBlocks.size, ()))
       _ <- totalNumCBsInSnapshots.get.flatTap { total =>
@@ -596,7 +607,7 @@ class SnapshotService[F[_]: Concurrent](
         _.values.toList.map(_.peerMetadata.id).traverse { p =>
           LiftIO[F]
             .liftIO(dao.cluster.markOfflinePeer(p))
-            .handleErrorWith(err => logger.error(err)(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
+            .handleErrorWith(err => logger.warn(err)(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
         }
       }
       .void
@@ -611,7 +622,7 @@ class SnapshotService[F[_]: Concurrent](
         _.values.toList.traverse { p =>
           LiftIO[F]
             .liftIO(dao.cluster.removePeer(p))
-            .handleErrorWith(err => logger.error(err)(s"Cannot remove offline peer: ${err.getMessage}"))
+            .handleErrorWith(err => logger.warn(err)(s"Cannot remove offline peer: ${err.getMessage}"))
         }
       }
       .void

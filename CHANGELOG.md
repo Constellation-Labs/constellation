@@ -2,6 +2,10 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Changed
+- At least 4 CPU cores are required to start a node
+### Fixed
+- Bounded thread pool usage for CPU-heavy operations
 
 ## [v2.15.1] 2020-09-29
 ### Fixed

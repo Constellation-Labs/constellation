@@ -38,7 +38,17 @@ object ConstellationExecutionContext {
   val callbacks = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
    */
 
-  val bounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
+  val bounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(
+    new ForkJoinPool(
+      {
+        val available = Runtime.getRuntime.availableProcessors
+        if (available == 1) 1 else available - 1
+      },
+      ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+      null,
+      true
+    )
+  )
 
   val unbounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(
     new ThreadPoolExecutor(

@@ -6,6 +6,7 @@ import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConstellationExecutionContext.bounded
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
@@ -262,7 +263,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
           s"Awaiting for acceptance: ${awaitingBlocks.size} | Allowed to accept: ${allowedToAccept.size}"
         )
 
-        _ <- Concurrent[F].start(allowedToAccept.traverse(accept(_).handleErrorWith(_ => Sync[F].unit)))
+        _ <- Concurrent[F].start(
+          allowedToAccept.traverse(c => cs.evalOn(bounded)(accept(c)).handleErrorWith(_ => Sync[F].unit))
+        )
       } yield ()
 
     acceptCheckpoint.handleErrorWith {
