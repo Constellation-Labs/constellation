@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.16.0] 2020-09-30
 ### Changed
 - At least 4 CPU cores are required to start a node
 ### Fixed
