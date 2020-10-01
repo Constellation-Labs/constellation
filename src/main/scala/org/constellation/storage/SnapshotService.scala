@@ -444,7 +444,7 @@ class SnapshotService[F[_]: Concurrent](
     } yield write
 
   def isOverDiskCapacity(bytesLengthToAdd: Long): F[Boolean] = {
-    val sizeDiskLimit = ConfigUtil.snapshotSizeDiskLimit
+    val sizeDiskLimit = 0 // ConfigUtil.snapshotSizeDiskLimit TODO: check if it works
     if (sizeDiskLimit == 0) return false.pure[F]
 
     val isOver = for {
@@ -454,13 +454,11 @@ class SnapshotService[F[_]: Concurrent](
     } yield isOverSpace
 
     isOver.flatTap { over =>
-      Sync[F].delay {
-        if (over) {
-          logger.warn(
-            s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit}"
-          )
-        }
-      }
+      if (over) {
+        logger.warn(
+          s"[${dao.id.short}] isOverDiskCapacity bytes to write ${bytesLengthToAdd} configured space: ${ConfigUtil.snapshotSizeDiskLimit}"
+        )
+      } else Sync[F].unit
     }
   }
 
