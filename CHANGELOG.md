@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.16.1] 2020-10-01
 ### Changed
 - Disabled size limit for snapshot directory
 
