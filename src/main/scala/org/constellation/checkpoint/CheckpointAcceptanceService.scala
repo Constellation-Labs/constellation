@@ -234,9 +234,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         _ <- acceptTransactions(cb, Some(checkpoint), doubleSpendTxs.map(_.hash))
         _ <- acceptObservations(cb, Some(checkpoint))
         _ <- updateRateLimiting(cb)
-        _ <- Sync[F].delay {
-          logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
-        }
+        _ <- logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
         _ <- concurrentTipService.update(cb, height)
         _ <- snapshotService.updateAcceptedCBSinceSnapshot(cb)
         _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
@@ -399,7 +397,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       case otherError =>
         acceptLock.release >>
           logger.debug(s"[Accept checkpoint][5-?] Release lock") >>
-          Sync[F].delay(logger.error(otherError)(s"Error when accepting block")) >>
+          logger.error(otherError)(s"Error when accepting block") >>
           dao.metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") >>
           otherError.raiseError[F, Unit]
     }
