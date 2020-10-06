@@ -2,11 +2,11 @@ package org.constellation.infrastructure.endpoints
 
 import cats.effect.Concurrent
 import cats.syntax.all._
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
-import org.constellation.session.Registration.`X-Id`
-import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight._
 import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, _}
@@ -19,11 +19,12 @@ import org.constellation.schema.Id._
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serializer.KryoSerializer
+import org.constellation.session.Registration.`X-Id`
 import org.constellation.storage.SnapshotService
-import org.http4s.{HttpRoutes, Response}
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.{HttpRoutes, Response}
 
 import scala.collection.SortedMap
 
@@ -31,6 +32,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
   implicit val smEncoder: Encoder[SortedMap[Id, Double]] =
     Encoder.encodeMap[Id, Double].contramap[SortedMap[Id, Double]](_.toMap)
+
+  private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def publicEndpoints(
     nodeId: Id,
@@ -183,15 +186,20 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
           data = message.data
           senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
 
-          res <- snapshotProposalGossipService.validate(message, senderId) match {
-            case Left(EndOfCycle)                => snapshotProposalGossipService.finishCycle(message) >> Ok()
-            case Left(IncorrectReceiverId(_, _)) => BadRequest()
-            case Left(IncorrectSenderId(_))      => Response[F](status = Unauthorized).pure[F]
-            case Left(_)                         => InternalServerError()
-            case Right(_) =>
+          validationResult = snapshotProposalGossipService.validate(message, senderId)
+
+          res <- validationResult.fold(
+            {
+              case EndOfCycle                    => snapshotProposalGossipService.finishCycle(message) >> Ok()
+              case e @ IncorrectReceiverId(_, _) => logger.error(e)(e.getMessage) >> BadRequest()
+              case e @ IncorrectSenderId(_) =>
+                logger.error(e)(e.getMessage) >> Response[F](status = Unauthorized).pure[F]
+              case e @ _ => logger.error(e)(e.getMessage) >> InternalServerError()
+            },
+            _ =>
               for {
                 _ <- redownloadService.persistPeerProposal(
-                  senderId,
+                  data.proposerId,
                   data.height,
                   data.hash,
                   data.reputation
@@ -199,7 +207,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
                 _ <- snapshotProposalGossipService.spread(message)
                 res <- Ok()
               } yield res
-          }
+          )
         } yield res
     }
 
