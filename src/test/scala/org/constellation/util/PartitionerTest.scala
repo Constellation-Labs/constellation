@@ -43,4 +43,10 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
     pathLengths.foreach(println)
     assert(pathLengths.forall(_ < ids.size))
   }
+
+  "ShortestPathPartitioner.shortestPath" should "always return shortest path" in {
+    val pathLengths = randomTxs.map(gossipPath(ids, _).size)
+    pathLengths.foreach(println)
+    assert(pathLengths.forall(_ < ids.size))
+  }
 }
