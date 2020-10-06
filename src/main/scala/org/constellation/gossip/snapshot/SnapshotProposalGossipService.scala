@@ -44,3 +44,13 @@ class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
         .exists(_.hash == expectedHash)
     } yield validProposalAtHeight
 }
+
+object SnapshotProposalGossipService {
+
+  def apply[F[_]: Concurrent: Timer: Parallel](
+    selfId: Id,
+    peerSampling: PeerSampling[F],
+    cluster: Cluster[F],
+    apiClient: ClientInterpreter[F]
+  ): SnapshotProposalGossipService[F] = new SnapshotProposalGossipService(selfId, peerSampling, cluster, apiClient)
+}

@@ -25,7 +25,7 @@ import org.constellation.domain.transaction.{
   TransactionValidator
 }
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
-import org.constellation.gossip.sampling.{PeerSampling, RandomPeerSampling}
+import org.constellation.gossip.sampling.PartitionerPeerSampling
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
@@ -128,7 +128,7 @@ class DAO(
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
   var snapshotTrigger: SnapshotTrigger = _
   var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
-  var peerSamplingService: PeerSampling[IO] = _
+  var partitionerPeerSampling: PartitionerPeerSampling[IO] = _
   var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
 
   val notificationService = new NotificationService[IO]()
@@ -290,9 +290,9 @@ class DAO(
     peerHealthCheckWatcher =
       PeerHealthCheckWatcher(ConfigUtil.config, healthCheckConsensusManager, unboundedHealthExecutionContext)
 
-    peerSamplingService = new RandomPeerSampling[IO](id, cluster)
+    partitionerPeerSampling = PartitionerPeerSampling[IO](id, cluster, trustManager)
 
-    snapshotProposalGossipService = new SnapshotProposalGossipService[IO](id, peerSamplingService, cluster, apiClient)
+    snapshotProposalGossipService = SnapshotProposalGossipService[IO](id, partitionerPeerSampling, cluster, apiClient)
 
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,
@@ -474,8 +474,15 @@ class DAO(
     )
     consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager, unboundedExecutionContext)
 
-    trustDataPollingScheduler =
-      TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, apiClient, this, unboundedExecutionContext)
+    trustDataPollingScheduler = TrustDataPollingScheduler(
+      ConfigUtil.config,
+      trustManager,
+      cluster,
+      apiClient,
+      partitionerPeerSampling,
+      this,
+      unboundedExecutionContext
+    )
 
     consensusScheduler =
       new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this, unboundedExecutionContext)

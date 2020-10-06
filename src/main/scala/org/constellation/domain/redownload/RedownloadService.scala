@@ -100,13 +100,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
     }
 
   def persistPeerProposal(peer: Id, height: Long, hash: String, reputation: Reputation): F[Unit] =
-    logger.debug(s"Persisting proposal of ${peer} at height $height and hash $hash") >> peersProposals.modify { m =>
-      val existing = m.getOrElse(peer, Map.empty)
-      val updated =
-        if (existing.contains(height)) m
-        else m.updated(peer, existing + (height -> PersistedSnapshotProposal(hash, reputation)))
-      val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
-      (ignored, ())
+    logger.debug(s"Persisting proposal of ${peer.short} at height $height and hash $hash") >> peersProposals.modify {
+      m =>
+        val existing = m.getOrElse(peer, Map.empty)
+        val updated =
+          if (existing.contains(height)) m
+          else m.updated(peer, existing + (height -> PersistedSnapshotProposal(hash, reputation)))
+        val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
+        (ignored, ())
     }
 
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =

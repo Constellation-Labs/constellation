@@ -64,28 +64,26 @@ object Partitioner {
     * @param trustGraph output of SelfAvoidingWalk, the topology of peer influence
     * @param src
     */
-  implicit class HausdorffPartition(trustGraph: List[TrustDataInternal])
-                                   (implicit src: TrustDataInternal) {
+  implicit class HausdorffPartition(trustGraph: List[TrustDataInternal])(implicit src: TrustDataInternal) {
     val k: Int = math.sqrt(trustGraph.length).toInt + 1
     lazy val nerve = hyperCover(Map(0 -> List(src)), trustGraph, k)
-
 
     implicit def hausdorffMonoid(hyperEdge: List[TrustDataInternal]): TopKMonoid[TrustDataInternal] =
       new TopKMonoid[TrustDataInternal](k)(HausdorffOrdering(hyperEdge))
 
     @tailrec
-    final def hyperCover(topology: Map[Int, List[TrustDataInternal]],
-                         peers: List[TrustDataInternal],
-                         k: Int): Map[Int, List[TrustDataInternal]] = {
+    final def hyperCover(
+      topology: Map[Int, List[TrustDataInternal]],
+      peers: List[TrustDataInternal],
+      k: Int
+    ): Map[Int, List[TrustDataInternal]] =
       if (k > 0) {
         val rank = this.k - k
         val nearestNeighbors = diffuse(topology(rank), peers)(hausdorffMonoid(peers))
         val higherOrders = peers.diff(nearestNeighbors)
         val newTop = topology + (rank + 1 -> nearestNeighbors)
         hyperCover(newTop, higherOrders, k - 1)
-      }
-      else topology
-    }
+      } else topology
 
     /**
       * The node-influence-measure calculated in SelfAvoidingWalk is essentially a pullback across the dimensions of
@@ -96,12 +94,13 @@ object Partitioner {
       * @param higherOrders
       * @return
       */
-    def diffuse(hyperEdge: List[TrustDataInternal], higherOrders: List[TrustDataInternal])
-               (implicit monoid: TopKMonoid[TrustDataInternal]):
-    List[TrustDataInternal] = monoid.sum(higherOrders.map(l => hausdorffMonoid(hyperEdge).build(l))).items
+    def diffuse(hyperEdge: List[TrustDataInternal], higherOrders: List[TrustDataInternal])(
+      implicit monoid: TopKMonoid[TrustDataInternal]
+    ): List[TrustDataInternal] = monoid.sum(higherOrders.map(l => hausdorffMonoid(hyperEdge).build(l))).items
 
-    def rePartition(influenceGraph: List[TrustDataInternal])(kPartite: Map[Int, List[TrustDataInternal]] = nerve):
-    Map[Int, List[TrustDataInternal]] = hyperCover(kPartite, influenceGraph, k)
+    def rePartition(influenceGraph: List[TrustDataInternal])(
+      kPartite: Map[Int, List[TrustDataInternal]] = nerve
+    ): Map[Int, List[TrustDataInternal]] = hyperCover(kPartite, influenceGraph, k)
   }
 
 }
@@ -122,13 +121,16 @@ case class HausdorffOrdering(hyperEdge: List[TrustDataInternal]) extends Orderin
     * @return
     */
   def haussdorfDistance(higherOrderNode: TrustDataInternal): (Double, Double) =
-    hyperEdge.foldLeft((0.0, 0.0)) { case ((curCompleteLinkage, curSingleLinkage), tdi) =>
-      val (complete, single) = tdi.view.foldLeft((curCompleteLinkage, curSingleLinkage)) {
-        case ((curCompleteLinkage, curSingleLinkage), (id, influenceMeasure)) =>
-          val higherOrderMeasure = higherOrderNode.view.getOrElse(id, 0.0)
-          (curCompleteLinkage + (influenceMeasure + higherOrderMeasure), curSingleLinkage - (influenceMeasure + higherOrderMeasure))
-      }
-      (curCompleteLinkage + complete, curSingleLinkage + single)
+    hyperEdge.foldLeft((0.0, 0.0)) {
+      case ((curCompleteLinkage, curSingleLinkage), tdi) =>
+        val (complete, single) = tdi.view.foldLeft((curCompleteLinkage, curSingleLinkage)) {
+          case ((curCompleteLinkage, curSingleLinkage), (id, influenceMeasure)) =>
+            val higherOrderMeasure = higherOrderNode.view.getOrElse(id, 0.0)
+            (
+              curCompleteLinkage + (influenceMeasure + higherOrderMeasure),
+              curSingleLinkage - (influenceMeasure + higherOrderMeasure)
+            )
+        }
+        (curCompleteLinkage + complete, curSingleLinkage + single)
     }
 }
-

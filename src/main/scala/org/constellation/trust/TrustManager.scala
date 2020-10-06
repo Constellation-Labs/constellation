@@ -6,8 +6,8 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.schema.{Id, NodeState}
 import org.constellation.schema.observation._
+import org.constellation.schema.{Id, NodeState}
 
 class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
 
@@ -17,6 +17,8 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
   private val predictedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
 
+  def getTrustDataInternalSelf: F[TrustDataInternal] = getStoredReputation.map(TrustDataInternal(nodeId, _))
+
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
     cluster.getPeerInfo.flatMap { peers =>
       if (peers.size > 2) {
@@ -25,7 +27,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
           _ <- logger.info(s"Begin handleTrustScoreUpdate for peerTrustScores: ${peerTrustScores.toString()}")
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
           (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
-//          _ <- logger.debug(s"Begin handleTrustScoreUpdate for scores: ${scores.toString()}")
+          //          _ <- logger.debug(s"Begin handleTrustScoreUpdate for scores: ${scores.toString()}")
 //          _ <- logger.info(
 //            s"Begin handleTrustScoreUpdate for distinct allNodeIds: ${scores.flatMap(_.view.keySet).distinct}"
 //          )
