@@ -6,7 +6,7 @@ import org.constellation.schema.Id
 
 case class GossipPath private (path: IndexedSeq[Id], id: String, cursor: Int = 0) {
 
-  def accept: GossipPath =
+  def forward: GossipPath =
     if (hasNext) GossipPath(path, id, cursor + 1) else this
 
   def isCompleted: Boolean = !hasNext
