@@ -6,7 +6,7 @@ import org.constellation.schema.Id
 
 import scala.collection.SortedMap
 
-case class SnapshotProposalGossip(hash: String, height: Long, reputation: SortedMap[Id, Double])
+case class SnapshotProposalGossip(proposerId: Id, hash: String, height: Long, reputation: SortedMap[Id, Double])
 
 object SnapshotProposalGossip {
   implicit val snapshotProposalCodec: Encoder[SnapshotProposalGossip] = deriveEncoder

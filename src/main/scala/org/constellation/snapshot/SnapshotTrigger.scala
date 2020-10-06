@@ -62,11 +62,11 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
               snapshotProposalGossipService
                 .spread(
                   SnapshotProposalGossip(
+                    dao.id,
                     created.hash,
                     created.height,
                     SortedMap(created.publicReputation.toSeq: _*)
-                  ),
-                  3
+                  )
                 )
                 .start
         }

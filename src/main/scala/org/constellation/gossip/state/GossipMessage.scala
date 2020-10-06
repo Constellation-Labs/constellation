@@ -4,7 +4,9 @@ import io.circe._
 import io.circe.generic.semiauto._
 import org.constellation.gossip.sampling.GossipPath
 
-case class GossipMessage[A](data: A, path: GossipPath)
+case class GossipMessage[A](data: A, path: GossipPath) {
+  def forward: GossipMessage[A] = GossipMessage(data, path.forward)
+}
 
 object GossipMessage {
   implicit def gossipMessageEncoder[A: Encoder]: Encoder[GossipMessage[A]] = deriveEncoder
