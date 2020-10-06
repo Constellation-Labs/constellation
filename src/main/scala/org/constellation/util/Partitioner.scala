@@ -1,14 +1,12 @@
 package org.constellation.util
 
 import com.google.common.hash.Hashing
+import com.twitter.algebird.TopKMonoid
+import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.schema.Id
 import org.constellation.schema.transaction.Transaction
-import org.constellation.domain.trust.TrustDataInternal
-import com.twitter.algebird.{MinPlus, MinPlusSemiring, MinPlusValue, Monoid}
-import com.twitter.algebird.MinPlus.rig
-import org.constellation.trust.TrustNode
 
-import scala.collection.immutable
+import scala.annotation.tailrec
 
 /**
   * First pass at facilitator selection. Need to impl proper epidemic model. For checkpoint blocks, in lieu of min-cut,
@@ -58,44 +56,78 @@ object Partitioner {
   }
 
   /**
-    * todo add path field so we can dynamically take top K paths
-    * Note we essentailly have two tuples for our Min-plus matrix, (src, order), (dst, score)
+    * We can rely on the weights of SelfAvoidingWalk to pre-order a cross influence space and reduce the dimensionality
+    * which allows for the greedy implementation below. Relying on the previous state's nerve to re-cluster based on
+    * changes in peer influence relative to its partition maintains the scale-free properties of a self similar/hierarchical
+    * hausdorff cluster
+    *
+    * @param trustGraph output of SelfAvoidingWalk, the topology of peer influence
     * @param src
-    * @param dst
-    * @param order
-    * @param score
     */
-  case class DirectedHyperEdge(src: Id, dst: Id, order: Int, score: Double)
+  implicit class HausdorffPartition(trustGraph: List[TrustDataInternal])
+                                   (implicit src: TrustDataInternal) {
+
+    lazy val nerve = hyperCover(Map(0 -> List(src)), trustGraph, k)
+    val k: Int = math.sqrt(trustGraph.length).toInt + 1
+
+    implicit def hausdorffMonoid(hyperEdge: List[TrustDataInternal]): TopKMonoid[TrustDataInternal] =
+      new TopKMonoid[TrustDataInternal](k)(HausdorffOrdering(hyperEdge))
+
+    @tailrec
+    final def hyperCover(topology: Map[Int, List[TrustDataInternal]],
+                         peers: List[TrustDataInternal],
+                         k: Int): Map[Int, List[TrustDataInternal]] = {
+      if (k > 0) {
+        val nearestNeighbors = diffuse(topology(k), peers)(topology(k))
+        val higherOrders = peers.diff(nearestNeighbors)
+        val newTop = topology + (k -> nearestNeighbors)
+        hyperCover(newTop, higherOrders, k - 1)
+      }
+      else topology
+    }
+
+    /**
+      * The node-influence-measure calculated in SelfAvoidingWalk is essentially a pullback across the dimensions of
+      * Observations into a density that allows calculation of diffusion across hyperedges which is our calculation of
+      * 'Conductance' or max-flow. See Lemma 4.1: https://arxiv.org/pdf/1804.11128.pdf
+      *
+      * @param hyperEdge
+      * @param higherOrders
+      * @return
+      */
+    def diffuse(hyperEdge: List[TrustDataInternal], higherOrders: List[TrustDataInternal])
+               (implicit monoid: TopKMonoid[TrustDataInternal]):
+    List[TrustDataInternal] = monoid.sum(higherOrders.map(l => hausdorffMonoid(hyperEdge).build(l))).items
+
+    def rePartition(kPartite: Map[Int, List[TrustDataInternal]] = nerve)(influenceGraph: List[TrustDataInternal]):
+    Map[Int, List[TrustDataInternal]] = hyperCover(kPartite, influenceGraph, k)
+  }
+
+}
+
+case class HausdorffOrdering(hyperEdge: List[TrustDataInternal]) extends Ordering[TrustDataInternal] {
+  override def compare(x: TrustDataInternal, y: TrustDataInternal): Int = {
+    val (xComplete, xSingle) = haussdorfDistance(x)
+    val (yComplete, ySingle) = haussdorfDistance(y)
+    if (xComplete <= yComplete && xSingle > ySingle) 1
+    else if (xComplete == xSingle && xSingle == ySingle) 0
+    else -1
+  }
 
   /**
-    * todo trustGraph Vector or Map
-    * @param trustGraph
-    * @param monoid
-    * @param ord
+    * See eq 19 https://arxiv.org/pdf/0801.0748.pdf
+    *
+    * @param higherOrderNode
+    * @return
     */
-  implicit class ShortestPathPartitioner(trustGraph: List[TrustDataInternal])
-                                        (implicit monoid: Monoid[DirectedHyperEdge], ord: Ordering[DirectedHyperEdge]){
-    implicit val ring = new MinPlusSemiring
-
-    implicit def toMinPlus(e: DirectedHyperEdge): MinPlus[DirectedHyperEdge] = MinPlusValue(e)
-
-    //todo tail call position
-    def directedEdges(startNode: TrustDataInternal = trustGraph.head, hyperEdgeOrder: Int = 1): Iterable[DirectedHyperEdge] = {
-      val firstOrderLaplacian = laplacian(startNode, hyperEdgeOrder)
-      val secondOrderLaplacian = trustGraph.tail.foldLeft(firstOrderLaplacian){
-        case (prevLap, trustDataInternal) => prevLap ++ directedEdges(trustDataInternal, hyperEdgeOrder + 1)
+  def haussdorfDistance(higherOrderNode: TrustDataInternal): (Double, Double) =
+    hyperEdge.foldLeft((0.0, 0.0)) { case ((curCompleteLinkage, curSingleLinkage), tdi) =>
+      val (complete, single) = tdi.view.foldLeft((curCompleteLinkage, curSingleLinkage)) {
+        case ((curCompleteLinkage, curSingleLinkage), (id, influenceMeasure)) =>
+          val higherOrderMeasure = higherOrderNode.view(id)
+          (curCompleteLinkage + (influenceMeasure + higherOrderMeasure), curSingleLinkage - (influenceMeasure + higherOrderMeasure))
       }
-      firstOrderLaplacian ++ secondOrderLaplacian
+      (curCompleteLinkage + complete, curSingleLinkage + single)
     }
-
-    def laplacian(fixedNode: TrustDataInternal = trustGraph.head, hyperEdgeOrder: Int = 1): immutable.Iterable[DirectedHyperEdge] = fixedNode.view.map {
-      case (id, score) => DirectedHyperEdge(fixedNode.id, id, hyperEdgeOrder, score)
-    }
-
-    def shortestPath(maxLength: Int = trustGraph.length): MinPlus[DirectedHyperEdge] =
-      directedEdges().map(toMinPlus).reduce(ring.plus)
-
-    def shortestKPaths(maxLength: Int = trustGraph.length) = ???
-  }
 }
 
