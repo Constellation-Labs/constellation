@@ -50,9 +50,7 @@ class DataGenerator[F[_]: Concurrent] {
       random <- randomEffect.get
     } yield random.nextDouble() > distance && random.nextDouble() < 0.5
 
-
-  def randomEdge(logic: Double => F[Boolean] = randomEdgeLogic)
-                (n: TrustNode, n2: TrustNode) =
+  def randomEdge(logic: Double => F[Boolean] = randomEdgeLogic)(n: TrustNode, n2: TrustNode) =
     for {
       random <- randomEffect.get
       result <- logic(n.id)
@@ -64,13 +62,12 @@ class DataGenerator[F[_]: Concurrent] {
 
   def seedCliqueLogic(maxSeedNodeIdx: Int = 1)(id: Double): F[Boolean] =
     for {
-      _ <-  randomEffect.get
+      _ <- randomEffect.get
     } yield
       if (id <= maxSeedNodeIdx) true
       else false
 
-  def cliqueEdge(logic: Double => F[Boolean] = seedCliqueLogic())
-                (n: TrustNode, n2: TrustNode): F[Option[TrustEdge]] =
+  def cliqueEdge(logic: Double => F[Boolean] = seedCliqueLogic())(n: TrustNode, n2: TrustNode): F[Option[TrustEdge]] =
     for {
       random <- randomEffect.get
       result <- logic(n.distance(n2))
@@ -81,9 +78,8 @@ class DataGenerator[F[_]: Concurrent] {
         Some(TrustEdge(n.id, n2.id, 2 * (trustZeroToOne - 0.5)))
       }
 
-
   def generateData(numNodes: Int = 30,
-                     edgeLogic: (TrustNode, TrustNode) => F[Option[TrustEdge]] = randomEdge()): F[List[TrustNode]] =
+                   edgeLogic: (TrustNode, TrustNode) => F[Option[TrustEdge]] = randomEdge()): F[List[TrustNode]] =
     for {
       random <- randomEffect.get
       nodes = (0 until numNodes).toList.map(id => TrustNode(id, random.nextDouble(), random.nextDouble()))
@@ -96,11 +92,10 @@ class DataGenerator[F[_]: Concurrent] {
       res <- nodesWithEdges
     } yield res
 
-  def bipartiteEdge(logic: Double => F[Boolean] = seedCliqueLogic())
-                   (n: TrustNode, n2: TrustNode) =
+  def bipartiteEdge(logic: Double => F[Boolean] = seedCliqueLogic())(n: TrustNode, n2: TrustNode) =
     for {
       result <- logic(n.id)
     } yield
-    if (result) Some(TrustEdge(n.id, n2.id, 1.0, isLabel = true))
-    else Some(TrustEdge(n.id, n2.id, -1.0))
+      if (result) Some(TrustEdge(n.id, n2.id, 1.0, isLabel = true))
+      else Some(TrustEdge(n.id, n2.id, -1.0))
 }
