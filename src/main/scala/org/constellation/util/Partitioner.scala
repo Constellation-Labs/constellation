@@ -56,7 +56,10 @@ object Partitioner {
   }
 
   /**
-    * 
+    * We can rely on the weights of SelfAvoidingWalk to pre-order a cross influence space and reduce the dimensionality
+    * which allows for the greedy implementation below. Relying on the previous state's nerve to re-cluster based on
+    * changes in peer influence relative to its partition maintains the scale-free properties of a self similar/hierarchical
+    * hausdorff cluster
     *
     * @param trustGraph output of SelfAvoidingWalk, the topology of peer influence
     * @param src
@@ -95,14 +98,14 @@ object Partitioner {
 
 }
 
-object ShortestPathPartitioner {
+object HausdorffPartitioner {
   def laplacian(hyperEdge: List[TrustDataInternal])(higherOrderNode: TrustDataInternal) = 1
 
   def hausdorffDistance(laplacian: Seq[TrustDataInternal], trustDataInternal: TrustDataInternal) = 1.0
 }
 
 case class CechOrdering(hyperEdge: List[TrustDataInternal]) extends Ordering[TrustDataInternal] {
-  def distance(higherOrderNode: TrustDataInternal): Int = ShortestPathPartitioner.laplacian(hyperEdge)(higherOrderNode)
+  def distance(higherOrderNode: TrustDataInternal): Int = HausdorffPartitioner.laplacian(hyperEdge)(higherOrderNode)
 
   override def compare(x: TrustDataInternal, y: TrustDataInternal): Int =
     if (distance(x) >= distance(y)) 1
