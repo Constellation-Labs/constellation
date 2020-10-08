@@ -72,9 +72,20 @@ object ConstellationNode extends IOApp with IOApp.WithContext {
       config = ConfigFactory.load() // TODO
 
       cloudConfigPath = Option(cliConfig.cloud)
-      cloudConfig = cloudConfigPath.flatMap { c =>
-        ConfigSource.file(c).load[CloudConfig].toOption
-      }.getOrElse(CloudConfig.empty)
+      cloudConfig <- Resource.liftF(
+        cloudConfigPath.fold(CloudConfig.empty.pure[IO]) { c =>
+          ConfigSource.file(c).load[CloudConfig] match {
+            case Left(failures) =>
+              IO.raiseError(
+                new Throwable(
+                  s"Cloud config file specified but loading failed, reason: ${failures.toList.map(_.description)}"
+                )
+              )
+            case Right(config) =>
+              config.pure[IO]
+          }
+        }
+      )
 
       _ <- Resource.liftF(createPreferencesPath[IO](preferencesPath))
 

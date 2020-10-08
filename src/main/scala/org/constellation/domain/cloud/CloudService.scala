@@ -84,43 +84,62 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
     }
 
   private def sendGenesis(genesis: GenesisObservation): F[Unit] =
-    providers.traverse { p =>
-      logger.debug(s"Sending genesis to cloud, provider=${p.name}") >>
-        p.storeGenesis(genesis)
-          .rethrowT
-          .handleErrorWith(logger.error(_)(s"Sending genesis to cloud failed, provider=${p.name}"))
-    }.void
+    if (providers.isEmpty)
+      logger.debug(s"Sending genesis to cloud, provider list is empty, PRETENDING that genesis has been sent.") >>
+        F.unit
+    else {
+      providers.traverse { p =>
+        logger.debug(s"Sending genesis to cloud, provider=${p.name}") >>
+          p.storeGenesis(genesis)
+            .rethrowT
+            .handleErrorWith(logger.error(_)(s"Sending genesis to cloud failed, provider=${p.name}"))
+      }.void
+    }
 
   private def sendSnapshot(snapshot: SnapshotToSend): F[List[Either[Throwable, Unit]]] =
-    providers.traverse { p =>
-      logger
-        .debug(s"Sending snapshot to cloud, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}") >>
-        p.storeSnapshot(snapshot.file, snapshot.height, snapshot.hash)
-          .rethrowT
-          .map(_.asRight[Throwable])
-          .handleErrorWith { error =>
-            logger
-              .error(error) {
-                s"Sending snapshot to cloud failed, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}"
-              } >> error.asLeft[Unit].pure[F]
-          }
+    if (providers.isEmpty)
+      logger.debug(
+        s"Sending snapshot to cloud, provider list is empty, PRETENDING that snapshot for height=${snapshot.height} hash=${snapshot.hash} has been sent."
+      ) >>
+        List(().asRight[Throwable]).pure[F]
+    else {
+      providers.traverse { p =>
+        logger
+          .debug(s"Sending snapshot to cloud, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}") >>
+          p.storeSnapshot(snapshot.file, snapshot.height, snapshot.hash)
+            .rethrowT
+            .map(_.asRight[Throwable])
+            .handleErrorWith { error =>
+              logger
+                .error(error) {
+                  s"Sending snapshot to cloud failed, provider=${p.name} height=${snapshot.height} hash=${snapshot.hash}"
+                } >> error.asLeft[Unit].pure[F]
+            }
+      }
     }
 
   private def sendSnapshotInfo(snapshotInfo: SnapshotInfoToSend): F[List[Either[Throwable, Unit]]] =
-    providers.traverse { p =>
-      logger
-        .debug(
-          s"Sending snapshot info to cloud, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
-        ) >>
-        p.storeSnapshotInfo(snapshotInfo.file, snapshotInfo.height, snapshotInfo.hash)
-          .rethrowT
-          .map(_.asRight[Throwable])
-          .handleErrorWith { error =>
-            logger
-              .error(error) {
-                s"Sending snapshot info to cloud failed, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
-              } >> error.asLeft[Unit].pure[F]
-          }
+    if (providers.isEmpty) {
+      logger.debug(
+        s"Sending snapshot info to cloud, provider list is empty, PRETENDING that snapshot info for height=${snapshotInfo.height} hash=${snapshotInfo.hash} has been sent."
+      ) >>
+        List(().asRight[Throwable]).pure[F]
+    } else {
+      providers.traverse { p =>
+        logger
+          .debug(
+            s"Sending snapshot info to cloud, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
+          ) >>
+          p.storeSnapshotInfo(snapshotInfo.file, snapshotInfo.height, snapshotInfo.hash)
+            .rethrowT
+            .map(_.asRight[Throwable])
+            .handleErrorWith { error =>
+              logger
+                .error(error) {
+                  s"Sending snapshot info to cloud failed, provider=${p.name} height=${snapshotInfo.height} hash=${snapshotInfo.hash}"
+                } >> error.asLeft[Unit].pure[F]
+            }
+      }
     }
 }
 
