@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Mark snapshot and snapshot-info files as sent for nodes not sending to cloud in order to not accumulate files locally
 
 ## [v2.16.1] 2020-10-01
 ### Changed
