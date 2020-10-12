@@ -18,7 +18,7 @@ class KeyTest extends AnyFlatSpec {
   "Hex encodings private" should "strip prefix and decode private keys properly" in {
 
     testKeys.foreach { kp =>
-      val hex = KeyUtils.privateKeyToHex(kp.getPrivate)
+      val hex = KeyUtils.privateKeyToFullHex(kp.getPrivate)
       assert(KeyUtils.hexToPrivateKey(hex) == kp.getPrivate)
     }
 

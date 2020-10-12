@@ -5,7 +5,7 @@ import org.constellation.keytool.CliMethod.CliMethod
 object CliMethod extends Enumeration {
   type CliMethod = Value
 
-  val GenerateWallet, MigrateExistingKeyStoreToStorePassOnly = Value
+  val GenerateWallet, MigrateExistingKeyStoreToStorePassOnly, ExportPrivateKeyHex = Value
 }
 
 case class CliConfig(
