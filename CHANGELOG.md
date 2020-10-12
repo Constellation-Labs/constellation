@@ -2,12 +2,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Possibility to migrate existing KeyStore to use storepass for both KeyStore and KeyPair
 
 ## [v2.16.2] 2020-10-09
-### Fixed
-- Mark snapshot and snapshot-info files as sent for nodes not sending to cloud in order to not accumulate files locally
 ### Changed
 - Remove two node operators from whitelisting
+### Fixed
+- Mark snapshot and snapshot-info files as sent for nodes not sending to cloud in order to not accumulate files locally
 
 ## [v2.16.1] 2020-10-01
 ### Changed

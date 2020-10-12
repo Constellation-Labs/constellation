@@ -25,7 +25,7 @@ class KeyToolCreateKeyPairStoreTest extends AnyFunSuite with BeforeAndAfterAll w
     val keyPair: KeyPair = KeyUtils.makeKeyPair()
 
     KeyStoreUtils
-      .keyPairToStorePathFrom[IO](keyPair, keyPath, alias, storePassword.toCharArray, keyPassword.toCharArray)
+      .putKeyPairToStorePath[IO](keyPair, keyPath, alias, storePassword.toCharArray, keyPassword.toCharArray)
       .value
       .unsafeRunSync()
       .toTry

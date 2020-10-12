@@ -1,6 +1,6 @@
 package org.constellation.keytool
 
-case class EnvPasswords(
+case class Passwords(
   storepass: Array[Char],
   keypass: Array[Char]
 )
