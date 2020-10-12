@@ -22,8 +22,20 @@ object KeyTool extends IOApp {
         generateKeyStoreWithKeyPair[F](cliParams).map(_ => ())
       case CliMethod.MigrateExistingKeyStoreToStorePassOnly =>
         migrateKeyStoreToSinglePassword[F](cliParams).map(_ => ())
+      case CliMethod.ExportPrivateKeyHex =>
+        exportPrivateKeyAsHex[F](cliParams).map(_ => ())
       case _ =>
         EitherT.leftT[F, Unit](new RuntimeException("Unknown command"))
+    }
+
+  private def exportPrivateKeyAsHex[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, String] =
+    getPasswords(cliParams).flatMap { passwords =>
+      KeyStoreUtils.exportPrivateKeyAsHex(
+        path = cliParams.keystore,
+        alias = cliParams.alias,
+        storePassword = passwords.storepass,
+        keyPassword = passwords.keypass
+      )
     }
 
   private def migrateKeyStoreToSinglePassword[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
@@ -77,10 +89,13 @@ object KeyTool extends IOApp {
           .action((x, c) => c.copy(loadFromEnvArgs = x)),
         cmd("generate-wallet")
           .action((_, c) => c.copy(method = CliMethod.GenerateWallet))
-          .text("generate-wallet"),
+          .text("Generate wallet (KeyStore with KeyPair inside)"),
         cmd("migrate-to-store-password-only")
           .action((_, c) => c.copy(method = CliMethod.MigrateExistingKeyStoreToStorePassOnly))
-          .text("migrate-to-store-password-only")
+          .text("Clone existing KeyStore and set storepass for both store and keypair"),
+        cmd("export-private-key-hex")
+          .action((_, c) => c.copy(method = CliMethod.ExportPrivateKeyHex))
+          .text("Exports PrivateKey in hexadecimal format")
       )
     }
     EitherT.fromEither[F] {

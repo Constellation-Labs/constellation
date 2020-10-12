@@ -1,6 +1,8 @@
 package org.constellation.keytool
 
 import java.io._
+import java.nio.charset.Charset
+import java.nio.file.FileAlreadyExistsException
 import java.security.cert.Certificate
 import java.security.{Key, KeyPair, KeyStore, PrivateKey}
 
@@ -15,6 +17,7 @@ object KeyStoreUtils {
   private val storeType: String = "PKCS12"
   private val storeExtension: String = "p12"
   private val singlePasswordKeyStoreSuffix: String = "_v2"
+  private val privateKeyHexName: String = "id_ecdsa.hex"
 
   def readFromFileStream[F[_]: Sync, T](dataPath: String, streamParser: FileInputStream => F[T]) =
     reader(dataPath)
@@ -56,6 +59,25 @@ object KeyStoreUtils {
           pemWriter.writeObject(pemObj)
         }
       }
+
+  def exportPrivateKeyAsHex[F[_]: Sync](
+    path: String,
+    alias: String,
+    storePassword: Array[Char],
+    keyPassword: Array[Char]
+  ): EitherT[F, Throwable, String] =
+    for {
+      keyPair <- keyPairFromStorePath(path, alias, storePassword, keyPassword)
+      hex = KeyUtils.privateKeyToHex(keyPair.getPrivate)
+      _ <- writer(pathDir(path) + privateKeyHexName)
+        .use(
+          os =>
+            Sync[F].delay {
+              os.write(hex.getBytes(Charset.forName("UTF-8")))
+            }
+        )
+        .attemptT
+    } yield hex
 
   def migrateKeyStoreToSinglePassword[F[_]: Sync](
     path: String,
@@ -137,15 +159,17 @@ object KeyStoreUtils {
       .use(_.pure[F])
       .attemptT
 
-  private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
+  private def reader[F[_]: Sync](path: String): Resource[F, FileInputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
-      new FileInputStream(keyStorePath)
+      new FileInputStream(path)
     })
 
-  private def writer[F[_]: Sync](keyStorePath: String): Resource[F, FileOutputStream] =
+  private def writer[F[_]: Sync](path: String): Resource[F, FileOutputStream] =
     Resource.fromAutoCloseable(Sync[F].delay {
-      val file = new File(keyStorePath)
-      // TODO: Check if file exists
+      val file = new File(path)
+      if (file.exists()) {
+        throw new FileAlreadyExistsException(file.getPath)
+      }
       new FileOutputStream(file, false)
     })
 
@@ -209,6 +233,15 @@ object KeyStoreUtils {
         keypass <- sys.env.get("CL_KEYPASS").toRight(new RuntimeException("CL_KEYPASS is missing in environment"))
       } yield Passwords(storepass = storepass.toCharArray, keypass = keypass.toCharArray)
     }
+
+  private def pathDir(path: String): String = {
+    val slashIndex = path.lastIndexOf("/")
+    if (slashIndex > 0) {
+      path.substring(0, slashIndex + 1)
+    } else {
+      ""
+    }
+  }
 
   private def withSinglePasswordSuffix(path: String): String =
     withExtension(withoutExtension(path) + singlePasswordKeyStoreSuffix)
