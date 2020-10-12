@@ -1,6 +1,6 @@
 package org.constellation.keytool
 
-import java.security.{KeyPair, KeyStore}
+import java.security.KeyStore
 
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
@@ -12,25 +12,48 @@ object KeyTool extends IOApp {
   def run(args: List[String]): IO[ExitCode] = {
     for {
       cliParams <- loadCliParams[IO](args)
-      keyStore <- makeKeyPairWith[IO](cliParams)
-    } yield keyStore
+      _ <- runMethod[IO](cliParams)
+    } yield ()
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  def makeKeyPairWith[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
-    if (Option(cliParams.loadFromEnvArgs).nonEmpty) {
-      KeyStoreUtils.keyPairToStorePath[F](
-        path = cliParams.keystore,
-        alias = cliParams.alias
-      )
-    } else
-      KeyStoreUtils.keyPairToStorePath[F](
+  def runMethod[F[_]](cliParams: CliConfig)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
+    cliParams.method match {
+      case CliMethod.GenerateWallet =>
+        generateKeyStoreWithKeyPair[F](cliParams).map(_ => ())
+      case CliMethod.MigrateExistingKeyStoreToStorePassOnly =>
+        migrateKeyStoreToSinglePassword[F](cliParams).map(_ => ())
+      case _ =>
+        EitherT.leftT[F, Unit](new RuntimeException("Unknown command"))
+    }
+
+  private def migrateKeyStoreToSinglePassword[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
+    getPasswords(cliParams).flatMap { passwords =>
+      KeyStoreUtils.migrateKeyStoreToSinglePassword(
         path = cliParams.keystore,
         alias = cliParams.alias,
-        storePassword = cliParams.storepass,
-        keyPassword = cliParams.keypass
+        storePassword = passwords.storepass,
+        keyPassword = passwords.keypass
       )
+    }
 
-  def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
+  private def generateKeyStoreWithKeyPair[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
+    getPasswords(cliParams).flatMap { passwords =>
+      KeyStoreUtils.generateKeyPairToStorePath(
+        path = cliParams.keystore,
+        alias = cliParams.alias,
+        storePassword = passwords.storepass,
+        keyPassword = passwords.keypass
+      )
+    }
+
+  private def getPasswords[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, Passwords] =
+    if (Option(cliParams.loadFromEnvArgs).nonEmpty) {
+      loadEnvPasswords
+    } else {
+      EitherT.pure(Passwords(storepass = cliParams.storepass, keypass = cliParams.keypass))
+    }
+
+  private def loadCliParams[F[_]: Sync](args: Seq[String]): EitherT[F, Throwable, CliConfig] = {
     val builder = OParser.builder[CliConfig]
 
     /**
@@ -41,7 +64,7 @@ object KeyTool extends IOApp {
       OParser.sequence(
         programName("cl-keytool"),
         // TODO: keytool BuildInfo needs to be generated BEFORE compiling constellation in CircleCI
-//        head("cl-keytool", BuildInfo.version),
+        //        head("cl-keytool", BuildInfo.version),
         opt[String]("keystore").required
           .action((x, c) => c.copy(keystore = x)),
         opt[String]("alias").required
@@ -51,7 +74,13 @@ object KeyTool extends IOApp {
         opt[String]("keypass").optional
           .action((x, c) => c.copy(keypass = x.toCharArray)),
         opt[String]("env_args").optional
-          .action((x, c) => c.copy(loadFromEnvArgs = x))
+          .action((x, c) => c.copy(loadFromEnvArgs = x)),
+        cmd("generate-wallet")
+          .action((_, c) => c.copy(method = CliMethod.GenerateWallet))
+          .text("generate-wallet"),
+        cmd("migrate-to-store-password-only")
+          .action((_, c) => c.copy(method = CliMethod.MigrateExistingKeyStoreToStorePassOnly))
+          .text("migrate-to-store-password-only")
       )
     }
     EitherT.fromEither[F] {

@@ -14,18 +14,7 @@ object KeyStoreUtils {
 
   private val storeType: String = "PKCS12"
   private val storeExtension: String = "p12"
-
-  private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
-    Resource.fromAutoCloseable(Sync[F].delay {
-      new FileInputStream(keyStorePath)
-    })
-
-  private def writer[F[_]: Sync](keyStorePath: String): Resource[F, FileOutputStream] =
-    Resource.fromAutoCloseable(Sync[F].delay {
-      val file = new File(keyStorePath)
-      // TODO: Check if file exists
-      new FileOutputStream(file)
-    })
+  private val singlePasswordKeyStoreSuffix: String = "_v2"
 
   def readFromFileStream[F[_]: Sync, T](dataPath: String, streamParser: FileInputStream => F[T]) =
     reader(dataPath)
@@ -49,15 +38,116 @@ object KeyStoreUtils {
       .fromAutoCloseable(Sync[F].delay {
         new BufferedWriter(new OutputStreamWriter(stream))
       })
-      .use(outStream => Sync[F].delay { outStream.write(serializer(obj)) })
+      .use(
+        outStream =>
+          Sync[F].delay {
+            outStream.write(serializer(obj))
+          }
+      )
 
   def storeKeyPemDecrypted[F[_]: Sync](key: Key)(stream: FileOutputStream): F[Unit] =
     Resource
-      .fromAutoCloseable(Sync[F].delay { new PemWriter(new OutputStreamWriter(stream)) })
+      .fromAutoCloseable(Sync[F].delay {
+        new PemWriter(new OutputStreamWriter(stream))
+      })
       .use { pemWriter =>
         val pemObj = new PemObject("EC KEY", key.getEncoded)
-        Sync[F].delay { pemWriter.writeObject(pemObj) }
+        Sync[F].delay {
+          pemWriter.writeObject(pemObj)
+        }
       }
+
+  def migrateKeyStoreToSinglePassword[F[_]: Sync](
+    path: String,
+    alias: String,
+    storePassword: Array[Char],
+    keyPassword: Array[Char]
+  ): EitherT[F, Throwable, KeyStore] =
+    for {
+      keyPair <- keyPairFromStorePath(path, alias, storePassword, keyPassword)
+      newKeyStore <- putKeyPairToStorePath(keyPair, withSinglePasswordSuffix(path), alias, storePassword, storePassword)
+    } yield newKeyStore
+
+  /**
+    * Generates new keypair and puts it to new keyStore at path
+    */
+  def generateKeyPairToStorePath[F[_]: Sync](
+    path: String,
+    alias: String,
+    storePassword: Array[Char],
+    keyPassword: Array[Char]
+  ): EitherT[F, Throwable, KeyStore] =
+    writer(withExtension(path))
+      .use(
+        stream =>
+          for {
+            keyStore <- createEmptyKeyStore(storePassword)
+            keyPair <- KeyUtils.makeKeyPair().pure[F]
+            chain <- generateCertificateChain(keyPair)
+            _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
+            _ <- store(stream, storePassword)(keyStore)
+          } yield keyStore
+      )
+      .attemptT
+
+  /**
+    * Puts existing to new keyStore at path
+    */
+  def putKeyPairToStorePath[F[_]: Sync](
+    keyPair: KeyPair,
+    path: String,
+    alias: String,
+    storePassword: Array[Char],
+    keyPassword: Array[Char]
+  ): EitherT[F, Throwable, KeyStore] =
+    writer(withExtension(path))
+      .use(
+        stream =>
+          for {
+            keyStore <- createEmptyKeyStore(storePassword)
+            chain <- generateCertificateChain(keyPair)
+            _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
+            _ <- store(stream, storePassword)(keyStore)
+          } yield keyStore
+      )
+      .attemptT
+
+  def keyPairFromStorePath[F[_]: Sync](
+    path: String,
+    alias: String
+  ): EitherT[F, Throwable, KeyPair] =
+    for {
+      env <- loadEnvPasswords
+      keyPair <- reader(path)
+        .evalMap(unlockKeyStore[F](env.storepass))
+        .evalMap(unlockKeyPair[F](alias, env.keypass))
+        .use(_.pure[F])
+        .attemptT
+    } yield keyPair
+
+  def keyPairFromStorePath[F[_]: Sync](
+    path: String,
+    alias: String,
+    storepass: Array[Char],
+    keypass: Array[Char]
+  ): EitherT[F, Throwable, KeyPair] =
+    reader(path)
+      .evalMap(unlockKeyStore[F](storepass))
+      .evalMap(unlockKeyPair[F](alias, keypass))
+      .use(_.pure[F])
+      .attemptT
+
+  private def reader[F[_]: Sync](keyStorePath: String): Resource[F, FileInputStream] =
+    Resource.fromAutoCloseable(Sync[F].delay {
+      new FileInputStream(keyStorePath)
+    })
+
+  private def writer[F[_]: Sync](keyStorePath: String): Resource[F, FileOutputStream] =
+    Resource.fromAutoCloseable(Sync[F].delay {
+      val file = new File(keyStorePath)
+      // TODO: Check if file exists
+      new FileOutputStream(file, false)
+    })
 
   private def generateCertificateChain[F[_]: Sync](keyPair: KeyPair): F[Array[Certificate]] =
     Sync[F].delay {
@@ -112,86 +202,26 @@ object KeyStoreUtils {
     keyStore
   }
 
-  private def loadEnvPasswords[F[_]: Sync]: EitherT[F, Throwable, EnvPasswords] =
+  def loadEnvPasswords[F[_]: Sync]: EitherT[F, Throwable, Passwords] =
     EitherT.fromEither[F] {
       for {
         storepass <- sys.env.get("CL_STOREPASS").toRight(new RuntimeException("CL_STOREPASS is missing in environment"))
         keypass <- sys.env.get("CL_KEYPASS").toRight(new RuntimeException("CL_KEYPASS is missing in environment"))
-      } yield EnvPasswords(storepass = storepass.toCharArray, keypass = keypass.toCharArray)
+      } yield Passwords(storepass = storepass.toCharArray, keypass = keypass.toCharArray)
     }
+
+  private def withSinglePasswordSuffix(path: String): String =
+    withExtension(withoutExtension(path) + singlePasswordKeyStoreSuffix)
 
   private def withExtension(path: String): String =
     if (path.endsWith(storeExtension)) path else s"$path.$storeExtension"
 
-  def keyPairToStorePath[F[_]: Sync](
-    path: String,
-    alias: String,
-    storePassword: Array[Char],
-    keyPassword: Array[Char]
-  ): EitherT[F, Throwable, KeyStore] =
-    writer(withExtension(path))
-      .use(
-        stream =>
-          for {
-            keyStore <- createEmptyKeyStore(storePassword)
-            keyPair <- KeyUtils.makeKeyPair().pure[F]
-            chain <- generateCertificateChain(keyPair)
-            _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
-            _ <- store(stream, storePassword)(keyStore)
-          } yield keyStore
-      )
-      .attemptT
-
-  def keyPairToStorePathFrom[F[_]: Sync](
-    keyPair: KeyPair,
-    path: String,
-    alias: String,
-    storePassword: Array[Char],
-    keyPassword: Array[Char]
-  ): EitherT[F, Throwable, KeyStore] =
-    writer(withExtension(path))
-      .use(
-        stream =>
-          for {
-            keyStore <- createEmptyKeyStore(storePassword)
-            chain <- generateCertificateChain(keyPair)
-            _ <- setKeyEntry(alias, keyPair, keyPassword, chain)(keyStore)
-            _ <- store(stream, storePassword)(keyStore)
-          } yield keyStore
-      )
-      .attemptT
-
-  def keyPairToStorePath[F[_]: Sync](
-    path: String,
-    alias: String
-  ): EitherT[F, Throwable, KeyStore] =
-    for {
-      env <- loadEnvPasswords
-      keyStore <- keyPairToStorePath(path, alias, env.storepass, env.keypass)
-    } yield keyStore
-
-  def keyPairFromStorePath[F[_]: Sync](
-    path: String,
-    alias: String
-  ): EitherT[F, Throwable, KeyPair] =
-    for {
-      env <- loadEnvPasswords
-      keyPair <- reader(path)
-        .evalMap(unlockKeyStore[F](env.storepass))
-        .evalMap(unlockKeyPair[F](alias, env.keypass))
-        .use(_.pure[F])
-        .attemptT
-    } yield keyPair
-
-  def keyPairFromStorePath[F[_]: Sync](
-    path: String,
-    alias: String,
-    storepass: Array[Char],
-    keypass: Array[Char]
-  ): EitherT[F, Throwable, KeyPair] =
-    reader(path)
-      .evalMap(unlockKeyStore[F](storepass))
-      .evalMap(unlockKeyPair[F](alias, keypass))
-      .use(_.pure[F])
-      .attemptT
+  private def withoutExtension(path: String): String = {
+    val dotIndex = path.lastIndexOf(".")
+    if (dotIndex > 0) {
+      path.substring(0, dotIndex)
+    } else {
+      path
+    }
+  }
 }
