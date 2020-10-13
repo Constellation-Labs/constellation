@@ -221,7 +221,7 @@ lazy val wallet = (project in file("wallet"))
     buildInfoPackage := "org.constellation.wallet",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.wallet.Wallet"),
-    libraryDependencies ++= walletSharedDependencies
+    libraryDependencies ++= (walletSharedDependencies ++ testDependencies)
   )
 
 lazy val integrationTests = (project in file("integration-tests"))
