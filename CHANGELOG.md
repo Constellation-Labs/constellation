@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Remove two node operators
 - Skip removing genesis tips
+### Added
+- Reference implementation of concise transaction data format
 
 ## [v2.19.0] 2020-11-16
 ### Added
