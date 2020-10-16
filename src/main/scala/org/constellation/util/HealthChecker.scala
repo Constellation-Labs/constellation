@@ -1,6 +1,6 @@
 package org.constellation.util
 
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -56,7 +56,8 @@ case class RecentSync(hash: String, height: Long)
 class HealthChecker[F[_]: Concurrent](
   dao: DAO,
   concurrentTipService: ConcurrentTipService[F],
-  apiClient: ClientInterpreter[F]
+  apiClient: ClientInterpreter[F],
+  unboundedBlocker: Blocker
 )(implicit C: ContextShift[F]) {
 
   implicit val shadedDao: DAO = dao
@@ -96,7 +97,8 @@ class HealthChecker[F[_]: Concurrent](
             PeerResponse
               .run(
                 apiClient.snapshot
-                  .getNextSnapshotHeight()
+                  .getNextSnapshotHeight(),
+                unboundedBlocker
               )(a)
               .handleErrorWith(_ => (a.id, -1L).pure[F])
         )

@@ -19,6 +19,8 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class TransactionChainServiceTest
     extends AnyFreeSpec
     with IdiomaticMockito
@@ -27,7 +29,7 @@ class TransactionChainServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val cs = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val cs = IO.contextShift(ExecutionContext.global)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
   var service: TransactionChainService[IO] = _
 

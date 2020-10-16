@@ -22,6 +22,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class CheckpointBlockValidatorTest
     extends AnyFreeSpec
     with IdiomaticMockito
@@ -29,7 +31,7 @@ class CheckpointBlockValidatorTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   var dao: DAO = _

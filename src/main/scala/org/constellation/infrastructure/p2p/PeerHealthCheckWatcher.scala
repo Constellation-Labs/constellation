@@ -6,13 +6,14 @@ import org.constellation.{ConfigUtil, ConstellationExecutionContext}
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.util.PeriodicIO
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration._
 
-class PeerHealthCheckWatcher(config: Config, peerHealthCheck: PeerHealthCheck[IO])
-    extends PeriodicIO("PeerHealthCheckWatcher") {
-
-  override val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.unboundedHealth
+class PeerHealthCheckWatcher(
+  config: Config,
+  peerHealthCheck: PeerHealthCheck[IO],
+  unboundedHealthExecutionContext: ExecutionContext
+) extends PeriodicIO("PeerHealthCheckWatcher", unboundedHealthExecutionContext: ExecutionContext) {
 
   override def trigger(): IO[Unit] = peerHealthCheck.check()
 
@@ -20,5 +21,7 @@ class PeerHealthCheckWatcher(config: Config, peerHealthCheck: PeerHealthCheck[IO
 }
 
 object PeerHealthCheckWatcher {
-  def apply(config: Config, peerHealthCheck: PeerHealthCheck[IO]) = new PeerHealthCheckWatcher(config, peerHealthCheck)
+
+  def apply(config: Config, peerHealthCheck: PeerHealthCheck[IO], unboundedHealthExecutionContext: ExecutionContext) =
+    new PeerHealthCheckWatcher(config, peerHealthCheck, unboundedHealthExecutionContext)
 }

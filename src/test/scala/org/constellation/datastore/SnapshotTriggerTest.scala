@@ -15,6 +15,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContext
 
 class SnapshotTriggerTest
     extends AnyFreeSpec
@@ -35,7 +36,7 @@ class SnapshotTriggerTest
   "triggerSnapshot" - {
     "if snapshot has been created" - {
       "calls redownload service to persist it as created snapshot" in {
-        val snapshotTrigger = new SnapshotTrigger()
+        val snapshotTrigger = new SnapshotTrigger(5, ExecutionContext.global)
         dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
@@ -52,7 +53,7 @@ class SnapshotTriggerTest
       }
 
       "calls redownload service to persist it as accepted snapshot" in {
-        val snapshotTrigger = new SnapshotTrigger()
+        val snapshotTrigger = new SnapshotTrigger(5, ExecutionContext.global)
         dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)

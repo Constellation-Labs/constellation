@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent._
 
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Blocker, Concurrent, ContextShift, IO}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, Resource, SyncIO}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
@@ -29,73 +29,79 @@ sealed class DefaultThreadFactory(prefix: String) extends ThreadFactory {
 
 object ConstellationExecutionContext {
 
-  /*
-  // By default number of available cpus use for CPU-intensive work
-  val bounded = ExecutionContext.fromExecutor(Executors.newWorkStealingPool())
-  //  an unbounded thread pool for executing blocking I/O calls
-  val unbounded = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
-  //  a bounded thread pool for non-blocking I/O callbacks
-  val callbacks = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(4))
-   */
+  val unboundedResource: Resource[SyncIO, ExecutionContext] =
+    Resource
+      .make(SyncIO {
+        new ThreadPoolExecutor(
+          0,
+          Integer.MAX_VALUE,
+          60L,
+          TimeUnit.SECONDS,
+          new SynchronousQueue[Runnable],
+          new DefaultThreadFactory("unbounded")
+        )
+      })(es => SyncIO(es.shutdown()))
+      .map(ExecutionContext.fromExecutor)
 
-  val bounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(
-    new ForkJoinPool(
-      {
-        val available = Runtime.getRuntime.availableProcessors
-        if (available == 1) 1 else available - 1
-      },
-      ForkJoinPool.defaultForkJoinWorkerThreadFactory,
-      null,
-      true
-    )
-  )
+  val boundedResource: Resource[IO, ExecutionContext] =
+    Resource
+      .make(
+        IO(
+          new ForkJoinPool({
+            val available = Runtime.getRuntime.availableProcessors
+            if (available == 1) 1 else available - 1
+          }, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true)
+        )
+      )(es => IO(es.shutdown()))
+      .map(ExecutionContext.fromExecutor)
 
-  val unbounded: ExecutionContextExecutor = ExecutionContext.fromExecutor(
-    new ThreadPoolExecutor(
-      0,
-      Integer.MAX_VALUE,
-      60L,
-      TimeUnit.SECONDS,
-      new SynchronousQueue[Runnable],
-      new DefaultThreadFactory("unbounded")
-    )
-  )
+  val callbacksResource: Resource[IO, ExecutionContext] = Resource
+    .make(
+      IO(
+        new ThreadPoolExecutor(
+          4,
+          4,
+          0L,
+          TimeUnit.MILLISECONDS,
+          new LinkedBlockingQueue[Runnable],
+          new DefaultThreadFactory("callbacks")
+        )
+      )
+    )(es => IO(es.shutdown()))
+    .map(ExecutionContext.fromExecutor)
 
-  val callbacks: ExecutionContextExecutor = ExecutionContext.fromExecutor(
-    new ThreadPoolExecutor(
-      4,
-      4,
-      0L,
-      TimeUnit.MILLISECONDS,
-      new LinkedBlockingQueue[Runnable],
-      new DefaultThreadFactory("callbacks")
-    )
-  )
+  val callbacksHealthResource: Resource[IO, ExecutionContext] = Resource
+    .make(
+      IO(
+        new ThreadPoolExecutor(
+          2,
+          2,
+          0L,
+          TimeUnit.MILLISECONDS,
+          new LinkedBlockingQueue[Runnable],
+          new DefaultThreadFactory("callbacks-health")
+        )
+      )
+    )(es => IO(es.shutdown()))
+    .map(ExecutionContext.fromExecutor)
 
-  val callbacksHealth: ExecutionContextExecutor = ExecutionContext.fromExecutor(
-    new ThreadPoolExecutor(
-      2,
-      2,
-      0L,
-      TimeUnit.MILLISECONDS,
-      new LinkedBlockingQueue[Runnable],
-      new DefaultThreadFactory("callbacks-health")
-    )
-  )
+  val unboundedHealthResource: Resource[IO, ExecutionContext] = Resource
+    .make(
+      IO(
+        new ThreadPoolExecutor(
+          0,
+          Integer.MAX_VALUE,
+          60L,
+          TimeUnit.SECONDS,
+          new SynchronousQueue[Runnable],
+          new DefaultThreadFactory("unbounded-health")
+        )
+      )
+    )(es => IO(es.shutdown()))
+    .map(ExecutionContext.fromExecutor)
 
-  val unboundedHealth: ExecutionContextExecutor = ExecutionContext.fromExecutor(
-    new ThreadPoolExecutor(
-      0,
-      Integer.MAX_VALUE,
-      60L,
-      TimeUnit.SECONDS,
-      new SynchronousQueue[Runnable],
-      new DefaultThreadFactory("unbounded-health")
-    )
-  )
-
-  val unboundedBlocker: Blocker = Blocker.liftExecutionContext(unbounded)
-  val unboundedHealthBlocker: Blocker = Blocker.liftExecutionContext(unboundedHealth)
+//  val unboundedBlocker: Blocker = Blocker.liftExecutionContext(unbounded)
+//  val unboundedHealthBlocker: Blocker = Blocker.liftExecutionContext(unboundedHealth)
 
   def createSemaphore[F[_]: Concurrent](permits: Long = 1): Semaphore[F] =
     Semaphore.in[IO, F](permits).unsafeRunSync()

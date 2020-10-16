@@ -11,6 +11,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class AddressServiceTest
     extends AnyFreeSpec
     with BeforeAndAfter
@@ -19,7 +21,7 @@ class AddressServiceTest
     with IdiomaticMockitoCats
     with ArgumentMatchersSugar {
 
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   private var addressService: AddressService[IO] = _
 

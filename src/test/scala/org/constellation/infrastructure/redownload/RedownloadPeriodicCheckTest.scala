@@ -10,6 +10,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class RedownloadPeriodicCheckTest
     extends AnyFreeSpec
     with Matchers
@@ -29,7 +31,7 @@ class RedownloadPeriodicCheckTest
 
   "triggerRedownloadCheck" - {
     "calls fetch for peers proposals" in {
-      val redownloadPeriodicCheck = new RedownloadPeriodicCheck()
+      val redownloadPeriodicCheck = new RedownloadPeriodicCheck(30, ExecutionContext.global)
 
       val trigger = redownloadPeriodicCheck.trigger()
       val cancel = redownloadPeriodicCheck.cancel()
@@ -40,7 +42,7 @@ class RedownloadPeriodicCheckTest
     }
 
     "calls check for alignment with majority snapshot" in {
-      val redownloadPeriodicCheck = new RedownloadPeriodicCheck()
+      val redownloadPeriodicCheck = new RedownloadPeriodicCheck(30, ExecutionContext.global)
 
       val trigger = redownloadPeriodicCheck.trigger()
       val cancel = redownloadPeriodicCheck.cancel()

@@ -11,10 +11,13 @@ import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-class SnapshotTrigger(periodSeconds: Int = 5)(implicit dao: DAO, cluster: Cluster[IO])
-    extends PeriodicIO("SnapshotTrigger") {
+class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: ExecutionContext)(
+  implicit dao: DAO,
+  cluster: Cluster[IO]
+) extends PeriodicIO("SnapshotTrigger", unboundedExecutionContext) {
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 

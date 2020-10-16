@@ -7,13 +7,13 @@ import org.constellation.ConstellationExecutionContext
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class MultiLockTest extends AnyWordSpec with Matchers {
   "MultiLock" should {
     "not allow concurrent modifications on same keys" in {
-      implicit val ec = ConstellationExecutionContext.bounded
-      implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+      implicit val ec = ExecutionContext.global
+      implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
       val counter = new AtomicInteger()
       counter.set(0)

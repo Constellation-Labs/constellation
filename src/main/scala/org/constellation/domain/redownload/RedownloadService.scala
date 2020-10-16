@@ -3,12 +3,11 @@ package org.constellation.domain.redownload
 import cats.NonEmptyParallel
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, Timer}
+import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
-import org.constellation.ConstellationExecutionContext.bounded
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
@@ -26,6 +25,7 @@ import org.constellation.util.Logging.stringifyStackTrace
 import org.constellation.util.Metrics
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -43,7 +43,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   rewardsManager: RewardsManager[F],
   apiClient: ClientInterpreter[F],
-  metrics: Metrics
+  metrics: Metrics,
+  boundedExecutionContext: ExecutionContext,
+  unboundedBlocker: Blocker
 )(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
 
   /**
@@ -166,7 +168,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
     PeerResponse
       .run(
         apiClient.snapshot
-          .getAcceptedSnapshots()
+          .getAcceptedSnapshots(),
+        unboundedBlocker
       )(client)
       .handleErrorWith(_ => F.pure(Map.empty))
 
@@ -175,7 +178,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
     PeerResponse
       .run(
         apiClient.snapshot
-          .getCreatedSnapshots()
+          .getCreatedSnapshots(),
+        unboundedBlocker
       )(client)
       .handleErrorWith { e =>
         logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty[Long, SnapshotProposal])
@@ -186,7 +190,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
     PeerResponse
       .run(
         apiClient.snapshot
-          .getStoredSnapshots()
+          .getStoredSnapshots(),
+        unboundedBlocker
       )(client)
       .handleErrorWith(_ => F.pure(List.empty))
 
@@ -195,7 +200,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
     PeerResponse
       .run(
         apiClient.snapshot
-          .getSnapshotInfo()
+          .getSnapshotInfo(),
+        unboundedBlocker
       )(client)
 
   // TODO: Extract to HTTP layer
@@ -203,7 +209,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
     PeerResponse
       .run(
         apiClient.snapshot
-          .getSnapshotInfo(hash)
+          .getSnapshotInfo(hash),
+        unboundedBlocker
       )(client)
 
   // TODO: Extract to HTTP layer
@@ -211,7 +218,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
     PeerResponse
       .run(
         apiClient.snapshot
-          .getStoredSnapshot(hash)
+          .getStoredSnapshot(hash),
+        unboundedBlocker
       )(client)
 
   private def fetchAndStoreMissingSnapshots(
@@ -280,12 +288,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
             .flatMap(
               snapshotsSerialized =>
                 snapshotsSerialized.traverse { s =>
-                  C.evalOn(bounded)(F.delay { KryoSerializer.deserializeCast[StoredSnapshot](s) })
+                  C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[StoredSnapshot](s) })
                 }
             )
 
           snapshotInfoFromMemPool <- fetchSnapshotInfo(client).flatMap { s =>
-            C.evalOn(bounded)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
+            C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
           }
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
           awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
@@ -300,10 +308,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
             (updated, ())
           }
 
-          sorted <- C.evalOn(bounded)(F.delay { TopologicalSort.sortBlocksTopologically(blocksToAccept) })
+          sorted <- C.evalOn(boundedExecutionContext)(F.delay {
+            TopologicalSort.sortBlocksTopologically(blocksToAccept)
+          })
           _ <- sorted.toList.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >>
-              C.evalOn(bounded) {
+              C.evalOn(boundedExecutionContext) {
                   checkpointAcceptanceService
                     .accept(b)
                 }
@@ -683,7 +693,9 @@ object RedownloadService {
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
     rewardsManager: RewardsManager[F],
     apiClient: ClientInterpreter[F],
-    metrics: Metrics
+    metrics: Metrics,
+    boundedExecutionContext: ExecutionContext,
+    unboundedBlocker: Blocker
   ): RedownloadService[F] =
     new RedownloadService[F](
       meaningfulSnapshotsCount,
@@ -699,7 +711,9 @@ object RedownloadService {
       checkpointAcceptanceService,
       rewardsManager,
       apiClient,
-      metrics
+      metrics,
+      boundedExecutionContext,
+      unboundedBlocker
     )
 
   type Reputation = SortedMap[Id, Double]

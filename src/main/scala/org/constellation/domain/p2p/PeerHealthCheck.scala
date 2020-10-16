@@ -1,13 +1,12 @@
 package org.constellation.domain.p2p
 
 import cats.effect.concurrent.Ref
-import cats.effect.{Clock, Concurrent, ContextShift, Sync, Timer}
+import cats.effect.{Blocker, Clock, Concurrent, ContextShift, Sync, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
-import org.constellation.ConstellationExecutionContext.{unboundedBlocker, unboundedHealthBlocker}
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -17,7 +16,13 @@ import org.constellation.util.Metrics
 
 import scala.concurrent.duration._
 
-class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F], metrics: Metrics)(
+class PeerHealthCheck[F[_]](
+  cluster: Cluster[F],
+  apiClient: ClientInterpreter[F],
+  metrics: Metrics,
+  unboundedBlocker: Blocker,
+  unboundedHealthBlocker: Blocker
+)(
   implicit F: Concurrent[F],
   CS: ContextShift[F],
   T: Timer[F],
@@ -175,9 +180,15 @@ class PeerHealthCheck[F[_]](cluster: Cluster[F], apiClient: ClientInterpreter[F]
 
 object PeerHealthCheck {
 
-  def apply[F[_]: Concurrent: Timer](cluster: Cluster[F], apiClient: ClientInterpreter[F], metrics: Metrics)(
+  def apply[F[_]: Concurrent: Timer](
+    cluster: Cluster[F],
+    apiClient: ClientInterpreter[F],
+    metrics: Metrics,
+    unboundedBlocker: Blocker,
+    unboundedHealthBlocker: Blocker
+  )(
     implicit C: ContextShift[F]
-  ) = new PeerHealthCheck[F](cluster, apiClient, metrics)
+  ) = new PeerHealthCheck[F](cluster, apiClient, metrics, unboundedBlocker, unboundedHealthBlocker)
 
   sealed trait PeerHealthCheckStatus {
     val lastCheck: Long

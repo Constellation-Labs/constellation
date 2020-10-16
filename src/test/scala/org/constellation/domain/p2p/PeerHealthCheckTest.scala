@@ -1,7 +1,7 @@
 package org.constellation.domain.p2p
 
 import cats.data.{Kleisli, NonEmptyList}
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
@@ -53,7 +53,13 @@ class PeerHealthCheckTest
     apiClient = mock[ClientInterpreter[IO]]
     cluster = mock[Cluster[IO]]
     metrics = mock[Metrics]
-    peerHealthCheck = PeerHealthCheck(cluster, apiClient, metrics)
+    peerHealthCheck = PeerHealthCheck(
+      cluster,
+      apiClient,
+      metrics,
+      Blocker.liftExecutionContext(ExecutionContext.global),
+      Blocker.liftExecutionContext(ExecutionContext.global)
+    )
     cluster.removePeer(*) shouldReturnF Unit
     cluster.markOfflinePeer(*) shouldReturnF Unit
     cluster.broadcastOfflineNodeState(*) shouldReturnF Unit

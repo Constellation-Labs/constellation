@@ -3,7 +3,7 @@ package org.constellation.p2p
 import java.net.SocketTimeoutException
 import java.security.KeyPair
 
-import cats.effect.{Concurrent, ContextShift, Timer}
+import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -29,7 +29,8 @@ class DataResolver[F[_]](
   cluster: Cluster[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
-  checkpointAcceptanceService: () => CheckpointAcceptanceService[F]
+  checkpointAcceptanceService: () => CheckpointAcceptanceService[F],
+  unboundedBlocker: Blocker
 )(
   implicit F: Concurrent[F],
   T: Timer[F],
@@ -228,7 +229,7 @@ class DataResolver[F[_]](
     endpoint: String => PeerResponse[F, Option[T]],
     peerClientMetadata: PeerClientMetadata
   ): F[Option[T]] =
-    PeerResponse.run(endpoint(hash))(peerClientMetadata).onError {
+    PeerResponse.run(endpoint(hash), unboundedBlocker)(peerClientMetadata).onError {
       case _: SocketTimeoutException =>
         observationService
           .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(List(hash)))(keyPair))
@@ -241,7 +242,7 @@ class DataResolver[F[_]](
     peerClientMetadata: PeerClientMetadata
   ): F[List[(String, A)]] =
     PeerResponse
-      .run(endpoint(hashes))(peerClientMetadata)
+      .run(endpoint(hashes), unboundedBlocker)(peerClientMetadata)
       .map(_.mapFilter {
         case (hash, data) => data.map((hash, _))
       })
@@ -261,7 +262,8 @@ object DataResolver {
     cluster: Cluster[F],
     transactionService: TransactionService[F],
     observationService: ObservationService[F],
-    checkpointAcceptanceService: () => CheckpointAcceptanceService[F]
+    checkpointAcceptanceService: () => CheckpointAcceptanceService[F],
+    unboundedBlocker: Blocker
   ): DataResolver[F] =
     new DataResolver(
       keyPair,
@@ -269,7 +271,8 @@ object DataResolver {
       cluster,
       transactionService,
       observationService,
-      checkpointAcceptanceService
+      checkpointAcceptanceService,
+      unboundedBlocker
     )
 
   case class DataResolutionOutOfPeers(hashes: List[String], peers: Iterable[String])

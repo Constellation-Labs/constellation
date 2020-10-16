@@ -1,6 +1,6 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Blocker, ContextShift, IO}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.constellation.p2p.Cluster
@@ -12,6 +12,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class DownloadServiceTest
     extends AnyFreeSpec
     with Matchers
@@ -20,7 +22,7 @@ class DownloadServiceTest
     with BeforeAndAfterEach
     with ArgumentMatchersSugar {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   var cluster: Cluster[IO] = _
   var downloadService: DownloadService[IO] = _
@@ -40,7 +42,9 @@ class DownloadServiceTest
       cluster,
       checkpointAcceptanceService,
       dao.apiClient,
-      metrics
+      metrics,
+      ExecutionContext.global,
+      Blocker.liftExecutionContext(ExecutionContext.global)
     )
 
     dao.blacklistedAddresses.clear shouldReturnF Unit

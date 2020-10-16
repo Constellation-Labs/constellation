@@ -3,18 +3,19 @@ package org.constellation.util
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.{ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
 import org.constellation.ConstellationExecutionContext
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
-abstract class PeriodicIO(taskName: String) extends StrictLogging {
+abstract class PeriodicIO(taskName: String, taskExecutionContext: ExecutionContext) extends StrictLogging {
 
-  val timerPool: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
-  val taskPool: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+  val timerPool: ExecutionContext = ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
+  val taskPool: ExecutionContext = taskExecutionContext
   implicit val contextShift: ContextShift[IO] = IO.contextShift(taskPool)
+  implicit val timer: Timer[IO] = IO.timer(timerPool)
 
   val executionNumber: AtomicLong = new AtomicLong(0)
   val cancellationToken: AtomicBoolean = new AtomicBoolean(false)
@@ -22,7 +23,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
   def trigger(): IO[Unit]
 
   def schedule(initialDelay: FiniteDuration, duration: FiniteDuration): Unit =
-    IO.timer(timerPool)
+    timer
       .sleep(initialDelay)
       .unsafeRunAsync {
         case Left(_)  => logger.error(s"Unexpected error while triggering periodic task ${taskName} with initial delay")
@@ -30,8 +31,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
       }
 
   def schedule(duration: FiniteDuration): Unit = {
-    val delayedTask = IO
-      .timer(timerPool)
+    val delayedTask = timer
       .sleep(duration)
       .flatMap(_ => IO(logger.debug(s"triggering periodic task ${taskName}")))
       .flatMap(
@@ -51,6 +51,7 @@ abstract class PeriodicIO(taskName: String) extends StrictLogging {
   }
 
   def cancel(): IO[Unit] = IO {
+    // TODO: shutdown timerPool
     cancellationToken.set(true)
   }
 }

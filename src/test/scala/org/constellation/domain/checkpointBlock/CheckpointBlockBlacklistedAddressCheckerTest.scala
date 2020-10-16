@@ -14,9 +14,11 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class CheckpointBlockBlacklistedAddressCheckerTest extends AnyFunSuite with BeforeAndAfter with Matchers {
 
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   private implicit val kp: KeyPair = KeyUtils.makeKeyPair()
 
   private var blacklistedAddresses: BlacklistedAddresses[IO] = _

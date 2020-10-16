@@ -16,11 +16,12 @@ import org.constellation.schema.signature.{HashSignature, SignatureBatch}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 import org.constellation.schema.Id
 
+import scala.concurrent.ExecutionContext
 import scala.util.{Random => ScalaRandom}
 
 object Fixtures {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
   val kp: KeyPair = KeyUtils.makeKeyPair()

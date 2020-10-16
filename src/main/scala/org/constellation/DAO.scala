@@ -1,6 +1,7 @@
 package org.constellation
 
 import better.files.File
+import cats.data.NonEmptyList
 import cats.effect.{Blocker, ContextShift, IO, Timer}
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -10,10 +11,13 @@ import org.constellation.checkpoint._
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
+import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
+import org.constellation.domain.rewards.StoredRewards
+import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.{
   TransactionChainService,
   TransactionGossiping,
@@ -34,14 +38,25 @@ import org.constellation.infrastructure.snapshot.{
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
-import org.constellation.schema.{Id, NodeState, NodeType}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.{ChannelMessage, GenesisObservation, Id, NodeState, NodeType}
 import org.constellation.session.SessionTokenService
 import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{HealthChecker, HostPort}
+import org.constellation.util.{HealthChecker, HostPort, Metrics}
 
-class DAO() extends NodeData with EdgeDAO with StrictLogging {
+import scala.collection.concurrent.TrieMap
+import scala.concurrent.ExecutionContext
+
+class DAO(
+  boundedExecutionContext: ExecutionContext,
+  unboundedExecutionContext: ExecutionContext,
+  unboundedHealthExecutionContext: ExecutionContext
+) extends NodeData {
+
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(unboundedExecutionContext)
 
   var sessionTokenService: SessionTokenService[IO] = _
 
@@ -50,10 +65,86 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
   var initialNodeConfig: NodeConfig = _
   @volatile var nodeConfig: NodeConfig = _
 
-  var node: ConstellationNode = _
-
   var transactionAcceptedAfterDownload: Long = 0L
   var downloadFinishedTime: Long = System.currentTimeMillis()
+
+  def processingConfig: ProcessingConfig = nodeConfig.processingConfig
+
+  // TODO: Put on Id keyed datastore (address? potentially) with other metadata
+  val publicReputation: TrieMap[Id, Double] = TrieMap()
+  val secretReputation: TrieMap[Id, Double] = TrieMap()
+
+  val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
+
+  var cloudService: CloudServiceEnqueue[IO] = _
+
+  var cluster: Cluster[IO] = _
+  var dataResolver: DataResolver[IO] = _
+  var trustManager: TrustManager[IO] = _
+  var transactionService: TransactionService[IO] = _
+  var blacklistedAddresses: BlacklistedAddresses[IO] = _
+  var transactionChainService: TransactionChainService[IO] = _
+  var transactionGossiping: TransactionGossiping[IO] = _
+  var observationService: ObservationService[IO] = _
+  var checkpointService: CheckpointService[IO] = _
+  var checkpointParentService: CheckpointParentService[IO] = _
+  var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
+
+  var genesisObservationStorage: GenesisObservationLocalStorage[IO] = _
+  var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
+
+  var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
+  var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _
+
+  var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
+  var snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[IO, SnapshotInfo]] = _
+
+  var rewardsStorage: LocalFileStorage[IO, StoredRewards] = _
+  var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
+
+  var snapshotService: SnapshotService[IO] = _
+  var concurrentTipService: ConcurrentTipService[IO] = _
+  var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
+  var transactionValidator: TransactionValidator[IO] = _
+  var rateLimiting: RateLimiting[IO] = _
+  var addressService: AddressService[IO] = _
+  var snapshotWatcher: SnapshotWatcher = _
+  var rollbackService: RollbackService[IO] = _
+  var cloudStorage: CloudStorageOld[IO] = _
+  var redownloadService: RedownloadService[IO] = _
+  var downloadService: DownloadService[IO] = _
+  var peerHealthCheck: PeerHealthCheck[IO] = _
+  var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
+  var consensusRemoteSender: ConsensusRemoteSender[IO] = _
+  var consensusManager: ConsensusManager[IO] = _
+  var consensusWatcher: ConsensusWatcher = _
+  var consensusScheduler: ConsensusScheduler = _
+  var trustDataPollingScheduler: TrustDataPollingScheduler = _
+  var eigenTrust: EigenTrust[IO] = _
+  var rewardsManager: RewardsManager[IO] = _
+  var joiningPeerValidator: JoiningPeerValidator[IO] = _
+  var snapshotTrigger: SnapshotTrigger = _
+  var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
+
+  val notificationService = new NotificationService[IO]()
+  val channelService = new ChannelService[IO]()
+  val soeService = new SOEService[IO]()
+  val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
+  val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
+
+  var genesisBlock: Option[CheckpointBlock] = None
+  var genesisObservation: Option[GenesisObservation] = None
+
+  def maxWidth: Int = processingConfig.maxWidth
+
+  def maxTXInBlock: Int = processingConfig.maxTXInBlock
+
+  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
+
+  val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
+
+  def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] =
+    threadSafeMessageMemPool.pull(minimumCount)
 
   def preventLocalhostAsPeer: Boolean = !nodeConfig.allowLocalhostPeers
 
@@ -99,7 +190,7 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
 
     idDir.createDirectoryIfNotExists(createParents = true)
 
-    implicit val ioTimer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ioTimer: Timer[IO] = IO.timer(unboundedExecutionContext)
     implicit val ioConcurrentEffect = IO.ioConcurrentEffect(contextShift)
 
     rateLimiting = new RateLimiting[IO]
@@ -110,9 +201,16 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
     transactionChainService = TransactionChainService[IO]
     transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
     transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
-    joiningPeerValidator = JoiningPeerValidator[IO](apiClient)
+    joiningPeerValidator = JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(unboundedExecutionContext))
 
-    cluster = Cluster[IO](() => metrics, joiningPeerValidator, apiClient, sessionTokenService, this)
+    cluster = Cluster[IO](
+      () => metrics,
+      joiningPeerValidator,
+      apiClient,
+      sessionTokenService,
+      this,
+      Blocker.liftExecutionContext(unboundedExecutionContext)
+    )
 
     trustManager = TrustManager[IO](id, cluster)
 
@@ -124,7 +222,8 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       cluster,
       transactionService,
       observationService,
-      () => checkpointAcceptanceService
+      () => checkpointAcceptanceService,
+      Blocker.liftExecutionContext(unboundedExecutionContext)
     )
 
     val merkleService =
@@ -145,33 +244,43 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       this,
       new FacilitatorFilter[IO](
         apiClient,
-        this
+        this,
+        Blocker.liftExecutionContext(unboundedExecutionContext)
       )
     )
     addressService = new AddressService[IO]()
 
     peerHealthCheck = {
-      val cs = IO.contextShift(ConstellationExecutionContext.unboundedHealth)
+      val cs = IO.contextShift(unboundedHealthExecutionContext)
       val ce = IO.ioConcurrentEffect(cs)
-      val timer = IO.timer(ConstellationExecutionContext.unboundedHealth)
+      val timer = IO.timer(unboundedHealthExecutionContext)
 
-      PeerHealthCheck[IO](cluster, apiClient, metrics)(ce, timer, cs)
+      PeerHealthCheck[IO](
+        cluster,
+        apiClient,
+        metrics,
+        Blocker.liftExecutionContext(unboundedExecutionContext),
+        Blocker.liftExecutionContext(unboundedHealthExecutionContext)
+      )(ce, timer, cs)
     }
-    peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck)
+    peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck, unboundedHealthExecutionContext)
 
     snapshotTrigger = new SnapshotTrigger(
-      processingConfig.snapshotTriggeringTimeSeconds
+      processingConfig.snapshotTriggeringTimeSeconds,
+      unboundedExecutionContext
     )(this, cluster)
 
     redownloadPeriodicCheck = new RedownloadPeriodicCheck(
-      processingConfig.redownloadPeriodicCheckTimeSeconds
+      processingConfig.redownloadPeriodicCheckTimeSeconds,
+      unboundedExecutionContext
     )(this)
 
     consensusRemoteSender = new ConsensusRemoteSender[IO](
-      IO.contextShift(ConstellationExecutionContext.unbounded),
+      IO.contextShift(unboundedExecutionContext),
       observationService,
       apiClient,
-      keyPair
+      keyPair,
+      Blocker.liftExecutionContext(unboundedExecutionContext)
     )
 
     snapshotStorage = SnapshotLocalStorage(snapshotPath)
@@ -246,7 +355,9 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       snapshotInfoStorage,
       rewardsStorage,
       eigenTrust,
-      this
+      this,
+      boundedExecutionContext,
+      unboundedExecutionContext
     )
 
     transactionValidator = new TransactionValidator[IO](transactionService)
@@ -271,7 +382,8 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       cluster,
       rateLimiting,
       dataResolver,
-      this
+      this,
+      boundedExecutionContext
     )
 
     redownloadService = RedownloadService[IO](
@@ -288,18 +400,29 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       checkpointAcceptanceService,
       rewardsManager,
       apiClient,
-      metrics
+      metrics,
+      boundedExecutionContext,
+      Blocker.liftExecutionContext(unboundedExecutionContext)
     )
 
-    downloadService = DownloadService[IO](redownloadService, cluster, checkpointAcceptanceService, apiClient, metrics)
+    downloadService = DownloadService[IO](
+      redownloadService,
+      cluster,
+      checkpointAcceptanceService,
+      apiClient,
+      metrics,
+      boundedExecutionContext,
+      Blocker.liftExecutionContext(unboundedExecutionContext)
+    )
 
     val healthChecker = new HealthChecker[IO](
       this,
       concurrentTipService,
-      apiClient
+      apiClient,
+      Blocker.liftExecutionContext(unboundedExecutionContext)
     )
 
-    snapshotWatcher = new SnapshotWatcher(healthChecker)
+    snapshotWatcher = new SnapshotWatcher(healthChecker, unboundedExecutionContext)
 
     consensusManager = new ConsensusManager[IO](
       transactionService,
@@ -315,15 +438,17 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       dataResolver,
       this,
       ConfigUtil.config,
-      Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.unbounded),
+      Blocker.liftExecutionContext(unboundedExecutionContext),
+      IO.contextShift(boundedExecutionContext),
       metrics = metrics
     )
-    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager)
+    consensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager, unboundedExecutionContext)
 
-    trustDataPollingScheduler = TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, apiClient, this)
+    trustDataPollingScheduler =
+      TrustDataPollingScheduler(ConfigUtil.config, trustManager, cluster, apiClient, this, unboundedExecutionContext)
 
-    consensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this)
+    consensusScheduler =
+      new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this, unboundedExecutionContext)
 
     rollbackService = new RollbackService[IO](
       this,
@@ -336,23 +461,6 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
       redownloadService,
       cluster
     )
-  }
-
-  def unsafeShutdown(): Unit = {
-    if (node != null) {
-      implicit val ec = ConstellationExecutionContext.unbounded
-    }
-
-    List(
-      peerHealthCheckWatcher,
-      snapshotWatcher,
-      trustDataPollingScheduler,
-      consensusScheduler,
-      consensusWatcher,
-      snapshotTrigger,
-      redownloadPeriodicCheck
-    ).filter(_ != null)
-      .foreach(_.cancel().unsafeRunSync())
   }
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
@@ -373,9 +481,6 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
   def leavingPeers: IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeState(Set(NodeState.Leaving))))
 
-  def terminateConsensuses(): IO[Unit] =
-    consensusManager.terminateConsensuses() // TODO: wkoszycki temporary fix to check cluster stability
-
   def getActiveMinHeight: IO[Option[Long]] =
     consensusManager.getActiveMinHeight // TODO: wkoszycki temporary fix to check cluster stability
 
@@ -389,34 +494,4 @@ class DAO() extends NodeData with EdgeDAO with StrictLogging {
         pd.peerMetadata.timeAdded < (System
           .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
     })
-
-  def enableSimulateEndpointTimeout(): Unit = {
-    simulateEndpointTimeout = true
-    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
-  }
-
-  def disableSimulateEndpointTimeout(): Unit = {
-    simulateEndpointTimeout = false
-    metrics.updateMetric("simulateEndpointTimeout", simulateEndpointTimeout.toString)
-  }
-
-  def enableRandomTransactions(): Unit = {
-    generateRandomTX = true
-    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
-  }
-
-  def disableRandomTransactions(): Unit = {
-    generateRandomTX = false
-    metrics.updateMetric("generateRandomTX", generateRandomTX.toString)
-  }
-
-  def enableCheckpointFormation(): Unit = {
-    formCheckpoints = true
-    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
-  }
-
-  def disableCheckpointFormation(): Unit = {
-    formCheckpoints = false
-    metrics.updateMetric("checkpointFormation", formCheckpoints.toString)
-  }
 }

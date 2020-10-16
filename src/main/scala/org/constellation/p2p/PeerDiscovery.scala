@@ -1,7 +1,7 @@
 package org.constellation.p2p
 
 import cats.data._
-import cats.effect.{Concurrent, ContextShift}
+import cats.effect.{Blocker, Concurrent, ContextShift}
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -10,7 +10,7 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.schema.Id
 
-class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], ownId: Id)(
+class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], ownId: Id, unboundedBlocker: Blocker)(
   implicit F: Concurrent[F],
   C: ContextShift[F]
 ) {
@@ -24,7 +24,8 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
       peers <- PeerResponse
         .run(
           apiClient.nodeMetadata
-            .getPeers()
+            .getPeers(),
+          unboundedBlocker
         )(peerMetadata.toPeerClientMetadata)
         .handleErrorWith(_ => F.pure(Seq.empty[PeerMetadata]))
 
@@ -48,10 +49,10 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
     } >>= { nextPeer =>
       val join = for {
         peer <- EitherT.fromOption[F](nextPeer, new Throwable("Next peer is empty")).rethrowT
-        registrationRequest <- PeerResponse.run(apiClient.sign.getRegistrationRequest())(peer)
+        registrationRequest <- PeerResponse.run(apiClient.sign.getRegistrationRequest(), unboundedBlocker)(peer)
         _ <- cluster.pendingRegistration(peer.host, registrationRequest)
         prr <- cluster.pendingRegistrationRequest
-        _ <- PeerResponse.run(apiClient.sign.register(prr))(peer)
+        _ <- PeerResponse.run(apiClient.sign.register(prr), unboundedBlocker)(peer)
       } yield ()
 
       if (nextPeer.isDefined) {
@@ -79,6 +80,11 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
 
 object PeerDiscovery {
 
-  def apply[F[_]: Concurrent: ContextShift](apiClient: ClientInterpreter[F], cluster: Cluster[F], ownId: Id) =
-    new PeerDiscovery(apiClient, cluster, ownId)
+  def apply[F[_]: Concurrent: ContextShift](
+    apiClient: ClientInterpreter[F],
+    cluster: Cluster[F],
+    ownId: Id,
+    unboundedBlocker: Blocker
+  ) =
+    new PeerDiscovery(apiClient, cluster, ownId, unboundedBlocker)
 }

@@ -1,9 +1,9 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.DAO
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -14,12 +14,16 @@ import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 
+import scala.concurrent.ExecutionContext
+
 class DownloadService[F[_]](
   redownloadService: RedownloadService[F],
   cluster: Cluster[F],
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   apiClient: ClientInterpreter[F],
-  metrics: Metrics
+  metrics: Metrics,
+  boundedExecutionContext: ExecutionContext,
+  unboundedBlocker: Blocker
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F]
@@ -63,7 +67,7 @@ class DownloadService[F[_]](
             .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
             .flatMap { snapshotsSerialized =>
               snapshotsSerialized.traverse { snapshot =>
-                C.evalOn(ConstellationExecutionContext.bounded)(F.delay {
+                C.evalOn(boundedExecutionContext)(F.delay {
                   KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
                 })
               }
@@ -71,7 +75,7 @@ class DownloadService[F[_]](
           snapshotInfoFromMemPool <- redownloadService
             .fetchSnapshotInfo(client)
             .flatMap { snapshotInfo =>
-              C.evalOn(ConstellationExecutionContext.bounded)(F.delay {
+              C.evalOn(boundedExecutionContext)(F.delay {
                 KryoSerializer.deserializeCast[SnapshotInfo](snapshotInfo)
               })
             }
@@ -89,7 +93,7 @@ class DownloadService[F[_]](
           }
 
           _ <- C
-            .evalOn(ConstellationExecutionContext.bounded) {
+            .evalOn(boundedExecutionContext) {
               F.delay {
                 TopologicalSort.sortBlocksTopologically(blocksToAccept).toList
               }
@@ -97,7 +101,7 @@ class DownloadService[F[_]](
             .flatMap {
               _.traverse { b =>
                 logger.debug(s"Accepting block above majority: ${b.height}") >>
-                  C.evalOn(ConstellationExecutionContext.bounded) {
+                  C.evalOn(boundedExecutionContext) {
                       checkpointAcceptanceService.accept(b)
                     }
                     .handleErrorWith { error =>
@@ -122,11 +126,11 @@ class DownloadService[F[_]](
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
       _ <- cluster
-        .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis()))
+        .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
         .flatTap { genesis =>
-          ContextShift[F].evalOn(ConstellationExecutionContext.bounded)(F.delay {
+          ContextShift[F].evalOn(boundedExecutionContext)(F.delay {
             Genesis.acceptGenesis(genesis)
           })
         }
@@ -141,7 +145,17 @@ object DownloadService {
     cluster: Cluster[F],
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
     apiClient: ClientInterpreter[F],
-    metrics: Metrics
+    metrics: Metrics,
+    boundedExecutionContext: ExecutionContext,
+    unboundedBlocker: Blocker
   ): DownloadService[F] =
-    new DownloadService[F](redownloadService, cluster, checkpointAcceptanceService, apiClient, metrics)
+    new DownloadService[F](
+      redownloadService,
+      cluster,
+      checkpointAcceptanceService,
+      apiClient,
+      metrics,
+      boundedExecutionContext,
+      unboundedBlocker
+    )
 }

@@ -7,6 +7,7 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
+import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.concurrency.SingleLock
 import org.constellation.consensus.FacilitatorFilter
@@ -16,7 +17,7 @@ import org.constellation.schema.edge.SignedObservationEdge
 import org.constellation.schema.{Height, Id, checkpoint}
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.DAO
 
 import scala.util.Random
 
@@ -59,7 +60,7 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
 
   private val conflictingTips: Ref[F, Map[String, CheckpointBlock]] = Ref.unsafe(Map.empty)
   private val tipsRef: Ref[F, Map[String, TipData]] = Ref.unsafe(Map.empty)
-  private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
+  private val semaphore: Semaphore[F] = createSemaphore()
 
   private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
 

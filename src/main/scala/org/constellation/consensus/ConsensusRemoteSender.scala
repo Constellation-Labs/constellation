@@ -4,7 +4,7 @@ import java.net.SocketTimeoutException
 import java.security.KeyPair
 
 import cats.data.NonEmptyList
-import cats.effect.{Concurrent, ContextShift, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, Sync}
 import cats.syntax.all._
 import io.circe.generic.semiauto._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -31,7 +31,8 @@ class ConsensusRemoteSender[F[_]: Concurrent](
   contextShift: ContextShift[F],
   observationService: ObservationService[F],
   apiClient: ClientInterpreter[F],
-  keyPair: KeyPair
+  keyPair: KeyPair,
+  unboundedBlocker: Blocker
 ) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -53,7 +54,8 @@ class ConsensusRemoteSender[F[_]: Concurrent](
                 roundData.messages,
                 roundData.observations
               )
-            )
+            ),
+          unboundedBlocker
         ),
       roundData.roundId,
       roundData.peers.toList,
@@ -62,7 +64,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
   def broadcastConsensusDataProposal(cmd: BroadcastConsensusDataProposal): F[Unit] =
     sendToAll(
-      PeerResponse.run(apiClient.consensus.addConsensusDataProposal(cmd.consensusDataProposal)),
+      PeerResponse.run(apiClient.consensus.addConsensusDataProposal(cmd.consensusDataProposal), unboundedBlocker),
       cmd.roundId,
       cmd.peers.toList,
       "BroadcastConsensusDataProposal"
@@ -70,7 +72,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
   def broadcastBlockUnion(cmd: BroadcastUnionBlockProposal): F[Unit] =
     sendToAll(
-      PeerResponse.run(apiClient.consensus.addUnionBlock(cmd.proposal)),
+      PeerResponse.run(apiClient.consensus.addUnionBlock(cmd.proposal), unboundedBlocker),
       cmd.roundId,
       cmd.peers.toList,
       "BroadcastUnionBlockProposal"
@@ -78,7 +80,7 @@ class ConsensusRemoteSender[F[_]: Concurrent](
 
   def broadcastSelectedUnionBlock(cmd: BroadcastSelectedUnionBlock): F[Unit] =
     sendToAll(
-      PeerResponse.run(apiClient.consensus.addSelectedUnionBlock(cmd.cb)),
+      PeerResponse.run(apiClient.consensus.addSelectedUnionBlock(cmd.cb), unboundedBlocker),
       cmd.roundId,
       cmd.peers.toList,
       "BroadcastSelectedUnionBlock"

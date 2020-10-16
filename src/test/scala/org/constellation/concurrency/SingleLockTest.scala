@@ -9,13 +9,13 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class SingleLockTest extends AnyWordSpec with Matchers {
   "SingleLock" should {
-    implicit val ec = ConstellationExecutionContext.bounded
-    implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-    implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+    implicit val ec = ExecutionContext.global
+    implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+    implicit val timer = IO.timer(ExecutionContext.global)
 
     "not allow concurrent modifications of same resource" in {
       val items = scala.collection.mutable.Stack[Int](1, 2, 3)
@@ -41,7 +41,7 @@ class SingleLockTest extends AnyWordSpec with Matchers {
       lazy val throwError = IO {
         throw new RuntimeException("throwError")
       }
-      implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+      implicit val timer = IO.timer(ExecutionContext.global)
       val items = scala.collection.mutable.Stack[Int](1, 2, 3)
       val processedItems = scala.collection.mutable.Stack[Int]()
       val op = IO {

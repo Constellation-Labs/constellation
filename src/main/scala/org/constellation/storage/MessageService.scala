@@ -2,25 +2,26 @@ package org.constellation.storage
 
 import cats.effect.Concurrent
 import cats.syntax.all._
+import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.schema.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.DAO
 
 class MessageService[F[_]: Concurrent]()(implicit dao: DAO)
     extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
 
   val merklePool = new ConcurrentStorageService[F, Seq[String]](
-    ConstellationExecutionContext.createSemaphore(),
+    createSemaphore(),
     "message_merkle_pool".some
   )
 
   val arbitraryPool = new ConcurrentStorageService[F, ChannelMessageMetadata](
-    ConstellationExecutionContext.createSemaphore(),
+    createSemaphore(),
     "message_arbitrary_pool".some
   )
 
   val memPool = new ConcurrentStorageService[F, ChannelMessageMetadata](
-    ConstellationExecutionContext.createSemaphore(),
+    createSemaphore(),
     "message_mem_pool".some
   )
 

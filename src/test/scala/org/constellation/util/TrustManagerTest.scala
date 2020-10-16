@@ -11,6 +11,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 class TrustManagerTest
@@ -20,7 +21,7 @@ class TrustManagerTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val ioContextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   private def mockTrustManager: TrustManager[IO] = mock[TrustManager[IO]]
 
   val cluster: Cluster[IO] = mock[Cluster[IO]]

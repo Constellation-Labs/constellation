@@ -1,7 +1,7 @@
 package org.constellation.genesis
 
 import cats.syntax.all._
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO}
+import cats.effect.{IO, LiftIO, Sync}
 import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -12,7 +12,7 @@ import org.constellation.schema.edge.{EdgeHashType, SignedObservationEdge, Typed
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
 import org.constellation.schema.{GenesisObservation, Height, PublicKeyExt}
 import org.constellation.util.AccountBalance
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.DAO
 
 object Genesis extends StrictLogging {
 
@@ -32,7 +32,7 @@ object Genesis extends StrictLogging {
     TypedEdgeHash(Coinbase, EdgeHashType.CheckpointHash)
   )
 
-  private def createDistributionTransactions[F[_]: Concurrent](
+  private def createDistributionTransactions[F[_]: Sync: LiftIO](
     allocAccountBalances: Seq[AccountBalance]
   )(implicit dao: DAO): F[List[Transaction]] = LiftIO[F].liftIO {
     allocAccountBalances.toList
@@ -52,7 +52,7 @@ object Genesis extends StrictLogging {
   private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =
     CheckpointBlock.createCheckpointBlock(transactions, GenesisTips)(CoinbaseKey)
 
-  private def createEmptyBlockFromGenesis[F[_]: Concurrent](
+  private def createEmptyBlockFromGenesis[F[_]: Sync: LiftIO](
     genesisSOE: SignedObservationEdge
   )(implicit dao: DAO): F[CheckpointBlock] = LiftIO[F].liftIO {
     val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.address
@@ -73,7 +73,6 @@ object Genesis extends StrictLogging {
   def createGenesisObservation(
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
   )(implicit dao: DAO): GenesisObservation = {
-    implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
     for {
       genesis <- createDistributionTransactions[IO](allocAccountBalances)
         .map(createGenesisBlock)

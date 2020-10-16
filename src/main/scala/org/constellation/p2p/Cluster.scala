@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 
 import cats.data.{EitherT, NonEmptyList, OptionT}
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, IO, LiftIO, Timer}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.syntax.all._
 import cats.kernel.Order
 import constellation._
@@ -102,7 +102,8 @@ class Cluster[F[_]](
   joiningPeerValidator: JoiningPeerValidator[F],
   apiClient: ClientInterpreter[F],
   sessionTokenService: SessionTokenService[F],
-  dao: DAO
+  dao: DAO,
+  unboundedBlocker: Blocker
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F],
@@ -123,7 +124,7 @@ class Cluster[F[_]](
   private val nodeState: Ref[F, NodeState] = Ref.unsafe[F, NodeState](initialState)
   private val peers: Ref[F, Map[Id, PeerData]] = Ref.unsafe[F, Map[Id, PeerData]](Map.empty)
 
-  private val peerDiscovery = PeerDiscovery[F](apiClient, this, dao.id)
+  private val peerDiscovery = PeerDiscovery[F](apiClient, this, dao.id, unboundedBlocker)
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
@@ -286,7 +287,7 @@ class Cluster[F[_]](
             request.port,
             request.id
           )
-          val req = PeerResponse.run(apiClient.sign.sign(authSignRequest))(peerClientMetadata)
+          val req = PeerResponse.run(apiClient.sign.sign(authSignRequest), unboundedBlocker)(peerClientMetadata)
 
           req.flatTap { sig =>
             if (sig.hashSignature.id != request.id) {
@@ -316,7 +317,7 @@ class Cluster[F[_]](
 
               for {
                 state <- withMetric(
-                  PeerResponse.run(apiClient.nodeMetadata.getNodeState())(peerClientMetadata),
+                  PeerResponse.run(apiClient.nodeMetadata.getNodeState(), unboundedBlocker)(peerClientMetadata),
                   "nodeState"
                 )
                 id = sig.hashSignature.id
@@ -363,7 +364,8 @@ class Cluster[F[_]](
             PeerResponse
               .run(
                 apiClient.snapshot
-                  .getLatestMajorityHeight()
+                  .getLatestMajorityHeight(),
+                unboundedBlocker
               )(pm.toPeerClientMetadata)
               .map(_.some)
               .handleError(_ => none[LatestMajorityHeight])
@@ -388,15 +390,17 @@ class Cluster[F[_]](
       _ <- logger.debug(s"Broadcasting own joined height - step1: height=$height")
       ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
-      _ <- broadcast(PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight))))
+      _ <- broadcast(
+        PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)), unboundedBlocker)
+      )
       _ <- F.start(
         T.sleep(10.seconds) >> broadcast(
-          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)))
+          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)), unboundedBlocker)
         )
       )
       _ <- F.start(
         T.sleep(30.seconds) >> broadcast(
-          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)))
+          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(dao.id, ownHeight)), unboundedBlocker)
         )
       )
     } yield ()
@@ -478,7 +482,8 @@ class Cluster[F[_]](
               PeerResponse
                 .run(
                   apiClient.snapshot
-                    .getPeerProposals(leavingPeerId)
+                    .getPeerProposals(leavingPeerId),
+                  unboundedBlocker
                 )(pd.peerMetadata.toPeerClientMetadata)
                 .handleErrorWith(
                   _ =>
@@ -559,9 +564,12 @@ class Cluster[F[_]](
 
         _ <- if (round % dao.processingConfig.peerHealthCheckInterval == 0) {
           peers.values.toList.traverse { pd =>
-            apiClient.metrics
-              .checkHealth()
-              .run(pd.peerMetadata.toPeerClientMetadata)
+            PeerResponse
+              .run(
+                apiClient.metrics
+                  .checkHealth(),
+                unboundedBlocker
+              )(pd.peerMetadata.toPeerClientMetadata)
               .flatTap { _ =>
                 dao.metrics.incrementMetricAsync[F]("peerHealthCheckPassed")
               }
@@ -650,13 +658,14 @@ class Cluster[F[_]](
                 PeerResponse
                   .run(
                     apiClient.sign
-                      .getRegistrationRequest()
+                      .getRegistrationRequest(),
+                    unboundedBlocker
                   )(peerClientMetadata)
                   .flatMap { registrationRequest =>
                     for {
                       _ <- pendingRegistration(peerClientMetadata.host, registrationRequest)
                       prr <- pendingRegistrationRequest
-                      response <- PeerResponse.run(apiClient.sign.register(prr))(peerClientMetadata)
+                      response <- PeerResponse.run(apiClient.sign.register(prr), unboundedBlocker)(peerClientMetadata)
                     } yield response
                   }
                   .handleErrorWith { err =>
@@ -769,7 +778,7 @@ class Cluster[F[_]](
   private def broadcastLeaveRequest(majorityHeight: Long): F[Unit] = {
     def peerUnregister(c: PeerClientMetadata) =
       PeerUnregister(dao.peerHostPort.host, dao.peerHostPort.port, dao.id, majorityHeight)
-    broadcast(c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)))(c)).void
+    broadcast(c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)), unboundedBlocker)(c)).void
   }
 
   def broadcastOfflineNodeState(nodeId: Id = dao.id): F[Unit] =
@@ -777,7 +786,10 @@ class Cluster[F[_]](
 
   private def broadcastNodeState(nodeState: NodeState, nodeId: Id = dao.id): F[Unit] =
     logThread(
-      broadcast(PeerResponse.run(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState))), Set(nodeId)).flatTap {
+      broadcast(
+        PeerResponse.run(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)), unboundedBlocker),
+        Set(nodeId)
+      ).flatTap {
         _.filter(_._2.isLeft).toList.traverse {
           case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
         }
@@ -830,8 +842,9 @@ object Cluster {
     joiningPeerValidator: JoiningPeerValidator[F],
     apiClient: ClientInterpreter[F],
     sessionTokenService: SessionTokenService[F],
-    dao: DAO
-  ) = new Cluster(joiningPeerValidator, apiClient, sessionTokenService, dao)
+    dao: DAO,
+    unboundedBlocker: Blocker
+  ) = new Cluster(joiningPeerValidator, apiClient, sessionTokenService, dao, unboundedBlocker)
 
   case class ClusterNode(alias: String, id: Id, ip: HostPort, status: NodeState, reputation: Long)
 
