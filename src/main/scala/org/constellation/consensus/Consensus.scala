@@ -32,13 +32,13 @@ import org.constellation.storage._
 import org.constellation.{
   CheckpointAcceptBlockAlreadyStored,
   ConfigUtil,
-  ConstellationExecutionContext,
   ContainsInvalidTransactionsException,
   DAO,
   MissingParents,
   MissingTransactionReference,
   PendingAcceptance
 }
+import org.constellation.ConstellationExecutionContext.createSemaphore
 
 import scala.concurrent.duration._
 
@@ -60,12 +60,9 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-//  implicit val contextShift: ContextShift[IO] =
-//    IO.contextShift(ConstellationExecutionContext.unbounded) // TODO: wkoszycki apply from calculationContext[F]
-
   implicit val shadowDAO: DAO = dao
 
-  val updateSemaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
+  val updateSemaphore: Semaphore[F] = createSemaphore[F](1)
 
   private[consensus] val consensusDataProposals: Ref[F, Map[FacilitatorId, ConsensusDataProposal]] =
     Ref.unsafe(Map.empty[FacilitatorId, ConsensusDataProposal])
@@ -354,7 +351,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
         PeerResponse
           .run(
             apiClient.checkpoint
-              .sendFinishedCheckpoint(finishedCheckpoint)
+              .sendFinishedCheckpoint(finishedCheckpoint),
+            remoteCall
           )(pd.peerMetadata.toPeerClientMetadata)
           .handleErrorWith { error =>
             logger.warn(error)(

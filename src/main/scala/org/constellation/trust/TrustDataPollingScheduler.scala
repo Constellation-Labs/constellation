@@ -1,6 +1,6 @@
 package org.constellation.trust
 
-import cats.effect.IO
+import cats.effect.{Blocker, IO}
 import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.domain.trust.TrustDataInternal
@@ -10,6 +10,7 @@ import org.constellation.schema.{Id, NodeState}
 import org.constellation.util.PeriodicIO
 import org.constellation.{ConfigUtil, DAO}
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class TrustDataPollingScheduler(
@@ -17,8 +18,9 @@ class TrustDataPollingScheduler(
   trustManager: TrustManager[IO],
   cluster: Cluster[IO],
   apiClient: ClientInterpreter[IO],
-  dao: DAO
-) extends PeriodicIO("TrustDataPollingScheduler") {
+  dao: DAO,
+  unboundedExecutionContext: ExecutionContext
+) extends PeriodicIO("TrustDataPollingScheduler", unboundedExecutionContext) {
 
   override def trigger(): IO[Unit] =
     cluster.getPeerInfo
@@ -29,7 +31,8 @@ class TrustDataPollingScheduler(
             PeerResponse
               .run(
                 apiClient.cluster
-                  .getTrust()
+                  .getTrust(),
+                Blocker.liftExecutionContext(unboundedExecutionContext)
               )(pd.peerMetadata.toPeerClientMetadata)
               .map(trust => TrustDataInternal(pd.peerMetadata.id, trust.view))
               .handleError(_ => TrustDataInternal(pd.peerMetadata.id, Map.empty[Id, Double]))
@@ -49,7 +52,8 @@ object TrustDataPollingScheduler {
     trustManager: TrustManager[IO],
     cluster: Cluster[IO],
     apiClient: ClientInterpreter[IO],
-    dao: DAO
+    dao: DAO,
+    unboundedExecutionContext: ExecutionContext
   ) =
-    new TrustDataPollingScheduler(config, trustManager, cluster, apiClient, dao)
+    new TrustDataPollingScheduler(config, trustManager, cluster, apiClient, dao, unboundedExecutionContext)
 }

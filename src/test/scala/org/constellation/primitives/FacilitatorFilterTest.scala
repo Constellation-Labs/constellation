@@ -1,7 +1,7 @@
 package org.constellation.primitives
 
 import cats.data.Kleisli
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Blocker, ContextShift, IO}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -21,6 +21,8 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.funspec.AnyFunSpecLike
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class FacilitatorFilterTest
     extends AnyFunSpecLike
     with ArgumentMatchersSugar
@@ -28,7 +30,7 @@ class FacilitatorFilterTest
     with IdiomaticMockitoCats
     with Matchers {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val dao: DAO = mock[DAO]
@@ -41,10 +43,12 @@ class FacilitatorFilterTest
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
   dao.concurrentTipService shouldReturn concurrentTipService
 
-  val calculationContext: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  val calculationContext: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val apiClient = mock[ClientInterpreter[IO]]
-  val facilitatorFilter = new FacilitatorFilter[IO](apiClient, dao)
+
+  val facilitatorFilter =
+    new FacilitatorFilter[IO](apiClient, dao, Blocker.liftExecutionContext(ExecutionContext.global))
 
   describe("filter facilitators") {
     it("should return 2 facilitators") {

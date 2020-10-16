@@ -19,6 +19,7 @@ import org.constellation.{BuildInfo, ConstellationExecutionContext, DAO}
 import org.joda.time.DateTime
 
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 /** For Grafana usage. */
@@ -110,8 +111,12 @@ class TransactionRateTracker()(implicit dao: DAO) {
   * @param periodSeconds: How often to recalculate moving window metrics (e.g. TPS)
   * @param dao: Data access object
   */
-class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(implicit dao: DAO)
-    extends PeriodicIO("Metrics") {
+class Metrics(
+  val collectorRegistry: CollectorRegistry,
+  periodSeconds: Int = 1,
+  unboundedExecutionContext: ExecutionContext
+)(implicit dao: DAO)
+    extends PeriodicIO("Metrics", unboundedExecutionContext) {
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
   private val countMetrics: TrieMap[String, AtomicLong] = TrieMap()
@@ -124,8 +129,6 @@ class Metrics(val collectorRegistry: CollectorRegistry, periodSeconds: Int = 1)(
   // Init
 
   val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash, collectorRegistry)
-
-  implicit val timer: cats.effect.Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
 
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(MILLISECONDS)

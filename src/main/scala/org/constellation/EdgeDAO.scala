@@ -2,44 +2,9 @@ package org.constellation
 
 import java.util.concurrent.Semaphore
 
-import cats.data.NonEmptyList
-import cats.effect.{ContextShift, IO}
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.checkpoint.{
-  CheckpointAcceptanceService,
-  CheckpointBlockValidator,
-  CheckpointParentService,
-  CheckpointService
-}
-import org.constellation.consensus._
-import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
-import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
-import org.constellation.domain.configuration.NodeConfig
-import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.{DownloadService, RedownloadService}
-import org.constellation.domain.rewards.StoredRewards
-import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
-import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
-import org.constellation.infrastructure.p2p.PeerHealthCheckWatcher
-import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
-import org.constellation.p2p.{Cluster, DataResolver, JoiningPeerValidator}
-import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.rollback.RollbackService
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
-import org.constellation.schema.{ChannelMessage, ChannelSendRequest, GenesisObservation, Height, Id}
-import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
-import org.constellation.storage._
-import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.Metrics
+import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.{ChannelMessage, ChannelSendRequest, Height, Id}
 
 import scala.collection.concurrent.TrieMap
 
@@ -157,92 +122,4 @@ object ContainsInvalidTransactionsException {
 
   def apply(cb: CheckpointBlock, txsToExclude: List[String]): ContainsInvalidTransactionsException =
     new ContainsInvalidTransactionsException(cb.baseHash, txsToExclude)
-}
-
-trait EdgeDAO {
-
-  var metrics: Metrics
-
-  @volatile var nodeConfig: NodeConfig
-
-  def processingConfig: ProcessingConfig = nodeConfig.processingConfig
-
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
-
-  // TODO: Put on Id keyed datastore (address? potentially) with other metadata
-  val publicReputation: TrieMap[Id, Double] = TrieMap()
-  val secretReputation: TrieMap[Id, Double] = TrieMap()
-
-  val otherNodeScores: TrieMap[Id, TrieMap[Id, Double]] = TrieMap()
-
-  var cloudService: CloudServiceEnqueue[IO] = _
-
-  var cluster: Cluster[IO] = _
-  var dataResolver: DataResolver[IO] = _
-  var trustManager: TrustManager[IO] = _
-  var transactionService: TransactionService[IO] = _
-  var blacklistedAddresses: BlacklistedAddresses[IO] = _
-  var transactionChainService: TransactionChainService[IO] = _
-  var transactionGossiping: TransactionGossiping[IO] = _
-  var observationService: ObservationService[IO] = _
-  var checkpointService: CheckpointService[IO] = _
-  var checkpointParentService: CheckpointParentService[IO] = _
-  var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
-
-  var genesisObservationStorage: GenesisObservationLocalStorage[IO] = _
-  var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
-
-  var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
-  var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _
-
-  var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
-  var snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[IO, SnapshotInfo]] = _
-
-  var rewardsStorage: LocalFileStorage[IO, StoredRewards] = _
-  var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
-
-  var snapshotService: SnapshotService[IO] = _
-  var concurrentTipService: ConcurrentTipService[IO] = _
-  var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
-  var transactionValidator: TransactionValidator[IO] = _
-  var rateLimiting: RateLimiting[IO] = _
-  var addressService: AddressService[IO] = _
-  var snapshotWatcher: SnapshotWatcher = _
-  var rollbackService: RollbackService[IO] = _
-  var cloudStorage: CloudStorageOld[IO] = _
-  var redownloadService: RedownloadService[IO] = _
-  var downloadService: DownloadService[IO] = _
-  var peerHealthCheck: PeerHealthCheck[IO] = _
-  var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
-  var consensusRemoteSender: ConsensusRemoteSender[IO] = _
-  var consensusManager: ConsensusManager[IO] = _
-  var consensusWatcher: ConsensusWatcher = _
-  var consensusScheduler: ConsensusScheduler = _
-  var trustDataPollingScheduler: TrustDataPollingScheduler = _
-  var eigenTrust: EigenTrust[IO] = _
-  var rewardsManager: RewardsManager[IO] = _
-  var joiningPeerValidator: JoiningPeerValidator[IO] = _
-  var snapshotTrigger: SnapshotTrigger = _
-  var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
-
-  val notificationService = new NotificationService[IO]()
-  val channelService = new ChannelService[IO]()
-  val soeService = new SOEService[IO]()
-  val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
-  val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
-
-  var genesisBlock: Option[CheckpointBlock] = None
-  var genesisObservation: Option[GenesisObservation] = None
-
-  def maxWidth: Int = processingConfig.maxWidth
-
-  def maxTXInBlock: Int = processingConfig.maxTXInBlock
-
-  def minCBSignatureThreshold: Int = processingConfig.numFacilitatorPeers
-
-  val resolveNotifierCallbacks: TrieMap[String, Seq[CheckpointBlock]] = TrieMap()
-
-  def pullMessages(minimumCount: Int): Option[Seq[ChannelMessage]] =
-    threadSafeMessageMemPool.pull(minimumCount)
-
 }

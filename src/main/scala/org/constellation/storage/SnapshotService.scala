@@ -8,7 +8,6 @@ import cats.syntax.all._
 import constellation.withMetric
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConstellationExecutionContext.bounded
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
 import org.constellation.domain.cloud.CloudStorageOld
@@ -33,6 +32,7 @@ import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContext
 
 class SnapshotService[F[_]: Concurrent](
   concurrentTipService: ConcurrentTipService[F],
@@ -50,7 +50,9 @@ class SnapshotService[F[_]: Concurrent](
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   eigenTrustStorage: LocalFileStorage[F, StoredRewards],
   eigenTrust: EigenTrust[F],
-  dao: DAO
+  dao: DAO,
+  boundedExecutionContext: ExecutionContext,
+  unboundedExecutionContext: ExecutionContext
 )(implicit C: ContextShift[F], P: Parallel[F]) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -133,7 +135,7 @@ class SnapshotService[F[_]: Concurrent](
         )
       )
       _ <- C
-        .evalOn(bounded)(applySnapshot().rethrowT)
+        .evalOn(boundedExecutionContext)(applySnapshot().rethrowT)
         .attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
@@ -180,7 +182,7 @@ class SnapshotService[F[_]: Concurrent](
       if (info.snapshot.snapshot == Snapshot.snapshotZero) {
         EitherT.liftF[F, Throwable, Unit](Sync[F].unit)
       } else {
-        C.evalOn(bounded)(Sync[F].delay { KryoSerializer.serializeAnyRef(info) }).attemptT.flatMap {
+        C.evalOn(boundedExecutionContext)(Sync[F].delay { KryoSerializer.serializeAnyRef(info) }).attemptT.flatMap {
           snapshotInfoStorage.write(hash, _)
         }
       }
@@ -217,15 +219,15 @@ class SnapshotService[F[_]: Concurrent](
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
-      _ <- C.evalOn(bounded)(removeStoredSnapshotDataFromMempool())
+      _ <- C.evalOn(boundedExecutionContext)(removeStoredSnapshotDataFromMempool())
       _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
-      _ <- C.evalOn(bounded)(addressService.setAll(snapshotInfo.addressCacheData))
-      _ <- C.evalOn(bounded) {
+      _ <- C.evalOn(boundedExecutionContext)(addressService.setAll(snapshotInfo.addressCacheData))
+      _ <- C.evalOn(boundedExecutionContext) {
         (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
           soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
             checkpointService.put(h) >>
@@ -436,10 +438,10 @@ class SnapshotService[F[_]: Concurrent](
   def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
     for {
       serialized <- EitherT(
-        C.evalOn(ConstellationExecutionContext.bounded)(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot))).attempt
+        C.evalOn(boundedExecutionContext)(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot))).attempt
       )
       write <- EitherT(
-        C.evalOn(ConstellationExecutionContext.unbounded)(writeSnapshot(snapshot, serialized).value)
+        C.evalOn(unboundedExecutionContext)(writeSnapshot(snapshot, serialized).value)
       )
     } yield write
 
@@ -524,7 +526,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): EitherT[F, SnapshotError, Unit] = {
     val applyAfter = for {
-      _ <- C.evalOn(bounded)(acceptSnapshot(currentSnapshot))
+      _ <- C.evalOn(boundedExecutionContext)(acceptSnapshot(currentSnapshot))
 
       _ <- totalNumCBsInSnapshots.modify(t => (t + currentSnapshot.checkpointBlocks.size, ()))
       _ <- totalNumCBsInSnapshots.get.flatTap { total =>
@@ -644,7 +646,9 @@ object SnapshotService {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     eigenTrustStorage: LocalFileStorage[F, StoredRewards],
     eigenTrust: EigenTrust[F],
-    dao: DAO
+    dao: DAO,
+    boundedExecutionContext: ExecutionContext,
+    unboundedExecutionContext: ExecutionContext
   )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
       concurrentTipService,
@@ -662,7 +666,9 @@ object SnapshotService {
       snapshotInfoStorage,
       eigenTrustStorage,
       eigenTrust,
-      dao
+      dao,
+      boundedExecutionContext,
+      unboundedExecutionContext
     )
 }
 

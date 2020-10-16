@@ -7,6 +7,7 @@ import cats.syntax.all._
 import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointParentService, CheckpointService}
 import org.constellation.consensus.Consensus._
 import org.constellation.domain.observation.ObservationService
@@ -21,7 +22,7 @@ import org.constellation.schema.transaction.Transaction
 import org.constellation.schema.{ChannelMessage, Id, NodeState, NodeType, PeerNotification}
 import org.constellation.storage.{ConcurrentTipService, _}
 import org.constellation.util.{Distance, Metrics}
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -61,7 +62,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   private val proposalsExpireTimeCache = ConfigUtil.getOrElse("constellation.cache.expire-after-min.cache", 10)
 
-  private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
+  private val semaphore: Semaphore[F] = createSemaphore()
   private[consensus] val consensuses: Ref[F, Map[RoundId, ConsensusInfo[F]]] = Ref.unsafe(
     Map.empty[RoundId, ConsensusInfo[F]]
   )

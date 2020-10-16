@@ -1,15 +1,15 @@
 package org.constellation.infrastructure.redownload
 
-import cats.effect.{ContextShift, IO}
-import cats.syntax.all._
+import cats.effect.IO
 import org.constellation.util.Logging.logThread
-import org.constellation.{ConstellationExecutionContext, DAO}
+import org.constellation.DAO
 import org.constellation.util.PeriodicIO
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-class RedownloadPeriodicCheck(periodSeconds: Int = 30)(implicit dao: DAO)
-    extends PeriodicIO("RedownloadPeriodicCheck") {
+class RedownloadPeriodicCheck(periodSeconds: Int = 30, unboundedExecutionContext: ExecutionContext)(implicit dao: DAO)
+    extends PeriodicIO("RedownloadPeriodicCheck", unboundedExecutionContext) {
 
   private def triggerRedownloadCheck(): IO[Unit] =
     for {

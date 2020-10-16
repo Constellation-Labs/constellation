@@ -1,6 +1,6 @@
 package org.constellation.consensus
 
-import cats.effect.{Concurrent, ContextShift}
+import cats.effect.{Blocker, Concurrent, ContextShift}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
@@ -13,7 +13,8 @@ import scala.util.Random
 
 class FacilitatorFilter[F[_]: Concurrent](
   apiClient: ClientInterpreter[F],
-  dao: DAO
+  dao: DAO,
+  unboundedBlocker: Blocker
 )(implicit val CS: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -51,5 +52,7 @@ class FacilitatorFilter[F[_]: Concurrent](
     }
 
   private def getFacilitatorNextSnapshotHeights(facilitator: (Id, PeerData)): F[(Id, Long)] =
-    PeerResponse.run(apiClient.snapshot.getNextSnapshotHeight())(facilitator._2.peerMetadata.toPeerClientMetadata)
+    PeerResponse.run(apiClient.snapshot.getNextSnapshotHeight(), unboundedBlocker)(
+      facilitator._2.peerMetadata.toPeerClientMetadata
+    )
 }

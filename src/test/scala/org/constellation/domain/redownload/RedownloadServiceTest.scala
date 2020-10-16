@@ -2,7 +2,7 @@ package org.constellation.domain.redownload
 
 import better.files.File
 import cats.data.{EitherT, Kleisli, NonEmptyList}
-import cats.effect.{ContextShift, IO, Timer}
+import cats.effect.{Blocker, ContextShift, IO, Timer}
 import cats.syntax.all._
 import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
 import org.constellation.checkpoint.CheckpointAcceptanceService
@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContext
 
 class RedownloadServiceTest
     extends AnyFreeSpec
@@ -37,8 +38,8 @@ class RedownloadServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
-  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
 
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
@@ -94,7 +95,9 @@ class RedownloadServiceTest
       checkpointAcceptanceService,
       rewardsManager,
       apiClient,
-      metrics
+      metrics,
+      ExecutionContext.global,
+      Blocker.liftExecutionContext(ExecutionContext.global)
     )
   }
 
@@ -635,7 +638,9 @@ class RedownloadServiceTest
           checkpointAcceptanceService,
           rewardsManager,
           apiClient,
-          metrics
+          metrics,
+          ExecutionContext.global,
+          Blocker.liftExecutionContext(ExecutionContext.global)
         )
 
         val check = redownloadService.sendMajoritySnapshotsToCloud()

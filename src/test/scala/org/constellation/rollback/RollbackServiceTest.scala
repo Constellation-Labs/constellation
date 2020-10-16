@@ -17,6 +17,8 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class RollbackServiceTest
     extends AnyFreeSpec
     with IdiomaticMockito
@@ -25,7 +27,7 @@ class RollbackServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val contextShift = IO.contextShift(scala.concurrent.ExecutionContext.global)
+  implicit val contextShift = IO.contextShift(ExecutionContext.global)
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _

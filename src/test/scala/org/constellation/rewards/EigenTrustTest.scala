@@ -19,6 +19,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class EigenTrustTest
     extends AnyFreeSpec
     with IdiomaticMockito
@@ -27,7 +29,7 @@ class EigenTrustTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val kp1 = KeyUtils.makeKeyPair()
   val kp2 = KeyUtils.makeKeyPair()

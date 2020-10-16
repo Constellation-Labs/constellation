@@ -2,7 +2,7 @@ package org.constellation.util
 
 import java.io.{PrintWriter, StringWriter}
 
-import cats.effect.{Bracket, Clock, IO, Sync}
+import cats.effect.{Bracket, Clock, IO, Sync, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import org.constellation.ConstellationExecutionContext
@@ -17,9 +17,7 @@ object Logging {
     sw.toString
   }
 
-  implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
-
-  def clock[F[_]: Clock] = Clock[F].realTime(MILLISECONDS)
+  def clock[F[_]: Clock]: F[Long] = Clock[F].realTime(MILLISECONDS)
 
   def logThread[F[_]: Sync: Clock, A](
     fa: F[A],
@@ -29,11 +27,13 @@ object Logging {
       startLog(operationName) >> clock
     )(_ => fa)(clk1 => clock.flatMap(finishedLog(operationName, clk1, _)))
 
-  def logThread[A](fa: IO[A], operationName: String)(implicit L: Logger[IO]): IO[A] =
+  def logThread[A](fa: IO[A], operationName: String)(implicit L: Logger[IO], T: Timer[IO]): IO[A] =
     (startLog(operationName) >> clock[IO])
       .bracket(_ => fa)(clk1 => clock[IO].flatMap(finishedLog(operationName, clk1, _)))
 
-  def logThread[A](fa: IO[A], operationName: String, logger: com.typesafe.scalalogging.Logger): IO[A] =
+  def logThread[A](fa: IO[A], operationName: String, logger: com.typesafe.scalalogging.Logger)(
+    implicit T: Timer[IO]
+  ): IO[A] =
     (IO(startLog(operationName, logger)) >> clock[IO])
       .bracket(_ => fa)(clk1 => clock[IO].flatMap(clk2 => IO(finishedLog(operationName, clk1, clk2, logger))))
 

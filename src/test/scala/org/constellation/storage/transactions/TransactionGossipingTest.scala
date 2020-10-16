@@ -15,6 +15,7 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class TransactionGossipingTest
@@ -24,8 +25,8 @@ class TransactionGossipingTest
     with Matchers
     with ArgumentMatchersSugar {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {

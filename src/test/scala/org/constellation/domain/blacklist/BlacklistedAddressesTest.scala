@@ -6,9 +6,11 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class BlacklistedAddressesTest extends AnyFreeSpec with BeforeAndAfter with Matchers {
 
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   private var blacklistAddresses: BlacklistedAddresses[IO] = _
 

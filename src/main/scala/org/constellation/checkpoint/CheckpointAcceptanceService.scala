@@ -6,7 +6,6 @@ import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConstellationExecutionContext.bounded
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker}
@@ -35,6 +34,7 @@ import org.constellation.{
   PendingDownloadException
 }
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
@@ -50,7 +50,8 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   cluster: Cluster[F],
   rateLimiting: RateLimiting[F],
   dataResolver: DataResolver[F],
-  dao: DAO
+  dao: DAO,
+  boundedExecutionContext: ExecutionContext
 ) {
   import CheckpointAcceptanceService._
 
@@ -262,7 +263,9 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         )
 
         _ <- Concurrent[F].start(
-          allowedToAccept.traverse(c => cs.evalOn(bounded)(accept(c)).handleErrorWith(_ => Sync[F].unit))
+          allowedToAccept.traverse(
+            c => cs.evalOn(boundedExecutionContext)(accept(c)).handleErrorWith(_ => Sync[F].unit)
+          )
         )
       } yield ()
 

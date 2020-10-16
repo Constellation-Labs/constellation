@@ -25,6 +25,8 @@ import org.http4s.metrics.prometheus.Prometheus
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 
+import scala.concurrent.ExecutionContext
+
 object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with ArgumentMatchersSugar {
 
   def prepareFacilitators(size: Int): Map[Id, PeerData] =
@@ -118,7 +120,7 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
 
         dao.peerInfo shouldReturn IO.pure(Map.empty)
 
-        val metrics = new Metrics(registry, 600)(dao)
+        val metrics = new Metrics(registry, 600, ExecutionContext.global)(dao)
         dao.metrics shouldReturn metrics
 
         val cluster = mock[Cluster[IO]]

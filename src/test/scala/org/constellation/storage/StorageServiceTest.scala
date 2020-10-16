@@ -7,9 +7,11 @@ import org.mockito.IdiomaticMockito
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class StorageServiceTest extends AnyFunSuite with IdiomaticMockito with Matchers {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   test("it should allow to put a new value") {
     val storage = new StorageService[IO, Int]()

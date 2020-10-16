@@ -9,9 +9,11 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class KeyToolCreateKeyPairStoreTest extends AnyFunSuite with BeforeAndAfterAll with Matchers {
 
-  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   private val keyPath: String = "src/test/resources/testKey.p12"
   private val alias: String = "alias"

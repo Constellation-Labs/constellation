@@ -12,7 +12,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
 
 object CheckOpenedFileDescriptors {
 
@@ -26,7 +26,7 @@ object CheckOpenedFileDescriptors {
 
 class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
 
-  implicit val ec: ExecutionContextExecutor = ConstellationExecutionContext.unbounded
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
   implicit val cs: ContextShift[IO] = IO.contextShift(ec)
 
   var openedFiles: Long = 0

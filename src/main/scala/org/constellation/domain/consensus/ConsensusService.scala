@@ -4,7 +4,7 @@ import cats.effect.concurrent.Semaphore
 import cats.effect.{Concurrent, ContextShift, IO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.ConstellationExecutionContext
+import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.concurrency.SingleLock
@@ -20,7 +20,7 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
 
   protected[domain] val merklePool =
     new ConcurrentStorageService[F, Seq[String]](
-      ConstellationExecutionContext.createSemaphore(),
+      createSemaphore(),
       metricRecordPrefix.map(_ + "_merklePool")
     )
 

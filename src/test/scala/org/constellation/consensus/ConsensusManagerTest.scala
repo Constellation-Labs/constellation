@@ -23,6 +23,7 @@ import org.scalatest.funspec.AnyFunSpecLike
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
 import scala.io.Source
 
 class ConsensusManagerTest
@@ -53,9 +54,9 @@ class ConsensusManagerTest
 
   val dao: DAO = TestHelpers.prepareMockedDAO()
 
-  implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ConstellationExecutionContext.bounded))
-  implicit val cs = IO.contextShift(ConstellationExecutionContext.unbounded)
-  implicit val timer = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ExecutionContext.global))
+  implicit val cs = IO.contextShift(ExecutionContext.global)
+  implicit val timer = IO.timer(ExecutionContext.global)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -74,8 +75,8 @@ class ConsensusManagerTest
       dao.dataResolver,
       dao,
       conf,
-      Blocker.liftExecutionContext(ConstellationExecutionContext.unbounded),
-      IO.contextShift(ConstellationExecutionContext.bounded),
+      Blocker.liftExecutionContext(ExecutionContext.global),
+      IO.contextShift(ExecutionContext.global),
       metrics
     )
   }

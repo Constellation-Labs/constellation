@@ -9,14 +9,16 @@ import org.constellation.schema.NodeState
 import org.constellation.util.PeriodicIO
 import org.constellation.{ConfigUtil, DAO}
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class ConsensusScheduler(
   config: Config,
   consensusManager: ConsensusManager[IO],
   cluster: Cluster[IO],
-  dao: DAO
-) extends PeriodicIO("ConsensusScheduler") {
+  dao: DAO,
+  unboundedExecutionContext: ExecutionContext
+) extends PeriodicIO("ConsensusScheduler", unboundedExecutionContext) {
 
   val crossTalkConsensus: IO[Unit] = consensusManager.startOwnConsensus().void.handleErrorWith {
     case error: ConsensusStartError => IO(logger.debug(error.getMessage))

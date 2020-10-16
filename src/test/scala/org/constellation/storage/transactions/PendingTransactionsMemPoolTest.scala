@@ -12,9 +12,11 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class PendingTransactionsMemPoolTest extends AnyFreeSpec with IdiomaticMockito with Matchers with BeforeAndAfter {
   import constellation.signedObservationEdge
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   var txChainService: TransactionChainService[IO] = _
   var txService: TransactionService[IO] = _

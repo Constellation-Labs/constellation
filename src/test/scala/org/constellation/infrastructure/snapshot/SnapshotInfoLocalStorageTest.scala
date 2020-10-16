@@ -12,11 +12,12 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
+import scala.concurrent.ExecutionContext
 
 class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
 
   "createDirectoryIfNotExists" - {
     "should create snapshot info directory if it does not exist" in CheckOpenedFileDescriptors.check {

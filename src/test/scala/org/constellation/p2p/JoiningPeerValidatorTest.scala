@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import constellation._
 import cats.data.Kleisli
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Blocker, ContextShift, IO}
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
@@ -17,6 +17,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class JoiningPeerValidatorTest
     extends AnyFreeSpec
     with ArgumentMatchersSugar
@@ -25,11 +27,13 @@ class JoiningPeerValidatorTest
     with IdiomaticMockitoCats
     with Matchers {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
 
   val apiClient = mock[ClientInterpreter[IO]]
-  val joiningPeerValidator: JoiningPeerValidator[IO] = new JoiningPeerValidator[IO](apiClient)
+
+  val joiningPeerValidator: JoiningPeerValidator[IO] =
+    new JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(ExecutionContext.global))
 
   private val joiningNode = PeerClientMetadata("1.1.1.1", 9000, null)
 

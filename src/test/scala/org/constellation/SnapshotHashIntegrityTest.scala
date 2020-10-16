@@ -5,8 +5,10 @@ import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, Snap
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class SnapshotHashIntegrityTest extends AnyFreeSpec with Matchers {
-  implicit val cc: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cc: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   "snapshot read" in {
     val storage = SnapshotLocalStorage[IO]("src/test/resources")

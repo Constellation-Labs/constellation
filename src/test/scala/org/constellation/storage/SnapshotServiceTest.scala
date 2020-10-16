@@ -20,6 +20,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class SnapshotServiceTest
     extends AnyFreeSpec
     with IdiomaticMockito
@@ -28,8 +30,8 @@ class SnapshotServiceTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.bounded)
-  implicit val timer: Timer[IO] = IO.timer(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
 
   var dao: DAO = _
   var snapshotService: SnapshotService[IO] = _
@@ -71,7 +73,9 @@ class SnapshotServiceTest
       snapshotInfoStorage,
       eigenTrustStorage,
       eigenTrust,
-      dao
+      dao,
+      ExecutionContext.global,
+      ExecutionContext.global
     )
   }
 

@@ -15,6 +15,8 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 class TransactionEndpointsTest
     extends AnyFreeSpec
     with IdiomaticMockito
@@ -23,7 +25,7 @@ class TransactionEndpointsTest
     with ArgumentMatchersSugar
     with BeforeAndAfter {
 
-  implicit val cs: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   var transactionChainService: TransactionChainService[IO] = _
   var transactionService: TransactionService[IO] = _
