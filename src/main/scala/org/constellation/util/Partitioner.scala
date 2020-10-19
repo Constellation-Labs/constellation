@@ -64,23 +64,21 @@ object Partitioner {
     * @param trustGraph output of SelfAvoidingWalk, the topology of peer influence
     * @param src
     */
-  implicit class HausdorffPartitioner(trustGraph: List[TrustDataInternal])
-                                        (implicit src: TrustDataInternal) {
-    val k: Int = math.sqrt(trustGraph.length).toInt + 1
-    lazy val nerve = hyperCover(Map(0 -> List(src)), trustGraph, k)
+  implicit class HausdorffPartition(trustGraph: List[TrustDataInternal])
+                                   (implicit src: TrustDataInternal) {
 
-    //todo TrustDataInternal covariant, then this can partition hybrid channels
-    implicit def partialOrder(hyperEdge: List[TrustDataInternal]): Ordering[TrustDataInternal] = CechOrdering(hyperEdge: List[TrustDataInternal])
+    lazy val nerve = hyperCover(Map(0 -> List(src)), trustGraph, k)
+    val k: Int = math.sqrt(trustGraph.length).toInt + 1
 
     implicit def hausdorffMonoid(hyperEdge: List[TrustDataInternal]): TopKMonoid[TrustDataInternal] =
-      new TopKMonoid[TrustDataInternal](k)(partialOrder(hyperEdge))
+      new TopKMonoid[TrustDataInternal](k)(HausdorffOrdering(hyperEdge))
 
     @tailrec
     final def hyperCover(topology: Map[Int, List[TrustDataInternal]],
                          peers: List[TrustDataInternal],
                          k: Int): Map[Int, List[TrustDataInternal]] = {
       if (k > 0) {
-        val nearestNeighbors: List[TrustDataInternal] = haussdorfCluster(topology(k), peers)(topology(k))
+        val nearestNeighbors = diffuse(topology(k), peers)(topology(k))
         val higherOrders = peers.diff(nearestNeighbors)
         val newTop = topology + (k -> nearestNeighbors)
         hyperCover(newTop, higherOrders, k - 1)
@@ -88,8 +86,17 @@ object Partitioner {
       else topology
     }
 
-    def haussdorfCluster(hyperEdge: List[TrustDataInternal], higherOrders: List[TrustDataInternal])
-                        (implicit monoid: TopKMonoid[TrustDataInternal]):
+    /**
+      * The node-influence-measure calculated in SelfAvoidingWalk is essentially a pullback across the dimensions of
+      * Observations into a density that allows calculation of diffusion across hyperedges which is our calculation of
+      * 'Conductance' or max-flow. See Lemma 4.1: https://arxiv.org/pdf/1804.11128.pdf
+      *
+      * @param hyperEdge
+      * @param higherOrders
+      * @return
+      */
+    def diffuse(hyperEdge: List[TrustDataInternal], higherOrders: List[TrustDataInternal])
+               (implicit monoid: TopKMonoid[TrustDataInternal]):
     List[TrustDataInternal] = monoid.sum(higherOrders.map(l => hausdorffMonoid(hyperEdge).build(l))).items
 
     def rePartition(kPartite: Map[Int, List[TrustDataInternal]] = nerve)(influenceGraph: List[TrustDataInternal]):
@@ -98,17 +105,29 @@ object Partitioner {
 
 }
 
-object HausdorffPartitioner {
-  def laplacian(hyperEdge: List[TrustDataInternal])(higherOrderNode: TrustDataInternal) = 1
+case class HausdorffOrdering(hyperEdge: List[TrustDataInternal]) extends Ordering[TrustDataInternal] {
+  override def compare(x: TrustDataInternal, y: TrustDataInternal): Int = {
+    val (xComplete, xSingle) = haussdorfDistance(x)
+    val (yComplete, ySingle) = haussdorfDistance(y)
+    if (xComplete <= yComplete && xSingle > ySingle) 1
+    else if (xComplete == xSingle && xSingle == ySingle) 0
+    else -1
+  }
 
-  def hausdorffDistance(laplacian: Seq[TrustDataInternal], trustDataInternal: TrustDataInternal) = 1.0
-}
-
-case class CechOrdering(hyperEdge: List[TrustDataInternal]) extends Ordering[TrustDataInternal] {
-  def distance(higherOrderNode: TrustDataInternal): Int = HausdorffPartitioner.laplacian(hyperEdge)(higherOrderNode)
-
-  override def compare(x: TrustDataInternal, y: TrustDataInternal): Int =
-    if (distance(x) >= distance(y)) 1
-    else 0
+  /**
+    * See eq 19 https://arxiv.org/pdf/0801.0748.pdf
+    *
+    * @param higherOrderNode
+    * @return
+    */
+  def haussdorfDistance(higherOrderNode: TrustDataInternal): (Double, Double) =
+    hyperEdge.foldLeft((0.0, 0.0)) { case ((curCompleteLinkage, curSingleLinkage), tdi) =>
+      val (complete, single) = tdi.view.foldLeft((curCompleteLinkage, curSingleLinkage)) {
+        case ((curCompleteLinkage, curSingleLinkage), (id, influenceMeasure)) =>
+          val higherOrderMeasure = higherOrderNode.view(id)
+          (curCompleteLinkage + (influenceMeasure + higherOrderMeasure), curSingleLinkage - (influenceMeasure + higherOrderMeasure))
+      }
+      (curCompleteLinkage + complete, curSingleLinkage + single)
+    }
 }
 
