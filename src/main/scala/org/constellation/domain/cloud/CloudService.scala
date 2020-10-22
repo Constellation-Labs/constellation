@@ -11,12 +11,15 @@ import org.constellation.domain.cloud.CloudService._
 import org.constellation.domain.cloud.config._
 import org.constellation.domain.cloud.providers.{CloudServiceProvider, GCPProvider, LocalProvider, S3Provider}
 import org.constellation.schema.GenesisObservation
+import org.constellation.util.Metrics
 
-class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: Concurrent[F]) {
+class CloudService[F[_]](providers: List[CloudServiceProvider[F]], metrics: Metrics)(implicit F: Concurrent[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
 
   private val sentData: Ref[F, Set[SnapshotSent]] = Ref.unsafe(Set.empty)
+
+  private[cloud] val lastSentSnapshot: Ref[F, Option[SnapshotSent]] = Ref.unsafe(None)
 
   def cloudSendingQueue(queue: Queue[F, DataToSend]): F[CloudServiceEnqueue[F]] = {
     val send: F[Unit] = queue.dequeue.through(sendFile).compile.drain
@@ -45,15 +48,39 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
     }
   }
 
+  private[cloud] def verifyAndSend(
+    height: Long,
+    hash: String,
+    send: F[List[Either[Throwable, Unit]]]
+  ): F[List[Either[Throwable, Unit]]] =
+    for {
+      lastSentSnapshot <- lastSentSnapshot.get
+      verificationResult = lastSentSnapshot.forall {
+        sentSnapshot =>
+          val heightDiff = height - sentSnapshot.height
+          lazy val isHashEqual = hash == sentSnapshot.hash
+
+          (heightDiff == 2L && sentSnapshot.snapshot && sentSnapshot.snapshotInfo) || (heightDiff == 0L && isHashEqual)
+      }
+      sendingResult <-
+        if (verificationResult)
+          send
+        else {
+          val e = PrecedingSnapshotIsNotThePreviousOne(lastSentSnapshot, height, hash)
+          logger.warn(e)("Failed verification before sending snapshot to cloud.") >>
+            List(e.asLeft[Unit]).pure[F]
+        }
+    } yield sendingResult
+
   private def sendFile: Pipe[F, DataToSend, Unit] =
     _.evalMap {
       case GenesisToSend(genesis) => sendGenesis(genesis)
       case s @ SnapshotToSend(_, height, hash) =>
-        sendSnapshot(s) >>= { ops =>
+        verifyAndSend(s.height, s.hash, sendSnapshot(s)) >>= { ops =>
           if (atLeastOne(ops)) markSnapshotAsSent(height, hash) else F.unit
         }
       case s @ SnapshotInfoToSend(_, height, hash) =>
-        sendSnapshotInfo(s) >>= { ops =>
+        verifyAndSend(s.height, s.hash, sendSnapshotInfo(s)) >>= { ops =>
           if (atLeastOne(ops)) markSnapshotInfoAsSent(height, hash) else F.unit
         }
     }
@@ -61,27 +88,51 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
   private def atLeastOne(ops: List[Either[Throwable, Unit]]): Boolean =
     ops.count(_.isRight) > 0
 
+  private def updateLastSentSnapshot: SnapshotSent => F[SnapshotSent] =
+    snapshotSent =>
+      lastSentSnapshot.modify { _ =>
+        (snapshotSent.some, snapshotSent)
+      }
+
+  private def incrementLastSentSnapshotMetric: SnapshotSent => F[Unit] =
+    snapshotSent =>
+      if (providers.isEmpty) F.unit
+      else metrics.updateMetricAsync[F]("cloud_sentSnapshotHeight", snapshotSent.height)
+
+  private def incrementLastSentSnapshotInfoMetric: SnapshotSent => F[Unit] =
+    snapshotSent =>
+      if (providers.isEmpty) F.unit
+      else metrics.updateMetricAsync[F]("cloud_sentSnapshotInfoHeight", snapshotSent.height)
+
   private def markSnapshotAsSent(height: Long, hash: String): F[Unit] =
     sentData.modify { s =>
-      val updated = s
+      val snapshotSent = s
         .find(_.hash == hash)
-        .fold(s + SnapshotSent(height, hash, snapshot = true, snapshotInfo = false))(
+        .fold(SnapshotSent(height, hash, snapshot = true, snapshotInfo = false))(
           snap =>
-            s.filterNot(_.hash == hash) + SnapshotSent(height, hash, snapshot = true, snapshotInfo = snap.snapshotInfo)
+            SnapshotSent(height, hash, snapshot = true, snapshotInfo = snap.snapshotInfo)
         )
-      (updated, ())
-    }
+      val updated = s.filterNot(_.hash == hash) + snapshotSent
+
+      (updated, snapshotSent)
+    } >>=
+      updateLastSentSnapshot >>=
+      incrementLastSentSnapshotMetric
 
   private def markSnapshotInfoAsSent(height: Long, hash: String): F[Unit] =
     sentData.modify { s =>
-      val updated = s
+      val snapshotSent = s
         .find(_.hash == hash)
-        .fold(s + SnapshotSent(height, hash, snapshot = false, snapshotInfo = true))(
+        .fold(SnapshotSent(height, hash, snapshot = false, snapshotInfo = true))(
           snap =>
-            s.filterNot(_.hash == hash) + SnapshotSent(height, hash, snapshot = snap.snapshot, snapshotInfo = true)
+            SnapshotSent(height, hash, snapshot = snap.snapshot, snapshotInfo = true)
         )
-      (updated, ())
-    }
+      val updated = s.filterNot(_.hash == hash) + snapshotSent
+
+      (updated, snapshotSent)
+    } >>=
+      updateLastSentSnapshot >>=
+      incrementLastSentSnapshotInfoMetric
 
   private def sendGenesis(genesis: GenesisObservation): F[Unit] =
     if (providers.isEmpty)
@@ -145,7 +196,7 @@ class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: C
 
 object CloudService {
 
-  def apply[F[_]: Concurrent](cloudConfig: CloudConfig): CloudService[F] = {
+  def apply[F[_]: Concurrent](cloudConfig: CloudConfig, metrics: Metrics): CloudService[F] = {
     val providers: List[CloudServiceProvider[F]] = cloudConfig.providers.map {
       case config @ S3(_, _, _)          => S3Provider(config)
       case config @ GCP(_, _)            => GCPProvider(config)
@@ -153,7 +204,7 @@ object CloudService {
       case config @ Local(_)             => LocalProvider(config)
     }
 
-    new CloudService(providers)
+    new CloudService(providers, metrics)
   }
 
   trait CloudServiceEnqueue[F[_]] {
@@ -177,4 +228,11 @@ object CloudService {
   case class SnapshotInfoToSend(file: File, height: Long, hash: String) extends FileToSend
 
   case class SnapshotSent(height: Long, hash: String, snapshot: Boolean, snapshotInfo: Boolean)
+
+  sealed trait CloudServiceError extends Throwable
+  case class PrecedingSnapshotIsNotThePreviousOne(lastSentSnapshot: Option[SnapshotSent], height: Long, hash: String)
+      extends CloudServiceError {
+    override def getMessage: String =
+      s"Previously sent snapshot is not the preceding one. Last=$lastSentSnapshot, height=$height, hash=$hash"
+  }
 }

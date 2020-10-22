@@ -476,8 +476,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       //          }
       //      }
 
-      _ <- uploadSnapshots.sequence
-      _ <- uploadSnapshotInfos.sequence
+      _ <- uploadSnapshots.zip(uploadSnapshotInfos)//so that snapshot and snapshotInfo for the same height are queued one after the other
+        .flatten{case (a,b) => List(a, b)}
+        .sequence
       // For now we do not restore EigenTrust model
       //      _ <- uploadRewards.sequence
 

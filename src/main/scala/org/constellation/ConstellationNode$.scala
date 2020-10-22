@@ -102,13 +102,9 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           )
       }
 
-      cloudService = CloudService[IO](cloudConfig)
-      cloudQueue <- Stream.eval(Queue.unbounded[IO, DataToSend])
-      cloudQueueInstance <- Stream.eval(cloudService.cloudSendingQueue(cloudQueue))
-
       dao <- runNode$(
         nodeConfig,
-        cloudQueueInstance,
+        cloudConfig,
         apiClient,
         registry,
         sessionTokenService,
@@ -253,7 +249,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
   def runNode$(
     nodeConfig: NodeConfig,
-    cloudService: CloudServiceEnqueue[IO],
+    cloudConfig: CloudConfig,
     client: Client[IO],
     registry: CollectorRegistry,
     sessionTokenService: SessionTokenService[IO],
@@ -285,8 +281,13 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           unboundedExecutionContext
         )(dao)
       })
+      cloudService <- Stream.eval(IO {
+        CloudService[IO](cloudConfig, dao.metrics)
+      })
+      cloudQueue <- Stream.eval(Queue.unbounded[IO, DataToSend])
+      cloudQueueInstance <- Stream.eval(cloudService.cloudSendingQueue(cloudQueue))
       _ <- Stream.eval(IO {
-        dao.initialize(nodeConfig, cloudService)
+        dao.initialize(nodeConfig, cloudQueueInstance)
       })
       _ <- Stream.eval(IO {
         MDC.put("node_id", dao.id.short)

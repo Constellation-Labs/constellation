@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 - Possibility to export private key from KeyStore in hexadecimal format
 ### Changed
 - ConstellationNode uses fs2 implementation to initialize
+- Check if previous snapshot was sent to cloud before sending the current one
 
 ## [v2.16.2] 2020-10-09
 ### Changed
