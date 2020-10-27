@@ -1,16 +1,15 @@
 package org.constellation.infrastructure.endpoints
 
 import cats.effect.{ContextShift, IO}
-import io.circe.generic.auto._
-import org.http4s.circe.CirceEntityDecoder._
-import org.http4s.implicits._
 import org.constellation.ConstellationExecutionContext
+import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.schema.transaction.LastTransactionRef
 import org.constellation.util.Metrics
+import org.http4s.implicits._
 import org.http4s.{HttpRoutes, Method, Request, Status}
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -30,14 +29,18 @@ class TransactionEndpointsTest
   var transactionChainService: TransactionChainService[IO] = _
   var transactionService: TransactionService[IO] = _
   var metrics: Metrics = _
+  var checkpointBlockValidator: CheckpointBlockValidator[IO] = _
   var transactionPeerEndpoints: HttpRoutes[IO] = _
+  var transactionPublicEndpoints: HttpRoutes[IO] = _
 
   before {
     transactionChainService = mock[TransactionChainService[IO]]
     transactionService = mock[TransactionService[IO]]
     metrics = mock[Metrics]
+    checkpointBlockValidator = mock[CheckpointBlockValidator[IO]]
 
     transactionPeerEndpoints = TransactionEndpoints.peerEndpoints[IO](transactionService, metrics)
+    transactionPublicEndpoints = TransactionEndpoints.publicEndpoints[IO](transactionService, checkpointBlockValidator)
   }
 
   "transactionPeerEndpoints" - {
@@ -55,6 +58,16 @@ class TransactionEndpointsTest
         transactionChainService.getLastAcceptedTransactionRef(*) shouldReturnF LastTransactionRef.empty
         val response =
           transactionPeerEndpoints.orNotFound.run(Request(Method.GET, uri"transaction/last-ref/DAG123")).unsafeRunSync
+
+        response.status shouldBe Status.Ok
+      }
+    }
+
+    "findTransactionsEndpoint" - {
+      "should respond with an Ok status" in {
+        transactionService.findByPredicate(*) shouldReturnF List.empty
+
+        val response = transactionPublicEndpoints.orNotFound.run(Request(Method.GET, uri"transaction?src=src")).unsafeRunSync
 
         response.status shouldBe Status.Ok
       }

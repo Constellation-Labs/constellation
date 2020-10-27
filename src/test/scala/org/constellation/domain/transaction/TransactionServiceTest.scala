@@ -381,6 +381,27 @@ class TransactionServiceTest
     }
   }
 
+  "findByPredicate" - {
+    "should find transaction by sender address" in {
+      val otherTx = mock[TransactionCacheData]
+      otherTx.transaction shouldReturn mock[Transaction]
+      otherTx.transaction.src shouldReturn Address("otherSrc")
+
+      txService.put(tx, ConsensusStatus.Accepted).unsafeRunSync
+      txService.put(otherTx, ConsensusStatus.Accepted).unsafeRunSync
+
+      val txs = txService.findByPredicate(_.transaction.src.address == "src").unsafeRunSync
+      txs should contain only tx
+    }
+
+    "should not find transactions in unknown state" in {
+      txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
+
+      val txs = txService.findByPredicate(_ => true).unsafeRunSync
+      txs isEmpty
+    }
+  }
+
   private def mockDAO: DAO = {
     val dao = mock[DAO]
 

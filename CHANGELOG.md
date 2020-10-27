@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Possibility to migrate existing KeyStore to use storepass for both KeyStore and KeyPair
 - Possibility to export private key from KeyStore in hexadecimal format
+- Endpoint for querying transactions by source address, that are not yet in a snapshot
 ### Changed
 - ConstellationNode uses fs2 implementation to initialize
 

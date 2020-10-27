@@ -8,13 +8,15 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.TransactionService
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.util.Metrics
-import org.http4s.{HttpRoutes, _}
+import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 
 class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
+
+  object SourceAddressParamMatcher extends QueryParamDecoderMatcher[String]("src")
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
@@ -23,6 +25,7 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
     checkpointBlockValidator: CheckpointBlockValidator[F]
   ) =
     getTransactionEndpoint(transactionService) <+>
+      findTransactionsEndpoint(transactionService) <+>
       processTransactionEndpoint(transactionService, checkpointBlockValidator) <+>
       getLastTransactionRefEndpoint(transactionService)
 
@@ -76,6 +79,13 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
       case GET -> Root / "transaction" / "last-ref" / address =>
         transactionService.transactionChainService.getLastAcceptedTransactionRef(address).map(_.asJson).flatMap(Ok(_))
     }
+
+  private def findTransactionsEndpoint(transactionService: TransactionService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "transaction" :? SourceAddressParamMatcher(sourceAddress) =>
+      transactionService
+        .findByPredicate(_.transaction.src.address == sourceAddress)
+        .map(_.asJson).flatMap(Ok(_))
+  }
 }
 
 object TransactionEndpoints {
