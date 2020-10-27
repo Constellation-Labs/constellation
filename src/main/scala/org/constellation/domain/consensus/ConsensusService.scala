@@ -144,6 +144,16 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         )
       )
 
+  def findByPredicate(predicate: A => Boolean): F[List[A]] = {
+    val filter: Map[String, A] => List[A] = _.filter { case (_, v) => predicate(v) }.values.toList
+
+    for {
+      p <- pending.toMap().map(filter)
+      a <- accepted.toMap().map(filter)
+      ic <- inConsensus.toMap().map(filter)
+    } yield p ++ a ++ ic
+  }
+
   def lookup(key: String): F[Option[A]] =
     Lookup.extendedLookup[F, String, A](List(accepted, inConsensus, pending, unknown))(
       key
