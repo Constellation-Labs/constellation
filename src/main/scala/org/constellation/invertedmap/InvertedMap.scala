@@ -50,5 +50,7 @@ final class InvertedMap[A, B] private (m: Map[B, Set[A]])
 object InvertedMap extends GenMapFactory[InvertedMap] {
   def empty[A, B] = new InvertedMap[A, B]()
 
+  def apply[A, B](m: Map[A, B]): InvertedMap[A, B] = InvertedMap(m.toSeq: _*)
+
   implicit def canBuildFrom[A, B]: CanBuildFrom[Coll, (A, B), InvertedMap[A, B]] = new MapCanBuildFrom[A, B]
 }

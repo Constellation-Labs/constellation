@@ -67,11 +67,11 @@ class MajorityStateChooser(id: Id) {
     if (value < 1.0e-10 && value > -1.0e-10) 0d
     else value
 
-  private def totalReputation(proposals: Map[Id, SnapshotProposalsAtHeight], height: Long, id: Id): Double =
+  private def totalReputation(proposals: PeersProposals, height: Long, id: Id): Double =
     proposals.values.flatMap { _.get(height).map(_.reputation.getOrElse(id, 0d)) }.sum
 
   private def mergeByHeights(
-    proposals: Map[Id, SnapshotProposalsAtHeight],
+    proposals: PeersProposals,
     peersCache: PeersCache
   ): Map[Long, Set[ExtendedSnapshotProposal]] =
     proposals.map {
