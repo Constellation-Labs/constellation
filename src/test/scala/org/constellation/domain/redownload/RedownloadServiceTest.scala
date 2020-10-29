@@ -15,6 +15,7 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
+import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
@@ -341,7 +342,7 @@ class RedownloadServiceTest
       PeerMetadata("host2", 9999, peer2, resourceInfo = mock[ResourceInfo]),
       NonEmptyList(mock[MajorityHeight], Nil)
     )
-    val initialPeersProposals = Map(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty)))
+    val initialPeersProposals = InvertedMap(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty)))
     val peer1Proposals =
       Map(1L -> SnapshotProposal("hash2p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty))
     val peer2Proposals =

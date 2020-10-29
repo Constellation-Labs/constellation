@@ -15,6 +15,7 @@ import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
@@ -63,7 +64,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   /**
     * Majority proposals from other peers. It is used to calculate majority state.
     */
-  private[redownload] val peersProposals: Ref[F, PeersProposals] = Ref.unsafe(Map.empty)
+  private[redownload] val peersProposals: Ref[F, PeersProposals] = Ref.unsafe(InvertedMap.empty)
 
   private[redownload] val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
 
@@ -123,7 +124,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     for {
       _ <- createdSnapshots.modify(_ => (Map.empty, ()))
       _ <- acceptedSnapshots.modify(_ => (Map.empty, ()))
-      _ <- peersProposals.modify(_ => (Map.empty, ()))
+      _ <- peersProposals.modify(_ => (InvertedMap.empty, ()))
       _ <- setLastMajorityState(Map.empty)
       _ <- setLastSentHeight(-1)
       _ <- rewardsManager.clearLastRewardedHeight()
@@ -148,7 +149,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
             id -> (proposalsAtHeight ++ diff)
         } ++ (newProposals -- m.keySet)
 
-        val ignored = updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a))))
+        val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
         (ignored, ignored)
       }
     } yield proposals
@@ -719,7 +720,7 @@ object RedownloadService {
   type Reputation = SortedMap[Id, Double]
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type SnapshotProposalsAtHeight = Map[Long, SnapshotProposal]
-  type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
+  type PeersProposals = InvertedMap[Id, SnapshotProposalsAtHeight]
   type PeersCache = Map[Id, NonEmptyList[MajorityHeight]]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]

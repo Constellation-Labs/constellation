@@ -2,6 +2,7 @@ package org.constellation.infrastructure.redownload
 
 import cats.effect.IO
 import cats.syntax.all._
+import org.constellation.invertedmap.InvertedMap
 import org.constellation.{DAO, TestHelpers}
 import org.constellation.p2p.Cluster
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -25,7 +26,7 @@ class RedownloadPeriodicCheckTest
   before {
     dao = TestHelpers.prepareMockedDAO()
 
-    dao.redownloadService.fetchAndUpdatePeersProposals shouldReturnF Map.empty
+    dao.redownloadService.fetchAndUpdatePeersProposals shouldReturnF InvertedMap.empty
     dao.redownloadService.checkForAlignmentWithMajoritySnapshot(*) shouldReturnF Unit
   }
 
