@@ -26,21 +26,10 @@ class RedownloadPeriodicCheckTest
   before {
     dao = TestHelpers.prepareMockedDAO()
 
-    dao.redownloadService.fetchAndUpdatePeersProposals shouldReturnF InvertedMap.empty
     dao.redownloadService.checkForAlignmentWithMajoritySnapshot(*) shouldReturnF Unit
   }
 
   "triggerRedownloadCheck" - {
-    "calls fetch for peers proposals" in {
-      val redownloadPeriodicCheck = new RedownloadPeriodicCheck(30, ExecutionContext.global)
-
-      val trigger = redownloadPeriodicCheck.trigger()
-      val cancel = redownloadPeriodicCheck.cancel()
-
-      trigger.guarantee(cancel).unsafeRunSync
-
-      dao.redownloadService.fetchAndUpdatePeersProposals.was(called)
-    }
 
     "calls check for alignment with majority snapshot" in {
       val redownloadPeriodicCheck = new RedownloadPeriodicCheck(30, ExecutionContext.global)

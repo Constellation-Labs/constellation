@@ -18,23 +18,21 @@ import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.configuration.CliConfigParser
-import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.infrastructure.endpoints._
+import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.schema.{GenesisObservation, Id, NodeState}
 import org.constellation.session.SessionTokenService
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
-import org.http4s.server.Server
+import org.http4s.Request
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.implicits._
-import org.http4s.metrics.MetricsOps
 import org.http4s.metrics.prometheus.Prometheus
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.{Router, middleware}
-import org.http4s.{HttpApp, HttpRoutes, Request}
 import org.slf4j.MDC
 import pureconfig._
 import pureconfig.generic.auto._
@@ -153,7 +151,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.snapshotInfoStorage,
           dao.snapshotService,
           dao.cluster,
-          dao.redownloadService
+          dao.redownloadService,
+          dao.snapshotProposalGossipService
         ) <+>
         SoeEndpoints.peerEndpoints[IO](dao.soeService) <+>
         TipsEndpoints.peerEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>

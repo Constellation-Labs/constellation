@@ -503,7 +503,7 @@ class Cluster[F[_]](
         maxProposal = proposals.maximumOption
         _ <- maxProposal.map { proposal =>
           logger.debug(s"Maximum proposal for leaving node id=${leavingPeerId} is empty? ${proposal.isEmpty}") >>
-            LiftIO[F].liftIO(dao.redownloadService.updatePeerProposal(leavingPeerId, proposal))
+            LiftIO[F].liftIO(dao.redownloadService.updatePeerProposals(leavingPeerId, proposal))
         }.getOrElse(F.unit)
 
         maxProposalHeight = maxProposal.flatMap(_.keySet.toList.maximumOption)
