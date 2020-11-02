@@ -7,7 +7,7 @@ import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
-import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
+import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
@@ -243,7 +243,7 @@ class RedownloadServiceTest
       val trust = SortedMap(Id("a") -> 0.2, Id("b") -> -0.4)
       val persist = redownloadService.persistCreatedSnapshot(2L, "aabbcc", trust)
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
-      (persist >> check).unsafeRunSync shouldBe SnapshotProposal("aabbcc", trust).some
+      (persist >> check).unsafeRunSync shouldBe PersistedSnapshotProposal("aabbcc", trust).some
     }
 
     "should not override previously persisted snapshot if snapshot at given height already exists" in {
@@ -251,7 +251,7 @@ class RedownloadServiceTest
       val persistSecond = redownloadService.persistCreatedSnapshot(2L, "bbbb", SortedMap.empty)
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
 
-      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe SnapshotProposal("aaaa", SortedMap.empty).some
+      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe PersistedSnapshotProposal("aaaa", SortedMap.empty).some
     }
 
     s"should limit the Map to removal point" in {
@@ -309,8 +309,8 @@ class RedownloadServiceTest
       val check = redownloadService.getCreatedSnapshots()
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(
-        2L -> SnapshotProposal("aaaa", SortedMap.empty),
-        4L -> SnapshotProposal("bbbb", SortedMap.empty)
+        2L -> PersistedSnapshotProposal("aaaa", SortedMap.empty),
+        4L -> PersistedSnapshotProposal("bbbb", SortedMap.empty)
       )
     }
   }
@@ -342,11 +342,17 @@ class RedownloadServiceTest
       PeerMetadata("host2", 9999, peer2, resourceInfo = mock[ResourceInfo]),
       NonEmptyList(mock[MajorityHeight], Nil)
     )
-    val initialPeersProposals = InvertedMap(peer1 -> Map(1L -> SnapshotProposal("hash1p1", SortedMap.empty)))
+    val initialPeersProposals = InvertedMap(peer1 -> Map(1L -> PersistedSnapshotProposal("hash1p1", SortedMap.empty)))
     val peer1Proposals =
-      Map(1L -> SnapshotProposal("hash2p1", SortedMap.empty), 2L -> SnapshotProposal("hash3p1", SortedMap.empty))
+      Map(
+        1L -> PersistedSnapshotProposal("hash2p1", SortedMap.empty),
+        2L -> PersistedSnapshotProposal("hash3p1", SortedMap.empty)
+      )
     val peer2Proposals =
-      Map(1L -> SnapshotProposal("hash1p2", SortedMap.empty), 2L -> SnapshotProposal("hash2p2", SortedMap.empty))
+      Map(
+        1L -> PersistedSnapshotProposal("hash1p2", SortedMap.empty),
+        2L -> PersistedSnapshotProposal("hash2p2", SortedMap.empty)
+      )
 
     "for empty proposals Map" - {
       "should not override previously stored proposals" in {
@@ -393,8 +399,8 @@ class RedownloadServiceTest
         val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
         val expected = Map(
           peer1 -> Map(
-            1L -> SnapshotProposal("hash1p1", SortedMap.empty),
-            2L -> SnapshotProposal("hash3p1", SortedMap.empty)
+            1L -> PersistedSnapshotProposal("hash1p1", SortedMap.empty),
+            2L -> PersistedSnapshotProposal("hash3p1", SortedMap.empty)
           )
         )
 
@@ -598,7 +604,7 @@ class RedownloadServiceTest
 
   "sendMajoritySnapshotsToCloud" - {
     "if cloud storage enabled" - {
-      "should upload snapshot and according snapshot info files" ignore {
+      "should upload snapshot and according snapshot info files".ignore {
         File.usingTemporaryFile() { file1 =>
           File.usingTemporaryFile() { file2 =>
             val lastMajorityState = Map(2L -> "a", 4L -> "b", 6L -> "c")

@@ -10,7 +10,7 @@ import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
-import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
+import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -93,15 +93,25 @@ class RedownloadService[F[_]: NonEmptyParallel](
     (s, minHeight(s))
   }
 
-  def updatePeerProposal(peer: Id, proposal: SnapshotProposalsAtHeight): F[Unit] =
+  def updatePeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
     peersProposals.modify { m =>
-      val updated = m.updated(peer, proposal)
+      val updated = m.updated(peer, proposals)
       (updated, ())
+    }
+
+  def persistPeerProposal(peer: Id, height: Long, hash: String, reputation: Reputation): F[Unit] =
+    logger.debug(s"Persisting proposal of ${peer} at height $height and hash $hash") >> peersProposals.modify { m =>
+      val existing = m.getOrElse(peer, Map.empty)
+      val updated =
+        if (existing.contains(height)) m
+        else m.updated(peer, existing + (height -> PersistedSnapshotProposal(hash, reputation)))
+      val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
+      (ignored, ())
     }
 
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
-      val updated = if (m.contains(height)) m else m.updated(height, SnapshotProposal(hash, reputation))
+      val updated = if (m.contains(height)) m else m.updated(height, PersistedSnapshotProposal(hash, reputation))
       val max = maxHeight(updated)
       val removalPoint = getRemovalPoint(max)
       val limited = takeHighestUntilKey(updated, removalPoint)
@@ -133,6 +143,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- rewardsManager.clearLastRewardedHeight()
     } yield ()
 
+  @deprecated("Proposals are now pushed via gossip instead of pulling")
   def fetchAndUpdatePeersProposals(): F[PeersProposals] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
@@ -143,7 +154,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       responses <- apiClients.traverse { client =>
         fetchCreatedSnapshots(client).map(client.id -> _)
       }
-      newProposals = responses.toMap
+      newProposals: Map[Id, SnapshotProposalsAtHeight] = responses.toMap
       proposals <- peersProposals.modify { m =>
         val updated = m.map {
           case (id, proposalsAtHeight) =>
@@ -186,7 +197,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
         unboundedBlocker
       )(client)
       .handleErrorWith { e =>
-        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty[Long, SnapshotProposal])
+        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty[Long, PersistedSnapshotProposal])
       }
 
   // TODO: Extract to HTTP layer
@@ -744,16 +755,16 @@ object RedownloadService {
 
   type Reputation = SortedMap[Id, Double]
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
-  type SnapshotProposalsAtHeight = Map[Long, SnapshotProposal]
+  type SnapshotProposalsAtHeight = Map[Long, PersistedSnapshotProposal]
   type PeersProposals = InvertedMap[Id, SnapshotProposalsAtHeight]
   type PeersCache = Map[Id, NonEmptyList[MajorityHeight]]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 
-  implicit val snapshotProposalsAtHeightEncoder: Encoder[Map[Long, SnapshotProposal]] =
-    Encoder.encodeMap[Long, SnapshotProposal]
-  implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, SnapshotProposal]] =
-    Decoder.decodeMap[Long, SnapshotProposal]
+  implicit val snapshotProposalsAtHeightEncoder: Encoder[Map[Long, PersistedSnapshotProposal]] =
+    Encoder.encodeMap[Long, PersistedSnapshotProposal]
+  implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, PersistedSnapshotProposal]] =
+    Decoder.decodeMap[Long, PersistedSnapshotProposal]
 
   case class LatestMajorityHeight(lowest: Long, highest: Long)
 

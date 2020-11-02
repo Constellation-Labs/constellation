@@ -2,14 +2,14 @@ package org.constellation.datastore
 
 import cats.data.EitherT
 import cats.effect.IO
-import cats.syntax.all._
-import org.constellation.{DAO, TestHelpers}
+import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
 import org.constellation.snapshot.SnapshotTrigger
 import org.constellation.storage.{SnapshotCreated, SnapshotError}
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.constellation.{DAO, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -27,10 +27,12 @@ class SnapshotTriggerTest
 
   implicit var dao: DAO = _
   implicit var cluster: Cluster[IO] = _
+  implicit var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
 
   before {
     dao = TestHelpers.prepareMockedDAO()
     cluster = dao.cluster
+    snapshotProposalGossipService = dao.snapshotProposalGossipService
   }
 
   "triggerSnapshot" - {
