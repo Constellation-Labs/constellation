@@ -1,14 +1,15 @@
 package org.constellation.snapshot
 
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import org.constellation.domain.exception.InvalidNodeState
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
+import org.constellation.gossip.snapshot.{SnapshotProposalGossip, SnapshotProposalGossipService}
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
 import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState}
-import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.util.Logging._
+import org.constellation.util.{Metrics, PeriodicIO}
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
@@ -16,7 +17,8 @@ import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: ExecutionContext)(
   implicit dao: DAO,
-  cluster: Cluster[IO]
+  cluster: Cluster[IO],
+  snapshotProposalGossipService: SnapshotProposalGossipService[IO]
 ) extends PeriodicIO("SnapshotTrigger", unboundedExecutionContext) {
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
@@ -56,8 +58,17 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
                 .persistCreatedSnapshot(created.height, created.hash, SortedMap(created.publicReputation.toSeq: _*)) >>
               dao.redownloadService
                 .persistAcceptedSnapshot(created.height, created.hash) >>
-              resetNodeState(stateSet)
-
+              resetNodeState(stateSet) >>
+              snapshotProposalGossipService
+                .spread(
+                  SnapshotProposalGossip(
+                    created.hash,
+                    created.height,
+                    SortedMap(created.publicReputation.toSeq: _*)
+                  ),
+                  3
+                )
+                .start
         }
       } yield (),
       IO.unit
