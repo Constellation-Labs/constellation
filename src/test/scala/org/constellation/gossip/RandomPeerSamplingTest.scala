@@ -3,10 +3,10 @@ package org.constellation.gossip
 import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.{PeerMetadata, ResourceInfo}
 import org.constellation.gossip.sampling.{PeerSampling, RandomPeerSampling}
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
+import org.constellation.{PeerMetadata, ResourceInfo}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
@@ -25,7 +25,7 @@ class RandomPeerSamplingTest
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   val selfId = Id("a")
-  var peerSampling: PeerSampling[IO, Id] = _
+  var peerSampling: PeerSampling[IO] = _
   var cluster: Cluster[IO] = mock[Cluster[IO]]
 
   val ids = Set(Id("b"), Id("c"), Id("d"), Id("e"), Id("f"), Id("g"), Id("h"))
@@ -43,34 +43,26 @@ class RandomPeerSamplingTest
   }
 
   "generated paths" - {
+
     "have all the nodes covered" in {
-      val fanout = 2
-      val path = peerSampling.selectPaths(fanout).unsafeRunSync()
-      val flattened = path.flatten.filterNot(id => id == selfId).toSet
+      val paths = peerSampling.selectPaths.unsafeRunSync()
+      val flattened = paths.map(_.toIndexedSeq).flatten.filterNot(id => id == selfId).toSet
       flattened.equals(ids) shouldBe true
     }
 
-    "number of paths equals fanout" in {
-      val fanout = 2
-      val path = peerSampling.selectPaths(fanout).unsafeRunSync()
-      path.size shouldBe fanout
-    }
-
     "have unique nodes" in {
-      val fanout = 2
-      val path = peerSampling.selectPaths(fanout).unsafeRunSync()
-      val duplicates = path.fold(Set.empty[Id]) {
+      val paths = peerSampling.selectPaths.unsafeRunSync()
+      val duplicates = paths.map(_.toIndexedSeq).fold(Set.empty[Id]) {
         case (a, b) => a.toSet.intersect(b.toSet).filterNot(id => id == selfId)
       }
       duplicates.size shouldBe 0
     }
 
     "start and ends with selfId" in {
-      val fanout = 2
-      val path = peerSampling.selectPaths(fanout).unsafeRunSync()
+      val path = peerSampling.selectPaths.unsafeRunSync()
 
-      path.forall(_.head.equals(selfId)) shouldBe true
-      path.forall(_.last.equals(selfId)) shouldBe true
+      path.forall(_.toIndexedSeq.head.equals(selfId)) shouldBe true
+      path.forall(_.toIndexedSeq.last.equals(selfId)) shouldBe true
     }
   }
 }

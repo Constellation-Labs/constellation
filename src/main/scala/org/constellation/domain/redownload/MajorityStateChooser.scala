@@ -141,17 +141,17 @@ class MajorityStateChooser(id: Id) {
 object MajorityStateChooser {
   def apply(id: Id): MajorityStateChooser = new MajorityStateChooser(id)
 
-  case class SnapshotProposal(hash: String, reputation: SortedMap[Id, Double])
+  case class PersistedSnapshotProposal(hash: String, reputation: SortedMap[Id, Double])
 
-  object SnapshotProposal {
+  object PersistedSnapshotProposal {
     implicit val smDecoder: Decoder[SortedMap[Id, Double]] =
       Decoder.decodeMap[Id, Double].map(m => SortedMap(m.toSeq: _*))
 
     implicit val smEncoder: Encoder[SortedMap[Id, Double]] =
       Encoder.encodeMap[Id, Double].contramap(m => m.toMap)
 
-    implicit val snapshotProposalEncoder: Encoder[SnapshotProposal] = deriveEncoder
-    implicit val snapshotProposalDecoder: Decoder[SnapshotProposal] = deriveDecoder
+    implicit val snapshotProposalEncoder: Encoder[PersistedSnapshotProposal] = deriveEncoder
+    implicit val snapshotProposalDecoder: Decoder[PersistedSnapshotProposal] = deriveDecoder
   }
 
   case class MajorityIntegrityError(gaps: Set[Long]) extends Throwable {

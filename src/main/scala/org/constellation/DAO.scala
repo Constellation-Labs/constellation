@@ -3,7 +3,6 @@ package org.constellation
 import better.files.File
 import cats.data.NonEmptyList
 import cats.effect.{Blocker, ContextShift, IO, Timer}
-import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil.AWSStorageConfig
@@ -25,6 +24,8 @@ import org.constellation.domain.transaction.{
   TransactionValidator
 }
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.gossip.sampling.{PeerSampling, RandomPeerSampling}
+import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
@@ -45,7 +46,7 @@ import org.constellation.session.SessionTokenService
 import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{HealthChecker, HostPort, Metrics}
+import org.constellation.util.{HealthChecker, HostPort}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
@@ -125,6 +126,8 @@ class DAO(
   var joiningPeerValidator: JoiningPeerValidator[IO] = _
   var snapshotTrigger: SnapshotTrigger = _
   var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
+  var peerSamplingService: PeerSampling[IO] = _
+  var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
@@ -265,10 +268,14 @@ class DAO(
     }
     peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck, unboundedHealthExecutionContext)
 
+    peerSamplingService = new RandomPeerSampling[IO](id, cluster)
+
+    snapshotProposalGossipService = new SnapshotProposalGossipService[IO](id, peerSamplingService, cluster, apiClient)
+
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,
       unboundedExecutionContext
-    )(this, cluster)
+    )(this, cluster, snapshotProposalGossipService)
 
     redownloadPeriodicCheck = new RedownloadPeriodicCheck(
       processingConfig.redownloadPeriodicCheckTimeSeconds,
