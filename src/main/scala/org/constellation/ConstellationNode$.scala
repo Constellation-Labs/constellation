@@ -151,7 +151,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.snapshotInfoStorage,
           dao.snapshotService,
           dao.cluster,
-          dao.redownloadService
+          dao.redownloadService,
+          dao.snapshotProposalGossipService
         ) <+>
         SoeEndpoints.peerEndpoints[IO](dao.soeService) <+>
         TipsEndpoints.peerEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
