@@ -10,6 +10,8 @@ import org.constellation.domain.redownload.RedownloadService.{
   SnapshotsAtHeight,
   _
 }
+import org.constellation.gossip.snapshot.SnapshotProposalGossip
+import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
@@ -17,15 +19,17 @@ import org.constellation.session.SessionTokenService
 import org.http4s.Method._
 import org.http4s.Status.Successful
 import org.http4s.circe.CirceEntityDecoder._
+import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.client.Client
 
 import scala.collection.SortedMap
 import scala.language.reflectiveCalls
 
-class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](
+class SnapshotClientInterpreter[F[_]: ContextShift](
   client: Client[F],
   sessionTokenService: SessionTokenService[F]
-) extends SnapshotClientAlgebra[F] {
+)(implicit F: Concurrent[F])
+    extends SnapshotClientAlgebra[F] {
 
   import Id._
 
@@ -40,7 +44,7 @@ class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](
     PeerResponse[F, Vector[Byte]](s"snapshot/stored/$hash", GET)(client, sessionTokenService) { (req, c) =>
       c.get(req.uri) {
         case Successful(response) => response.body.compile.toVector
-        case response             => Concurrent[F].raiseError(new Throwable(response.status.reason))
+        case response             => F.raiseError(new Throwable(response.status.reason))
       }
     }.map(_.toArray)
 
@@ -63,7 +67,7 @@ class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](
     PeerResponse[F, Vector[Byte]](s"snapshot/info", GET)(client, sessionTokenService) { (req, c) =>
       c.get(req.uri) {
         case Successful(response) => response.body.compile.toVector
-        case response             => Concurrent[F].raiseError(new Throwable(response.status.reason))
+        case response             => F.raiseError(new Throwable(response.status.reason))
       }
     }.map(_.toArray)
 
@@ -71,12 +75,24 @@ class SnapshotClientInterpreter[F[_]: Concurrent: ContextShift](
     PeerResponse[F, Vector[Byte]](s"snapshot/info/$hash", GET)(client, sessionTokenService) { (req, c) =>
       c.get(req.uri) {
         case Successful(response) => response.body.compile.toVector
-        case response             => Concurrent[F].raiseError(new Throwable(response.status.reason))
+        case response             => F.raiseError(new Throwable(response.status.reason))
       }
     }.map(_.toArray)
 
   def getLatestMajorityHeight(): PeerResponse[F, LatestMajorityHeight] =
     PeerResponse[F, LatestMajorityHeight](s"latestMajorityHeight")(client, sessionTokenService)
+
+  def postPeerProposal(message: GossipMessage[SnapshotProposalGossip]): PeerResponse[F, Unit] =
+    PeerResponse[F, Boolean](s"peer/snapshot/created", POST)(client, sessionTokenService) { (req, c) =>
+      c.successful(req.withEntity(message))
+    }.flatMapF(
+      a =>
+        if (a) F.unit
+        else
+          F.raiseError(
+            new Throwable(s"Cannot post proposal of hash ${message.data.hash} and height ${message.data.height}")
+          )
+    )
 }
 
 object SnapshotClientInterpreter {

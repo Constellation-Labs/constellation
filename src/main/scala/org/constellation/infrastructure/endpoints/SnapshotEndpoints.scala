@@ -1,27 +1,31 @@
 package org.constellation.infrastructure.endpoints
 
-import cats.effect.{Concurrent, IO}
+import cats.effect.Concurrent
 import cats.syntax.all._
-import io.circe.syntax._
 import io.circe.Encoder
 import io.circe.generic.semiauto._
+import io.circe.syntax._
+import org.constellation.session.Registration.`X-Id`
+import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService
-import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
+import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight._
+import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, _}
 import org.constellation.domain.storage.LocalFileStorage
+import org.constellation.gossip.snapshot.{SnapshotProposalGossip, SnapshotProposalGossipService}
+import org.constellation.gossip.state.GossipMessage
+import org.constellation.gossip.{EndOfCycle, IncorrectReceiverId, IncorrectSenderId}
 import org.constellation.p2p.Cluster
-import org.constellation.schema.NodeState
-import org.constellation.schema.Id
+import org.constellation.schema.Id._
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.{Id, NodeState}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
-import org.http4s.HttpRoutes
+import org.http4s.{HttpRoutes, Response}
+import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 
 import scala.collection.SortedMap
-import Id._
-import RedownloadService._
-import LatestMajorityHeight._
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 
 class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
@@ -48,7 +52,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     cluster: Cluster[F],
-    redownloadService: RedownloadService[F]
+    redownloadService: RedownloadService[F],
+    snapshotProposalGossipService: SnapshotProposalGossipService[F]
   ) =
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
       getStoredSnapshotByHash(snapshotStorage) <+>
@@ -58,7 +63,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       getNextSnapshotHeight(nodeId, snapshotService) <+>
       getSnapshotInfo(snapshotService, cluster) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
-      getLatestMajorityHeight(redownloadService)
+      getLatestMajorityHeight(redownloadService) <+>
+      postSnapshotProposal(snapshotProposalGossipService, redownloadService)
 
   def ownerEndpoints(
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
@@ -166,6 +172,37 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         .flatMap(Ok(_))
   }
 
+  private def postSnapshotProposal(
+    snapshotProposalGossipService: SnapshotProposalGossipService[F],
+    redownloadService: RedownloadService[F]
+  ): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case req @ POST -> Root / "peer" / "snapshot" / "created" =>
+        for {
+          message <- req.as[GossipMessage[SnapshotProposalGossip]]
+          data = message.data
+          senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
+
+          res <- snapshotProposalGossipService.validate(message, senderId) match {
+            case Left(EndOfCycle)                => snapshotProposalGossipService.finishCycle(message) >> Ok()
+            case Left(IncorrectReceiverId(_, _)) => BadRequest()
+            case Left(IncorrectSenderId(_))      => Response[F](status = Unauthorized).pure[F]
+            case Left(_)                         => InternalServerError()
+            case Right(_) =>
+              for {
+                _ <- redownloadService.persistPeerProposal(
+                  senderId,
+                  data.height,
+                  data.hash,
+                  data.reputation
+                )
+                _ <- snapshotProposalGossipService.spread(message)
+                res <- Ok()
+              } yield res
+          }
+        } yield res
+    }
+
   private def getLatestMajorityState(redownloadService: RedownloadService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "majority" / "state" =>
       redownloadService
@@ -191,10 +228,19 @@ object SnapshotEndpoints {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     cluster: Cluster[F],
-    redownloadService: RedownloadService[F]
+    redownloadService: RedownloadService[F],
+    snapshotProposalGossipService: SnapshotProposalGossipService[F]
   ): HttpRoutes[F] =
     new SnapshotEndpoints[F]()
-      .peerEndpoints(nodeId, snapshotStorage, snapshotInfoStorage, snapshotService, cluster, redownloadService)
+      .peerEndpoints(
+        nodeId,
+        snapshotStorage,
+        snapshotInfoStorage,
+        snapshotService,
+        cluster,
+        redownloadService,
+        snapshotProposalGossipService
+      )
 
   def ownerEndpoints[F[_]: Concurrent](
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
