@@ -13,8 +13,8 @@ import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.MajorityStateChooser.SnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
@@ -330,16 +330,19 @@ class RedownloadService[F[_]: NonEmptyParallel](
     def wrappedRedownload(
       shouldRedownload: Boolean,
       meaningfulAcceptedSnapshots: SnapshotsAtHeight,
-      meaningfulMajorityState: SnapshotsAtHeight
+      meaningfulMajorityState: SnapshotsAtHeight,
+      maxMajorityHeight: Long
     ) =
       for {
         _ <- if (shouldRedownload) {
-          val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
+          val redownloadPlan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
+          val downloadPlan = calculateDownloadPlan(redownloadPlan, maxMajorityHeight)
+          val plan = if (isDownload) downloadPlan else redownloadPlan
           val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
           for {
             _ <- logger.debug(s"Alignment result: $result")
             _ <- logger.debug("Redownload needed! Applying the following redownload plan:")
-            _ <- applyRedownloadPlan(plan, meaningfulMajorityState).value.flatMap(F.fromEither)
+            _ <- applyPlan(plan, meaningfulMajorityState).value.flatMap(F.fromEither)
           } yield ()
         } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
       } yield ()
@@ -394,7 +397,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- if (shouldPerformRedownload) {
         cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
           if (state.isNewSet) {
-            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
+            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState, maxMajorityHeight).handleErrorWith {
               error =>
                 logger.error(error)(s"Redownload error: ${stringifyStackTrace(error)}") >> cluster
                   .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
@@ -520,7 +523,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }.attemptT
     } yield ()
 
-  private[redownload] def applyRedownloadPlan(
+  private[redownload] def applyPlan(
     plan: RedownloadPlan,
     majorityState: SnapshotsAtHeight
   ): EitherT[F, Throwable, Unit] =
@@ -640,6 +643,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
     val toLeave = acceptedSnapshots.toSet.diff(toRemove.toSet).toMap
     RedownloadPlan(toDownload, toRemove, toLeave)
   }
+
+  private[redownload] def calculateDownloadPlan(plan: RedownloadPlan, maxMajorityHeight: Long): RedownloadPlan =
+    plan.copy(toDownload = plan.toDownload.filterKeys(_ >= maxMajorityHeight))
 
   private[redownload] def getAlignmentResult(
     acceptedSnapshots: SnapshotsAtHeight,

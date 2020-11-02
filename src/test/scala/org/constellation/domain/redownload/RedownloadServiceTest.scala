@@ -576,6 +576,22 @@ class RedownloadServiceTest
     }
   }
 
+  "calculateDownloadPlan" - {
+    "should leave only meaningful snapshots for download" in {
+      val sourcePlan = RedownloadPlan(
+        toDownload = Map(1L -> "a", 3L -> "c", 4L -> "d"),
+        toRemove = Map(3L -> "x"),
+        toLeave = Map(2L -> "b")
+      )
+
+      val calculatedPlan = redownloadService.calculateDownloadPlan(sourcePlan, 3L)
+
+      calculatedPlan.toDownload should contain only (3L -> "c", 4L -> "d")
+      calculatedPlan.toLeave shouldBe sourcePlan.toLeave
+      calculatedPlan.toRemove shouldBe sourcePlan.toRemove
+    }
+  }
+
   /*
   "fetchStoredSnapshotsFromAllPeers" - {
     "should fetch stored snapshots of all peers" in {

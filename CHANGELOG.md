@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Endpoint for querying transactions by source address, that are not yet in a snapshot
 ### Changed
 - ConstellationNode uses fs2 implementation to initialize
+- Node downloads only meaningful snapshots when joining the cluster
 
 ## [v2.16.2] 2020-10-09
 ### Changed
