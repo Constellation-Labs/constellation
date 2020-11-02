@@ -2,6 +2,10 @@ package org.constellation.gossip.sampling
 
 import cats.effect.Concurrent
 import cats.implicits._
+import io.chrisdavenport.fuuid.FUUID
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.gossip.NotEnoughPeersForFanout
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
 
@@ -11,10 +15,29 @@ import scala.util.Random
 /**
   * Peer sampling strategy based on uniform random sample selection
   */
-class RandomPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F]) extends PeerSampling[F, Id] {
+class RandomPeerSampling[F[_]](selfId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) extends PeerSampling[F] {
 
-  def selectPaths(fanout: Int): F[Seq[IndexedSeq[Id]]] =
-    getPeers.map(randomPath(_, fanout))
+  private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  private val fanout: Int = 1
+
+  def selectPaths: F[List[GossipPath]] =
+    getPeers
+      .flatMap(
+        ids =>
+          if (ids.size >= fanout)
+            F.pure(ids)
+          else
+            F.raiseError[Set[Id]](NotEnoughPeersForFanout(fanout, ids.size))
+      )
+      .map(randomPath(_, fanout))
+      .flatMap(paths => paths.toList.traverse(path => generatePathId.map(GossipPath(path, _))))
+      .flatTap(
+        paths =>
+          paths.zipWithIndex.toList.traverse {
+            case (path, index) =>
+              logger.debug(s"Path $index: ${path.toIndexedSeq.map(_.short).mkString(" -> ")}")
+          }
+      )
 
   private def randomPath(peers: Set[Id], fanout: Int): Seq[IndexedSeq[Id]] = {
     def partition(list: IndexedSeq[Id], count: Int): List[IndexedSeq[Id]] = {
@@ -32,6 +55,9 @@ class RandomPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F]) exte
 
   private def getPeers: F[Set[Id]] =
     cluster.getPeerInfo
-      .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) }.keySet)
+      .map(_.filter {
+        case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState)
+      }.keySet)
 
+  protected def generatePathId: F[String] = FUUID.randomFUUID.map(_.toString)
 }
