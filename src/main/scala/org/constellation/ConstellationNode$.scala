@@ -345,7 +345,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
       _ <- Stream.eval {
         IO { Runtime.getRuntime.availableProcessors }
-          .map(_ >= 2)
+          .map(_ >= 4)
           .ifM(
             IO.unit,
             IO.raiseError(
