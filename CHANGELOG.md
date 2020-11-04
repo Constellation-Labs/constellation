@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Added
 - Additional metrics for non-dummy transactions
+- Validation that transaction chain doesn't have any gaps
 
 ## [v2.18.0] 2020-11-12
 ### Added
