@@ -16,23 +16,11 @@ import org.constellation.p2p.{Cluster, DataResolver}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation}
 import org.constellation.schema.signature.{HashSignature, SignatureRequest, SignatureResponse}
-import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
 import org.constellation.schema.{ChannelMessageMetadata, Height, Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
-import org.constellation.{
-  CheckpointAcceptBlockAlreadyStored,
-  ConstellationExecutionContext,
-  ContainsInvalidTransactionsException,
-  DAO,
-  HeightBelow,
-  MissingCheckpointBlockException,
-  MissingHeightException,
-  MissingParents,
-  MissingTransactionReference,
-  PendingAcceptance,
-  PendingDownloadException
-}
+import org.constellation._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -511,7 +499,7 @@ object CheckpointAcceptanceService {
 
   def areTransactionsAllowedForAcceptance[F[_]: Concurrent](
     txs: List[Transaction]
-  )(txChainService: TransactionChainService[F]) =
+  )(txChainService: TransactionChainService[F]): F[Boolean] =
     txs
       .groupBy(_.src.address)
       .mapValues(_.sortBy(_.ordinal))
@@ -522,10 +510,19 @@ object CheckpointAcceptanceService {
           case (hash, txs) =>
             txChainService
               .getLastAcceptedTransactionRef(hash)
-              .map(txs.headOption.map(_.lastTxRef).contains)
+              .map {
+                latr =>
+                  txs.foldLeft(latr.some) {
+                    case (maybePrev, tx) =>
+                      for {
+                        prev <- maybePrev
+                        txPrev <- tx.lastTxRef.some if prev == txPrev
+                      } yield LastTransactionRef(tx.hash, tx.ordinal)
+                  }
+              }
         }
       }
-      .map(_.forall(_ == true))
+      .map(_.forall(_.isDefined))
 
   def getMissingTransactionReferences[F[_]: Concurrent](cb: CheckpointBlock)(
     txChainService: TransactionChainService[F]
