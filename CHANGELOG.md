@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Additional metrics for non-dummy transactions
 
 ## [v2.17.1] 2020-11-5
 ### Fixed
