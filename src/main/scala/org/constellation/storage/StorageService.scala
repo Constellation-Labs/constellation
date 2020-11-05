@@ -72,6 +72,8 @@ class StorageService[F[_]: Concurrent, V](
 
   def size(): F[Long] = Sync[F].delay(lruCache.estimatedSize())
 
+  def count(predicate: V => Boolean): F[Long] = toMap().map(_.count { case (_, v) => predicate(v) }.toLong)
+
   def toMap(): F[Map[String, V]] =
     Sync[F].delay(lruCache.asMap().toMap)
 

@@ -49,6 +49,9 @@ abstract class PendingMemPool[F[_]: Concurrent, K, V]() extends LookupAlgebra[F,
   def contains(key: K): F[Boolean] =
     ref.get.map(_.contains(key))
 
+  def count(predicate: V => Boolean): F[Long] =
+    ref.get.map(_.count { case (_, v) => predicate(v) }.toLong)
+
   def size(): F[Long] =
     ref.get.map(_.size.toLong)
 
