@@ -7,7 +7,8 @@ import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.domain.consensus.ConsensusService
+import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
+import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
 import org.constellation.keytool.KeyUtils
 import org.constellation.schema.Schema
 import org.constellation.schema.checkpoint.CheckpointCache
@@ -96,6 +97,28 @@ class TransactionService[F[_]: Concurrent](
           else Sync[F].unit
       )
 
+  def countNotDummy(status: ConsensusStatus): F[Long] = {
+    val predicate: TransactionCacheData => Boolean = !_.transaction.isDummy
+
+    status match {
+      case ConsensusStatus.Pending     => pending.count(predicate)
+      case ConsensusStatus.InConsensus => inConsensus.count(predicate)
+      case ConsensusStatus.Accepted    => accepted.count(predicate)
+      case ConsensusStatus.Unknown     => unknown.count(predicate)
+    }
+  }
+
+  override def getMetricsMap: F[Map[String, Long]] =
+    List(
+      "pending" -> count(ConsensusStatus.Pending),
+      "inConsensus" -> count(ConsensusStatus.InConsensus),
+      "accepted" -> count(ConsensusStatus.Accepted),
+      "unknown" -> count(ConsensusStatus.Unknown),
+      "pending_notDummy" -> countNotDummy(ConsensusStatus.Pending),
+      "inConsensus_notDummy" -> countNotDummy(ConsensusStatus.InConsensus),
+      "accepted_notDummy" -> countNotDummy(ConsensusStatus.Accepted),
+      "unknown_notDummy" -> countNotDummy(ConsensusStatus.Unknown)
+    ).traverse { case (m, cF) => cF.map((m -> _)) }.map(_.toMap)
 }
 
 object TransactionService {

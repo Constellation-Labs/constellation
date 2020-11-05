@@ -14,6 +14,8 @@ trait StorageAlgebra[F[_], K, V] extends LookupAlgebra[F, K, V] {
 
   def size(): F[Long]
 
+  def count(predicate: V => Boolean): F[Long]
+
   // Rethink if needed \/:
 
   def toMap(): F[Map[K, V]]
