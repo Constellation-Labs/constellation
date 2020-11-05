@@ -4,7 +4,6 @@ import better.files.File
 import cats.data.{EitherT, Kleisli, NonEmptyList}
 import cats.effect.{Blocker, ContextShift, IO, Timer}
 import cats.syntax.all._
-import org.constellation.{ConstellationExecutionContext, PeerMetadata, ResourceInfo}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
@@ -22,10 +21,11 @@ import org.constellation.schema.Id
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
+import org.constellation.{PeerMetadata, ResourceInfo}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
@@ -573,22 +573,6 @@ class RedownloadServiceTest
         diff.toRemove shouldEqual Map(4L -> "b")
         diff.toDownload shouldEqual Map(4L -> "x")
       }
-    }
-  }
-
-  "calculateDownloadPlan" - {
-    "should leave only meaningful snapshots for download" in {
-      val sourcePlan = RedownloadPlan(
-        toDownload = Map(1L -> "a", 3L -> "c", 4L -> "d"),
-        toRemove = Map(3L -> "x"),
-        toLeave = Map(2L -> "b")
-      )
-
-      val calculatedPlan = redownloadService.calculateDownloadPlan(sourcePlan, 3L)
-
-      calculatedPlan.toDownload should contain only (3L -> "c", 4L -> "d")
-      calculatedPlan.toLeave shouldBe sourcePlan.toLeave
-      calculatedPlan.toRemove shouldBe sourcePlan.toRemove
     }
   }
 

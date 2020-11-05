@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.17.1] 2020-11-5
+### Fixed
+- Nodes should no longer stuck in `PendingDownload` when joining the cluster
+
 ## [v2.17.0] 2020-11-03
 ### Added
 - Possibility to migrate existing KeyStore to use storepass for both KeyStore and KeyPair

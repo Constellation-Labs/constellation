@@ -327,17 +327,10 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(isDownload: Boolean = false): F[Unit] = {
-    def wrappedRedownload(
-      shouldRedownload: Boolean,
-      meaningfulAcceptedSnapshots: SnapshotsAtHeight,
-      meaningfulMajorityState: SnapshotsAtHeight,
-      maxMajorityHeight: Long
-    ) =
+    def wrappedRedownload(shouldRedownload: Boolean, meaningfulAcceptedSnapshots: SnapshotsAtHeight, meaningfulMajorityState: SnapshotsAtHeight) =
       for {
         _ <- if (shouldRedownload) {
-          val redownloadPlan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
-          val downloadPlan = calculateDownloadPlan(redownloadPlan, maxMajorityHeight)
-          val plan = if (isDownload) downloadPlan else redownloadPlan
+          val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
           val result = getAlignmentResult(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
           for {
             _ <- logger.debug(s"Alignment result: $result")
@@ -380,8 +373,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       maxMajorityHeight = maxHeight(majorityState)
       ignorePoint = getIgnorePoint(maxMajorityHeight)
+      majorityStateCutoff = if (isDownload) maxMajorityHeight else ownPeer.getOrElse(maxMajorityHeight)
       meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
-      meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint)
+      meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint).filterKeys(_ >= majorityStateCutoff)
 
       _ <- setLastMajorityState(meaningfulMajorityState)
 
@@ -397,7 +391,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- if (shouldPerformRedownload) {
         cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
           if (state.isNewSet) {
-            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState, maxMajorityHeight).handleErrorWith {
+            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
               error =>
                 logger.error(error)(s"Redownload error: ${stringifyStackTrace(error)}") >> cluster
                   .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
@@ -643,9 +637,6 @@ class RedownloadService[F[_]: NonEmptyParallel](
     val toLeave = acceptedSnapshots.toSet.diff(toRemove.toSet).toMap
     RedownloadPlan(toDownload, toRemove, toLeave)
   }
-
-  private[redownload] def calculateDownloadPlan(plan: RedownloadPlan, maxMajorityHeight: Long): RedownloadPlan =
-    plan.copy(toDownload = plan.toDownload.filterKeys(_ >= maxMajorityHeight))
 
   private[redownload] def getAlignmentResult(
     acceptedSnapshots: SnapshotsAtHeight,
