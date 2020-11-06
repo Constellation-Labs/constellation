@@ -1,7 +1,9 @@
 #!/bin/sh
 #ulimit -c unlimited
 #ulimit -n 60036
-export CL_STOREPASS=storepass && export CL_KEYPASS=keypass && \
+export CL_STOREPASS=storepass && \
+export CL_KEYPASS=keypass && \
+export CL_MIN_CPU_COUNT=2 && \
 java "-Dcom.sun.management.jmxremote" \
 "-Dcom.sun.management.jmxremote.port=9010" \
 "-Dcom.sun.management.jmxremote.rmi.port=9011" \
