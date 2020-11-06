@@ -325,6 +325,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
   private def validateInitConditions(nodeConfig: NodeConfig): Stream[IO, Unit] = {
     import constellation.PublicKeyExt
 
+    val minCpuCount = sys.env.get("CL_MIN_CPU_COUNT").flatMap(x => Try(x.toInt).toOption).getOrElse(4)
+
     for {
       _ <- Stream.eval {
         IO { File(s"tmp/${nodeConfig.primaryKeyPair.getPublic.toId.medium}/peers").nonEmpty }
@@ -345,7 +347,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
       _ <- Stream.eval {
         IO { Runtime.getRuntime.availableProcessors }
-          .map(_ >= 4)
+          .map(_ >= minCpuCount)
           .ifM(
             IO.unit,
             IO.raiseError(
