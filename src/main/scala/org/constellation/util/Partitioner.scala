@@ -66,9 +66,9 @@ object Partitioner {
     */
   implicit class HausdorffPartition(trustGraph: List[TrustDataInternal])
                                    (implicit src: TrustDataInternal) {
-
-    lazy val nerve = hyperCover(Map(0 -> List(src)), trustGraph, k)
     val k: Int = math.sqrt(trustGraph.length).toInt + 1
+    lazy val nerve = hyperCover(Map(0 -> List(src)), trustGraph, k)
+
 
     implicit def hausdorffMonoid(hyperEdge: List[TrustDataInternal]): TopKMonoid[TrustDataInternal] =
       new TopKMonoid[TrustDataInternal](k)(HausdorffOrdering(hyperEdge))
@@ -78,9 +78,10 @@ object Partitioner {
                          peers: List[TrustDataInternal],
                          k: Int): Map[Int, List[TrustDataInternal]] = {
       if (k > 0) {
-        val nearestNeighbors = diffuse(topology(k), peers)(topology(k))
+        val rank = this.k - k
+        val nearestNeighbors = diffuse(topology(rank), peers)(hausdorffMonoid(peers))
         val higherOrders = peers.diff(nearestNeighbors)
-        val newTop = topology + (k -> nearestNeighbors)
+        val newTop = topology + (rank + 1 -> nearestNeighbors)
         hyperCover(newTop, higherOrders, k - 1)
       }
       else topology
@@ -99,7 +100,7 @@ object Partitioner {
                (implicit monoid: TopKMonoid[TrustDataInternal]):
     List[TrustDataInternal] = monoid.sum(higherOrders.map(l => hausdorffMonoid(hyperEdge).build(l))).items
 
-    def rePartition(kPartite: Map[Int, List[TrustDataInternal]] = nerve)(influenceGraph: List[TrustDataInternal]):
+    def rePartition(influenceGraph: List[TrustDataInternal])(kPartite: Map[Int, List[TrustDataInternal]] = nerve):
     Map[Int, List[TrustDataInternal]] = hyperCover(kPartite, influenceGraph, k)
   }
 
@@ -124,7 +125,7 @@ case class HausdorffOrdering(hyperEdge: List[TrustDataInternal]) extends Orderin
     hyperEdge.foldLeft((0.0, 0.0)) { case ((curCompleteLinkage, curSingleLinkage), tdi) =>
       val (complete, single) = tdi.view.foldLeft((curCompleteLinkage, curSingleLinkage)) {
         case ((curCompleteLinkage, curSingleLinkage), (id, influenceMeasure)) =>
-          val higherOrderMeasure = higherOrderNode.view(id)
+          val higherOrderMeasure = higherOrderNode.view.getOrElse(id, 0.0)
           (curCompleteLinkage + (influenceMeasure + higherOrderMeasure), curSingleLinkage - (influenceMeasure + higherOrderMeasure))
       }
       (curCompleteLinkage + complete, curSingleLinkage + single)
