@@ -91,4 +91,13 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
     val rank2Eq: Boolean = partitions(2).map(_.id).toSet == rPartite.map(_._1.id).toSet
     assert(rank1Eq && rank2Eq)
   }
+
+  "HausdorffPartition.nerve" should "contain all nodes after partitioning" in {
+    val trustNodes: Seq[TrustNode] = DataGeneration.generateBipartiteTestData(ids.size)
+    val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
+      TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
+    val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
+    val partitions: Map[Int, List[TrustDataInternal]] = partitioner.nerve
+    assert(partitions.values.flatMap(_.map(_.id)).toSet === ids.toSet)
+  }
 }
