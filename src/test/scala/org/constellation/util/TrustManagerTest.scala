@@ -59,7 +59,7 @@ class TrustManagerTest
     val reputation = Map.empty[Id, Double]
     val scores = peerTrustScores :+ TrustDataInternal(id, reputation)
     val (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
-    val dummyTrustNodes = DataGeneration.generateTestData(3)
+    val dummyTrustNodes = DataGeneration.generateData(3)
     val nodeMap = dummyTrustNodes.zipWithIndex.toMap.map { case (k, v) => (v, k) }
     val doWalk = Try { SelfAvoidingWalk.walk(1, 2, nodeMap, 1, 0, Set.empty[Int], 1d) }
     assert(doWalk.isSuccess)
