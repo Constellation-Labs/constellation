@@ -11,7 +11,7 @@ import org.constellation.domain.redownload.RedownloadService.{
 }
 import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.MajorityHeight
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.BeforeAndAfterEach

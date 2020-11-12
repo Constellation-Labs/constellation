@@ -5,9 +5,9 @@ import java.security.KeyPair
 
 import cats.effect.Sync
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
-import org.constellation.schema.signature.SignHelp
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.schema.v2.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.signature.SignHelp
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 
 object TransactionExt {
 

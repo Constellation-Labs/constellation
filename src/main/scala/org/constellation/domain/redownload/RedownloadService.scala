@@ -18,8 +18,8 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.{Id, NodeState}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Logging.stringifyStackTrace

@@ -5,7 +5,7 @@ import org.constellation.PeerMetadata
 import org.constellation.domain.p2p.client.NodeMetadataClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.address.AddressCacheData
+import org.constellation.schema.v2.address.AddressCacheData
 import org.constellation.session.SessionTokenService
 import org.constellation.util.NodeStateInfo
 import org.http4s.circe.CirceEntityDecoder._

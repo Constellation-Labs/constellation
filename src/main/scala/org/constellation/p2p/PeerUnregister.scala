@@ -2,7 +2,7 @@ package org.constellation.p2p
 
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 case class PeerUnregister(host: String, port: Int, id: Id, majorityHeight: Long)
 

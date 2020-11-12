@@ -20,14 +20,14 @@ import org.constellation.consensus.ConsensusManager.{
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.PeerData
-import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
+import org.constellation.schema.v2.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
-import org.constellation.schema.consensus.RoundId
-import org.constellation.schema.observation.Observation
-import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
-import org.constellation.schema.{ChannelMessage, Id, NodeState, PeerNotification}
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
+import org.constellation.schema.v2.consensus.RoundId
+import org.constellation.schema.v2.observation.Observation
+import org.constellation.schema.v2.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.v2.{ChannelMessage, Id, NodeState, PeerNotification}
 import org.constellation.storage._
 import org.constellation.{
   CheckpointAcceptBlockAlreadyStored,

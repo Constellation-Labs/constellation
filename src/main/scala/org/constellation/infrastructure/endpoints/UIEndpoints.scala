@@ -10,7 +10,7 @@ import org.constellation.util.ServeUI
 import org.http4s.{HttpRoutes, _}
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import org.constellation.schema.ChannelMessageMetadata._
+import org.constellation.schema.v2.ChannelMessageMetadata._
 
 import scala.concurrent.ExecutionContext
 

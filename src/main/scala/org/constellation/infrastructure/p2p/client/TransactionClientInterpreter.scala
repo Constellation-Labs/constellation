@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.TransactionClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.transaction.{LastTransactionRef, TransactionCacheData}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, TransactionCacheData}
 import org.constellation.session.SessionTokenService
 import org.http4s.Method._
 import org.http4s.circe.CirceEntityDecoder._

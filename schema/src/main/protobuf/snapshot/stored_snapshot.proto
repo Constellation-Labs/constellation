@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.snapshot;
+
+import "snapshot/snapshot.proto";
+import "checkpoint/checkpoint_cache.proto";
+
+message StoredSnapshot {
+  Snapshot snapshot = 1;
+  repeated checkpoint.CheckpointCache checkpointCache = 2;
+}

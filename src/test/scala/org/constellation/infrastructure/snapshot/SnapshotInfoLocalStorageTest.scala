@@ -4,8 +4,8 @@ import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
 import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.checkpoint.CheckpointCache
+import org.constellation.schema.v2.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.freespec.AnyFreeSpec

@@ -4,8 +4,8 @@ import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusService
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.observation.Observation
+import org.constellation.schema.v2.checkpoint.CheckpointCache
+import org.constellation.schema.v2.observation.Observation
 import org.constellation.trust.TrustManager
 
 class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: DAO)

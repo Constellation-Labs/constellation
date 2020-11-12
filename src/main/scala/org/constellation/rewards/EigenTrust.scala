@@ -9,8 +9,8 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.schema.Id
-import org.constellation.schema.observation.{Observation, ObservationData, ObservationEvent}
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.observation.{Observation, ObservationData, ObservationEvent}
 import org.constellation.trust.{DataGeneration, TrustEdge, TrustManager, TrustNode}
 
 import scala.collection.JavaConverters._

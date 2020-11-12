@@ -8,12 +8,12 @@ import scala.collection.JavaConverters._
 import cats.effect.{ContextShift, IO}
 import org.constellation.{ConstellationExecutionContext, DAO}
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.{Id, observation}
+import org.constellation.schema.v2.{Id, observation}
 import org.constellation.trust.{TrustEdge, TrustManager}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
-import org.constellation.schema.observation.{CheckpointBlockWithMissingSoe, ObservationData}
+import org.constellation.schema.v2.observation.{CheckpointBlockWithMissingSoe, ObservationData}
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec

@@ -7,7 +7,7 @@ import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.p2p.PeerHealthCheck.PeerHealthCheckStatus
 import org.constellation.domain.trust.TrustData
 import org.constellation.p2p.{Cluster, JoinedHeight, PeerUnregister, SetNodeStatus}
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 import org.constellation.trust.TrustManager
 import org.http4s.HttpRoutes
 import org.http4s.circe._
@@ -19,7 +19,7 @@ import JoinedHeight._
 import PeerUnregister._
 import TrustData._
 import Id._
-import org.constellation.schema.observation.ObservationEvent
+import org.constellation.schema.v2.observation.ObservationEvent
 
 class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 

@@ -11,7 +11,7 @@
 //import org.constellation.p2p.PeerData
 //import org.constellation.primitives.Schema._
 //import org.constellation.primitives._
-//import org.constellation.schema.Id
+//import org.constellation.schema.schema.Id
 //import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 //import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FreeSpec, Matchers}
 //

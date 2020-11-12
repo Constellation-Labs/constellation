@@ -6,11 +6,11 @@ import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.address.AddressCacheData
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
-import org.constellation.schema.edge.{EdgeHashType, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
-import org.constellation.schema.{GenesisObservation, Height, PublicKeyExt}
+import org.constellation.schema.v2.address.AddressCacheData
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.v2.edge.{EdgeHashType, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
+import org.constellation.schema.v2.{GenesisObservation, Height, PublicKeyExt}
 import org.constellation.util.AccountBalance
 import org.constellation.DAO
 

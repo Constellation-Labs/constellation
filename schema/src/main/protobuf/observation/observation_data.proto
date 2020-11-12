@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.observation;
+
+import "id.proto";
+import "observation/observation_event.proto";
+
+message ObservationData {
+  Id id = 1;
+  ObservationEvent event = 2;
+  int64 time = 3;
+}

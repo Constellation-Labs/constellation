@@ -3,7 +3,7 @@ package org.constellation.p2p
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
 import org.constellation.ResourceInfo
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.session.SessionTokenService.Token
 
 case class PeerRegistrationRequest(

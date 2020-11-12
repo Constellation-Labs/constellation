@@ -14,8 +14,8 @@ import PeerAuthSignRequest._
 import PeerRegistrationRequest._
 import HostPort._
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
-import org.constellation.schema.Id
-import org.constellation.schema.signature.{SignHelp, SingleHashSignature}
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.signature.{SignHelp, SingleHashSignature}
 import org.constellation.session.Registration.JoinRequestPayload
 
 class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {

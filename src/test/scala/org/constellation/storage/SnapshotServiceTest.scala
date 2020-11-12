@@ -12,7 +12,7 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.rewards.EigenTrust
-import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.trust.TrustManager
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

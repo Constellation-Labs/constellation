@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.merkle;
+
+message MerkleNode {
+  string hash = 1;
+  string leftChild = 2;
+  string rightChild = 3;
+}
+
+message MerkleProof {
+  string input = 1;
+  repeated MerkleNode nodes = 2;
+  string root = 3;
+}
+
+message MerkleResult {
+  repeated string inputs = 1;
+  repeated MerkleNode nodes = 2;
+}

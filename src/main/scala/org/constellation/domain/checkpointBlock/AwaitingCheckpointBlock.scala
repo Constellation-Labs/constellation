@@ -5,8 +5,8 @@ import cats.syntax.all._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.transaction.TransactionChainService
 import org.constellation.genesis.Genesis
-import org.constellation.schema.checkpoint.CheckpointBlock
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.v2.checkpoint.CheckpointBlock
+import org.constellation.schema.v2.transaction.Transaction
 import org.constellation.storage.SOEService
 
 object AwaitingCheckpointBlock {

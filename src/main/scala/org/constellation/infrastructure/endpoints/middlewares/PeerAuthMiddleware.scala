@@ -9,7 +9,7 @@ import cats.syntax.all._
 import fs2.{Chunk, Stream}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.session.Registration.`X-Id`
 import org.constellation.session.SessionTokenService
 import org.constellation.session.SessionTokenService.{Token, TokenValid, `X-Session-Token`}

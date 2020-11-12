@@ -8,12 +8,12 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointParentService, InsufficientBalance}
 import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
-import org.constellation.schema.Schema._
-import org.constellation.schema.address.AddressCacheData
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointEdge, CheckpointEdgeData}
-import org.constellation.schema.signature.HashSignature
-import org.constellation.schema.edge.{Edge, ObservationEdge, SignedObservationEdge}
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
+import org.constellation.schema.v2.Schema._
+import org.constellation.schema.v2.address.AddressCacheData
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, CheckpointEdge, CheckpointEdgeData}
+import org.constellation.schema.v2.signature.HashSignature
+import org.constellation.schema.v2.edge.{Edge, ObservationEdge, SignedObservationEdge}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats

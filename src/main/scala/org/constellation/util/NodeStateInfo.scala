@@ -2,7 +2,7 @@ package org.constellation.util
 
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
-import org.constellation.schema.{NodeState, NodeType}
+import org.constellation.schema.v2.{NodeState, NodeType}
 
 case class NodeStateInfo(
   nodeState: NodeState,

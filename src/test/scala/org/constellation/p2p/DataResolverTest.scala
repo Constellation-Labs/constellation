@@ -1,7 +1,7 @@
 //package org.constellation.p2p
 //
 //import cats.effect.{ContextShift, IO}
-//import org.constellation.schema.Id
+//import org.constellation.schema.schema.Id
 //import org.constellation.util.{APIClient, PeerApiClient}
 //import org.constellation.{DAO, Fixtures}
 //import org.mockito.ArgumentMatchers

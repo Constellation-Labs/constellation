@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+enum PeerState {
+  Join = 0;
+  Leave = 1;
+}

@@ -1,0 +1,46 @@
+package org.constellation.schema.v2
+
+import java.security.PublicKey
+
+import com.google.common.hash.Hashing
+import io.circe.{Decoder, Encoder, KeyDecoder, KeyEncoder}
+import io.circe.generic.semiauto._
+import org.constellation.keytool.KeyUtils
+import org.constellation.keytool.KeyUtils.hexToPublicKey
+import org.constellation.schema.ProtoAutoCodecs
+
+case class Id(hex: String) extends Ordered[Id] {
+
+  @transient
+  val short: String = hex.toString.slice(0, 5)
+
+  @transient
+  val medium: String = hex.toString.slice(0, 10)
+
+  @transient
+  lazy val address: String = KeyUtils.publicKeyToAddressString(toPublicKey)
+
+  @transient
+  lazy val toPublicKey: PublicKey = hexToPublicKey(hex)
+
+  @transient
+  lazy val bytes: Array[Byte] = KeyUtils.hex2bytes(hex)
+
+  @transient
+  lazy val bigInt: BigInt = BigInt(bytes)
+
+  @transient
+  lazy val distance: BigInt = BigInt(Hashing.sha256.hashBytes(toPublicKey.getEncoded).asBytes())
+
+  override def compare(that: Id): Int = hex.compare(that.hex)
+}
+
+object Id extends ProtoAutoCodecs[org.constellation.schema.proto.Id, Id] {
+  val cmp = org.constellation.schema.proto.Id
+
+  implicit val idEncoder: Encoder[Id] = deriveEncoder
+  implicit val idDecoder: Decoder[Id] = deriveDecoder
+
+  implicit val keyIdEncoder: KeyEncoder[Id] = KeyEncoder.encodeKeyString.contramap[Id](_.hex)
+  implicit val keyIdDecoder: KeyDecoder[Id] = KeyDecoder.decodeKeyString.map(Id(_))
+}

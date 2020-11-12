@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+message Height {
+  int64 min = 1;
+  int64 max = 2;
+}

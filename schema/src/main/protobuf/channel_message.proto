@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+import "merkle/merkle_node.proto";
+import "signature/signature_batch.proto";
+
+message ChannelMessageData {
+  string message = 1;
+  string previousMessageHash = 2;
+  string channelId = 3;
+}
+
+message SignedChannelMessageData {
+  ChannelMessageData data = 1;
+  signature.SignatureBatch signatures = 2;
+}
+
+message ChannelMessageMetadata {
+  ChannelMessage channelMessage = 1;
+  string blockHash = 2;
+  string snapshotHash = 3;
+}
+
+message ChannelMetadata {
+  ChannelOpen channelOpen = 1;
+  ChannelMessageMetadata genesisMessageMetadata = 2;
+  int64 totalNumMessages = 3;
+  repeated string last25MessageHashes = 4;
+}
+
+message SingleChannelUIOutput {
+  ChannelOpen channelOpen = 1;
+  int64 totalNumMessages = 2;
+  repeated string last25MessageHashes = 3;
+  string genesisAddress = 4;
+}
+
+message ChannelMessage {
+  SignedChannelMessageData signedMessageData = 1;
+}
+
+message ChannelProof {
+  ChannelMessageMetadata channelMessageMetadata = 1;
+  merkle.MerkleProof checkpointProof = 2;
+  merkle.MerkleProof checkpointMessageProof = 3;
+}
+
+message ChannelOpenRequest {
+  string channelId = 1;
+  string jsonSchema = 2;
+  bool acceptInvalid = 3;
+}
+
+message ChannelOpen {
+  string name = 1;
+  string jsonSchema = 2;
+  bool acceptInvalid = 3;
+}
+
+message ChannelOpenResponse {
+  string errorMessage = 1;
+  string genesisHash = 2;
+}
+
+message ChannelSendRequest {
+  string channelId = 1;
+  repeated string messages = 2;
+}
+
+message ChannelSendRequestRawJson {
+  string channelId = 1;
+  string messages = 2;
+}
+
+message ChannelSendResponse {
+  string errorMessage = 1;
+  repeated string messageHashes = 2;
+}

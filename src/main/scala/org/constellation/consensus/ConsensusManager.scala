@@ -15,11 +15,11 @@ import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.concurrency.SingleLock
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
-import org.constellation.schema.consensus.RoundId
-import org.constellation.schema.observation.Observation
-import org.constellation.schema.transaction.Transaction
-import org.constellation.schema.{ChannelMessage, Id, NodeState, NodeType, PeerNotification}
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.v2.consensus.RoundId
+import org.constellation.schema.v2.observation.Observation
+import org.constellation.schema.v2.transaction.Transaction
+import org.constellation.schema.v2.{ChannelMessage, Id, NodeState, NodeType, PeerNotification}
 import org.constellation.storage.{ConcurrentTipService, _}
 import org.constellation.util.{Distance, Metrics}
 import org.constellation.{ConfigUtil, DAO}

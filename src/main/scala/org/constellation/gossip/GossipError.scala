@@ -1,6 +1,6 @@
 package org.constellation.gossip
 
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 trait GossipError extends Throwable {}
 

@@ -2,11 +2,11 @@ package org.constellation.domain.transaction
 
 import cats.data.Validated
 import cats.effect.IO
-import org.constellation.schema.edge.EdgeHashType.{AddressHash, TransactionDataHash}
-import org.constellation.schema.signature.SignatureBatch
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
-import org.constellation.schema.edge.{Edge, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.schema.transaction
+import org.constellation.schema.v2.edge.EdgeHashType.{AddressHash, TransactionDataHash}
+import org.constellation.schema.v2.signature.SignatureBatch
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.schema.v2.edge.{Edge, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.transaction
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.BeforeAndAfter

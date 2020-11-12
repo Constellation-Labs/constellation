@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.checkpoint;
+
+import "checkpoint/checkpoint_edge_data.proto";
+import "edge/observation_edge.proto";
+import "edge/signed_observation_edge.proto";
+
+message EdgeCheckpointEdgeData {
+  edge.ObservationEdge observationEdge = 1;
+  edge.SignedObservationEdge signedObservationEdge = 2;
+  CheckpointEdgeData data = 3;
+}
+
+message CheckpointEdge {
+  EdgeCheckpointEdgeData edge = 1;
+}

@@ -15,6 +15,7 @@ import io.micrometer.core.instrument.{Clock, Counter, Tag, Timer}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.cache.caffeine.CacheMetricsCollector
+import org.constellation.keytool.KeyUtils
 import org.constellation.{BuildInfo, ConstellationExecutionContext, DAO}
 import org.joda.time.DateTime
 
@@ -128,7 +129,7 @@ class Metrics(
 
   // Init
 
-  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash, collectorRegistry)
+  val registry = Metrics.prometheusSetup(KeyUtils.publicKeyToHex(dao.keyPair.getPublic), collectorRegistry)
 
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(MILLISECONDS)

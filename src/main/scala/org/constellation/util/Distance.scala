@@ -1,7 +1,7 @@
 package org.constellation.util
 
 import com.google.common.hash.Hashing
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 object Distance {
 

@@ -13,11 +13,11 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.genesis.Genesis
 import org.constellation.p2p.{Cluster, DataResolver}
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
-import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation}
-import org.constellation.schema.signature.{HashSignature, SignatureRequest, SignatureResponse}
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
-import org.constellation.schema.{ChannelMessageMetadata, Height, Id, NodeState}
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
+import org.constellation.schema.v2.observation.{CheckpointBlockInvalid, Observation}
+import org.constellation.schema.v2.signature.{HashSignature, SignatureRequest, SignatureResponse}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
+import org.constellation.schema.v2.{ChannelMessageMetadata, Height, Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
 import org.constellation._
@@ -510,15 +510,14 @@ object CheckpointAcceptanceService {
           case (hash, txs) =>
             txChainService
               .getLastAcceptedTransactionRef(hash)
-              .map {
-                latr =>
-                  txs.foldLeft(latr.some) {
-                    case (maybePrev, tx) =>
-                      for {
-                        prev <- maybePrev
-                        txPrev <- tx.lastTxRef.some if prev == txPrev
-                      } yield LastTransactionRef(tx.hash, tx.ordinal)
-                  }
+              .map { latr =>
+                txs.foldLeft(latr.some) {
+                  case (maybePrev, tx) =>
+                    for {
+                      prev <- maybePrev
+                      txPrev <- tx.lastTxRef.some if prev == txPrev
+                    } yield LastTransactionRef(tx.hash, tx.ordinal)
+                }
               }
         }
       }

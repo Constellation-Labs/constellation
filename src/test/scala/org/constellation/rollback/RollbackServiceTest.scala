@@ -8,7 +8,7 @@ import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.genesis.GenesisObservationS3Storage
 import org.constellation.p2p.Cluster
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.DAO
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

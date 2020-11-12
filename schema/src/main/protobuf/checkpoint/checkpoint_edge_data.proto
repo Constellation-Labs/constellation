@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.checkpoint;
+
+message CheckpointEdgeData {
+  repeated string hashes = 1;
+  repeated string messageHashes = 2;
+  repeated string observationsHashes = 3;
+}

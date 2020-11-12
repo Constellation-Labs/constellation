@@ -5,7 +5,7 @@ import cats.syntax.all._
 import cats.effect.Concurrent
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.schema.GenesisObservation
+import org.constellation.schema.v2.GenesisObservation
 
 class GenesisObservationLocalStorage[F[_]: Concurrent](baseDir: String)
     extends LocalFileStorage[F, GenesisObservation](baseDir) {

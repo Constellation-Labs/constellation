@@ -6,14 +6,14 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.PeerData
-import org.constellation.schema.checkpoint.{CheckpointCacheMetadata, TipData}
-import org.constellation.schema.Height
+import org.constellation.schema.v2.checkpoint.{CheckpointCacheMetadata, TipData}
+import org.constellation.schema.v2.Height
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.storage.{ConcurrentTipService, TipSoe}
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, ProcessingConfig, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats

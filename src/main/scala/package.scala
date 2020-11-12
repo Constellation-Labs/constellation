@@ -8,10 +8,9 @@ import cats.syntax.all._
 import com.google.common.hash.Hashing
 import org.constellation.DAO
 import org.constellation.keytool.KeyUtils._
-import org.constellation.schema.Schema._
-import org.constellation.schema.Id
-import org.constellation.schema.address.AddressMetaData
-import org.constellation.schema.signature.SignHelpExt
+import org.constellation.schema.v2.Schema._
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.signature.SignHelpExt
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.POWExt
 
@@ -38,9 +37,6 @@ package object constellation extends POWExt with SignHelpExt {
 
     def sha256Bytes: Array[Byte] = Hashing.sha256().hashBytes(arr).asBytes()
   }
-
-  implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =
-    AddressMetaData(publicKeyToAddressString(key))
 
   def withMetric[F[_]: Sync, A](fa: F[A], prefix: String)(implicit dao: DAO): F[A] =
     fa.flatTap(_ => dao.metrics.incrementMetricAsync[F](s"${prefix}_success")).handleErrorWith { err =>

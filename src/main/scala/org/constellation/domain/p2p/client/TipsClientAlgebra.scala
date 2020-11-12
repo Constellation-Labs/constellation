@@ -1,8 +1,8 @@
 package org.constellation.domain.p2p.client
 
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.checkpoint.TipData
-import org.constellation.schema.{Height, Id}
+import org.constellation.schema.v2.checkpoint.TipData
+import org.constellation.schema.v2.{Height, Id}
 
 trait TipsClientAlgebra[F[_]] {
   def getTips(): PeerResponse[F, Map[String, TipData]]

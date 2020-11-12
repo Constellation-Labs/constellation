@@ -3,8 +3,13 @@ package org.constellation.storage.transactions
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import org.constellation.domain.transaction.{PendingTransactionsMemPool, TransactionChainService, TransactionService}
-import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
+import org.constellation.schema.v2.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.transaction.{
+  LastTransactionRef,
+  Transaction,
+  TransactionCacheData,
+  TransactionEdgeData
+}
 import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.IdiomaticMockito

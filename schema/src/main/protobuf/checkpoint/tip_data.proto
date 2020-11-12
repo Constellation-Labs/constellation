@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.checkpoint;
+
+import "checkpoint/checkpoint_block.proto";
+import "height.proto";
+
+message TipData {
+  CheckpointBlock checkpointBlock = 1;
+  int32 numUses = 2;
+  Height height = 3;
+}

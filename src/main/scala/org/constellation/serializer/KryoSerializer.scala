@@ -1,6 +1,6 @@
 package org.constellation.serializer
 
-import org.constellation.schema.Kryo
+import org.constellation.schema.v2.Kryo
 
 object KryoSerializer {
 

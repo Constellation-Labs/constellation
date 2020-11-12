@@ -11,7 +11,7 @@ import org.constellation.domain.redownload.RedownloadService.{
   SnapshotsAtHeight
 }
 import org.constellation.p2p.MajorityHeight
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 import scala.collection.SortedMap
 

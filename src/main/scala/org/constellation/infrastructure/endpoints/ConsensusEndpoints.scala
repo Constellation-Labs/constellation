@@ -25,7 +25,7 @@ import RoundDataRemote._
 import ConsensusDataProposal._
 import UnionBlockProposal._
 import SelectedUnionBlock._
-import org.constellation.schema.observation.ObservationEvent
+import org.constellation.schema.v2.observation.ObservationEvent
 
 class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 

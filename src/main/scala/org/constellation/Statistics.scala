@@ -6,7 +6,7 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import com.amazonaws.util.IOUtils
 import fs2.Stream
 import fs2.io.{stdin, stdinUtf8}
-import org.constellation.schema.snapshot.SnapshotInfo
+import org.constellation.schema.v2.snapshot.SnapshotInfo
 import org.constellation.serializer.KryoSerializer
 
 import scala.concurrent.ExecutionContext

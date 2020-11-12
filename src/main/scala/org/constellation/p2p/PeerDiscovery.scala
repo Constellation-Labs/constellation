@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], ownId: Id, unboundedBlocker: Blocker)(
   implicit F: Concurrent[F],

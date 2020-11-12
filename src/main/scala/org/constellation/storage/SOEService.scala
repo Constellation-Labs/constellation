@@ -5,7 +5,7 @@ import cats.effect.concurrent.Semaphore
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext
-import org.constellation.schema.edge.SignedObservationEdge
+import org.constellation.schema.v2.edge.SignedObservationEdge
 
 class SOEService[F[_]: Concurrent]() {
 

@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+message MetricsResult {
+  map<string, string> metrics = 1;
+}

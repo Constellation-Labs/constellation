@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.observation;
+
+import "consensus/round_id.proto";
+
+message ObservationEvent {
+  oneof event {
+    CheckpointBlockWithMissingParents checkpointBlockWithMissingParents = 1;
+    CheckpointBlockWithMissingSoe checkpointBlockWithMissingSoe = 2;
+    RequestTimeoutOnConseusus requestTimeoutOnConsensus = 3;
+    RequestTimeoutOnResolving requestTimeoutOnResolving = 4;
+    CheckpointBlockInvalid checkpointBlockInvalid = 5;
+  }
+}
+
+message CheckpointBlockWithMissingParents {
+  string checkpointBaseHash = 1;
+}
+
+message CheckpointBlockWithMissingSoe {
+  string checkpointBaseHash = 1;
+}
+
+message RequestTimeoutOnConseusus {
+  consensus.RoundId roundId = 1;
+}
+
+message RequestTimeoutOnResolving {
+  repeated string hashes = 1;
+}
+
+message CheckpointBlockInvalid {
+  string checkpointBaseHash = 1;
+  string reason = 2;
+}

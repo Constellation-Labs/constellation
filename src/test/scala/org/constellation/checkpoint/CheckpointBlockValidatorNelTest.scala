@@ -11,14 +11,14 @@
 //import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 //import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 //import org.constellation.checkpoint.CheckpointBlockValidator._
-//import org.constellation.schema.snapshot.StoredSnapshot
+//import org.constellation.schema.schema.snapshot.StoredSnapshot
 //import org.constellation.consensus.{RandomData, Snapshot}
-//import org.constellation.schema.snapshot.SnapshotInfo
+//import org.constellation.schema.schema.snapshot.SnapshotInfo
 //import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
 //import org.constellation.p2p.{Cluster, JoiningPeerValidator}
 //import org.constellation.primitives.Schema.{AddressCacheData, CheckpointCache, GenesisObservation}
 //import org.constellation.primitives.{CheckpointBlock, IPManager, Transaction}
-//import org.constellation.schema.Id
+//import org.constellation.schema.schema.Id
 //import org.constellation.storage._
 //import org.constellation.util.{HashSignature, Metrics}
 //import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}

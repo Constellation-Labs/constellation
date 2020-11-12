@@ -10,10 +10,15 @@ import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.Schema
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
+import org.constellation.schema.v2.Schema
+import org.constellation.schema.v2.checkpoint.CheckpointCache
+import org.constellation.schema.v2.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.transaction.{
+  LastTransactionRef,
+  Transaction,
+  TransactionCacheData,
+  TransactionEdgeData
+}
 import org.constellation.storage.RateLimiting
 
 class TransactionService[F[_]: Concurrent](

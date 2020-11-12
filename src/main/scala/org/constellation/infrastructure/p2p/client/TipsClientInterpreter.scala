@@ -3,12 +3,12 @@ package org.constellation.infrastructure.p2p.client
 import cats.effect.{Concurrent, ContextShift}
 import io.circe.Decoder
 import io.circe.generic.semiauto._
-import org.constellation.schema.checkpoint.TipData._
+import org.constellation.schema.v2.checkpoint.TipData._
 import org.constellation.domain.p2p.client.TipsClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.checkpoint.TipData
-import org.constellation.schema.{Height, Id}
+import org.constellation.schema.v2.checkpoint.TipData
+import org.constellation.schema.v2.{Height, Id}
 import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.client.Client
@@ -19,7 +19,6 @@ class TipsClientInterpreter[F[_]: Concurrent: ContextShift](
   client: Client[F],
   sessionTokenService: SessionTokenService[F]
 ) extends TipsClientAlgebra[F] {
-
   implicit val tipDataMapDecoder: Decoder[Map[String, TipData]] = Decoder.decodeMap[String, TipData]
   implicit val idLongDecoder: Decoder[(Id, Long)] = deriveDecoder[(Id, Long)]
 

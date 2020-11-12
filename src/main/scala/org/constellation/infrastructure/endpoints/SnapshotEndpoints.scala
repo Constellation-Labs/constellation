@@ -9,8 +9,8 @@ import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.p2p.Cluster
-import org.constellation.schema.NodeState
-import org.constellation.schema.Id
+import org.constellation.schema.v2.NodeState
+import org.constellation.schema.v2.Id
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.http4s.HttpRoutes
@@ -21,7 +21,7 @@ import scala.collection.SortedMap
 import Id._
 import RedownloadService._
 import LatestMajorityHeight._
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
 
 class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 

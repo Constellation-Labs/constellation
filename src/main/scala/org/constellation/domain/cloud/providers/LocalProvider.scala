@@ -5,7 +5,7 @@ import cats.data.EitherT
 import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.domain.cloud.config.Local
-import org.constellation.schema.GenesisObservation
+import org.constellation.schema.v2.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
 class LocalProvider[F[_]](config: Local)(implicit F: Concurrent[F]) extends CloudServiceProvider[F] {

@@ -6,8 +6,8 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusStatus
-import org.constellation.schema.Id
-import org.constellation.schema.transaction.TransactionCacheData
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.transaction.TransactionCacheData
 import org.constellation.util.Logging._
 
 import scala.util.Random

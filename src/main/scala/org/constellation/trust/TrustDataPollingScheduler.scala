@@ -6,7 +6,7 @@ import com.typesafe.config.Config
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 import org.constellation.util.PeriodicIO
 import org.constellation.{ConfigUtil, DAO}
 

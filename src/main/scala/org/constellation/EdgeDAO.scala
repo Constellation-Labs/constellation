@@ -3,8 +3,8 @@ package org.constellation
 import java.util.concurrent.Semaphore
 
 import com.typesafe.scalalogging.StrictLogging
-import org.constellation.schema.checkpoint.CheckpointBlock
-import org.constellation.schema.{ChannelMessage, ChannelSendRequest, Height, Id}
+import org.constellation.schema.v2.checkpoint.CheckpointBlock
+import org.constellation.schema.v2.{ChannelMessage, ChannelSendRequest, Height, Id}
 
 import scala.collection.concurrent.TrieMap
 

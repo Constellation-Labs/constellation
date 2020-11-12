@@ -11,9 +11,9 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.p2p.Cluster
-import org.constellation.schema.GenesisObservation
+import org.constellation.schema.v2.GenesisObservation
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
 

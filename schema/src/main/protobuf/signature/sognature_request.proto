@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.signature;
+
+import "checkpoint/checkpoint_block.proto";
+import "id.proto";
+
+message SignatureRequest {
+  checkpoint.CheckpointBlock checkpointBlock = 1;
+  repeated Id facilitators = 2;
+}

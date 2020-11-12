@@ -8,8 +8,8 @@ import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSor
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
-import org.constellation.schema.NodeState
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.NodeState
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics

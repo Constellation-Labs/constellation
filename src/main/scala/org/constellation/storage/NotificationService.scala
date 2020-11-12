@@ -3,7 +3,7 @@ package org.constellation.storage
 import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext
-import org.constellation.schema.PeerNotification
+import org.constellation.schema.v2.PeerNotification
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
 class NotificationService[F[_]: Concurrent]() extends MerkleStorageAlgebra[F, String, PeerNotification] {

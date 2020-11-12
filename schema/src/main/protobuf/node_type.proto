@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+enum NodeType {
+  Full = 0;
+  Light = 1;
+}

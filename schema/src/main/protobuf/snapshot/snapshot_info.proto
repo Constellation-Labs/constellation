@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.snapshot;
+
+import "snapshot/stored_snapshot.proto";
+import "checkpoint/checkpoint_cache.proto";
+import "address/address_cache_data.proto";
+import "checkpoint/tip_data.proto";
+import "transaction/last_transaction_ref.proto";
+
+message SnapshotInfo {
+  StoredSnapshot snapshot = 1;
+  repeated string acceptedCBSinceSnapshot = 2;
+  repeated checkpoint.CheckpointCache acceptedCBSinceSnapshotCache = 3;
+  repeated checkpoint.CheckpointCache awaitingCbs = 4;
+  int32 lastSnapshotHeight = 5;
+  repeated string snapshotHashes = 6;
+  map<string, address.AddressCacheData> addressCacheData = 7;
+  map<string, checkpoint.TipData> tips = 8;
+  repeated checkpoint.CheckpointCache snapshotCache = 9;
+  map<string, transaction.LastTransactionRef> lastAcceptedTransactionRef = 10;
+}

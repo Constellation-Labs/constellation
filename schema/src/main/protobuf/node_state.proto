@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+enum NodeState {
+  PendingDownload = 0;
+  ReadyForDownload = 1;
+  DownloadInProgress = 2;
+  DownloadCompleteAwaitingFinalSync = 3;
+  SnapshotCreation = 4;
+  Ready = 5;
+  Leaving = 6;
+  Offline = 7;
+}

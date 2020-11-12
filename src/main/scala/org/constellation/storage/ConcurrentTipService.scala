@@ -12,9 +12,9 @@ import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.concurrency.SingleLock
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.p2p.PeerData
-import org.constellation.schema.checkpoint.{CheckpointBlock, TipData}
-import org.constellation.schema.edge.SignedObservationEdge
-import org.constellation.schema.{Height, Id, checkpoint}
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, TipData}
+import org.constellation.schema.v2.edge.SignedObservationEdge
+import org.constellation.schema.v2.{Height, Id, checkpoint}
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, DAO}

@@ -9,7 +9,7 @@ import cats.syntax.all._
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.storage.StorageOptions
 import org.constellation.domain.cloud.config.{GCP, GCPInherit, PermissionFile}
-import org.constellation.schema.GenesisObservation
+import org.constellation.schema.v2.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
 class GCPProvider[F[_]](credentials: GoogleCredentials, bucketName: String)(implicit F: Concurrent[F])

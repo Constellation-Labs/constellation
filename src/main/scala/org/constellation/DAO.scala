@@ -38,9 +38,9 @@ import org.constellation.infrastructure.snapshot.{
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
-import org.constellation.schema.{ChannelMessage, GenesisObservation, Id, NodeState, NodeType}
+import org.constellation.schema.v2.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.{ChannelMessage, GenesisObservation, Id, NodeState, NodeType}
 import org.constellation.session.SessionTokenService
 import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._

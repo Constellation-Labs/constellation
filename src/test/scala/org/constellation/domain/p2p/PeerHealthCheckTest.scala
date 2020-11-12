@@ -10,7 +10,7 @@ import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.client.{ClusterClientInterpreter, MetricsClientInterpreter}
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.util.Metrics
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

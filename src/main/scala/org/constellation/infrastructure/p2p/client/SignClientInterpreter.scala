@@ -5,7 +5,7 @@ import org.constellation.domain.p2p.client.SignClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
-import org.constellation.schema.signature.SingleHashSignature
+import org.constellation.schema.v2.signature.SingleHashSignature
 import org.http4s.Method._
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._

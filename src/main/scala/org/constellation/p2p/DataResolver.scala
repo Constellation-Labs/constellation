@@ -17,11 +17,11 @@ import org.constellation.storage.SOEService
 import org.constellation.util.Logging._
 import org.constellation.util.Distance
 import DataResolver._
-import org.constellation.schema.NodeState
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.consensus.RoundId
-import org.constellation.schema.observation.{Observation, RequestTimeoutOnResolving}
-import org.constellation.schema.transaction.TransactionCacheData
+import org.constellation.schema.v2.NodeState
+import org.constellation.schema.v2.checkpoint.CheckpointCache
+import org.constellation.schema.v2.consensus.RoundId
+import org.constellation.schema.v2.observation.{Observation, RequestTimeoutOnResolving}
+import org.constellation.schema.v2.transaction.TransactionCacheData
 
 class DataResolver[F[_]](
   keyPair: KeyPair,

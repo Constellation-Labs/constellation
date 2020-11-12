@@ -7,7 +7,7 @@ import org.constellation.gossip.sampling.PeerSampling
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 
 abstract class GossipService[F[_], A](selfId: Id, peerSampling: PeerSampling[F, Id], cluster: Cluster[F])(
   implicit val F: Concurrent[F]

@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.transaction;
+
+message LastTransactionRef {
+  string prevHash = 1;
+  int32 ordinal = 2;
+}

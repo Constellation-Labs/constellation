@@ -6,7 +6,7 @@ import org.constellation.consensus.RoundDataRemote
 import org.constellation.domain.p2p.client.ConsensusClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.observation.ObservationEvent
+import org.constellation.schema.v2.observation.ObservationEvent
 import org.http4s.client.Client
 import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._

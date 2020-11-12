@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.transaction;
+
+import "transaction/last_transaction_ref.proto";
+
+message TransactionEdgeData {
+  int32 amount = 1;
+  LastTransactionRef lastTxRef = 2;
+  int64 fee = 3;
+  int64 salt = 4;
+}

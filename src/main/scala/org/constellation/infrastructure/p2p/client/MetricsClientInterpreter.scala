@@ -4,7 +4,7 @@ import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.MetricsClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.MetricsResult
+import org.constellation.schema.v2.MetricsResult
 import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.client.Client

@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.Logger
 import constellation._
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.util.Metrics
 
 case class LocalNodeConfig(

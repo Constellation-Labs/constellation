@@ -11,10 +11,10 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.publicKeyToAddressString
-import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
-import org.constellation.schema.signature.{HashSignature, SignatureBatch}
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
-import org.constellation.schema.Id
+import org.constellation.schema.v2.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.signature.{HashSignature, SignatureBatch}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.schema.v2.Id
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Random => ScalaRandom}

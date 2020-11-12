@@ -1,7 +1,7 @@
 package org.constellation.regression
 
 import org.constellation.Fixtures
-import org.constellation.schema.signature.{SignHelp, SingleHashSignature}
+import org.constellation.schema.v2.signature.{SignHelp, SingleHashSignature}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 

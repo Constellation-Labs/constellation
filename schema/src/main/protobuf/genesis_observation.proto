@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+import "checkpoint/checkpoint_block.proto";
+
+message GenesisObservation {
+  checkpoint.CheckpointBlock genesis = 1;
+  checkpoint.CheckpointBlock initialDistribution = 2;
+  checkpoint.CheckpointBlock initialDistribution2 = 3;
+}

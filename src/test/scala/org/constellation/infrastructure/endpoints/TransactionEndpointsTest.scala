@@ -4,7 +4,7 @@ import cats.effect.{ContextShift, IO}
 import org.constellation.ConstellationExecutionContext
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
-import org.constellation.schema.transaction.LastTransactionRef
+import org.constellation.schema.v2.transaction.LastTransactionRef
 import org.constellation.util.Metrics
 import org.http4s.implicits._
 import org.http4s.{HttpRoutes, Method, Request, Status}
@@ -67,7 +67,8 @@ class TransactionEndpointsTest
       "should respond with an Ok status" in {
         transactionService.findByPredicate(*) shouldReturnF List.empty
 
-        val response = transactionPublicEndpoints.orNotFound.run(Request(Method.GET, uri"transaction?src=src")).unsafeRunSync
+        val response =
+          transactionPublicEndpoints.orNotFound.run(Request(Method.GET, uri"transaction?src=src")).unsafeRunSync
 
         response.status shouldBe Status.Ok
       }

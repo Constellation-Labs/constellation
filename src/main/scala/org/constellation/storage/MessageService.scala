@@ -3,7 +3,7 @@ package org.constellation.storage
 import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext.createSemaphore
-import org.constellation.schema.{ChannelMessageMetadata, ChannelMetadata}
+import org.constellation.schema.v2.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 import org.constellation.DAO
 

@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.edge;
+
+import "edge/edge_hash_type.proto";
+
+message TypedEdgeHash {
+  string hashReference = 1;
+  EdgeHashType hashType = 2;
+  string baseHash = 3;
+}

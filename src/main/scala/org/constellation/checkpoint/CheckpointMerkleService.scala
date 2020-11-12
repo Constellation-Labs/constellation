@@ -4,16 +4,16 @@ import cats.effect.Concurrent
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.p2p.DataResolver
-import org.constellation.schema.PeerNotification
-import org.constellation.schema.checkpoint.{
+import org.constellation.schema.v2.PeerNotification
+import org.constellation.schema.v2.checkpoint.{
   CheckpointBlock,
   CheckpointBlockMetadata,
   CheckpointCache,
   CheckpointCacheMetadata
 }
-import org.constellation.schema.merkle.MerkleTree
-import org.constellation.schema.observation.Observation
-import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.v2.merkle.MerkleTree
+import org.constellation.schema.v2.observation.Observation
+import org.constellation.schema.v2.transaction.{Transaction, TransactionCacheData}
 import org.constellation.storage.algebra.MerkleStorageAlgebra
 
 class CheckpointMerkleService[F[_]: Concurrent](

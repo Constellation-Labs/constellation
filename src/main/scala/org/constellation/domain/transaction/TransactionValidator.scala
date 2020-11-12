@@ -3,7 +3,7 @@ package org.constellation.domain.transaction
 import cats.data.ValidatedNel
 import cats.effect.Sync
 import cats.syntax.all._
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction}
 
 object TransactionValidator {
   type ValidationResult[A] = ValidatedNel[TransactionValidationError, A]

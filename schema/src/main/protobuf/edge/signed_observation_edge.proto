@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.edge;
+
+import "signature/signature_batch.proto";
+
+message SignedObservationEdge {
+  signature.SignatureBatch signatureBatch = 1;
+}

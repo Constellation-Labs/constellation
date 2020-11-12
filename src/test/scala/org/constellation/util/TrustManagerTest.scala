@@ -2,7 +2,7 @@ package org.constellation.util
 import cats.effect.{ContextShift, IO}
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.trust.{DataGeneration, SelfAvoidingWalk, TrustManager, TrustNode}
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats

@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+message Node {
+  string address = 1;
+  string host = 2;
+  int32 port = 3;
+}

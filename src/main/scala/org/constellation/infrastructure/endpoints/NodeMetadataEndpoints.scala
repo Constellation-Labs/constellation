@@ -6,7 +6,7 @@ import io.circe.{Encoder, KeyEncoder}
 import io.circe.syntax._
 import io.circe.generic.semiauto._
 import org.constellation.p2p.{Cluster, MajorityHeight}
-import org.constellation.schema.{Id, NodeState, NodeType}
+import org.constellation.schema.v2.{Id, NodeState, NodeType}
 import org.constellation.storage.AddressService
 import org.constellation.util.NodeStateInfo
 import org.http4s.HttpRoutes

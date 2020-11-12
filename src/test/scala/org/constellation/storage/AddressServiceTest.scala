@@ -2,8 +2,8 @@ package org.constellation.storage
 
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
-import org.constellation.schema.address.AddressCacheData
-import org.constellation.schema.transaction.LastTransactionRef
+import org.constellation.schema.v2.address.AddressCacheData
+import org.constellation.schema.v2.transaction.LastTransactionRef
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.mockito.cats.IdiomaticMockitoCats

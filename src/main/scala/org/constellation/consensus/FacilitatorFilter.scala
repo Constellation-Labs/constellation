@@ -6,7 +6,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.PeerData
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.constellation.storage.TipSoe
 
 import scala.util.Random

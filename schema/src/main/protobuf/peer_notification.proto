@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+import "id.proto";
+import "peer_state.proto";
+import "google/protobuf/timestamp.proto";
+
+message PeerNotification {
+  Id id = 1;
+  PeerState state = 2;
+  google.protobuf.Timestamp localDateTime = 3;
+}

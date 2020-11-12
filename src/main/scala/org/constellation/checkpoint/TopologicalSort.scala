@@ -1,6 +1,6 @@
 package org.constellation.checkpoint
 
-import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.v2.checkpoint.CheckpointCache
 
 import scala.annotation.tailrec
 

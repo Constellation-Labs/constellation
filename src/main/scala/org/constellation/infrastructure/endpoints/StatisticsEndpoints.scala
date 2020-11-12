@@ -6,8 +6,8 @@ import io.circe.syntax._
 import io.circe.generic.semiauto._
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.Cluster
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.Node
+import org.constellation.schema.v2.checkpoint.CheckpointCache
+import org.constellation.schema.v2.Node
 import org.constellation.storage.RecentDataTracker
 import org.constellation.{BlockUIOutput, ChannelValidationInfo}
 import org.http4s.HttpRoutes
@@ -15,7 +15,7 @@ import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import BlockUIOutput._
 import io.circe.{Decoder, Encoder}
-import org.constellation.schema.transaction.TransactionCacheData
+import org.constellation.schema.v2.transaction.TransactionCacheData
 
 class StatisticsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 

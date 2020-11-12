@@ -26,6 +26,8 @@ lazy val versions = new {
   val scaffeine = "4.0.1"
   val betterFiles = "3.9.1"
   val pureconfig = "0.13.0"
+  val chimney = "0.6.1"
+  val scalapb = "0.7.1"
 }
 
 // -----------------
@@ -58,6 +60,15 @@ lazy val coreSettings = Seq(
 )
 
 // -----------------
+
+lazy val protoDependencies = Seq(
+  "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+)
+
+lazy val protoCirceDependencies = Seq(
+  "io.github.scalapb-json" %% "scalapb-circe",
+  "io.github.scalapb-json" %% "scalapb-circe-macros"
+).map(_ % versions.scalapb)
 
 lazy val http4sDependencies = Seq(
   "org.http4s" %% "http4s-blaze-server",
@@ -114,8 +125,9 @@ lazy val prometheusDependencies = Seq(
 
 lazy val sharedDependencies = Seq(
   "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-  "joda-time" % "joda-time" % "1.6"
-) ++ circeDependencies ++ catsDependencies ++ loggingDependencies
+  "joda-time" % "joda-time" % "1.6",
+  "io.scalaland" %% "chimney" % versions.chimney
+) ++ circeDependencies ++ catsDependencies ++ loggingDependencies ++ protoDependencies ++ protoCirceDependencies
 
 lazy val keyToolSharedDependencies = Seq(
   "com.google.cloud" % "google-cloud-storage" % "1.91.0"
@@ -172,6 +184,12 @@ assemblyMergeStrategy in assembly := {
 
 // -----------------
 
+PB.targets in Compile := Seq(
+  scalapb.gen() -> (sourceManaged in Compile).value / "scalapb"
+)
+
+// -----------------
+
 lazy val keytool = (project in file("keytool"))
   .enablePlugins(BuildInfoPlugin)
   .settings(
@@ -195,7 +213,10 @@ lazy val schema = (project in file("schema"))
     ),
     buildInfoPackage := "org.constellation.schema",
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
-    libraryDependencies ++= schemaSharedDependencies
+    libraryDependencies ++= schemaSharedDependencies,
+    Compile / PB.targets := Seq(
+      scalapb.gen(flatPackage = true) -> (sourceManaged in Compile).value / "scalapb"
+    )
   )
 
 lazy val wallet = (project in file("wallet"))

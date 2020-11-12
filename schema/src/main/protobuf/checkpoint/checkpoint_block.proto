@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.checkpoint;
+
+import "checkpoint/checkpoint_edge.proto";
+import "transaction/transaction.proto";
+import "channel_message.proto";
+import "peer_notification.proto";
+import "observation/observation.proto";
+
+message CheckpointEdgeLike {
+  CheckpointEdge checkpoint = 1;
+}
+
+message CheckpointBlockMetadata {
+  string transactionsMerkleRoot = 1;
+  CheckpointEdge checkpointEdge = 2;
+  string messagesMerkleRoot = 3;
+  string notificationsMerkleRoot = 4;
+  string observationsMerkleRoot = 5;
+
+  // from CheckpointEdgeLike
+  CheckpointEdge checkpoint = 6;
+}
+
+message CheckpointBlock {
+  repeated transaction.Transaction transactions = 1;
+  CheckpointEdge checkpoint = 2;
+  repeated ChannelMessage messages = 3;
+  repeated PeerNotification notifications = 4;
+  repeated observation.Observation observations = 5;
+}

@@ -22,8 +22,8 @@ import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.infrastructure.endpoints._
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.schema.checkpoint.CheckpointBlock
-import org.constellation.schema.{GenesisObservation, Id, NodeState}
+import org.constellation.schema.v2.checkpoint.CheckpointBlock
+import org.constellation.schema.v2.{GenesisObservation, Id, NodeState}
 import org.constellation.session.SessionTokenService
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
 import org.http4s.server.Server

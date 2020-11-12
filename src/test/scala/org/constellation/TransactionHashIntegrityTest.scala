@@ -9,11 +9,11 @@ import cats.effect.{ContextShift, IO}
 import io.circe.generic.auto._
 import io.circe.parser.parse
 import org.constellation.consensus.{Snapshot, StoredSnapshot}
-import org.constellation.schema.snapshot.SnapshotInfo
+import org.constellation.schema.schema.snapshot.SnapshotInfo
 import org.constellation.domain.storage.StorageItemKind.GenesisObservation
 import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.schema.transaction.Transaction
 import org.constellation.serializer.KryoSerializer
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers

@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.checkpoint;
+
+import "checkpoint/checkpoint_cache.proto";
+import "id.proto";
+
+message FinishedCheckpoint {
+  CheckpointCache checkpointCacheData = 1;
+  repeated Id facilitators = 2;
+}

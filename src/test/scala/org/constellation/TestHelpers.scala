@@ -18,7 +18,7 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
 import org.http4s.metrics.prometheus.Prometheus

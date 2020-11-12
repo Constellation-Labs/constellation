@@ -5,9 +5,9 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.schema.address.Address
-import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.v2.address.Address
+import org.constellation.schema.v2.checkpoint.CheckpointCache
+import org.constellation.schema.v2.transaction.Transaction
 
 class RateLimiting[F[_]: Concurrent]() {
   val logger = Slf4jLogger.getLogger[F]

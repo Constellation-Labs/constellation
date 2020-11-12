@@ -17,8 +17,8 @@ import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
 import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
-import org.constellation.schema.Id
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.constellation.{PeerMetadata, ResourceInfo}

@@ -11,7 +11,7 @@ import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCh
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.{Cluster, PeerData}
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 import org.constellation.util.Metrics
 
 import scala.concurrent.duration._

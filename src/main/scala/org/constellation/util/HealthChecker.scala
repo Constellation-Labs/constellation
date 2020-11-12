@@ -4,7 +4,7 @@ import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 import org.constellation.storage.ConcurrentTipService
 import org.constellation.{ConfigUtil, DAO}
 

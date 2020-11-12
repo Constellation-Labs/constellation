@@ -9,11 +9,11 @@ import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{TransactionChainService, TransactionValidator}
 import org.constellation.genesis.Genesis
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.GenesisObservation
-import org.constellation.schema.address.AddressCacheData
-import org.constellation.schema.checkpoint.CheckpointBlock
-import org.constellation.schema.edge.SignedObservationEdge
-import org.constellation.schema.transaction.LastTransactionRef
+import org.constellation.schema.v2.GenesisObservation
+import org.constellation.schema.v2.address.AddressCacheData
+import org.constellation.schema.v2.checkpoint.CheckpointBlock
+import org.constellation.schema.v2.edge.SignedObservationEdge
+import org.constellation.schema.v2.transaction.LastTransactionRef
 import org.constellation.{DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}

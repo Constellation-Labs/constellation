@@ -8,11 +8,11 @@ import constellation.signedObservationEdge
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
-import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
-import org.constellation.schema.snapshot.SnapshotInfo
-import org.constellation.schema.transaction
-import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
+import org.constellation.schema.v2.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.schema.v2.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.v2.snapshot.SnapshotInfo
+import org.constellation.schema.v2.transaction
+import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.freespec.AnyFreeSpec

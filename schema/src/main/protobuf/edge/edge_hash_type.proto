@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.edge;
+
+enum EdgeHashType {
+  AddressHash = 0;
+  CheckpointDataHash = 1;
+  CheckpointHash = 2;
+  TransactionDataHash = 3;
+  TransactionHash = 4;
+  ValidationHash = 5;
+  BundleDataHash = 6;
+  ChannelMessageDataHash = 7;
+}

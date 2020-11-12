@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto;
+
+message CommonMetadata {
+  bool valid = 1;
+  bool inDAG = 2;
+  bool resolved = 3;
+  bool resolutionInProgress = 4;
+  bool inMemPool = 5;
+  int64 lastResolveAttempt = 6;
+  int64 rxTime = 7;
+}

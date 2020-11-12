@@ -3,7 +3,7 @@ package org.constellation.gossip.sampling
 import cats.effect.Concurrent
 import cats.implicits._
 import org.constellation.p2p.Cluster
-import org.constellation.schema.{Id, NodeState}
+import org.constellation.schema.v2.{Id, NodeState}
 
 import scala.collection.immutable.Seq._
 import scala.util.Random

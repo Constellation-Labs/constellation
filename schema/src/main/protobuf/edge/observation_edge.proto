@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.edge;
+
+import "edge/typed_edge_hash.proto";
+
+message ObservationEdge {
+  repeated TypedEdgeHash parents = 1;
+  TypedEdgeHash data = 2;
+}

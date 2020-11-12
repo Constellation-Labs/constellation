@@ -6,7 +6,7 @@ import cats.implicits._
 import org.constellation.{PeerMetadata, ResourceInfo}
 import org.constellation.gossip.sampling.{PeerSampling, RandomPeerSampling}
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.address;
+
+message AddressCacheData {
+  int64 balance = 1;
+  int64 memPoolBalance = 2;
+  double reputation = 3;
+  map<string, int64> ancestorBalances = 4;
+  map<string, int64> ancestorReputations = 5;
+  int64 balanceByLatestSnapshot = 6;
+  int64 rewardsBalance = 7;
+}

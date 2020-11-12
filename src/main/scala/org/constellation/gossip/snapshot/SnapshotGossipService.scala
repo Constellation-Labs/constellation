@@ -5,8 +5,8 @@ import org.constellation.gossip.sampling.PeerSampling
 import org.constellation.gossip.{GossipMessage, GossipService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.Cluster
-import org.constellation.schema.Id
-import org.constellation.schema.snapshot.Snapshot
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.snapshot.Snapshot
 
 class SnapshotGossipService[F[_]: Concurrent](
   selfId: Id,

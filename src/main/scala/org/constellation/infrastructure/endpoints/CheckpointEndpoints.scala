@@ -11,15 +11,14 @@ import org.constellation.util.Metrics
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import org.constellation.schema.signature.SignatureRequest._
-import org.constellation.schema.signature.SignatureResponse._
-import org.constellation.schema.checkpoint.FinishedCheckpoint
-import org.constellation.schema.{GenesisObservation, Height}
-import org.constellation.schema.observation.ObservationEvent
-import org.constellation.schema.signature.SignatureRequest
+import org.constellation.schema.v2.signature.SignatureRequest._
+import org.constellation.schema.v2.signature.SignatureResponse._
+import org.constellation.schema.v2.checkpoint.FinishedCheckpoint
+import org.constellation.schema.v2.{GenesisObservation, Height}
+import org.constellation.schema.v2.observation.ObservationEvent
+import org.constellation.schema.v2.signature.SignatureRequest
 
 class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
-
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def peerEndpoints(

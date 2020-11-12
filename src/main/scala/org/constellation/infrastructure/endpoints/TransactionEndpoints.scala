@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.v2.transaction.{Transaction, TransactionCacheData}
 import org.constellation.util.Metrics
 import org.http4s.HttpRoutes
 import org.http4s.circe._
@@ -84,7 +84,8 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
     case GET -> Root / "transaction" :? SourceAddressParamMatcher(sourceAddress) =>
       transactionService
         .findByPredicate(_.transaction.src.address == sourceAddress)
-        .map(_.asJson).flatMap(Ok(_))
+        .map(_.asJson)
+        .flatMap(Ok(_))
   }
 }
 

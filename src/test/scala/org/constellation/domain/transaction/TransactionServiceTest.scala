@@ -8,9 +8,14 @@ import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
-import org.constellation.schema.address.Address
-import org.constellation.schema.edge.Edge
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
+import org.constellation.schema.v2.address.Address
+import org.constellation.schema.v2.edge.Edge
+import org.constellation.schema.v2.transaction.{
+  LastTransactionRef,
+  Transaction,
+  TransactionCacheData,
+  TransactionEdgeData
+}
 import org.constellation.storage.RateLimiting
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}

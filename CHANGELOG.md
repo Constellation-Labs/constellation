@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Proto schema
 ### Changed
 - Remove node operator
 - Skip removing genesis tips

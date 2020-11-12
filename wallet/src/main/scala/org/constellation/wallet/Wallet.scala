@@ -6,7 +6,7 @@ import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import cats.syntax.all._
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.v2.transaction.Transaction
 import scopt.OParser
 
 object Wallet extends IOApp {

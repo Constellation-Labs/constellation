@@ -6,7 +6,7 @@ import org.constellation.domain.redownload.RedownloadService.{
   SnapshotsAtHeight
 }
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 trait SnapshotClientAlgebra[F[_]] {
   def getStoredSnapshots(): PeerResponse[F, List[String]]

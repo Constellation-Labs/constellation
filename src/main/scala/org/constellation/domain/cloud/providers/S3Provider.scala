@@ -11,7 +11,7 @@ import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
 import org.constellation.domain.cloud.config.{Credentials, S3, S3Compat, S3Inherit}
-import org.constellation.schema.GenesisObservation
+import org.constellation.schema.v2.GenesisObservation
 import org.constellation.serializer.KryoSerializer
 
 class S3Provider[F[_]](client: AmazonS3, bucketName: String)(implicit F: Concurrent[F])

@@ -1,9 +1,9 @@
 package org.constellation.util
 
 import cats.syntax.all._
-import org.constellation.schema.checkpoint.CheckpointBlock
-import org.constellation.schema.snapshot.StoredSnapshot
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.v2.checkpoint.CheckpointBlock
+import org.constellation.schema.v2.snapshot.StoredSnapshot
+import org.constellation.schema.v2.transaction.Transaction
 
 object AccountBalances {
 

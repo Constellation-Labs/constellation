@@ -2,7 +2,7 @@ package org.constellation.domain.trust
 
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 case class TrustData(view: Map[Id, Double])
 

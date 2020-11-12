@@ -10,7 +10,7 @@ import fs2.concurrent.Queue
 import org.constellation.domain.cloud.CloudService._
 import org.constellation.domain.cloud.config._
 import org.constellation.domain.cloud.providers.{CloudServiceProvider, GCPProvider, LocalProvider, S3Provider}
-import org.constellation.schema.GenesisObservation
+import org.constellation.schema.v2.GenesisObservation
 
 class CloudService[F[_]](providers: List[CloudServiceProvider[F]])(implicit F: Concurrent[F]) {
 

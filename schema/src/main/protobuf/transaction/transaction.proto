@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.transaction;
+
+import "id.proto";
+import "transaction/last_transaction_ref.proto";
+import "edge/observation_edge.proto";
+import "edge/signed_observation_edge.proto";
+import "transaction/transaction_edge_data.proto";
+
+message TransactionCacheData {
+  Transaction transaction = 1;
+  map<string, bool> inDAGByAncestor = 2;
+  string cbBaseHash = 3;
+  repeated string cbForkBaseHash = 4;
+  repeated Transaction signatureForks = 5;
+  repeated Id knownPeers = 6;
+  int64 rxTime = 7;
+  repeated Id path = 8;
+}
+
+message EdgeTransactionEdgeData {
+  edge.ObservationEdge observationEdge = 1;
+  edge.SignedObservationEdge signedObservationEdge = 2;
+  TransactionEdgeData data = 3;
+}
+
+message Transaction {
+  EdgeTransactionEdgeData edge = 1;
+  LastTransactionRef lastTxRef = 2;
+  bool isDummy = 3;
+  bool isTest = 4;
+}
+
+message TransactionGossip {
+  Transaction tx = 1;
+  repeated Id path = 2;
+}

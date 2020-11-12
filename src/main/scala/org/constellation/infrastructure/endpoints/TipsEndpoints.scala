@@ -6,8 +6,8 @@ import io.circe.Encoder
 import io.circe.syntax._
 import io.circe.generic.semiauto._
 import org.constellation.checkpoint.CheckpointService
-import org.constellation.schema.Id
-import org.constellation.schema.checkpoint.TipData
+import org.constellation.schema.v2.Id
+import org.constellation.schema.v2.checkpoint.TipData
 import org.constellation.storage.ConcurrentTipService
 import org.http4s.HttpRoutes
 import org.http4s.circe._

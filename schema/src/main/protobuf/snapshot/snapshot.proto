@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package org.constellation.schema.proto.snapshot;
+
+message Snapshot {
+  string lastSnapshot = 1;
+  repeated string checkpointBlocks = 2;
+  map<string, double> publicReputation = 3; // key "string" is Id "hex"
+}

@@ -1,6 +1,6 @@
 package org.constellation.gossip
 
-import org.constellation.schema.Id
+import org.constellation.schema.v2.Id
 
 case class GossipPath private (path: IndexedSeq[Id], cursor: Int = 0) {
 

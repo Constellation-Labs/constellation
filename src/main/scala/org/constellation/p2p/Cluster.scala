@@ -16,7 +16,7 @@ import org.constellation._
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
-import org.constellation.schema.{Id, NodeState, PeerNotification}
+import org.constellation.schema.v2.{Id, NodeState, PeerNotification}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging._
 import org.constellation.util._
@@ -26,7 +26,7 @@ import scala.util.Random
 import io.circe.syntax._
 import io.circe.parser._
 import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, SnapshotProposalsAtHeight}
-import org.constellation.schema.signature.Signable
+import org.constellation.schema.v2.signature.Signable
 import org.constellation.session.SessionTokenService
 import org.constellation.session.SessionTokenService.Token
 

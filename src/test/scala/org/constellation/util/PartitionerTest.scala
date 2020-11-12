@@ -3,7 +3,7 @@ package org.constellation.util
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.constellation.Fixtures._
 import Partitioner._
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.v2.transaction.Transaction
 import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
