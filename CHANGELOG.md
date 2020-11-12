@@ -3,7 +3,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [v2.17.1] 2020-11-5
+## [v2.18.0] 2020-11-12
+### Added
+- Whitelisted next batch of operators
+
+## [v2.17.1] 2020-11-05
 ### Fixed
 - Nodes should no longer stuck in `PendingDownload` when joining the cluster
 
