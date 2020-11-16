@@ -4,6 +4,7 @@ import org.constellation.Fixtures
 import org.constellation.Fixtures._
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.schema.transaction.Transaction
+import org.constellation.trust.DataGeneration.{bipartiteEdge, cliqueEdge, generateData, seedCliqueLogic}
 import org.constellation.trust.{DataGeneration, TrustNode}
 import org.constellation.util.Partitioner._
 import org.scalatest.flatspec.AsyncFlatSpecLike
@@ -26,6 +27,15 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
       destStr => makeTransaction(id.address, destStr, random.nextLong(), getRandomElement(tempKeySet, random))
     )
   }
+
+  def generateFullyConnectedData(numNodes: Int = 30) =
+    generateData(numNodes, cliqueEdge()(seedCliqueLogic(numNodes)))
+
+  def generateCliqueTestData(numNodes: Int = 30) =
+    generateData(numNodes, cliqueEdge()(seedCliqueLogic(numNodes / 2)))
+
+  def generateBipartiteTestData(numNodes: Int = 30) =
+    generateData(numNodes, bipartiteEdge()(seedCliqueLogic(numNodes / 2)))
 
   "Facilitator selection" should "be deterministic" in {
     val facilitator = selectTxFacilitator(ids, randomTxs.head)
@@ -50,7 +60,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   }
 
   "HausdorffPartition.nerve" should "deterministically repartition random edges" in {
-    val trustNodes: Seq[TrustNode] = DataGeneration.generateFullyConnectedTestData(ids.size)
+    val trustNodes: Seq[TrustNode] = generateFullyConnectedData(ids.size)
     val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
       TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
@@ -60,7 +70,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   }
 
   "HausdorffPartition.nerve" should "deterministically repartition clique edges" in {
-    val trustNodes: Seq[TrustNode] = DataGeneration.generateCliqueTestData(ids.size)
+    val trustNodes: Seq[TrustNode] = generateCliqueTestData(ids.size)
     val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
       TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
@@ -70,7 +80,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   }
 
   "HausdorffPartition.nerve" should "not repeat peers in partition paths" in {
-    val trustNodes: Seq[TrustNode] = DataGeneration.generateFullyConnectedTestData(ids.size)
+    val trustNodes: Seq[TrustNode] = generateFullyConnectedData(ids.size)
     val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
       TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
@@ -81,7 +91,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   }
 
   "HausdorffPartition.nerve" should "deterministically layer bipartite cliques" in {
-    val trustNodes: Seq[TrustNode] = DataGeneration.generateBipartiteTestData(ids.size)
+    val trustNodes: Seq[TrustNode] = generateBipartiteTestData(ids.size)
     val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
       TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val (lPartite, rPartite) = tdi.tail.zipWithIndex.partition { case (_, idx) => idx < (ids.size / 2) }
@@ -93,7 +103,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   }
 
   "HausdorffPartition.nerve" should "contain all nodes after partitioning" in {
-    val trustNodes: Seq[TrustNode] = DataGeneration.generateBipartiteTestData(ids.size)
+    val trustNodes: Seq[TrustNode] = generateBipartiteTestData(ids.size)
     val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
       TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
