@@ -36,11 +36,6 @@ class TransactionService[F[_]: Concurrent](
       .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
       .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
-  override def pullForConsensus(maxCount: Int): F[List[TransactionCacheData]] =
-    super.pullForConsensus(maxCount).flatMap { txs =>
-      if (txs.isEmpty) createDummyTransactions(1) else txs.pure[F]
-    }
-
   def applyAfterRedownload(tx: TransactionCacheData, cpc: Option[CheckpointCache]): F[Unit] =
     super
       .accept(tx, cpc)
