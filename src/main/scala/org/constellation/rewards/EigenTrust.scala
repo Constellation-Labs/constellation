@@ -32,7 +32,7 @@ object EigenTrust {
 
 // TODO: Remove commented out code.
 
-  val nodesWithEdges: List[TrustNode] = DataGeneration.generateTestData()
+  val nodesWithEdges: List[TrustNode] = DataGeneration.generateData()
 
   val opinionsInput = new java.util.ArrayList[Opinion]()
 
