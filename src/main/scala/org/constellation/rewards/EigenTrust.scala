@@ -5,13 +5,14 @@ import java.security.SecureRandom
 import atb.common.DefaultRandomGenerator
 import atb.interfaces.{Experience, Opinion}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, ContextShift, IO}
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConstellationExecutionContext
 import org.constellation.schema.Id
 import org.constellation.schema.observation.{Observation, ObservationData, ObservationEvent}
-import org.constellation.trust.{DataGeneration, TrustEdge, TrustManager, TrustNode}
+import org.constellation.trust.{DataGenerator, TrustEdge, TrustManager, TrustNode}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -30,9 +31,11 @@ object EigenTrust {
   final val opinionSampleNum = 10
   final val opinionSampleSD = 0.1
 
-// TODO: Remove commented out code.
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
 
-  val nodesWithEdges: List[TrustNode] = DataGeneration.generateData()
+  // TODO: Remove commented out code.
+
+  val nodesWithEdges: List[TrustNode] = new DataGenerator[IO]().generateData().unsafeRunSync()
 
   val opinionsInput = new java.util.ArrayList[Opinion]()
 
