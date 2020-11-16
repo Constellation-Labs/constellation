@@ -11,6 +11,8 @@ import org.http4s.dsl.Http4sDsl
 
 class ObservationEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
+  def publicEndpoints(observationService: ObservationService[F]) = getObservationByHash(observationService)
+
   def peerEndpoints(observationService: ObservationService[F], metrics: Metrics) =
     getObservationByHash(observationService) <+>
       getBatchEndpoint(metrics, observationService)
@@ -33,6 +35,9 @@ class ObservationEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
 }
 
 object ObservationEndpoints {
+
+  def publicEndpoints[F[_]: Concurrent](observationService: ObservationService[F]): HttpRoutes[F] =
+    new ObservationEndpoints[F]().publicEndpoints(observationService)
 
   def peerEndpoints[F[_]: Concurrent](observationService: ObservationService[F], metrics: Metrics): HttpRoutes[F] =
     new ObservationEndpoints[F]().peerEndpoints(observationService, metrics)

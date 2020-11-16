@@ -15,6 +15,14 @@ import org.http4s.dsl.Http4sDsl
 
 class TipsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
+  def publicEndpoints(
+    nodeId: Id,
+    concurrentTipService: ConcurrentTipService[F],
+    checkpointService: CheckpointService[F]
+  ) =
+    getTipsEndpoint(concurrentTipService: ConcurrentTipService[F]) <+>
+      getHeights(nodeId, concurrentTipService, checkpointService)
+
   def peerEndpoints(
     nodeId: Id,
     concurrentTipService: ConcurrentTipService[F],
@@ -50,6 +58,13 @@ class TipsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 }
 
 object TipsEndpoints {
+
+  def publicEndpoints[F[_]: Concurrent](
+    nodeId: Id,
+    concurrentTipService: ConcurrentTipService[F],
+    checkpointService: CheckpointService[F]
+  ): HttpRoutes[F] =
+    new TipsEndpoints[F]().peerEndpoints(nodeId, concurrentTipService, checkpointService)
 
   def peerEndpoints[F[_]: Concurrent](
     nodeId: Id,

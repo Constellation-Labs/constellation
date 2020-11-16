@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 - Validation that transaction chain doesn't have any gaps
 ### Changed
 - Turn off dummy transactions
+- More verbose public endpoints
 
 ## [v2.18.0] 2020-11-12
 ### Added

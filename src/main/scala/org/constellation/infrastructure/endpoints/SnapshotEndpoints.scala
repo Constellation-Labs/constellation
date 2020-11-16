@@ -28,6 +28,20 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   implicit val smEncoder: Encoder[SortedMap[Id, Double]] =
     Encoder.encodeMap[Id, Double].contramap[SortedMap[Id, Double]](_.toMap)
 
+  def publicEndpoints(
+    nodeId: Id,
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    snapshotService: SnapshotService[F],
+    redownloadService: RedownloadService[F]
+  ) =
+    getStoredSnapshotsEndpoint(snapshotStorage) <+>
+      getCreatedSnapshotsEndpoint(redownloadService) <+>
+      getAcceptedSnapshotsEndpoint(redownloadService) <+>
+      getPeerProposals(redownloadService) <+>
+      getNextSnapshotHeight(nodeId, snapshotService) <+>
+      getLatestMajorityHeight(redownloadService) <+>
+      getLatestMajorityState(redownloadService)
+
   def peerEndpoints(
     nodeId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
@@ -151,9 +165,25 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         .map(_.asJson)
         .flatMap(Ok(_))
   }
+
+  private def getLatestMajorityState(redownloadService: RedownloadService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "majority" / "state" =>
+      redownloadService
+        .getLastMajorityState()
+        .map(_.asJson)
+        .flatMap(Ok(_))
+  }
 }
 
 object SnapshotEndpoints {
+
+  def publicEndpoints[F[_]: Concurrent](
+    nodeId: Id,
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    snapshotService: SnapshotService[F],
+    redownloadService: RedownloadService[F]
+  ): HttpRoutes[F] =
+    new SnapshotEndpoints[F]().publicEndpoints(nodeId, snapshotStorage, snapshotService, redownloadService)
 
   def peerEndpoints[F[_]: Concurrent](
     nodeId: Id,
