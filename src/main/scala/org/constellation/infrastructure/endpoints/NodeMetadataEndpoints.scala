@@ -16,7 +16,11 @@ import NodeStateInfo._
 
 class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
-  def publicEndpoints(addressService: AddressService[F]) = getAddressBalance(addressService)
+  def publicEndpoints(addressService: AddressService[F], cluster: Cluster[F], nodeType: NodeType) =
+    getNodeState(cluster, nodeType) <+>
+      getAddressBalance(addressService) <+>
+      getNodePeers(cluster) <+>
+      getPeersMajorityHeights(cluster)
 
   def peerEndpoints(
     cluster: Cluster[F],
@@ -77,8 +81,12 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
 
 object NodeMetadataEndpoints {
 
-  def publicEndpoints[F[_]: Concurrent](addressService: AddressService[F]): HttpRoutes[F] =
-    new NodeMetadataEndpoints[F]().publicEndpoints(addressService)
+  def publicEndpoints[F[_]: Concurrent](
+    addressService: AddressService[F],
+    cluster: Cluster[F],
+    nodeType: NodeType
+  ): HttpRoutes[F] =
+    new NodeMetadataEndpoints[F]().publicEndpoints(addressService, cluster, nodeType)
 
   def peerEndpoints[F[_]: Concurrent](
     cluster: Cluster[F],

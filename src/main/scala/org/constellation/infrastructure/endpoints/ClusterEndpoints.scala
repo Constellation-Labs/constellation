@@ -23,8 +23,8 @@ import org.constellation.schema.observation.ObservationEvent
 
 class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
-  def publicEndpoints(cluster: Cluster[F]) =
-    infoEndpoint(cluster)
+  def publicEndpoints(cluster: Cluster[F], trustManager: TrustManager[F]) =
+    infoEndpoint(cluster) <+> trustEndpoint(trustManager)
 
   def peerEndpoints(cluster: Cluster[F], trustManager: TrustManager[F]) =
     infoEndpoint(cluster) <+>
@@ -86,8 +86,8 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
 object ClusterEndpoints {
 
-  def publicEndpoints[F[_]: Concurrent](cluster: Cluster[F]): HttpRoutes[F] =
-    new ClusterEndpoints[F].publicEndpoints(cluster)
+  def publicEndpoints[F[_]: Concurrent](cluster: Cluster[F], trustManager: TrustManager[F]): HttpRoutes[F] =
+    new ClusterEndpoints[F].publicEndpoints(cluster, trustManager)
 
   def peerEndpoints[F[_]: Concurrent](
     cluster: Cluster[F],

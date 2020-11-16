@@ -34,6 +34,8 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
       requestBlockSignatureEndpoint(checkpointAcceptanceService) <+>
       handleFinishedCheckpointEndpoint(metrics, snapshotService, checkpointAcceptanceService)
 
+  def publicEndpoints(checkpointService: CheckpointService[F]) = getCheckpointEndpoint(checkpointService)
+
   private def genesisEndpoint(genesisObservation: => Option[GenesisObservation]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "genesis" => Ok(genesisObservation.asJson)
   }
@@ -84,6 +86,10 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
 }
 
 object CheckpointEndpoints {
+
+  def publicEndpoints[F[_]: Concurrent: ContextShift](
+    checkpointService: CheckpointService[F]
+  ): HttpRoutes[F] = new CheckpointEndpoints[F]().publicEndpoints(checkpointService)
 
   def peerEndpoints[F[_]: Concurrent: ContextShift](
     genesisObservation: => Option[GenesisObservation],

@@ -10,6 +10,8 @@ import org.http4s.dsl.Http4sDsl
 
 class SoeEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
+  def publicEndpoints(soeService: SOEService[F]) = getSoeEndpoint(soeService)
+
   def peerEndpoints(soeService: SOEService[F]) = getSoeEndpoint(soeService)
 
   private def getSoeEndpoint(soeService: SOEService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -19,6 +21,9 @@ class SoeEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 }
 
 object SoeEndpoints {
+
+  def publicEndpoints[F[_]: Concurrent](soeService: SOEService[F]): HttpRoutes[F] =
+    new SoeEndpoints[F]().publicEndpoints(soeService)
 
   def peerEndpoints[F[_]: Concurrent](soeService: SOEService[F]): HttpRoutes[F] =
     new SoeEndpoints[F]().peerEndpoints(soeService)

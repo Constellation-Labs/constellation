@@ -82,6 +82,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       (majorityState, maxHeight(majorityState))
     }.flatMap(metrics.updateMetricAsync[F]("redownload_lastMajorityStateHeight", _))
 
+  def getLastMajorityState(): F[SnapshotsAtHeight] =
+    lastMajorityState.get
+
   def latestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
     (s, maxHeight(s))
   }
@@ -327,7 +330,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield ()
 
   def checkForAlignmentWithMajoritySnapshot(isDownload: Boolean = false): F[Unit] = {
-    def wrappedRedownload(shouldRedownload: Boolean, meaningfulAcceptedSnapshots: SnapshotsAtHeight, meaningfulMajorityState: SnapshotsAtHeight) =
+    def wrappedRedownload(
+      shouldRedownload: Boolean,
+      meaningfulAcceptedSnapshots: SnapshotsAtHeight,
+      meaningfulMajorityState: SnapshotsAtHeight
+    ) =
       for {
         _ <- if (shouldRedownload) {
           val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)

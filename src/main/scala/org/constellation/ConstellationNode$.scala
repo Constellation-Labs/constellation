@@ -118,9 +118,19 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       )
 
       publicEndpoints = MetricsEndpoints.publicEndpoints[IO](dao.metrics) <+>
-        NodeMetadataEndpoints.publicEndpoints[IO](dao.addressService) <+>
+        NodeMetadataEndpoints.publicEndpoints[IO](dao.addressService, dao.cluster, dao.nodeType) <+>
         TransactionEndpoints.publicEndpoints[IO](dao.transactionService, dao.checkpointBlockValidator) <+>
-        ClusterEndpoints.publicEndpoints[IO](dao.cluster)
+        ClusterEndpoints.publicEndpoints[IO](dao.cluster, dao.trustManager) <+>
+        CheckpointEndpoints.publicEndpoints[IO](dao.checkpointService) <+>
+        ObservationEndpoints.publicEndpoints[IO](dao.observationService) <+>
+        SnapshotEndpoints.publicEndpoints[IO](
+          dao.id,
+          dao.snapshotStorage,
+          dao.snapshotService,
+          dao.redownloadService
+        ) <+>
+        TipsEndpoints.publicEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
+        SoeEndpoints.publicEndpoints[IO](dao.soeService)
 
       peerPublicEndpoints = SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
         BuildInfoEndpoints.peerEndpoints[IO]() <+> MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
