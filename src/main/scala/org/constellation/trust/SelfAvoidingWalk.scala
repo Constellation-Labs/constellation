@@ -365,13 +365,13 @@ object SelfAvoidingWalk extends StrictLogging {
     res
   }
 
-  def debugRunner(): Unit = {
-
-    val nodes = DataGeneration.generateData()
-
-    runWalk(nodes.head.id, nodes)
-
-  }
+//  def debugRunner(): Unit = {
+//
+//    val nodes = DataGeneration.generateData()
+//
+//    runWalk(nodes.head.id, nodes)
+//
+//  }
 
   def getWalk(selfId: Int, nodes: Seq[TrustNode], numIterations: Int = 100000) = {
     val nodeMap = nodes.map { n =>

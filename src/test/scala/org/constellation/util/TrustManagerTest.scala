@@ -3,7 +3,7 @@ import cats.effect.{ContextShift, IO}
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.Id
-import org.constellation.trust.{DataGeneration, SelfAvoidingWalk, TrustManager, TrustNode}
+import org.constellation.trust.{DataGenerator, SelfAvoidingWalk, TrustManager, TrustNode}
 import org.constellation.{ConstellationExecutionContext, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -59,7 +59,7 @@ class TrustManagerTest
     val reputation = Map.empty[Id, Double]
     val scores = peerTrustScores :+ TrustDataInternal(id, reputation)
     val (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
-    val dummyTrustNodes = DataGeneration.generateData(3)
+    val dummyTrustNodes = new DataGenerator[IO]().generateData(3).unsafeRunSync()
     val nodeMap = dummyTrustNodes.zipWithIndex.toMap.map { case (k, v) => (v, k) }
     val doWalk = Try { SelfAvoidingWalk.walk(1, 2, nodeMap, 1, 0, Set.empty[Int], 1d) }
     assert(doWalk.isSuccess)
