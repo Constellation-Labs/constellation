@@ -59,14 +59,17 @@ lazy val coreSettings = Seq(
 
 // -----------------
 
-lazy val http4sDependencies = Seq(
-  "org.http4s" %% "http4s-blaze-server",
+lazy val http4sClientDependencies = Seq(
+  "org.http4s" %% "http4s-dsl",
   "org.http4s" %% "http4s-blaze-client",
   "org.http4s" %% "http4s-circe",
-  "org.http4s" %% "http4s-dsl",
+).map(_ % versions.http4s)
+
+lazy val http4sDependencies = Seq(
+  "org.http4s" %% "http4s-blaze-server",
   "org.http4s" %% "http4s-prometheus-metrics",
   "org.http4s" %% "http4s-okhttp-client"
-).map(_ % versions.http4s)
+).map(_ % versions.http4s) ++ http4sClientDependencies
 
 lazy val circeDependencies = Seq(
   "io.circe" %% "circe-core" % versions.circe,
@@ -110,6 +113,10 @@ lazy val prometheusDependencies = Seq(
   "io.prometheus" % "simpleclient_logback" % versions.prometheus
 )
 
+lazy val pureconfigDependencies = Seq(
+  "com.github.pureconfig" %% "pureconfig" % versions.pureconfig
+)
+
 // -----------------
 
 lazy val sharedDependencies = Seq(
@@ -128,6 +135,8 @@ lazy val walletSharedDependencies = Seq(
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ walletSharedDependencies
 
+lazy val integrationTestsSharedDependencies = spongyCastleDependencies ++ sharedDependencies ++ fs2Dependencies ++ http4sClientDependencies ++ pureconfigDependencies
+
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % versions.betterFiles).withSources().withJavadoc(),
   "com.github.japgolly.scalacss" %% "ext-scalatags" % "0.6.1",
@@ -137,9 +146,8 @@ lazy val coreDependencies = Seq(
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.863",
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
-  "com.github.pureconfig" %% "pureconfig" % versions.pureconfig,
   "io.chrisdavenport" %% "fuuid" % "0.4.0"
-) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies
+) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ pureconfigDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
@@ -174,6 +182,7 @@ assemblyMergeStrategy in assembly := {
 
 lazy val keytool = (project in file("keytool"))
   .enablePlugins(BuildInfoPlugin)
+  .configs(IntegrationTest)
   .settings(
     commonSettings,
     name := "keytool",
@@ -211,6 +220,15 @@ lazy val wallet = (project in file("wallet"))
     buildInfoOptions ++= Seq(BuildInfoOption.BuildTime, BuildInfoOption.ToMap),
     mainClass := Some("org.constellation.wallet.Wallet"),
     libraryDependencies ++= walletSharedDependencies
+  )
+
+lazy val integrationTests = (project in file("integration-tests"))
+  .enablePlugins(BuildInfoPlugin)
+  .dependsOn(wallet)
+  .configs(IntegrationTest)
+  .settings(
+    Defaults.itSettings,
+    libraryDependencies ++= (integrationTestsSharedDependencies ++ testDependencies)
   )
 
 lazy val root = (project in file("."))

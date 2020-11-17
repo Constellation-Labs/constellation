@@ -29,6 +29,12 @@ If you want to re-use `$HOSTS_FILE`, use following command to export them automa
 $ export HOSTS_FILE=$(./dag exportIPs)
 ``` 
 
+If you want to run commands in a non-interactive way, use the `--batch` or `-b` option:
+
+```shell script
+$ ./dag autostart 10 --batch
+``` 
+
 ### Step by step:
 
 You have to assemble the project and upload a .jar file to an s3 bucket.

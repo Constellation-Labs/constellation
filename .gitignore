@@ -21,3 +21,5 @@ terraform/aws/whitelisting-*
 .metals/
 .bloop/
 project/metals.sbt
+keys/
+integration-tests/src/test/resources/terraform-output.json

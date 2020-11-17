@@ -8,6 +8,8 @@ import java.security.{Key, KeyPair, KeyStore, PrivateKey}
 
 import cats.data.EitherT
 import cats.effect._
+import cats.instances
+import cats.instances.stream
 import cats.syntax.all._
 import org.bouncycastle.util.io.pem.{PemObject, PemWriter}
 import org.constellation.keytool.cert.{DistinguishedName, SelfSignedCertificate}
@@ -24,7 +26,7 @@ object KeyStoreUtils {
       .use(streamParser)
       .attemptT
 
-  def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: FileOutputStream => F[Unit]) =
+  def storeWithFileStream[F[_]: Sync](path: String, bufferedWriter: OutputStream => F[Unit]) =
     writer(path)
       .use(bufferedWriter)
       .attemptT
@@ -36,7 +38,7 @@ object KeyStoreUtils {
       })
       .use(inStream => Option(inStream.readLine()).flatMap(parser).pure[F])
 
-  def writeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: FileOutputStream) =
+  def writeTypeToFileStream[F[_]: Sync, T](serializer: T => String)(obj: T)(stream: OutputStream) =
     Resource
       .fromAutoCloseable(Sync[F].delay {
         new BufferedWriter(new OutputStreamWriter(stream))
