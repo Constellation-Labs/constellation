@@ -1,4 +1,4 @@
-package org.constellation.serializer
+package org.constellation.serialization
 
 import java.security.PublicKey
 

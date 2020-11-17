@@ -3,20 +3,29 @@ package org.constellation.storage
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.mockito.IdiomaticMockito
-import org.mockito.cats.IdiomaticMockitoCats
-import org.scalatest.matchers.should.Matchers
 import org.constellation.Fixtures
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.schema.address.Address
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.serialization.KryoSerializer
+import org.mockito.IdiomaticMockito
+import org.mockito.cats.IdiomaticMockitoCats
+import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.ExecutionContext
 
-class RateLimitingTest extends AnyFreeSpec with IdiomaticMockito with IdiomaticMockitoCats with Matchers {
+class RateLimitingTest
+    extends AnyFreeSpec
+    with IdiomaticMockito
+    with IdiomaticMockitoCats
+    with Matchers
+    with BeforeAndAfter {
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
+
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   "update" - {
     "it should increment counter for all (not dummy) source addresses in provided txs" in {

@@ -41,7 +41,8 @@ class TransactionValidatorTest
 
     "should fail validation" - {
       "when destination address is smaller than 40 characters" in {
-        val tx = createTransaction("sender", validAddress.substring(0, 39), LastTransactionRef.empty, LastTransactionRef.empty)
+        val tx =
+          createTransaction("sender", validAddress.substring(0, 39), LastTransactionRef.empty, LastTransactionRef.empty)
         val result = TransactionValidator.validateDestinationAddress(tx)
 
         result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
@@ -55,21 +56,36 @@ class TransactionValidatorTest
       }
 
       "when destination address contains non base58 character" in {
-        val tx = createTransaction("sender", validAddress.substring(0, 39) + "%", LastTransactionRef.empty, LastTransactionRef.empty)
+        val tx = createTransaction(
+          "sender",
+          validAddress.substring(0, 39) + "%",
+          LastTransactionRef.empty,
+          LastTransactionRef.empty
+        )
         val result = TransactionValidator.validateDestinationAddress(tx)
 
         result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
       }
 
       "when destination address contains whitespace character" in {
-        val tx = createTransaction("sender", s"${validAddress.substring(0, 39)} ", LastTransactionRef.empty, LastTransactionRef.empty)
+        val tx = createTransaction(
+          "sender",
+          s"${validAddress.substring(0, 39)} ",
+          LastTransactionRef.empty,
+          LastTransactionRef.empty
+        )
         val result = TransactionValidator.validateDestinationAddress(tx)
 
         result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
       }
 
       "when destination address does not contain DAG prefix" in {
-        val tx = createTransaction("sender", s"ABC${validAddress.substring(3)} ", LastTransactionRef.empty, LastTransactionRef.empty)
+        val tx = createTransaction(
+          "sender",
+          s"ABC${validAddress.substring(3)} ",
+          LastTransactionRef.empty,
+          LastTransactionRef.empty
+        )
         val result = TransactionValidator.validateDestinationAddress(tx)
 
         result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
@@ -85,7 +101,12 @@ class TransactionValidatorTest
       "when the parity number does not match" in {
         val par = validAddress.substring(4).filter(Character.isDigit).map(_.toString.toInt).sum % 9
         val invalidPar = if (par > 5) 0 else 9
-        val tx = createTransaction("sender", s"${validAddress.substring(0, 3)}${invalidPar}${validAddress.substring(4)} ", LastTransactionRef.empty, LastTransactionRef.empty)
+        val tx = createTransaction(
+          "sender",
+          s"${validAddress.substring(0, 3)}${invalidPar}${validAddress.substring(4)} ",
+          LastTransactionRef.empty,
+          LastTransactionRef.empty
+        )
         val result = TransactionValidator.validateDestinationAddress(tx)
 
         result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))

@@ -1,19 +1,21 @@
 package org.constellation.util
 
 import cats.effect.{ConcurrentEffect, ContextShift, IO}
-import org.constellation.{ConstellationExecutionContext, Fixtures}
+import org.constellation.Fixtures
+import cats.implicits._
 import org.constellation.Fixtures._
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.schema.transaction.Transaction
+import org.constellation.serialization.KryoSerializer
 import org.constellation.trust.{DataGenerator, TrustNode}
 import org.constellation.util.Partitioner._
+import org.scalatest.BeforeAndAfter
 import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import scala.concurrent.ExecutionContext
 
-class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
+class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfter {
 
   val random = new java.util.Random()
   val randomTxs = getRandomTxs()
@@ -24,6 +26,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val effect: ConcurrentEffect[IO] = IO.ioConcurrentEffect(contextShift)
   val generator = new DataGenerator[IO]()
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   def getRandomTxs(factor: Int = 5): Set[Transaction] = idSet5.flatMap { id =>
     val destinationAddresses = idSet5.map(_.address)
