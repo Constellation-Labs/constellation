@@ -20,7 +20,7 @@ import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Logging.stringifyStackTrace
 import org.constellation.util.Metrics

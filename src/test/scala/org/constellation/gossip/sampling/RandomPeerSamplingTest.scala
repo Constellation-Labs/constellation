@@ -1,9 +1,8 @@
-package org.constellation.gossip
+package org.constellation.gossip.sampling
 
 import cats.data.NonEmptyList
 import cats.effect.{ContextShift, IO}
 import cats.implicits._
-import org.constellation.gossip.sampling.{PeerSampling, RandomPeerSampling}
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
 import org.constellation.{PeerMetadata, ResourceInfo}

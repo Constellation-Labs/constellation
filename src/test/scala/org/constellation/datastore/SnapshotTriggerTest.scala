@@ -1,10 +1,11 @@
 package org.constellation.datastore
 
 import cats.data.EitherT
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
+import org.constellation.serialization.KryoSerializer
 import org.constellation.snapshot.SnapshotTrigger
 import org.constellation.storage.{SnapshotCreated, SnapshotError}
 import org.constellation.{DAO, TestHelpers}
@@ -13,6 +14,7 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import cats.implicits._
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
@@ -28,6 +30,9 @@ class SnapshotTriggerTest
   implicit var dao: DAO = _
   implicit var cluster: Cluster[IO] = _
   implicit var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
+
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   before {
     dao = TestHelpers.prepareMockedDAO()

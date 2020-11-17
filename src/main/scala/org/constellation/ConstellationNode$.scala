@@ -24,6 +24,7 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.schema.{GenesisObservation, Id, NodeState}
+import org.constellation.serialization.KryoSerializer
 import org.constellation.session.SessionTokenService
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
 import org.http4s.Request
@@ -62,6 +63,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
     import constellation.PublicKeyExt
     for {
       _ <- Stream.eval(logger.info(s"Main init with args: $args"))
+
+      _ <- Stream.eval(KryoSerializer.init[IO])
 
       bounded <- Stream.resource(boundedResource)
       unbounded = executionContext
@@ -152,7 +155,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.snapshotService,
           dao.cluster,
           dao.redownloadService,
-          dao.snapshotProposalGossipService
+          dao.snapshotProposalGossipService,
+          dao.messageValidator
         ) <+>
         SoeEndpoints.peerEndpoints[IO](dao.soeService) <+>
         TipsEndpoints.peerEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>

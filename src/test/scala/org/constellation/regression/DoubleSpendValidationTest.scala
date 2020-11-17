@@ -2,8 +2,8 @@ package org.constellation.regression
 
 import java.security.KeyPair
 
-import cats.effect.IO
 import cats.effect.concurrent.Ref
+import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.transaction.{TransactionChainService, TransactionValidator}
@@ -14,16 +14,21 @@ import org.constellation.schema.address.AddressCacheData
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.schema.edge.SignedObservationEdge
 import org.constellation.schema.transaction.LastTransactionRef
+import org.constellation.serialization.KryoSerializer
 import org.constellation.{DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext
 
 // TODO: Consider moving to validation test suite
 class DoubleSpendValidationTest
     extends AnyFreeSpec
     with Matchers
+    with BeforeAndAfter
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with ArgumentMatchersSugar {
@@ -32,6 +37,9 @@ class DoubleSpendValidationTest
 
   def startingTips(go: GenesisObservation)(implicit dao: DAO): Seq[SignedObservationEdge] =
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
+
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   "#1007" - {
     implicit val dao = TestHelpers.prepareMockedDAO()

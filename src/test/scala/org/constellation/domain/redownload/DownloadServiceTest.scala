@@ -2,12 +2,13 @@ package org.constellation.domain.redownload
 
 import cats.effect.{Blocker, ContextShift, IO}
 import org.constellation.checkpoint.CheckpointAcceptanceService
-import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.constellation.p2p.Cluster
-import org.constellation.storage.SnapshotService
+import org.constellation.serialization.KryoSerializer
 import org.constellation.util.Metrics
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.constellation.{DAO, TestHelpers}
+import cats.implicits._
 import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -30,6 +31,7 @@ class DownloadServiceTest
   var redownloadService: RedownloadService[IO] = _
   var checkpointAcceptanceService: CheckpointAcceptanceService[IO] = _
   implicit var dao: DAO = _
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   override def beforeEach() = {
     dao = TestHelpers.prepareMockedDAO()
@@ -90,7 +92,7 @@ class DownloadServiceTest
   }
 
   "downloadAndAcceptGenesis" - {
-    "test to be defined after genesis refactor" ignore {}
+    "test to be defined after genesis refactor".ignore {}
   }
 
 }

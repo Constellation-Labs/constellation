@@ -5,7 +5,6 @@ import cats.implicits._
 import io.chrisdavenport.fuuid.FUUID
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.gossip.NotEnoughPeersForFanout
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
 
@@ -22,13 +21,6 @@ class RandomPeerSampling[F[_]](selfId: Id, cluster: Cluster[F])(implicit F: Conc
 
   def selectPaths: F[List[GossipPath]] =
     getPeers
-      .flatMap(
-        ids =>
-          if (ids.size >= fanout)
-            F.pure(ids)
-          else
-            F.raiseError[Set[Id]](NotEnoughPeersForFanout(fanout, ids.size))
-      )
       .map(randomPath(_, fanout))
       .flatMap(paths => paths.toList.traverse(path => generatePathId.map(GossipPath(path, _))))
       .flatTap(
