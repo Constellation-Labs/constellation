@@ -5,7 +5,7 @@ import java.security.SecureRandom
 import atb.common.DefaultRandomGenerator
 import atb.interfaces.{Experience, Opinion}
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.{Blocker, Concurrent, ContextShift, IO}
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -31,39 +31,37 @@ object EigenTrust {
   final val opinionSampleNum = 10
   final val opinionSampleSD = 0.1
 
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
-
   // TODO: Remove commented out code.
-
-  val nodesWithEdges: List[TrustNode] = new DataGenerator[IO]().generateData().unsafeRunSync()
-
-  val opinionsInput = new java.util.ArrayList[Opinion]()
-
-  nodesWithEdges.foreach { node: TrustNode =>
-    node.edges.foreach { edge =>
-      val trust = edge.trust / 2 + 0.5 // Revert from -1 to 1 => 0 to 1
-      //      println(trust)
-      opinionsInput.add(new Opinion(edge.src, edge.dst, 0, 0, trust, Random.nextDouble() / 10))
-    }
-  }
-
-  val eigenTrust = new EigenTrustJ()
-  eigenTrust
-    .initialize(
-      weight.asInstanceOf[Object],
-      satisfactoryThreshold.asInstanceOf[Object],
-      opinionSampleNum.asInstanceOf[Object],
-      opinionSampleSD.asInstanceOf[Object]
-    )
-
-  eigenTrust.setRandomGenerator(new DefaultRandomGenerator(0))
-
-  eigenTrust.processExperiences(new java.util.ArrayList[Experience]())
-  eigenTrust.processOpinions(opinionsInput)
-
-  eigenTrust.calculateTrust()
-
-  val trustMap: Map[Integer, java.lang.Double] = eigenTrust.getTrust(0).asScala.toMap
+//
+//  val nodesWithEdges: List[TrustNode] = new DataGenerator[IO]().generateData().unsafeRunSync()
+//
+//  val opinionsInput = new java.util.ArrayList[Opinion]()
+//
+//  nodesWithEdges.foreach { node: TrustNode =>
+//    node.edges.foreach { edge =>
+//      val trust = edge.trust / 2 + 0.5 // Revert from -1 to 1 => 0 to 1
+//      //      println(trust)
+//      opinionsInput.add(new Opinion(edge.src, edge.dst, 0, 0, trust, Random.nextDouble() / 10))
+//    }
+//  }
+//
+//  val eigenTrust = new EigenTrustJ()
+//  eigenTrust
+//    .initialize(
+//      weight.asInstanceOf[Object],
+//      satisfactoryThreshold.asInstanceOf[Object],
+//      opinionSampleNum.asInstanceOf[Object],
+//      opinionSampleSD.asInstanceOf[Object]
+//    )
+//
+//  eigenTrust.setRandomGenerator(new DefaultRandomGenerator(0))
+//
+//  eigenTrust.processExperiences(new java.util.ArrayList[Experience]())
+//  eigenTrust.processOpinions(opinionsInput)
+//
+//  eigenTrust.calculateTrust()
+//
+//  val trustMap: Map[Integer, java.lang.Double] = eigenTrust.getTrust(0).asScala.toMap
 
   //  trustMap.toSeq.sortBy(_._1).foreach { println }
 
@@ -76,19 +74,28 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
 
   private implicit val logger = Slf4jLogger.getLogger[F]
 
-  def initializeModel(): F[Unit] = eigenTrustJ.modify { _ =>
-    val instance = new EigenTrustJ()
-    instance.initialize(
-      EigenTrust.weight.asInstanceOf[Object],
-      EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
-      EigenTrust.opinionSampleNum.asInstanceOf[Object],
-      EigenTrust.opinionSampleSD.asInstanceOf[Object]
-    )
-    instance.setRandomGenerator(new DefaultRandomGenerator(0))
-    instance.processExperiences(List().asJava)
-    instance.calculateTrust()
-    (instance, ())
-  }
+  def initializeModel(): F[Unit] =
+    for {
+      randomData <- new DataGenerator[F]().generateData()
+      randomOpinions = randomData.flatMap(_.edges).map { edge =>
+        new Opinion(edge.src, edge.dst, 0, 0, normalizeTrust(edge.trust), Random.nextDouble() / 10)
+      }
+
+      _ <- eigenTrustJ.modify { _ =>
+        val instance = new EigenTrustJ()
+        instance.initialize(
+          EigenTrust.weight.asInstanceOf[Object],
+          EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
+          EigenTrust.opinionSampleNum.asInstanceOf[Object],
+          EigenTrust.opinionSampleSD.asInstanceOf[Object]
+        )
+        instance.setRandomGenerator(new DefaultRandomGenerator(0))
+        instance.processExperiences(List().asJava)
+        instance.processOpinions(randomOpinions.asJava)
+        instance.calculateTrust()
+        (instance, ())
+      }
+    } yield ()
 
   def setModel(model: EigenTrustJ): F[Unit] = eigenTrustJ.modify { _ =>
     (model, ())
