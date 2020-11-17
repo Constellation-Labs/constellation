@@ -14,6 +14,7 @@ clr='\033[0m'
 READLINK=`readlink $0`
 if [[ "$READLINK" == "" ]]; then DIR="$PWD"; else DIR="$(dirname $READLINK)"; fi
 
+BATCH=0
 CONFIRMED=0
 
 ### Functions
@@ -30,7 +31,7 @@ checkHosts() {
     exit 1
   fi
 
-  if [ $CONFIRMED -eq 0 ]; then
+  if [ $BATCH -eq 0 ] && [ $CONFIRMED -eq 0 ]; then
     name=$(basename $HOSTS_FILE)
 
     read -p "$(echo -e "Do you want to continue using hosts: ${grn}$name${clr} (y/n)? ")" choice
@@ -243,7 +244,29 @@ Terraform commands:
     output \t\t\t Display output from terraform
     workspace ${grn}select|new ${red}name${clr} \t Manage workspace
     grafana \t\t\t Open grafana
+
+Options:
+    -b, --batch \t Use batch or non-interactive mode
 EOF)
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+arg="$1"
+
+case $arg in
+    -b|--batch)
+    BATCH=1
+    shift
+    ;;
+    *)
+    POSITIONAL+=("$1")
+    shift
+    ;;
+esac
+done
+
+set -- "${POSITIONAL[@]}"
 
 if [[ $1 == "" ]]; then
   echo -e "$usage"

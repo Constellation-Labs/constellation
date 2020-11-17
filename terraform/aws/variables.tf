@@ -32,3 +32,4 @@ variable "grafana_disk_size" {
   type = number
   default = 50
 }
+

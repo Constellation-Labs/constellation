@@ -1,6 +1,6 @@
 package org.constellation.wallet
 
-import java.io.{FileInputStream, FileOutputStream}
+import java.io.{FileInputStream, FileOutputStream, OutputStream}
 import java.security.KeyPair
 
 import cats.effect.Sync
@@ -39,8 +39,8 @@ object TransactionExt {
   def transactionParser[F[_]](fis: FileInputStream)(implicit F: Sync[F]): F[Option[Transaction]] =
     KeyStoreUtils.parseFileOfTypeOp[F, Transaction](parse(_).map(_.as[Transaction]).toOption.flatMap(_.toOption))(fis)
 
-  def transactionWriter[F[_]](t: Transaction)(implicit F: Sync[F]): FileOutputStream => F[Unit] = {
-    (fos: FileOutputStream) =>
+  def transactionWriter[F[_]](t: Transaction)(implicit F: Sync[F]): OutputStream => F[Unit] = {
+    (fos: OutputStream) =>
       KeyStoreUtils.writeTypeToFileStream[F, Transaction](_.asJson.noSpaces)(t)(fos)
   }
 
@@ -63,7 +63,7 @@ object TransactionExt {
   ): Transaction = {
     val lastTxRef =
       prevTx
-        .map(tx => LastTransactionRef(tx.hash, tx.lastTxRef.ordinal + 1))
+        .map(tx => LastTransactionRef(tx.hash, tx.ordinal))
         .getOrElse(LastTransactionRef.empty)
     val edge = createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
     Transaction(edge, lastTxRef, false, false)

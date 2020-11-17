@@ -1,0 +1,67 @@
+name: Integration tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      nodeCount:
+        description: 'Number of nodes in a cluster'
+        required: false
+        default: '3'
+
+jobs:
+  test:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 0.12.25
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          sudo apt-get install -y pssh
+
+      - name: Start cluster
+        run: |
+          pushd terraform/aws
+          export EXECUTION_TAG=$(git describe --exact-match --tags 2>/dev/null || git rev-parse --short HEAD)
+          terraform workspace new integration-tests-$EXECUTION_TAG
+          ./dag --batch autostart  ${{ github.event.inputs.nodeCount }}
+          terraform output -json > terraform-output.json
+          popd
+          mv terraform/aws/terraform-output.json integration-tests/src/test/resources/
+
+      - name: Download keys
+        run: |
+          mkdir -p keys
+          aws s3 cp s3://constellationlabs-dag/keys/key-10.p12 keys/key.p12
+
+      - name: Run tests
+        run: |
+          sbt integrationTests/test
+
+      # TODO Upload metrics and logs to S3
+
+      - name: Destroy the environment
+        run: |
+          pushd terraform/aws
+          terraform destroy
+          popd
