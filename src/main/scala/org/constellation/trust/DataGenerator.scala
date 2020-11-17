@@ -96,26 +96,9 @@ class DataGenerator[F[_]: Concurrent] {
       res <- nodesWithEdges
     } yield res
 
-
-//    def generateData2(numNodes: Int = 30,
-//                   edgeLogic: (TrustNode, TrustNode) => Option[TrustEdge] = randomEdge() = {
-//
-//    val nodes: List[TrustNode] = (0 until numNodes).toList.map { id =>
-//      TrustNode(id, Random.nextDouble(), Random.nextDouble())
-//    }
-//    val nodesWithEdges = nodes.map { n =>
-//      val edges = nodes.filterNot(_.id == n.id).flatMap { n2 =>
-//        edgeLogic(n, n2)
-//      }
-//      n.copy(edges = edges)
-//    }
-//    nodesWithEdges
-//  }
-
   def bipartiteEdge(logic: Double => F[Boolean] = seedCliqueLogic())
                    (n: TrustNode, n2: TrustNode) =
     for {
-      _ <-  randomEffect.get
       result <- logic(n.id)
     } yield
     if (result) Some(TrustEdge(n.id, n2.id, 1.0, isLabel = true))
