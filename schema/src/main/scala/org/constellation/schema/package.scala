@@ -5,6 +5,7 @@ import java.security.{KeyPair, PrivateKey, PublicKey}
 import com.google.common.hash.Hashing
 import org.constellation.keytool.KeyUtils.{bytes2hex, publicKeyToAddressString, publicKeyToHex, signData}
 import org.constellation.schema.address.AddressMetaData
+import org.constellation.schema.serialization.Kryo
 
 package object schema {
 

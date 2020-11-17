@@ -26,6 +26,7 @@ import org.constellation.domain.transaction.{
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.gossip.sampling.PartitionerPeerSampling
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
+import org.constellation.gossip.validation.MessageValidator
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
@@ -128,6 +129,7 @@ class DAO(
   var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
   var partitionerPeerSampling: PartitionerPeerSampling[IO] = _
   var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
+  var messageValidator: MessageValidator = _
 
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
@@ -270,7 +272,10 @@ class DAO(
 
     partitionerPeerSampling = PartitionerPeerSampling[IO](id, cluster, trustManager)
 
-    snapshotProposalGossipService = SnapshotProposalGossipService[IO](id, partitionerPeerSampling, cluster, apiClient)
+    messageValidator = MessageValidator(id)
+
+    snapshotProposalGossipService =
+      SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient)
 
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,

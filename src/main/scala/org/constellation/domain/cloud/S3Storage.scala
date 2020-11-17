@@ -11,7 +11,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.services.s3.{AmazonS3, AmazonS3ClientBuilder}
 import com.amazonaws.util.IOUtils
 import org.constellation.infrastructure.cloud.{CannotGetBucket, CannotGetService}
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}

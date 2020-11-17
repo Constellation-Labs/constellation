@@ -10,7 +10,7 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 

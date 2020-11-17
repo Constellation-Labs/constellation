@@ -1,22 +1,21 @@
 package org.constellation.domain.transaction
 
-import java.security.KeyPair
-
-import cats.effect.{Concurrent, IO}
+import cats.effect.IO
 import cats.syntax.all._
 import constellation.signedObservationEdge
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.Fixtures
 import org.constellation.domain.transaction.TransactionService.createTransactionEdge
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.snapshot.SnapshotInfo
 import org.constellation.schema.transaction
-import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.serialization.KryoSerializer
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.BeforeAndAfter
+import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.ExecutionContext
@@ -34,6 +33,7 @@ class TransactionChainServiceTest
   var service: TransactionChainService[IO] = _
 
   before {
+    KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
     service = TransactionChainService[IO]
   }
 
