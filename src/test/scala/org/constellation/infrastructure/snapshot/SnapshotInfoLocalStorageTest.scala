@@ -3,21 +3,22 @@ package org.constellation.infrastructure.snapshot
 import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
 import cats.syntax.all._
-import org.constellation.ConstellationExecutionContext
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
-import org.constellation.serializer.KryoSerializer
-import org.scalatest.BeforeAndAfterAll
+import org.constellation.serialization.KryoSerializer
+import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
 
-class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
+class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfter {
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
+
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   "createDirectoryIfNotExists" - {
     "should create snapshot info directory if it does not exist" in CheckOpenedFileDescriptors.check {

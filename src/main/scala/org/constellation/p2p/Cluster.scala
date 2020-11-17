@@ -17,7 +17,7 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.schema.{Id, NodeState, PeerNotification}
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.constellation.util.Logging._
 import org.constellation.util._
 

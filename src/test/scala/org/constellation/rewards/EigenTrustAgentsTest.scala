@@ -1,11 +1,15 @@
 package org.constellation.rewards
 
-import org.constellation.serializer.KryoSerializer
+import cats.effect.{ContextShift, IO}
+import org.constellation.serialization.KryoSerializer
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
+import cats.implicits._
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext
 
 class EigenTrustAgentsTest
     extends AnyFreeSpec
@@ -14,6 +18,12 @@ class EigenTrustAgentsTest
     with IdiomaticMockitoCats
     with Matchers
     with ArgumentMatchersSugar {
+
+  private implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
+  before {
+    KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
+  }
 
   "should register agent" in {
     val agents = EigenTrustAgents.empty()

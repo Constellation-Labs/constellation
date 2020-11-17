@@ -3,16 +3,18 @@ package org.constellation.domain.checkpointBlock
 import java.security.KeyPair
 
 import cats.effect.{ContextShift, IO}
+import org.constellation.Fixtures
+import cats.implicits._
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.transaction.TransactionChainService
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction
-import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
-import org.scalatest.funsuite.AnyFunSuite
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.constellation.serialization.KryoSerializer
 import org.scalatest.BeforeAndAfter
+import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.ExecutionContext
@@ -26,6 +28,7 @@ class CheckpointBlockDoubleSpendCheckerTest extends AnyFunSuite with BeforeAndAf
   private var transactionChainService: TransactionChainService[IO] = _
 
   before {
+    KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
   }

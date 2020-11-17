@@ -1,5 +1,7 @@
 package org.constellation.gossip
 
+import java.security.KeyPair
+
 import cats.Parallel
 import cats.effect.{Concurrent, Timer}
 import cats.syntax.all._
@@ -9,6 +11,7 @@ import org.constellation.ConfigUtil
 import org.constellation.gossip.bisect.bisectA
 import org.constellation.gossip.sampling.{GossipPath, PeerSampling}
 import org.constellation.gossip.state.{GossipMessage, GossipMessagePathTracker}
+import org.constellation.gossip.validation.EndOfCycle
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
@@ -17,6 +20,7 @@ import scala.concurrent.duration._
 
 abstract class GossipService[F[_]: Parallel, A](
   selfId: Id,
+  keyPair: KeyPair,
   peerSampling: PeerSampling[F],
   cluster: Cluster[F],
   messageTracker: GossipMessagePathTracker[F, A]
@@ -59,20 +63,9 @@ abstract class GossipService[F[_]: Parallel, A](
     for {
       _ <- logger.debug(s"Starting spreading of data: $data")
       messages <- peerSampling.selectPaths
-        .map(_.map(GossipMessage(data, _)))
-      _ <- messages.map(trySpreadAndWaitForStatus).parSequence
+        .map(_.map(GossipMessage(data, _, selfId)))
+      _ <- messages.map(spreadInit).parSequence
     } yield ()
-
-  def validate(message: GossipMessage[A], senderId: Id): Either[GossipError, GossipMessage[A]] =
-    if (!couldSend(message, senderId)) {
-      Left(IncorrectSenderId(senderId))
-    } else if (!couldReceive(message)) {
-      Left(IncorrectReceiverId(selfId.some, message.path.next))
-    } else if (isEndOfCycle(message)) {
-      Left(EndOfCycle)
-    } else Right(message)
-
-  def finishCycle(message: GossipMessage[A]): F[Unit] = messageTracker.success(message.path.id)
 
   /**
     * Forward message to next node on path
@@ -82,39 +75,36 @@ abstract class GossipService[F[_]: Parallel, A](
       _ <- logger.debug(
         s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next.map(_.short)})."
       )
-      _ <- spreadToNext(message)
+      _ <- signAndForward(message).handleErrorWith(
+        e => logger.error(e)(s"Forwarding message on path ${message.path.id} failed")
+      )
     } yield ()
 
-  private def couldSend(message: GossipMessage[A], senderId: Id): Boolean =
-    message.path.isPrev(senderId)
+  def finishCycle(message: GossipMessage[A]): F[Unit] = messageTracker.success(message.path.id)
 
-  private def couldReceive(message: GossipMessage[A]): Boolean =
-    message.path.isCurrent(selfId)
-
-  private def isEndOfCycle(message: GossipMessage[A]): Boolean =
-    message.path.isCurrent(selfId) && message.path.isFirst(selfId) && message.path.isLast(selfId)
-
-  private def spreadToNext(message: GossipMessage[A]): F[Unit] =
+  private def signAndForward(message: GossipMessage[A]): F[Unit] =
     message.path.next match {
-      case Some(id) => getClientMetadata(id).flatMap(spreadFn(_, message.forward))
+      case Some(id) => getClientMetadata(id).flatMap(spreadFn(_, message.sign(keyPair)))
       case None     => F.raiseError[Unit](EndOfCycle)
     }
 
-  private def trySpreadAndWaitForStatus(msg: GossipMessage[A]): F[Unit] = {
-    val trySpread = for {
-      _ <- messageTracker.start(msg)
-      _ <- logger.debug(s"Started path ${msg.path.id}: ${msg.path.toIndexedSeq.map(_.short).mkString(" -> ")}")
-      _ <- spreadToNext(msg)
-      _ <- T.sleep(getPathTimeout(msg.path))
-      succeeded <- messageTracker.isSuccess(msg)
+  private def spreadInit(message: GossipMessage[A]): F[Unit] = {
+    val round = for {
+      _ <- messageTracker.start(message)
+      _ <- logger.debug(s"Started path ${message.path.id}: ${message.path.toIndexedSeq.map(_.short).mkString(" -> ")}")
+      _ <- signAndForward(message)
+      _ <- T.sleep(getPathTimeout(message.path))
+      succeeded <- messageTracker.isSuccess(message)
       _ <- if (succeeded) {
-        messageTracker.remove(msg.path.id) >> logger.debug(s"Succeeded path ${msg.path.id}")
+        messageTracker.remove(message.path.id) >> logger.debug(s"Succeeded path ${message.path.id}")
       } else {
-        recover(msg)
+        recover(message)
       }
     } yield ()
 
-    trySpread.handleErrorWith(e => logger.error(e)(s"Spreading message on path ${msg.path.id} failed") >> recover(msg))
+    round.handleErrorWith(
+      e => logger.error(e)(s"Spreading message on path ${message.path.id} failed") >> recover(message)
+    )
   }
 
   private def getPathTimeout(path: GossipPath): FiniteDuration =

@@ -1,5 +1,7 @@
 package org.constellation.gossip.snapshot
 
+import java.security.KeyPair
+
 import cats.Parallel
 import cats.effect.{Concurrent, Timer}
 import cats.syntax.all._
@@ -14,11 +16,13 @@ import org.constellation.schema.Id
 
 class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
   selfId: Id,
+  keyPair: KeyPair,
   peerSampling: PeerSampling[F],
   cluster: Cluster[F],
   apiClient: ClientInterpreter[F]
 ) extends GossipService[F, SnapshotProposalGossip](
       selfId,
+      keyPair,
       peerSampling,
       cluster,
       new GossipMessagePathTracker[F, SnapshotProposalGossip]
@@ -49,8 +53,10 @@ object SnapshotProposalGossipService {
 
   def apply[F[_]: Concurrent: Timer: Parallel](
     selfId: Id,
+    keyPair: KeyPair,
     peerSampling: PeerSampling[F],
     cluster: Cluster[F],
     apiClient: ClientInterpreter[F]
-  ): SnapshotProposalGossipService[F] = new SnapshotProposalGossipService(selfId, peerSampling, cluster, apiClient)
+  ): SnapshotProposalGossipService[F] =
+    new SnapshotProposalGossipService(selfId, keyPair, peerSampling, cluster, apiClient)
 }

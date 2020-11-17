@@ -2,6 +2,7 @@ package org.constellation.storage
 
 import better.files.File
 import cats.data.EitherT
+import cats.implicits._
 import cats.effect.{ContextShift, IO, Timer}
 import org.constellation._
 import org.constellation.checkpoint.CheckpointService
@@ -13,6 +14,7 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.serialization.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -37,6 +39,7 @@ class SnapshotServiceTest
   var snapshotService: SnapshotService[IO] = _
   var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
   var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   before {
     dao = mockDAO

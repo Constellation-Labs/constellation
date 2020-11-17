@@ -6,7 +6,7 @@ import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.domain.cloud.config.Local
 import org.constellation.schema.GenesisObservation
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 
 class LocalProvider[F[_]](config: Local)(implicit F: Concurrent[F]) extends CloudServiceProvider[F] {
   val name = s"local/${config.path}"
