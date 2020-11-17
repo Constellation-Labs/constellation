@@ -11,6 +11,8 @@ import org.scalatest.flatspec.AsyncFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
+import scala.concurrent.ExecutionContext
+
 class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val random = new java.util.Random()
@@ -19,7 +21,7 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
   val proposerId = Fixtures.id
   val ids = proposerId :: idSet5.toList
   val idxId = ids.zipWithIndex.toMap.map { case (k, v) => (v, k) }
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ConstellationExecutionContext.unbounded)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val effect: ConcurrentEffect[IO] = IO.ioConcurrentEffect(contextShift)
   val generator = new DataGenerator[IO]()
 
@@ -64,8 +66,8 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "HausdorffPartition.nerve" should "deterministically repartition random edges" in {
     val trustNodes: Seq[TrustNode] = generateFullyConnectedData(ids.size).unsafeRunSync()
-    val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
-      TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
+    val tdi: List[TrustDataInternal] =
+      trustNodes.map(tn => TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
     val partitions: Map[Int, List[TrustDataInternal]] = partitioner.nerve
     val repartition: Map[Int, List[TrustDataInternal]] = partitioner.rePartition(tdi.tail)(partitioner.nerve)
@@ -74,8 +76,8 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "HausdorffPartition.nerve" should "deterministically repartition clique edges" in {
     val trustNodes: Seq[TrustNode] = generateCliqueTestData(ids.size).unsafeRunSync()
-    val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
-      TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
+    val tdi: List[TrustDataInternal] =
+      trustNodes.map(tn => TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
     val partitions: Map[Int, List[TrustDataInternal]] = partitioner.nerve
     val repartition: Map[Int, List[TrustDataInternal]] = partitioner.rePartition(tdi.tail)(partitioner.nerve)
@@ -84,8 +86,8 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "HausdorffPartition.nerve" should "not repeat peers in partition paths" in {
     val trustNodes: Seq[TrustNode] = generateFullyConnectedData(ids.size).unsafeRunSync()
-    val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
-      TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
+    val tdi: List[TrustDataInternal] =
+      trustNodes.map(tn => TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
     val partitions: Map[Int, List[TrustDataInternal]] = partitioner.nerve
     assert((1 until partitions.size - 2).forall { rank =>
@@ -95,8 +97,8 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "HausdorffPartition.nerve" should "deterministically layer bipartite cliques" in {
     val trustNodes: Seq[TrustNode] = generateBipartiteTestData(ids.size).unsafeRunSync()
-    val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
-      TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
+    val tdi: List[TrustDataInternal] =
+      trustNodes.map(tn => TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val (lPartite, rPartite) = tdi.tail.zipWithIndex.partition { case (_, idx) => idx < (ids.size / 2) }
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
     val partitions: Map[Int, List[TrustDataInternal]] = partitioner.nerve
@@ -107,8 +109,8 @@ class PartitionerTest extends AsyncFlatSpecLike with Matchers with BeforeAndAfte
 
   "HausdorffPartition.nerve" should "contain all nodes after partitioning" in {
     val trustNodes: Seq[TrustNode] = generateBipartiteTestData(ids.size).unsafeRunSync()
-    val tdi: List[TrustDataInternal] = trustNodes.map(tn =>
-      TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
+    val tdi: List[TrustDataInternal] =
+      trustNodes.map(tn => TrustDataInternal(idxId(tn.id), tn.edges.map(e => (idxId(e.dst), e.trust)).toMap)).toList
     val partitioner: HausdorffPartition = HausdorffPartition(tdi.tail)(tdi.head)
     val partitions: Map[Int, List[TrustDataInternal]] = partitioner.nerve
     assert(partitions.values.flatMap(_.map(_.id)).toSet === ids.toSet)
