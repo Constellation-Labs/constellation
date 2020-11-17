@@ -3,10 +3,9 @@ package org.constellation.infrastructure.snapshot
 import better.files._
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
-import org.constellation.ConstellationExecutionContext
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.snapshot.{Snapshot, StoredSnapshot}
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -28,6 +27,7 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
 
   implicit val ec: ExecutionContextExecutor = ExecutionContext.global
   implicit val cs: ContextShift[IO] = IO.contextShift(ec)
+  KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   var openedFiles: Long = 0
 
@@ -162,7 +162,7 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
   }
 
   "getUsableSpace" - {
-    "should read usable space from snapshot directory" ignore CheckOpenedFileDescriptors.check {
+    "should read usable space from snapshot directory".ignore(CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
         val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
@@ -172,7 +172,7 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
 
         snapshotStorage.getUsableSpace.unsafeRunSync shouldBe usableSpace
       }
-    }
+    })
   }
 
   "getOccupiedSpace" - {

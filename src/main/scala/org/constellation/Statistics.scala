@@ -7,7 +7,7 @@ import com.amazonaws.util.IOUtils
 import fs2.Stream
 import fs2.io.{stdin, stdinUtf8}
 import org.constellation.schema.snapshot.SnapshotInfo
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 
 import scala.concurrent.ExecutionContext
 import scala.io.StdIn.readLong

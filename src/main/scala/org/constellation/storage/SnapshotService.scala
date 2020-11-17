@@ -26,7 +26,7 @@ import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
 import org.constellation.schema.transaction.TransactionCacheData
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}

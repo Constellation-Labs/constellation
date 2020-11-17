@@ -9,7 +9,7 @@ import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJs
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.client.BuildInfoClientInterpreter
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.constellation.{BuildInfo, ConstellationExecutionContext}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
