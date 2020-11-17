@@ -17,7 +17,7 @@ import org.constellation.schema.edge.SignedObservationEdge
 import org.constellation.schema.{Height, Id, checkpoint}
 import org.constellation.util.Logging._
 import org.constellation.util.Metrics
-import org.constellation.DAO
+import org.constellation.{ConfigUtil, DAO}
 
 import scala.util.Random
 
@@ -51,12 +51,24 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
+  private val snapshotHeightInterval: Int =
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+
   def clearStaleTips(min: Long): F[Unit] =
-    tipsRef.get.map(tips => tips.filter(_._2.height.min <= min)).flatMap { toRemove =>
-      Logger[F]
-        .debug(s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}")
-        .flatMap(_ => tipsRef.modify(curr => (curr -- toRemove.keySet, ())))
-    }
+    (min > snapshotHeightInterval)
+      .pure[F]
+      .ifM(
+        tipsRef.get.map(tips => tips.filter(_._2.height.min <= min)).flatMap { toRemove =>
+          Logger[F]
+            .debug(
+              s"Removing tips that are below cluster height: $min to remove ${toRemove.map(t => (t._1, t._2.height))}"
+            )
+            .flatMap(_ => tipsRef.modify(curr => (curr -- toRemove.keySet, ())))
+        },
+        Logger[F].debug(
+          s"Min=${min} is lower or equal snapshotHeightInterval=${snapshotHeightInterval}. Skipping tips removal"
+        )
+      )
 
   private val conflictingTips: Ref[F, Map[String, CheckpointBlock]] = Ref.unsafe(Map.empty)
   private val tipsRef: Ref[F, Map[String, TipData]] = Ref.unsafe(Map.empty)
