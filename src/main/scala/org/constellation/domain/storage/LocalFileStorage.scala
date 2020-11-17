@@ -7,7 +7,7 @@ import cats.data.EitherT
 import cats.effect.Concurrent
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.slf4j.Logger
 
 abstract class LocalFileStorage[F[_], A <: AnyRef](baseDir: String)(implicit F: Concurrent[F])

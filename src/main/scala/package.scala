@@ -12,7 +12,7 @@ import org.constellation.schema.Schema._
 import org.constellation.schema.Id
 import org.constellation.schema.address.AddressMetaData
 import org.constellation.schema.signature.SignHelpExt
-import org.constellation.serializer.KryoSerializer
+import org.constellation.serialization.KryoSerializer
 import org.constellation.util.POWExt
 
 import scala.concurrent.duration.Duration

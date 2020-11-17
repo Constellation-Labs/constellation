@@ -2,23 +2,22 @@ package org.constellation.rewards
 
 import atb.common.DefaultRandomGenerator
 import atb.interfaces.Experience
-import cats.effect.concurrent.Ref
-
-import scala.collection.JavaConverters._
-import cats.effect.{ContextShift, IO}
-import org.constellation.{ConstellationExecutionContext, DAO}
-import org.constellation.keytool.KeyUtils
-import org.constellation.schema.{Id, observation}
-import org.constellation.trust.{TrustEdge, TrustManager}
-import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
-import org.mockito.cats.IdiomaticMockitoCats
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
+import cats.implicits._
+import cats.effect.{ContextShift, IO}
+import org.constellation.DAO
+import org.constellation.keytool.KeyUtils
 import org.constellation.schema.observation.{CheckpointBlockWithMissingSoe, ObservationData}
-import org.constellation.serializer.KryoSerializer
+import org.constellation.schema.{Id, observation}
+import org.constellation.serialization.KryoSerializer
+import org.constellation.trust.{TrustEdge, TrustManager}
+import org.mockito.cats.IdiomaticMockitoCats
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 
 class EigenTrustTest
@@ -55,6 +54,7 @@ class EigenTrustTest
   final val opinionSampleSD = 0.1
 
   before {
+    KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
     eigenTrust = new EigenTrust[IO](Id("self"))
     etj = new EigenTrustJ()
     etj.initialize(
