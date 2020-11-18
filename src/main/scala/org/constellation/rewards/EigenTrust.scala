@@ -31,7 +31,7 @@ object EigenTrust {
   final val opinionSampleNum = 10
   final val opinionSampleSD = 0.1
 
-  // TODO: Remove commented out code.
+// TODO: Remove commented out code. It is mostly playground/leftover
 //
 //  val nodesWithEdges: List[TrustNode] = new DataGenerator[IO]().generateData().unsafeRunSync()
 //
@@ -75,27 +75,19 @@ class EigenTrust[F[_]: Concurrent](selfId: Id) {
   private implicit val logger = Slf4jLogger.getLogger[F]
 
   def initializeModel(): F[Unit] =
-    for {
-      randomData <- new DataGenerator[F]().generateData()
-      randomOpinions = randomData.flatMap(_.edges).map { edge =>
-        new Opinion(edge.src, edge.dst, 0, 0, normalizeTrust(edge.trust), Random.nextDouble() / 10)
-      }
-
-      _ <- eigenTrustJ.modify { _ =>
-        val instance = new EigenTrustJ()
-        instance.initialize(
-          EigenTrust.weight.asInstanceOf[Object],
-          EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
-          EigenTrust.opinionSampleNum.asInstanceOf[Object],
-          EigenTrust.opinionSampleSD.asInstanceOf[Object]
-        )
-        instance.setRandomGenerator(new DefaultRandomGenerator(0))
-        instance.processExperiences(List().asJava)
-        instance.processOpinions(randomOpinions.asJava)
-        instance.calculateTrust()
-        (instance, ())
-      }
-    } yield ()
+    eigenTrustJ.modify { _ =>
+      val instance = new EigenTrustJ()
+      instance.initialize(
+        EigenTrust.weight.asInstanceOf[Object],
+        EigenTrust.satisfactoryThreshold.asInstanceOf[Object],
+        EigenTrust.opinionSampleNum.asInstanceOf[Object],
+        EigenTrust.opinionSampleSD.asInstanceOf[Object]
+      )
+      instance.setRandomGenerator(new DefaultRandomGenerator(0))
+      instance.processExperiences(List().asJava)
+      instance.calculateTrust()
+      (instance, ())
+    }
 
   def setModel(model: EigenTrustJ): F[Unit] = eigenTrustJ.modify { _ =>
     (model, ())
