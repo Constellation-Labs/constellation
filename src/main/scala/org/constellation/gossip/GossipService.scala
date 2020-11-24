@@ -5,8 +5,9 @@ import cats.effect.{Concurrent, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.ConfigUtil
 import org.constellation.gossip.bisect.bisectA
-import org.constellation.gossip.sampling.PeerSampling
+import org.constellation.gossip.sampling.{GossipPath, PeerSampling}
 import org.constellation.gossip.state.{GossipMessage, GossipMessagePathTracker}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster
@@ -24,6 +25,7 @@ abstract class GossipService[F[_]: Parallel, A](
   T: Timer[F]
 ) {
   protected val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  private val spreadRequestTimeout = ConfigUtil.getDurationFromConfig("gossip.spread-request-timeout", 10 seconds)
 
   /**
     * How to spread the message to peer
@@ -35,6 +37,7 @@ abstract class GossipService[F[_]: Parallel, A](
     */
   protected def validationFn(peerClientMetadata: PeerClientMetadata, message: GossipMessage[A]): F[Boolean]
 
+  // TODO: Check if bisect is efficient enough for error handling Gossip
   def recover(message: GossipMessage[A]): F[Unit] = {
     val sequence = message.path.toIndexedSeq
 
@@ -45,7 +48,7 @@ abstract class GossipService[F[_]: Parallel, A](
       )(sequence)
       sequenceToRetry = sequence.dropWhile(failureNode.contains)
       clients <- sequenceToRetry.toList.traverse(getClientMetadata)
-      _ <- clients.traverse(spreadFn(_, message)) // If it fails we should force trigger healthcheck
+      _ <- clients.traverse(spreadFn(_, message)) // TODO: Force trigger peer healthcheck if it fails
       _ <- messageTracker.remove(message.path.id)
     } yield ()
   }
@@ -53,24 +56,25 @@ abstract class GossipService[F[_]: Parallel, A](
   /**
     * Start spreading the message to fanout
     */
-  def spread(data: A, fanout: Int): F[Unit] =
+  def spread(data: A): F[Unit] =
     for {
-      _ <- logger.debug(s"Starting spreading of data: $data with fanout $fanout")
+      _ <- logger.debug(s"Starting spreading of data: $data")
       messages <- peerSampling.selectPaths
         .map(_.map(GossipMessage(data, _)))
       _ <- messages.map { msg =>
         for {
-          _ <- logger.debug(s"Path ${msg.path.id}: ${msg.path.toIndexedSeq.map(_.short).mkString(" -> ")}")
           _ <- messageTracker.start(msg)
-          _ <- spreadToNext(msg).handleErrorWith(_ => recover(msg))
-          _ <- logger.debug(s"Started path ${msg.path.id}")
-          _ <- T.sleep(30 seconds)
-          succeeded <- messageTracker.isSuccess(msg)
-          _ <- if (succeeded) {
-            messageTracker.remove(msg.path.id) >> logger.debug(s"Succeeded path ${msg.path.id}")
-          } else {
-            recover(msg)
-          }
+          _ <- logger.debug(s"Started path ${msg.path.id}: ${msg.path.toIndexedSeq.map(_.short).mkString(" -> ")}")
+          _ <- (for {
+            _ <- spreadToNext(msg)
+            _ <- T.sleep(getPathTimeout(msg.path))
+            succeeded <- messageTracker.isSuccess(msg)
+            _ <- if (succeeded) {
+              messageTracker.remove(msg.path.id) >> logger.debug(s"Succeeded path ${msg.path.id}")
+            } else {
+              recover(msg)
+            }
+          } yield ()).handleErrorWith(_ => recover(msg))
         } yield ()
       }.parSequence
     } yield ()
@@ -92,25 +96,28 @@ abstract class GossipService[F[_]: Parallel, A](
   def spread(message: GossipMessage[A]): F[Unit] =
     for {
       _ <- logger.debug(
-        s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next})."
+        s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next.map(_.short)})."
       )
-      _ <- spreadToNext(GossipMessage(message.data, message.path.accept))
+      _ <- spreadToNext(message)
     } yield ()
 
   private def couldSend(message: GossipMessage[A], senderId: Id): Boolean =
-    message.path.isCurrent(senderId)
+    message.path.isPrev(senderId)
 
   private def couldReceive(message: GossipMessage[A]): Boolean =
-    message.path.isNext(selfId)
+    message.path.isCurrent(selfId)
 
   private def isEndOfCycle(message: GossipMessage[A]): Boolean =
-    message.path.isNext(selfId) && message.path.isFirst(selfId) && message.path.isLast(selfId)
+    message.path.isCurrent(selfId) && message.path.isFirst(selfId) && message.path.isLast(selfId)
 
   private def spreadToNext(message: GossipMessage[A]): F[Unit] =
     message.path.next match {
-      case Some(id) => getClientMetadata(id).flatMap(spreadFn(_, message))
+      case Some(id) => getClientMetadata(id).flatMap(spreadFn(_, message.forward))
       case None     => throw EndOfCycle
     }
+
+  private def getPathTimeout(path: GossipPath): FiniteDuration =
+    path.toIndexedSeq.length * spreadRequestTimeout
 
   protected def getClientMetadata(id: Id): F[PeerClientMetadata] =
     cluster.getPeerInfo.map(_.get(id) match {

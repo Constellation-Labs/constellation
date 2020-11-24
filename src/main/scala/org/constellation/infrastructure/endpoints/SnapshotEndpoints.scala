@@ -5,8 +5,6 @@ import cats.syntax.all._
 import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
-import org.constellation.session.Registration.`X-Id`
-import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight._
 import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, _}
@@ -19,11 +17,12 @@ import org.constellation.schema.Id._
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serializer.KryoSerializer
+import org.constellation.session.Registration.`X-Id`
 import org.constellation.storage.SnapshotService
-import org.http4s.{HttpRoutes, Response}
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
+import org.http4s.{HttpRoutes, Response}
 
 import scala.collection.SortedMap
 
@@ -191,7 +190,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
             case Right(_) =>
               for {
                 _ <- redownloadService.persistPeerProposal(
-                  senderId,
+                  data.proposerId,
                   data.height,
                   data.hash,
                   data.reputation

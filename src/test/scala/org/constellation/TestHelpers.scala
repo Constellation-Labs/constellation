@@ -73,7 +73,6 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         dao.alias shouldReturn None
 
         dao.snapshotProposalGossipService shouldReturn mock[SnapshotProposalGossipService[IO]]
-        dao.snapshotProposalGossipService.spread(*, *).shouldReturnF(Unit)
         dao.snapshotProposalGossipService.spread(*) shouldReturnF Unit
 
         val rds = mock[RedownloadService[IO]]
