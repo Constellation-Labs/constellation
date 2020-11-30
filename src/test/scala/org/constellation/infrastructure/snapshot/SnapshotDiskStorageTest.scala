@@ -31,8 +31,10 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
 
   var openedFiles: Long = 0
 
-  override def beforeAll(): Unit =
+  override def beforeAll(): Unit = {
+    KryoSerializer.init[IO].unsafeRunSync()
     openedFiles = File.numberOfOpenFileDescriptors()
+  }
 
   override def afterAll(): Unit = {
     val endOpenFiles = File.numberOfOpenFileDescriptors()
@@ -162,7 +164,7 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
   }
 
   "getUsableSpace" - {
-    "should read usable space from snapshot directory" ignore CheckOpenedFileDescriptors.check {
+    "should read usable space from snapshot directory".ignore(CheckOpenedFileDescriptors.check {
       File.usingTemporaryDirectory() { dir =>
         val snapshotsDir = dir / "snapshots"
         val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
@@ -172,7 +174,7 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
 
         snapshotStorage.getUsableSpace.unsafeRunSync shouldBe usableSpace
       }
-    }
+    })
   }
 
   "getOccupiedSpace" - {

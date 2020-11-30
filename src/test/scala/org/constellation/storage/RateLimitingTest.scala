@@ -10,13 +10,24 @@ import org.constellation.Fixtures
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.schema.address.Address
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.serializer.KryoSerializer
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.concurrent.ExecutionContext
 
-class RateLimitingTest extends AnyFreeSpec with IdiomaticMockito with IdiomaticMockitoCats with Matchers {
+class RateLimitingTest
+    extends AnyFreeSpec
+    with IdiomaticMockito
+    with IdiomaticMockitoCats
+    with Matchers
+    with BeforeAndAfter {
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
+
+  before {
+    KryoSerializer.init[IO].unsafeRunSync()
+  }
 
   "update" - {
     "it should increment counter for all (not dummy) source addresses in provided txs" in {

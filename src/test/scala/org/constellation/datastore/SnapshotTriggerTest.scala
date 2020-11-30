@@ -1,10 +1,11 @@
 package org.constellation.datastore
 
 import cats.data.EitherT
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
+import org.constellation.serializer.KryoSerializer
 import org.constellation.snapshot.SnapshotTrigger
 import org.constellation.storage.{SnapshotCreated, SnapshotError}
 import org.constellation.{DAO, TestHelpers}
@@ -29,7 +30,10 @@ class SnapshotTriggerTest
   implicit var cluster: Cluster[IO] = _
   implicit var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
 
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     dao = TestHelpers.prepareMockedDAO()
     cluster = dao.cluster
     snapshotProposalGossipService = dao.snapshotProposalGossipService

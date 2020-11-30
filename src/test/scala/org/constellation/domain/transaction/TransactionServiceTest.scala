@@ -11,6 +11,7 @@ import org.constellation.domain.consensus.ConsensusStatus.ConsensusStatus
 import org.constellation.schema.address.Address
 import org.constellation.schema.edge.Edge
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RateLimiting
 import org.constellation.util.Metrics
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
@@ -53,6 +54,7 @@ class TransactionServiceTest
   tx.transaction.lastTxRef shouldReturn LastTransactionRef.empty
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     dao = TestHelpers.prepareMockedDAO()
     txChain = TransactionChainService[IO]
     rl = RateLimiting[IO]()
@@ -295,7 +297,7 @@ class TransactionServiceTest
 
   "pullForConsensusSafe" - {
     // Ignored because of non deterministic output (4999 isn't exual 5000).
-    "should be safe to use concurrently" ignore {
+    "should be safe to use concurrently".ignore {
       val pullsIteration = 100
       val pullsMaxCount = 50
 
@@ -391,7 +393,7 @@ class TransactionServiceTest
       txService.put(otherTx, ConsensusStatus.Accepted).unsafeRunSync
 
       val txs = txService.findByPredicate(_.transaction.src.address == "src").unsafeRunSync
-      txs should contain only tx
+      (txs should contain).only(tx)
     }
 
     "should not find transactions in unknown state" in {

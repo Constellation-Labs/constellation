@@ -55,6 +55,7 @@ class EigenTrustTest
   final val opinionSampleSD = 0.1
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     eigenTrust = new EigenTrust[IO](Id("self"))
     etj = new EigenTrustJ()
     etj.initialize(

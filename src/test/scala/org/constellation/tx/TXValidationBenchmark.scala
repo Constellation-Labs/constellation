@@ -1,16 +1,23 @@
 package org.constellation.tx
 
+import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 import org.constellation.Fixtures._
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils._
 import org.constellation.domain.transaction.TransactionValidator
+import org.constellation.serializer.KryoSerializer
+import org.scalatest.BeforeAndAfter
 import org.scalatest.flatspec.AnyFlatSpec
 
-class TXValidationBenchmark extends AnyFlatSpec {
+class TXValidationBenchmark extends AnyFlatSpec with BeforeAndAfter {
   val logger = Logger("TXValidationBenchmark")
 
   val batchSize = 500
+
+  before {
+    KryoSerializer.init[IO].unsafeRunSync()
+  }
 
   // System dependent, this is a large enough buffer though
   "Timing tx signature" should s"validate $batchSize transaction signatures under 30s" in {

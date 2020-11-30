@@ -12,6 +12,7 @@ import org.constellation.schema.transaction.{LastTransactionRef, Transaction, Tr
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.snapshot.SnapshotInfo
 import org.constellation.schema.transaction
+import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -34,6 +35,7 @@ class TransactionChainServiceTest
   var service: TransactionChainService[IO] = _
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     service = TransactionChainService[IO]
   }
 

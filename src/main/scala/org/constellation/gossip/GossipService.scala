@@ -1,5 +1,7 @@
 package org.constellation.gossip
 
+import java.security.KeyPair
+
 import cats.Parallel
 import cats.effect.{Concurrent, Timer}
 import cats.syntax.all._
@@ -9,6 +11,7 @@ import org.constellation.ConfigUtil
 import org.constellation.gossip.bisect.bisectA
 import org.constellation.gossip.sampling.{GossipPath, PeerSampling}
 import org.constellation.gossip.state.{GossipMessage, GossipMessagePathTracker}
+import org.constellation.gossip.validation.EndOfCycle
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
@@ -17,6 +20,7 @@ import scala.concurrent.duration._
 
 abstract class GossipService[F[_]: Parallel, A](
   selfId: Id,
+  kp: KeyPair,
   peerSampling: PeerSampling[F],
   cluster: Cluster[F],
   messageTracker: GossipMessagePathTracker[F, A]
@@ -60,7 +64,7 @@ abstract class GossipService[F[_]: Parallel, A](
     for {
       _ <- logger.debug(s"Starting spreading of data: $data")
       messages <- peerSampling.selectPaths
-        .map(_.map(GossipMessage(data, _)))
+        .map(_.map(GossipMessage(data, _, selfId)))
       _ <- messages.map { msg =>
         for {
           _ <- messageTracker.start(msg)
@@ -79,15 +83,6 @@ abstract class GossipService[F[_]: Parallel, A](
       }.parSequence
     } yield ()
 
-  def validate(message: GossipMessage[A], senderId: Id): Either[GossipError, GossipMessage[A]] =
-    if (!couldSend(message, senderId)) {
-      Left(IncorrectSenderId(senderId))
-    } else if (!couldReceive(message)) {
-      Left(IncorrectReceiverId(selfId.some, message.path.next))
-    } else if (isEndOfCycle(message)) {
-      Left(EndOfCycle)
-    } else Right(message)
-
   def finishCycle(message: GossipMessage[A]): F[Unit] = messageTracker.success(message.path.id)
 
   /**
@@ -101,18 +96,9 @@ abstract class GossipService[F[_]: Parallel, A](
       _ <- spreadToNext(message)
     } yield ()
 
-  private def couldSend(message: GossipMessage[A], senderId: Id): Boolean =
-    message.path.isPrev(senderId)
-
-  private def couldReceive(message: GossipMessage[A]): Boolean =
-    message.path.isCurrent(selfId)
-
-  private def isEndOfCycle(message: GossipMessage[A]): Boolean =
-    message.path.isCurrent(selfId) && message.path.isFirst(selfId) && message.path.isLast(selfId)
-
   private def spreadToNext(message: GossipMessage[A]): F[Unit] =
     message.path.next match {
-      case Some(id) => getClientMetadata(id).flatMap(spreadFn(_, message.forward))
+      case Some(id) => getClientMetadata(id).flatMap(spreadFn(_, message.sign(kp)))
       case None     => throw EndOfCycle
     }
 

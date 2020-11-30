@@ -1,5 +1,6 @@
 package org.constellation.infrastructure.endpoints
 
+import cats.data.Validated.{Invalid, Valid}
 import cats.effect.Concurrent
 import cats.syntax.all._
 import io.circe.Encoder
@@ -11,7 +12,13 @@ import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeig
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.gossip.snapshot.{SnapshotProposalGossip, SnapshotProposalGossipService}
 import org.constellation.gossip.state.GossipMessage
-import org.constellation.gossip.{EndOfCycle, IncorrectReceiverId, IncorrectSenderId}
+import org.constellation.gossip.validation.{
+  EndOfCycle,
+  IncorrectReceiverId,
+  IncorrectSenderId,
+  MessageValidator,
+  PathDoesNotStartAndEndWithOrigin
+}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id._
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
@@ -52,7 +59,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     snapshotService: SnapshotService[F],
     cluster: Cluster[F],
     redownloadService: RedownloadService[F],
-    snapshotProposalGossipService: SnapshotProposalGossipService[F]
+    snapshotProposalGossipService: SnapshotProposalGossipService[F],
+    messageValidator: MessageValidator
   ) =
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
       getStoredSnapshotByHash(snapshotStorage) <+>
@@ -63,7 +71,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       getSnapshotInfo(snapshotService, cluster) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
       getLatestMajorityHeight(redownloadService) <+>
-      postSnapshotProposal(snapshotProposalGossipService, redownloadService)
+      postSnapshotProposal(snapshotProposalGossipService, redownloadService, messageValidator)
 
   def ownerEndpoints(
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
@@ -173,7 +181,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
   private def postSnapshotProposal(
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
-    redownloadService: RedownloadService[F]
+    redownloadService: RedownloadService[F],
+    messageValidator: MessageValidator
   ): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case req @ POST -> Root / "peer" / "snapshot" / "created" =>
@@ -182,15 +191,15 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
           data = message.data
           senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
 
-          res <- snapshotProposalGossipService.validate(message, senderId) match {
-            case Left(EndOfCycle)                => snapshotProposalGossipService.finishCycle(message) >> Ok()
-            case Left(IncorrectReceiverId(_, _)) => BadRequest()
-            case Left(IncorrectSenderId(_))      => Response[F](status = Unauthorized).pure[F]
-            case Left(_)                         => InternalServerError()
-            case Right(_) =>
+          res <- messageValidator.validateForForward(message, senderId) match {
+            case Invalid(EndOfCycle)                                                            => snapshotProposalGossipService.finishCycle(message) >> Ok()
+            case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) => BadRequest()
+            case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
+            case Invalid(_)                                                                     => InternalServerError()
+            case Valid(_) =>
               for {
                 _ <- redownloadService.persistPeerProposal(
-                  data.proposerId,
+                  message.origin,
                   data.height,
                   data.hash,
                   data.reputation
@@ -228,7 +237,8 @@ object SnapshotEndpoints {
     snapshotService: SnapshotService[F],
     cluster: Cluster[F],
     redownloadService: RedownloadService[F],
-    snapshotProposalGossipService: SnapshotProposalGossipService[F]
+    snapshotProposalGossipService: SnapshotProposalGossipService[F],
+    messageValidator: MessageValidator
   ): HttpRoutes[F] =
     new SnapshotEndpoints[F]()
       .peerEndpoints(
@@ -238,7 +248,8 @@ object SnapshotEndpoints {
         snapshotService,
         cluster,
         redownloadService,
-        snapshotProposalGossipService
+        snapshotProposalGossipService,
+        messageValidator
       )
 
   def ownerEndpoints[F[_]: Concurrent](

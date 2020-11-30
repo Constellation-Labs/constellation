@@ -9,9 +9,14 @@ case class GossipPath private (path: IndexedSeq[Id], id: String, cursor: Int = 0
   def forward: GossipPath =
     if (hasNext) GossipPath(path, id, cursor + 1) else this
 
+  def backward: GossipPath =
+    if (hasPrev) GossipPath(path, id, cursor - 1) else this
+
   def isCompleted: Boolean = !hasNext
 
   def hasNext: Boolean = next.isDefined
+
+  def hasPrev: Boolean = prev.isDefined
 
   def next: Option[Id] = path.lift(cursor + 1)
 

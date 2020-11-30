@@ -5,6 +5,7 @@ import cats.syntax.all._
 import org.constellation.domain.transaction.{PendingTransactionsMemPool, TransactionChainService, TransactionService}
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
 import org.mockito.IdiomaticMockito
@@ -24,6 +25,7 @@ class PendingTransactionsMemPoolTest extends AnyFreeSpec with IdiomaticMockito w
   var dao: DAO = _
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     dao = TestHelpers.prepareMockedDAO()
     txChainService = TransactionChainService[IO]
     rl = RateLimiting[IO]()

@@ -1,14 +1,22 @@
 package org.constellation.serializer
 
-import org.constellation.schema.Kryo
+import cats.Monoid
+import cats.effect.Concurrent
+import org.constellation.schema.serialization.{ExplicitKryoRegistrar, Kryo, SingletonRegistrar => SchemaRegistrar}
+import org.constellation.schema.serialization.ExplicitKryoRegistrar._
 
 object KryoSerializer {
 
-  val kryoPool = Kryo.init(new ConstellationKryoRegistrar())
+  def init[F[_]: Concurrent]: F[Unit] = Kryo.init(
+    Monoid[ExplicitKryoRegistrar].combine(
+      SchemaRegistrar,
+      ConstellationKryoRegistrar
+    )
+  )
 
   def serializeAnyRef(anyRef: AnyRef): Array[Byte] =
-    kryoPool.toBytesWithClass(anyRef)
+    Kryo.serializeAnyRef(anyRef)
 
   def deserializeCast[T](bytes: Array[Byte]): T =
-    kryoPool.fromBytes(bytes).asInstanceOf[T]
+    Kryo.deserializeCast(bytes)
 }

@@ -13,6 +13,7 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -39,6 +40,7 @@ class SnapshotServiceTest
   var snapshotInfoStorage: LocalFileStorage[IO, SnapshotInfo] = _
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     dao = mockDAO
 
     val cts = mock[ConcurrentTipService[IO]]

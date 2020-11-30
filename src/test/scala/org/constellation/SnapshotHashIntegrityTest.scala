@@ -2,13 +2,19 @@ package org.constellation
 
 import cats.effect.{ContextShift, IO}
 import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotLocalStorage}
+import org.constellation.serializer.KryoSerializer
+import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.ExecutionContext
 
-class SnapshotHashIntegrityTest extends AnyFreeSpec with Matchers {
+class SnapshotHashIntegrityTest extends AnyFreeSpec with Matchers with BeforeAndAfter {
   implicit val cc: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
+  before {
+    KryoSerializer.init[IO].unsafeRunSync()
+  }
 
   "snapshot read" in {
     val storage = SnapshotLocalStorage[IO]("src/test/resources")

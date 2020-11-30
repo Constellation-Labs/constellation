@@ -10,6 +10,7 @@ import org.constellation.schema.transaction.{LastTransactionRef, Transaction, Tr
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction
+import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.BeforeAndAfter
@@ -26,6 +27,7 @@ class CheckpointBlockDoubleSpendCheckerTest extends AnyFunSuite with BeforeAndAf
   private var transactionChainService: TransactionChainService[IO] = _
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
   }

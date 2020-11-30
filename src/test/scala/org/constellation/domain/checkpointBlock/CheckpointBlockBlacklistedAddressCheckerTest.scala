@@ -9,6 +9,7 @@ import org.constellation.schema.transaction.{LastTransactionRef, Transaction, Tr
 import org.constellation.schema.checkpoint.CheckpointBlock
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction
+import org.constellation.serializer.KryoSerializer
 import org.constellation.{ConstellationExecutionContext, Fixtures, schema}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.funsuite.AnyFunSuite
@@ -24,6 +25,7 @@ class CheckpointBlockBlacklistedAddressCheckerTest extends AnyFunSuite with Befo
   private var blacklistedAddresses: BlacklistedAddresses[IO] = _
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     blacklistedAddresses = BlacklistedAddresses[IO]
   }
 

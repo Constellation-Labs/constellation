@@ -4,6 +4,7 @@ import cats.effect.{Blocker, ContextShift, IO}
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.{ConstellationExecutionContext, DAO, TestHelpers}
 import org.constellation.p2p.Cluster
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
@@ -32,6 +33,7 @@ class DownloadServiceTest
   implicit var dao: DAO = _
 
   override def beforeEach() = {
+    KryoSerializer.init[IO].unsafeRunSync()
     dao = TestHelpers.prepareMockedDAO()
     cluster = dao.cluster
     redownloadService = dao.redownloadService
@@ -90,7 +92,7 @@ class DownloadServiceTest
   }
 
   "downloadAndAcceptGenesis" - {
-    "test to be defined after genesis refactor" ignore {}
+    "test to be defined after genesis refactor".ignore {}
   }
 
 }

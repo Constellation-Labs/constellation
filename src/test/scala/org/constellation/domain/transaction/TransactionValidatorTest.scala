@@ -1,17 +1,20 @@
 package org.constellation.domain.transaction
 
 import cats.data.Validated
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import org.constellation.schema.edge.EdgeHashType.{AddressHash, TransactionDataHash}
 import org.constellation.schema.signature.SignatureBatch
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 import org.constellation.schema.edge.{Edge, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction
+import org.constellation.serializer.KryoSerializer
 import org.mockito.IdiomaticMockito
 import org.mockito.cats.IdiomaticMockitoCats
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext
 
 class TransactionValidatorTest
     extends AnyFreeSpec
@@ -25,8 +28,10 @@ class TransactionValidatorTest
   var transactionChainService: TransactionChainService[IO] = _
   var transactionService: TransactionService[IO] = _
   var transactionValidator: TransactionValidator[IO] = _
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   before {
+    KryoSerializer.init[IO].unsafeRunSync()
     transactionChainService = mock[TransactionChainService[IO]]
     transactionService = mock[TransactionService[IO]]
     transactionService.transactionChainService shouldReturn transactionChainService

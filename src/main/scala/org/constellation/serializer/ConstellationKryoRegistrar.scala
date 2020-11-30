@@ -3,25 +3,27 @@ package org.constellation.serializer
 import atb.common.DefaultRandomGenerator
 import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
-import com.esotericsoftware.kryo.Kryo
-import com.twitter.chill.IKryoRegistrar
 import org.constellation.domain.rewards.StoredRewards
+import org.constellation.gossip.sampling.GossipPath
+import org.constellation.gossip.snapshot.SnapshotProposalGossip
+import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.rewards.EigenTrustAgents
+import org.constellation.schema.serialization.ExplicitKryoRegistrar
 
-class ConstellationKryoRegistrar extends IKryoRegistrar {
-  override def apply(kryo: Kryo): Unit =
-    this.registerClasses(kryo)
-
-  private def registerClasses(kryo: Kryo): Unit = {
-    kryo.register(classOf[DefaultRandomGenerator], 178)
-    kryo.register(classOf[MersenneTwister], 179)
-    kryo.register(classOf[cern.jet.random.Normal], 180)
-    kryo.register(classOf[cern.jet.random.Uniform], 181)
-    kryo.register(classOf[EigenTrustJ], 183)
-    kryo.register(classOf[EigenTrustAgents], 184)
-    kryo.register(classOf[StoredRewards], 185)
-
-    kryo.register(classOf[BuildInfoJson], 187)
-  }
-}
+object ConstellationKryoRegistrar
+    extends ExplicitKryoRegistrar(
+      Set(
+        (classOf[DefaultRandomGenerator], 178),
+        (classOf[MersenneTwister], 179),
+        (classOf[cern.jet.random.Normal], 180),
+        (classOf[cern.jet.random.Uniform], 181),
+        (classOf[EigenTrustJ], 183),
+        (classOf[EigenTrustAgents], 184),
+        (classOf[StoredRewards], 185),
+        (classOf[BuildInfoJson], 187),
+        (classOf[SnapshotProposalGossip], 1032),
+        (classOf[GossipMessage[SnapshotProposalGossip]], 1033),
+        (classOf[GossipPath], 1034)
+      )
+    ) {}

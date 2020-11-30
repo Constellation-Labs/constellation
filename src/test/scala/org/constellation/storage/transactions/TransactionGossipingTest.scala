@@ -8,10 +8,12 @@ import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService}
 import org.constellation.p2p.PeerData
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.serializer.KryoSerializer
 import org.constellation.storage.RateLimiting
 import org.constellation.{ConstellationExecutionContext, DAO, Fixtures}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
@@ -23,11 +25,16 @@ class TransactionGossipingTest
     with IdiomaticMockito
     with IdiomaticMockitoCats
     with Matchers
+    with BeforeAndAfter
     with ArgumentMatchersSugar {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val implicitLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+
+  before {
+    KryoSerializer.init[IO].unsafeRunSync()
+  }
 
   test("it should randomly select the diff of all peer IDs and peers in the tx path") {
     val dao = mockDAO

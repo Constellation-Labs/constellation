@@ -7,17 +7,21 @@ import org.constellation.ConstellationExecutionContext
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.serializer.KryoSerializer
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
 
-class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
+class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with BeforeAndAfter {
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
+
+  before {
+    KryoSerializer.init[IO].unsafeRunSync()
+  }
 
   "createDirectoryIfNotExists" - {
     "should create snapshot info directory if it does not exist" in CheckOpenedFileDescriptors.check {
