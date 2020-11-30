@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Changed
-- Remove node operator
+- Remove two node operators
 - Skip removing genesis tips
 
 ## [v2.19.0] 2020-11-16
