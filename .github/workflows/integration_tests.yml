@@ -6,7 +6,7 @@ on:
       nodeCount:
         description: 'Number of nodes in a cluster'
         required: false
-        default: '3'
+        default: '4'
 
 jobs:
   test:
@@ -32,22 +32,45 @@ jobs:
         uses: hashicorp/setup-terraform@v1
         with:
           terraform_version: 0.12.25
+          terraform_wrapper: false # wrapper would print out terraform command to stdout first
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
           sudo apt-get install -y pssh
+          sudo ln -s $(which parallel-ssh) /usr/local/bin/pssh
+          sudo ln -s $(which parallel-scp) /usr/local/bin/pscp
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/id_rsa.pub
+          cp integration-tests/ssh-config ~/.ssh/config
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_rsa
+          chmod 644 ~/.ssh/config
+          chmod 644 ~/.ssh/id_rsa.pub
 
       - name: Start cluster
+        id: start_cluster
         run: |
+          sudo service ssh restart
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/id_rsa
+          cat /home/runner/.ssh/config
+          cat /etc/ssh/ssh_config
+          ssh -v 54.177.165.53  "ls /tmp"
           pushd terraform/aws
           export EXECUTION_TAG=$(git describe --exact-match --tags 2>/dev/null || git rev-parse --short HEAD)
+          terraform init
           terraform workspace new integration-tests-$EXECUTION_TAG
           ./dag --batch autostart  ${{ github.event.inputs.nodeCount }}
           terraform output -json > terraform-output.json
+          mv terraform-output.json ../../integration-tests/src/test/resources/
           popd
-          mv terraform/aws/terraform-output.json integration-tests/src/test/resources/
+          echo ::set-output name=tf_workspace::"integration-tests-$EXECUTION_TAG"
 
       - name: Download keys
         run: |
@@ -56,12 +79,25 @@ jobs:
 
       - name: Run tests
         run: |
+          echo "---------------------------------------"
+          cat integration-tests/src/test/resources/terraform-output.json
+          echo "+++++++++++++++++++++++++++++++++++++++"
+          sleep 180
           sbt integrationTests/test
 
-      # TODO Upload metrics and logs to S3
+      - name: Save logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p /tmp/upload
+          while read INSTANCE_IP; do
+            mkdir -p "/tmp/upload/$INSTANCE_IP"
+            scp -o StrictHostKeyChecking=no -r admin@$ip:/home/admin/constellation/logs/ "/tmp/upload/$INSTANCE_IP/"
+          done < terraform/aws/${{ steps.start_cluster.output.tf_workspace }}
+          aws s3 sync /tmp/upload/ "s3://constellationlabs-dag/logs/${{ steps.start_cluster.output.tf_workspace }}"
 
       - name: Destroy the environment
+        if: ${{ always() }}
         run: |
           pushd terraform/aws
-          terraform destroy
+          terraform destroy -auto-approve
           popd

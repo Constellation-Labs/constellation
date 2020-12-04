@@ -20,8 +20,14 @@ case class TxGenConfig(
   keyPair: KeyPairConfig
 )
 
+case class SSHConfig(
+  user: String,
+  keyfile: String
+)
+
 case class RootTestConfig(
-  txGen: TxGenConfig
+  txGen: TxGenConfig,
+  ssh: SSHConfig
 )
 
 trait TestConfig extends Assertions {
