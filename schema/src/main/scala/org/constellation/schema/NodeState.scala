@@ -6,6 +6,7 @@ sealed trait NodeState extends EnumEntry
 
 object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
+  //case object Joining extends NodeState
   case object PendingDownload extends NodeState
   case object ReadyForDownload extends NodeState
   case object DownloadInProgress extends NodeState
@@ -28,6 +29,8 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
   val offlineStates: Set[NodeState] = Set(Offline)
 
   val invalidForJoining: Set[NodeState] = Set(Leaving, Offline)
+
+  val initiallyJoining: Set[NodeState] = Set(PendingDownload, ReadyForDownload)
 
   val validDuringDownload: Set[NodeState] =
     Set(ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync)
@@ -62,6 +65,8 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
   def isNotOffline(current: NodeState): Boolean = !offlineStates.contains(current)
 
   def isInvalidForJoining(current: NodeState): Boolean = invalidForJoining.contains(current)
+
+  def isInitiallyJoining(current: NodeState): Boolean = initiallyJoining.contains(current)
 
   def canActAsJoiningSource(current: NodeState): Boolean = all.diff(invalidForJoining).contains(current)
 

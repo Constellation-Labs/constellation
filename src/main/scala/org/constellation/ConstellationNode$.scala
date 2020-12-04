@@ -203,7 +203,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
             MetricsEndpoints.peerHealthCheckEndpoints[IO]() <+>
               PeerAuthMiddleware.requestTokenVerifierMiddleware(dao.sessionTokenService)(
                 PeerAuthMiddleware.enforceKnownPeersMiddleware(getKnownPeerId, isIdWhitelisted)(
-                  ClusterEndpoints.peerHealthCheckEndpoints[IO](dao.peerHealthCheck)
+                  HealthCheckEndpoints.peerHealthCheckEndpoints[IO](dao.healthCheckConsensusManager)
                 )
               )
           )
@@ -249,7 +249,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         implicit val ce = IO.ioConcurrentEffect(cs)
 
         BlazeServerBuilder[IO](callbacksHealth)
-          .bindHttp(9003, "0.0.0.0")
+          .bindHttp(nodeConfig.healthHttpPort, "0.0.0.0")
           .withHttpApp(responseLogger(peerHealthCheckRouter))
           .withoutBanner
           .serve
@@ -460,6 +460,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
         httpPort <- getPort(config, httpPortFromArg, "DAG_HTTP_PORT", "http.port")
         peerHttpPort <- getPort(config, peerHttpPortFromArg, "DAG_PEER_HTTP_PORT", "http.peer-port")
+        healthHttpPort <- getPort(config, None, "DAG_HEALTH_HTTP_PORT", "http.health-port")
 
         allocAccountBalances <- getAllocAccountBalances(cliConfig)
         _ <- logger.debug(s"Alloc: $allocAccountBalances")
@@ -481,6 +482,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           httpInterface = config.getString("http.interface"),
           httpPort = httpPort,
           peerHttpPort = peerHttpPort,
+          healthHttpPort = healthHttpPort,
           defaultTimeoutSeconds = config.getInt("default-timeout-seconds"),
           attemptDownload = !cliConfig.genesisNode,
           cliConfig = cliConfig,
