@@ -13,28 +13,19 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.healthcheck.HealthCheckConsensusManager
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
-import org.constellation.infrastructure.snapshot.{
-  SnapshotInfoLocalStorage,
-  SnapshotInfoS3Storage,
-  SnapshotLocalStorage,
-  SnapshotS3Storage
-}
+import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotInfoS3Storage, SnapshotLocalStorage, SnapshotS3Storage}
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
@@ -114,6 +105,7 @@ class DAO(
   var redownloadService: RedownloadService[IO] = _
   var downloadService: DownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
+  var healthCheckConsensusManager: HealthCheckConsensusManager[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _
@@ -263,7 +255,10 @@ class DAO(
         Blocker.liftExecutionContext(unboundedHealthExecutionContext)
       )(ce, timer, cs)
     }
-    peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck, unboundedHealthExecutionContext)
+
+    healthCheckConsensusManager = new HealthCheckConsensusManager(id, apiClient, Blocker.liftExecutionContext(unboundedHealthExecutionContext), cluster, peerHealthCheck)
+
+    peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, healthCheckConsensusManager, unboundedHealthExecutionContext)
 
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,

@@ -14,6 +14,7 @@ class ClientInterpreter[F[_]: Concurrent: ContextShift](
   val checkpoint: CheckpointClientAlgebra[F] = CheckpointClientInterpreter[F](client, sessionTokenService)
   val cluster: ClusterClientAlgebra[F] = ClusterClientInterpreter[F](client, sessionTokenService)
   val consensus: ConsensusClientAlgebra[F] = ConsensusClientInterpreter[F](client, sessionTokenService)
+  val healthcheck: HealthCheckClientAlgebra[F] = HealthCheckClientInterpreter[F](client, sessionTokenService)
   val metrics: MetricsClientAlgebra[F] = MetricsClientInterpreter[F](client, sessionTokenService)
   val nodeMetadata: NodeMetadataClientAlgebra[F] = NodeMetadataClientInterpreter[F](client, sessionTokenService)
   val observation: ObservationClientAlgebra[F] = ObservationClientInterpreter[F](client, sessionTokenService)

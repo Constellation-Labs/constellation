@@ -11,11 +11,13 @@ import constellation._
 import enumeratum._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
+//import io.circe.{Codec, Decoder, Encoder}
 import io.circe.generic.semiauto._
 import org.constellation._
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster.ClusterNode
+//import org.constellation.p2p.Cluster.{ClusterNode, HealthcheckInProgress, JoiningError}
 import org.constellation.schema.{Id, NodeState, PeerNotification}
 import org.constellation.serializer.KryoSerializer
 import org.constellation.util.Logging._
@@ -118,6 +120,7 @@ class Cluster[F[_]](
   private val participatedInGenesisFlow: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
   private val participatedInRollbackFlow: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
   private val joinedAsInitialFacilitator: Ref[F, Option[Boolean]] = Ref.unsafe[F, Option[Boolean]](None)
+  //private val isHealtcheckConsensusInProgress: Ref[F, Boolean] = Ref.unsafe(false)
 
   private val initialState: NodeState =
     if (dao.nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
@@ -132,6 +135,8 @@ class Cluster[F[_]](
 
   dao.metrics.updateMetricAsync[IO]("nodeState", initialState.toString).unsafeRunAsync(_ => ())
   private val stakingAmount = ConfigUtil.getOrElse("constellation.staking-amount", 0L)
+
+  //def setHealthcheckConsensusStatus = isHealtcheckConsensusInProgress.modify(_ => (true, ()))
 
   def setJoinedAsInitialFacilitator(joined: Boolean): F[Unit] =
     joinedAsInitialFacilitator.modify { j =>
@@ -726,10 +731,10 @@ class Cluster[F[_]](
         state <- nodeState.get
         _ <- if (NodeState.canJoin(state)) F.unit else F.raiseError(new Throwable("Node attempted to double join"))
         _ <- clearServicesBeforeJoin()
-        _ <- attemptRegisterPeer(hp)
+        _ <- attemptRegisterPeer(hp) // I would consider making it a recursive process or something similar, so that we wait until it finishes the joining flow, we wouldn't have to wait with T.sleep(...) and we would know that initiall joining succeeded
         _ <- T.sleep(15.seconds)
-        _ <- LiftIO[F].liftIO(dao.downloadService.download())
-        _ <- broadcastOwnJoinedHeight()
+        _ <- LiftIO[F].liftIO(dao.downloadService.download()) // we are currently setting node to Ready as a part of download
+        _ <- broadcastOwnJoinedHeight() // I would consider if setting it to Ready along with broadcasting joining height isn't more correct, we can treat PendingDownload and ReadyForDownload as "JoiningInProgress" states
       } yield (),
       "cluster_join"
     )
@@ -857,4 +862,29 @@ object Cluster {
     implicit val clusterNodeDecoder: Decoder[ClusterNode] = deriveDecoder
   }
 
+//  sealed trait JoiningError extends Exception
+//  object JoiningError {
+//    implicit val joiningErrorEncoder: Encoder[JoiningError] = Encoder.instance {
+//      case a @ HealthcheckInProgress(_) => a.asJson
+//    }
+//
+//    implicit val joiningErrorDecoder: Decoder[JoiningError] =
+//      List[Decoder[JoiningError]](
+//        Decoder[HealthcheckInProgress].widen
+//      ).reduceLeft(_.or(_))
+//  }
+//
+//  case class HealthcheckInProgress(ownId: Id) extends JoiningError {
+//    override def getMessage: String = s"Peer id=$ownId is currently taking part in healtcheck consensus and can't join another node."
+//  }
+//  object HealthcheckInProgress {
+//    implicit val healthcheckInProgressCodec: Codec[HealthcheckInProgress] = deriveCodec[HealthcheckInProgress]
+//  }
+//
+  object EitherCodec {
+    implicit def eitherEncoder[A, B](implicit a: Encoder[A], b: Encoder[B]): Encoder[Either[A, B]] =
+      Encoder.encodeEither("left", "right")
+    implicit def eitherDecoder[A, B](implicit a: Decoder[A], b: Decoder[B]): Decoder[Either[A, B]] =
+      Decoder.decodeEither("left", "right")
+  }
 }
