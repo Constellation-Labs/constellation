@@ -28,7 +28,7 @@ class PeerHealthCheckTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  /*implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
@@ -146,5 +146,5 @@ class PeerHealthCheckTest
 
       cluster.broadcastOfflineNodeState(*).was(called)
     }
-  }
+  }*/
 }

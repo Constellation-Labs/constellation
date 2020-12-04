@@ -19,6 +19,7 @@ case class NodeConfig(
   httpInterface: String = "0.0.0.0",
   httpPort: Int = 9000,
   peerHttpPort: Int = 9001,
+  healthHttpPort: Int = 9003,
   defaultTimeoutSeconds: Int = 5,
   attemptDownload: Boolean = false,
   allowLocalhostPeers: Boolean = false,

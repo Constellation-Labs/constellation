@@ -13,6 +13,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.healthcheck.HealthCheckConsensusManager
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
 import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
@@ -114,6 +115,7 @@ class DAO(
   var redownloadService: RedownloadService[IO] = _
   var downloadService: DownloadService[IO] = _
   var peerHealthCheck: PeerHealthCheck[IO] = _
+  var healthCheckConsensusManager: HealthCheckConsensusManager[IO] = _
   var peerHealthCheckWatcher: PeerHealthCheckWatcher = _
   var consensusRemoteSender: ConsensusRemoteSender[IO] = _
   var consensusManager: ConsensusManager[IO] = _
@@ -259,11 +261,28 @@ class DAO(
         cluster,
         apiClient,
         metrics,
-        Blocker.liftExecutionContext(unboundedExecutionContext),
-        Blocker.liftExecutionContext(unboundedHealthExecutionContext)
+        Blocker.liftExecutionContext(unboundedHealthExecutionContext),
+        healthHttpPort = nodeConfig.healthHttpPort.toString
       )(ce, timer, cs)
     }
-    peerHealthCheckWatcher = PeerHealthCheckWatcher(ConfigUtil.config, peerHealthCheck, unboundedHealthExecutionContext)
+
+    healthCheckConsensusManager = {
+      val cs = IO.contextShift(unboundedHealthExecutionContext)
+      val ce = IO.ioConcurrentEffect(cs)
+      val timer = IO.timer(unboundedHealthExecutionContext)
+
+      HealthCheckConsensusManager[IO](
+        id,
+        cluster,
+        peerHealthCheck,
+        apiClient,
+        Blocker.liftExecutionContext(unboundedHealthExecutionContext),
+        healthHttpPort = nodeConfig.healthHttpPort.toString
+      )(ce, cs, timer)
+    }
+
+    peerHealthCheckWatcher =
+      PeerHealthCheckWatcher(ConfigUtil.config, healthCheckConsensusManager, unboundedHealthExecutionContext)
 
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,
