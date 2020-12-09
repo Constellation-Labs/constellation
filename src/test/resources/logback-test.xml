@@ -1,10 +1,31 @@
 <configuration>
-    <jmxConfigurator />
+    <jmxConfigurator/>
 
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] [%X{node_id}] %highlight(%-5level) %cyan(%logger{15}) - %msg %n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] [%X{node_id}] %highlight(%-5level) %cyan(%logger{15}) - %msg %n
+            </pattern>
         </encoder>
+    </appender>
+
+    <appender name="splunk" class="com.splunk.logging.HttpEventCollectorLogbackAppender">
+        <url>https://prd-p-2t3gb.splunkcloud.com:8088</url>
+        <token>7bf6eac2-d79f-4f74-8c2a-ba62da9306b6</token>
+        <index>main</index>
+        <disableCertificateValidation>true</disableCertificateValidation>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>%msg</pattern>
+        </layout>
+    </appender>
+
+    <appender name="GELF" class="de.siegmar.logbackgelf.GelfTcpAppender">
+        <graylogHost>127.0.0.1</graylogHost>
+        <graylogPort>12201</graylogPort>
+    </appender>
+
+    <!-- Use AsyncAppender to prevent slowdowns -->
+    <appender name="ASYNC GELF" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="GELF"/>
     </appender>
 
     <property name="HOME_LOG" value="logs/app.log"/>
@@ -34,10 +55,6 @@
     </logger>
 
     <logger name="org.constellation" level="debug">
-        <appender-ref ref="console" />
-    </logger>
-
-    <logger name="org.constellation" level="debug">
-        <appender-ref ref="rollingFile" />
+        <appender-ref ref="ASYNC GELF"/>
     </logger>
 </configuration>
