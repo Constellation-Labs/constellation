@@ -62,7 +62,7 @@ lazy val coreSettings = Seq(
 lazy val http4sClientDependencies = Seq(
   "org.http4s" %% "http4s-dsl",
   "org.http4s" %% "http4s-blaze-client",
-  "org.http4s" %% "http4s-circe",
+  "org.http4s" %% "http4s-circe"
 ).map(_ % versions.http4s)
 
 lazy val http4sDependencies = Seq(
@@ -199,6 +199,8 @@ lazy val schema = (project in file("schema"))
   .enablePlugins(BuildInfoPlugin)
   .dependsOn(keytool)
   .settings(
+    commonSettings,
+    name := "schema",
     buildInfoKeys := Seq[BuildInfoKey](
       version
     ),
