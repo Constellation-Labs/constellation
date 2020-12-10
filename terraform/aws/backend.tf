@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
-    bucket = "constellationlabs-dag"
-    key = "terraform.tfstate"
+    bucket = "constellationlabs-tf"
+    key = "cluster"
     region = "us-west-1"
   }
 }

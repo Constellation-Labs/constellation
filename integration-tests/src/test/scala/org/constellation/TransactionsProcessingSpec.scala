@@ -24,6 +24,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
+import org.scalatest.tagobjects.Slow
 
 import scala.concurrent.ExecutionContext.global
 
