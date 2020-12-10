@@ -21,7 +21,7 @@ import scala.io.Source
 
 class DownloadSpec extends AnyFreeSpec with CustomMatchers with TestConfig with TerraformOutput with Eventually {
 
-  val logger = Slf4jLogger.getLogger[IO]
+  private val logger = Slf4jLogger.getLogger[IO]
 
   override implicit val patienceConfig: PatienceConfig =
     PatienceConfig(
@@ -42,33 +42,33 @@ class DownloadSpec extends AnyFreeSpec with CustomMatchers with TestConfig with 
 
   private val instanceIp: String = terraform.instanceIps.value.last
 
-//  "restarting a node and joining cluster" in {
-//    terraform.instanceIps.value.length should be > 3
-//
-//    val stopCmd = getResourceAsString("scripts/stop.sh")
-//    evalSSHCommand(stopCmd)
-//
-//    eventually {
-//      getClusterNodesState should contain only (Offline)
-//    }
-//
-//    eventually(Timeout(1 hour)) {
-//      getClusterNodesState shouldBe empty
-//    }
-//
-//    val startCmd = getResourceAsString("scripts/start.sh")
-//    evalSSHCommand(startCmd)
-//
-//    eventually {
-//      NodeState.validForDownload should contain (getNodeState)
-//    }
-//
-//    val headIP = s"headIP=${terraform.instanceIps.value.head};"
-//    val joinCmd = getResourceAsString("scripts/join.sh")
-//    evalSSHCommand(headIP + joinCmd)
-//
-//    eventually { NodeState.readyStates should contain (getNodeState) }
-//  }
+  "restarting a node and joining cluster" in {
+    terraform.instanceIps.value.length should be > 3
+
+    val stopCmd = getResourceAsString("scripts/stop.sh")
+    evalSSHCommand(stopCmd)
+
+    eventually {
+      getClusterNodesState should contain only (Offline)
+    }
+
+    eventually(Timeout(1 hour)) {
+      getClusterNodesState shouldBe empty
+    }
+
+    val startCmd = getResourceAsString("scripts/start.sh")
+    evalSSHCommand(startCmd)
+
+    eventually {
+      NodeState.validForDownload should contain (getNodeState)
+    }
+
+    val headIP = s"headIP=${terraform.instanceIps.value.head};"
+    val joinCmd = getResourceAsString("scripts/join.sh")
+    evalSSHCommand(headIP + joinCmd)
+
+    eventually { NodeState.readyStates should contain (getNodeState) }
+  }
 
   private def getResourceAsString(resourcePath: String) = Source.fromResource(resourcePath).getLines().mkString("\n")
 

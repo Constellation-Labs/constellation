@@ -56,12 +56,8 @@ jobs:
       - name: Start cluster
         id: start_cluster
         run: |
-          sudo service ssh restart
           eval $(ssh-agent -s)
           ssh-add ~/.ssh/id_rsa
-          cat /home/runner/.ssh/config
-          cat /etc/ssh/ssh_config
-          ssh -v 54.177.165.53  "ls /tmp"
           pushd terraform/aws
           export EXECUTION_TAG=$(git describe --exact-match --tags 2>/dev/null || git rev-parse --short HEAD)-$RANDOM
           terraform init
@@ -79,20 +75,16 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "---------------------------------------"
-          cat integration-tests/src/test/resources/terraform-output.json
-          echo "+++++++++++++++++++++++++++++++++++++++"
-          sleep 180
           sbt integrationTests/test
 
       - name: Save logs
         if: ${{ always() }}
         run: |
           mkdir -p /tmp/upload
-          while read INSTANCE_IP; do
-            mkdir -p "/tmp/upload/$INSTANCE_IP"
-            scp -o StrictHostKeyChecking=no -r admin@$ip:/home/admin/constellation/logs/ "/tmp/upload/$INSTANCE_IP/"
-          done < terraform/aws/${{ steps.start_cluster.output.tf_workspace }}
+          while read IP; do
+            mkdir -p "/tmp/upload/$IP"
+            scp -o StrictHostKeyChecking=no -r admin@$IP:/home/admin/constellation/logs/ "/tmp/upload/$IP/"
+          done < terraform/aws/hosts-${{ steps.start_cluster.output.tf_workspace }}
           aws s3 sync /tmp/upload/ "s3://constellationlabs-dag/logs/${{ steps.start_cluster.output.tf_workspace }}"
 
       - name: Destroy the environment
