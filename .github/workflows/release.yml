@@ -24,7 +24,7 @@ jobs:
           java-version: 1.8
       - name: Assemble assets
         run: |
-          sbt "++ 2.12.10" "keytool/assembly" "++ 2.12.10" "wallet/assembly"
+          sbt "++ 2.12.10" "keytool/assembly" "++ 2.12.10" "wallet/assembly" "++ 2.12.10" "schema/assembly"
           mkdir -p ./src/main/resources/ui/
           cd ui && sbt clean fullOptJS && cd ..
           cp ./ui/target/scala-2.12/*js* ./src/main/resources/ui/
@@ -34,6 +34,7 @@ jobs:
         run: |
           cp ./keytool/target/scala-2.12/keytool-assembly-${{ steps.tagName.outputs.tag }}.jar docker/keytool/cl-keytool.jar
           cp ./wallet/target/scala-2.12/wallet-assembly-${{ steps.tagName.outputs.tag }}.jar docker/wallet/cl-wallet.jar
+          cp ./schema/target/scala-2.12/schema-assembly-${{ steps.tagName.outputs.tag }}.jar docker/schema/cl-schema.jar
           cp ./target/scala-2.12/constellation-assembly-${{ steps.tagName.outputs.tag }}.jar docker/node/cl-node.jar
 
       - name: Upload release assets
@@ -46,6 +47,7 @@ jobs:
           files: |
             docker/keytool/cl-keytool.jar
             docker/wallet/cl-wallet.jar
+            docker/schema/cl-schema.jar
             docker/node/cl-node.jar
             main-net/mainnet-whitelisting
         env:
