@@ -57,6 +57,7 @@ class DoubleSpendValidationTest
       ss,
       cps,
       tv,
+      transactionChainService,
       dao
     )
 

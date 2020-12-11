@@ -6,7 +6,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
-import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator}
 import org.constellation.consensus.Consensus.{
   ConsensusDataProposal,
   ConsensusProposal,
@@ -46,7 +46,7 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
   private def handleProposal(
     proposal: ConsensusProposal,
     consensusManager: ConsensusManager[F],
-    transactionService: TransactionService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ): F[Response[F]] =
     consensusManager.getRound(proposal.roundId).flatMap {
       case None =>
@@ -56,7 +56,7 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
           case proposal: ConsensusDataProposal =>
             CheckpointAcceptanceService
               .areTransactionsAllowedForAcceptance[F](proposal.transactions.toList)(
-                transactionService.transactionChainService
+                checkpointBlockValidator
               )
               .ifM(F.start(consensus.addConsensusDataProposal(proposal)) >> Accepted(), BadRequest())
           case proposal: UnionBlockProposal =>
@@ -98,49 +98,49 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
 
   private def addConsensusDataProposalEndpoint(
     consensusManager: ConsensusManager[F],
-    transactionService: TransactionService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "block-round" / "proposal" =>
       for {
         proposal <- req.decodeJson[ConsensusDataProposal]
         _ <- logger.debug(s"ConsensusDataProposal adding proposal for round ${proposal.roundId}")
-        response <- handleProposal(proposal, consensusManager, transactionService)
+        response <- handleProposal(proposal, consensusManager, checkpointBlockValidator)
       } yield response
   }
 
   private def addUnionBlockEndpoint(
     consensusManager: ConsensusManager[F],
-    transactionService: TransactionService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "block-round" / "union" =>
       for {
         proposal <- req.decodeJson[UnionBlockProposal]
         _ <- logger.debug(s"UnionBlockProposal adding proposal for round ${proposal.roundId}")
-        response <- handleProposal(proposal, consensusManager, transactionService)
+        response <- handleProposal(proposal, consensusManager, checkpointBlockValidator)
       } yield response
   }
 
   private def addSelectedUnionBlockEndpoint(
     consensusManager: ConsensusManager[F],
-    transactionService: TransactionService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "block-round" / "selected" =>
       for {
         proposal <- req.decodeJson[SelectedUnionBlock]
         _ <- logger.debug(s"SelectedUnionBlock adding proposal for round ${proposal.roundId}")
-        response <- handleProposal(proposal, consensusManager, transactionService)
+        response <- handleProposal(proposal, consensusManager, checkpointBlockValidator)
       } yield response
   }
 
   def peerEndpoints(
     consensusManager: ConsensusManager[F],
     snapshotService: SnapshotService[F],
-    transactionService: TransactionService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ) =
     participateInNewRoundEndpoint(consensusManager, snapshotService) <+>
-      addConsensusDataProposalEndpoint(consensusManager, transactionService) <+>
-      addUnionBlockEndpoint(consensusManager, transactionService) <+>
-      addSelectedUnionBlockEndpoint(consensusManager, transactionService)
+      addConsensusDataProposalEndpoint(consensusManager, checkpointBlockValidator) <+>
+      addUnionBlockEndpoint(consensusManager, checkpointBlockValidator) <+>
+      addSelectedUnionBlockEndpoint(consensusManager, checkpointBlockValidator)
 
 }
 
@@ -149,7 +149,7 @@ object ConsensusEndpoints {
   def peerEndpoints[F[_]: Concurrent: ContextShift](
     consensusManager: ConsensusManager[F],
     snapshotService: SnapshotService[F],
-    transactionService: TransactionService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ): HttpRoutes[F] =
-    new ConsensusEndpoints[F]().peerEndpoints(consensusManager, snapshotService, transactionService)
+    new ConsensusEndpoints[F]().peerEndpoints(consensusManager, snapshotService, checkpointBlockValidator)
 }
