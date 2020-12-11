@@ -3,19 +3,19 @@ package org.constellation.domain.checkpointBlock
 import cats.data.Validated
 import cats.effect.concurrent.Ref
 import cats.effect.{ContextShift, IO}
-import cats.syntax.all._
+import cats.implicits._
+import cats.syntax._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointParentService, InsufficientBalance}
-import org.constellation.domain.transaction.{TransactionService, TransactionValidator}
-import org.constellation.schema.Schema._
-import org.constellation.schema.address.AddressCacheData
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService, TransactionValidator}
+import org.constellation.schema.address.{Address, AddressCacheData}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointEdge, CheckpointEdgeData}
-import org.constellation.schema.signature.HashSignature
 import org.constellation.schema.edge.{Edge, ObservationEdge, SignedObservationEdge}
+import org.constellation.schema.signature.HashSignature
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
-import org.constellation.{ConstellationExecutionContext, DAO, Fixtures, TestHelpers}
+import org.constellation.{DAO, Fixtures, TestHelpers}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfter
@@ -38,9 +38,25 @@ class CheckpointBlockValidatorTest
   var snapService: SnapshotService[IO] = _
   var addressService: AddressService[IO] = _
   var transactionService: TransactionService[IO] = _
+  var transactionChainService: TransactionChainService[IO] = _
   var checkpointParentService: CheckpointParentService[IO] = _
   var transactionValidator: TransactionValidator[IO] = _
   var cbValidator: CheckpointBlockValidator[IO] = _
+
+  /** Represents transaction's `prevHash` and `hash` respectively */
+  type Link = (String, String)
+
+  def createTxs(ordinal: Long)(entry: (String, List[Link])): List[Transaction] =
+    entry match {
+      case (src, (prevHash, hash) :: tail) =>
+        val tx = mock[Transaction]
+        tx.src shouldReturn Address(src)
+        tx.hash shouldReturn hash
+        tx.ordinal shouldReturn ordinal
+        tx.lastTxRef shouldReturn LastTransactionRef(prevHash, ordinal - 1)
+        tx :: createTxs(ordinal + 1)((src, tail))
+      case (_, Nil) => List.empty
+    }
 
   before {
     dao = TestHelpers.prepareMockedDAO()
@@ -49,12 +65,66 @@ class CheckpointBlockValidatorTest
     transactionService = mock[TransactionService[IO]]
     checkpointParentService = mock[CheckpointParentService[IO]]
     transactionValidator = mock[TransactionValidator[IO]]
-    cbValidator =
-      new CheckpointBlockValidator[IO](addressService, snapService, checkpointParentService, transactionValidator, dao)
+    transactionChainService = mock[TransactionChainService[IO]]
+    cbValidator = new CheckpointBlockValidator[IO](
+      addressService,
+      snapService,
+      checkpointParentService,
+      transactionValidator,
+      transactionChainService,
+      dao
+    )
     snapService.lastSnapshotHeight shouldReturn Ref.unsafe(1)
+    transactionChainService.getLastAcceptedTransactionRef("src") shouldReturn LastTransactionRef("a", 0).pure[IO]
+    transactionChainService.getLastAcceptedTransactionRef("SRC") shouldReturn LastTransactionRef("A", 0).pure[IO]
+  }
+
+  "validateLastTxRefChain" - {
+    "should pass validation when transactions form a consistent chain" in {
+      val txs = List(
+        "src" -> List("a" -> "b", "b" -> "c", "c" -> "d"),
+        "SRC" -> List("A" -> "B", "B" -> "C")
+      ).flatMap(createTxs(1))
+
+      val result = cbValidator.validateLastTxRefChain(txs).unsafeRunSync
+
+      result.isValid shouldBe true
+    }
+
+    "should fail validation when link b -> c is missing" in {
+      val txs = List(
+        "src" -> List("a" -> "b", "c" -> "d"),
+        "SRC" -> List("A" -> "B", "B" -> "C")
+      ).flatMap(createTxs(1))
+
+      val result = cbValidator.validateLastTxRefChain(txs).unsafeRunSync
+
+      result.isValid shouldBe false
+    }
+
+    "should fail validation when last accepted transaction hash doesn't match the first transaction's prevHash" in {
+      val txs = List(
+        "src" -> List("b" -> "c", "c" -> "d"),
+        "SRC" -> List("A" -> "B", "B" -> "C")
+      ).flatMap(createTxs(1))
+
+      val result = cbValidator.validateLastTxRefChain(txs).unsafeRunSync
+
+      result.isValid shouldBe false
+    }
+
+    "should fail validation when difference between ordinals is greater than 1" in {
+      val txs1 = List("src" -> List("a" -> "b", "b" -> "c")).flatMap(createTxs(1))
+      val txs2 = List("src" -> List("c" -> "d")).flatMap(createTxs(10))
+
+      val result = cbValidator.validateLastTxRefChain(txs1 ++ txs2).unsafeRunSync
+
+      result.isValid shouldBe false
+    }
   }
 
   "invalid checkpoint due to " - {
+
     "empty signatures " in {
       val checkpointBlock: CheckpointBlock = mock[CheckpointBlock]
       val mockHashSignature: HashSignature = mock[HashSignature]

@@ -366,6 +366,7 @@ class DAO(
       snapshotService,
       checkpointParentService,
       transactionValidator,
+      transactionChainService,
       this
     )
 

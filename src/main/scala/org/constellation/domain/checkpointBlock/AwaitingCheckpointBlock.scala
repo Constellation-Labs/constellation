@@ -2,6 +2,7 @@ package org.constellation.domain.checkpointBlock
 
 import cats.effect.Concurrent
 import cats.syntax.all._
+import org.constellation.checkpoint.CheckpointBlockValidator
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.transaction.TransactionChainService
 import org.constellation.genesis.Genesis
@@ -12,10 +13,10 @@ import org.constellation.storage.SOEService
 object AwaitingCheckpointBlock {
 
   def areReferencesAccepted[F[_]: Concurrent](
-    txChainService: TransactionChainService[F]
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   )(cb: CheckpointBlock): F[Boolean] = {
     val txs = cb.transactions.toList
-    areTransactionsAllowedForAcceptance(txs)(txChainService)
+    areTransactionsAllowedForAcceptance(txs)(checkpointBlockValidator)
   }
 
   def areParentsSOEAccepted[F[_]: Concurrent](soeService: SOEService[F])(cb: CheckpointBlock): F[Boolean] = {
@@ -35,19 +36,6 @@ object AwaitingCheckpointBlock {
 
   private def areTransactionsAllowedForAcceptance[F[_]: Concurrent](
     txs: List[Transaction]
-  )(txChainService: TransactionChainService[F]): F[Boolean] =
-    txs
-      .groupBy(_.src.address)
-      .mapValues(_.sortBy(_.ordinal))
-      .toList
-      .pure[F]
-      .flatMap { t =>
-        t.traverse {
-          case (hash, txs) =>
-            txChainService
-              .getLastAcceptedTransactionRef(hash)
-              .map(txs.headOption.map(_.lastTxRef).contains)
-        }
-      }
-      .map(_.forall(_ == true))
+  )(checkpointBlockValidator: CheckpointBlockValidator[F]): F[Boolean] =
+    checkpointBlockValidator.validateLastTxRefChain(txs).map(_.isValid)
 }

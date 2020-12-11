@@ -152,7 +152,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking missing references")
         _ <- AwaitingCheckpointBlock
-          .areReferencesAccepted(transactionService.transactionChainService)(cb)
+          .areReferencesAccepted(checkpointBlockValidator)(cb)
           .ifM(
             logConditions(cb, true) >> Sync[F].unit,
             logConditions(cb, false) >>
@@ -238,7 +238,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         allowedToAccept <- awaitingBlocks.toList.filterA { c =>
           AwaitingCheckpointBlock.areParentsSOEAccepted(checkpointParentService.soeService)(c.checkpointBlock)
         }.flatMap(_.filterA { c =>
-            AwaitingCheckpointBlock.areReferencesAccepted(transactionService.transactionChainService)(c.checkpointBlock)
+            AwaitingCheckpointBlock.areReferencesAccepted(checkpointBlockValidator)(c.checkpointBlock)
           })
           .flatMap(_.filterA { c =>
             AwaitingCheckpointBlock.hasNoBlacklistedTxs(c.checkpointBlock)(blacklistedAddresses)
@@ -416,10 +416,13 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
     cb.transactions.toList
       .filterNot(h => txsHashToFilter.contains(h.hash))
+      .groupBy(_.src.address)
+      .mapValues(_.sortBy(_.ordinal))
+      .values
+      .flatten
+      .toList
       .map(tx => (tx, toCacheData(tx)))
-      .traverse {
-        case (tx, txMetadata) => transactionService.accept(txMetadata, cpc) >> transfer(tx)
-      }
+      .traverse { case (tx, txMetadata) => transactionService.accept(txMetadata, cpc) >> transfer(tx) }
       .void
   }
 
@@ -494,35 +497,13 @@ object CheckpointAcceptanceService {
 
   def isCheckpointBlockAllowedForAcceptance[F[_]: Concurrent](
     cb: CheckpointBlock
-  )(txChainService: TransactionChainService[F]) =
-    areTransactionsAllowedForAcceptance(cb.transactions.toList)(txChainService)
+  )(checkpointBlockValidator: CheckpointBlockValidator[F]) =
+    areTransactionsAllowedForAcceptance(cb.transactions.toList)(checkpointBlockValidator)
 
   def areTransactionsAllowedForAcceptance[F[_]: Concurrent](
     txs: List[Transaction]
-  )(txChainService: TransactionChainService[F]): F[Boolean] =
-    txs
-      .groupBy(_.src.address)
-      .mapValues(_.sortBy(_.ordinal))
-      .toList
-      .pure[F]
-      .flatMap { t =>
-        t.traverse {
-          case (hash, txs) =>
-            txChainService
-              .getLastAcceptedTransactionRef(hash)
-              .map {
-                latr =>
-                  txs.foldLeft(latr.some) {
-                    case (maybePrev, tx) =>
-                      for {
-                        prev <- maybePrev
-                        txPrev <- tx.lastTxRef.some if prev == txPrev
-                      } yield LastTransactionRef(tx.hash, tx.ordinal)
-                  }
-              }
-        }
-      }
-      .map(_.forall(_.isDefined))
+  )(checkpointBlockValidator: CheckpointBlockValidator[F]): F[Boolean] =
+    checkpointBlockValidator.validateLastTxRefChain(txs).map(_.isValid)
 
   def getMissingTransactionReferences[F[_]: Concurrent](cb: CheckpointBlock)(
     txChainService: TransactionChainService[F]

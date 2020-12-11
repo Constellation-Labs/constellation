@@ -1,18 +1,18 @@
 package org.constellation.checkpoint
 
 import cats.data.{Ior, NonEmptyList, ValidatedNel}
-import cats.effect.{IO, Sync}
+import cats.effect.{Concurrent, IO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
-import io.circe.syntax._
 import io.circe.generic.semiauto._
-import org.constellation.domain.transaction.TransactionValidator
-import org.constellation.schema.signature.HashSignature
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionValidator}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.edge.{ObservationEdge, SignedObservationEdge}
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, DAO}
@@ -121,6 +121,7 @@ class CheckpointBlockValidator[F[_]: Sync](
   snapshotService: SnapshotService[F],
   checkpointParentService: CheckpointParentService[F],
   transactionValidator: TransactionValidator[F],
+  txChainService: TransactionChainService[F],
   dao: DAO
 ) {
 
@@ -159,6 +160,30 @@ class CheckpointBlockValidator[F[_]: Sync](
     t: Iterable[Transaction]
   ): F[ValidationResult[List[Transaction]]] =
     t.toList.traverse(validateTransaction).map(x => x.map(_.map(List(_)))).map(_.combineAll)
+
+  def validateLastTxRefChain(txs: Iterable[Transaction]): F[ValidationResult[List[Transaction]]] =
+    txs
+      .groupBy(_.src.address)
+      .mapValues(_.toList.sortBy(_.ordinal))
+      .toList
+      .pure[F]
+      .flatMap { t =>
+        t.traverse {
+          case (hash, txs) =>
+            txChainService
+              .getLastAcceptedTransactionRef(hash)
+              .map { latr =>
+                txs.foldLeft(latr.some) {
+                  case (maybePrev, tx) =>
+                    for {
+                      prev <- maybePrev
+                      txPrev <- tx.lastTxRef.some if prev == txPrev
+                    } yield LastTransactionRef(tx.hash, tx.ordinal)
+                }
+              }
+        }
+      }
+      .map(chain => if (chain.forall(_.isDefined)) txs.toList.validNel else TransactionChainIncorrect().invalidNel)
 
   def validateDuplicatedTransactions(
     t: Iterable[Transaction]
@@ -349,6 +374,7 @@ object CheckpointBlockValidation {
     case a @ DuplicatedTransaction(_)    => a.asJson
     case a @ NoAddressCacheFound(_, _)   => a.asJson
     case a @ InsufficientBalance(_)      => a.asJson
+    case a @ TransactionChainIncorrect() => a.asJson
   }
 
   implicit val decodeCheckpointBlockValidation: Decoder[CheckpointBlockValidation] =
@@ -359,7 +385,8 @@ object CheckpointBlockValidation {
       Decoder[InvalidCheckpointHash].widen,
       Decoder[DuplicatedTransaction].widen,
       Decoder[NoAddressCacheFound].widen,
-      Decoder[InsufficientBalance].widen
+      Decoder[InsufficientBalance].widen,
+      Decoder[TransactionChainIncorrect].widen
     ).reduceLeft(_.or(_))
 
 }
@@ -406,6 +433,10 @@ case class InvalidCheckpointHash(oe: ObservationEdge, soe: SignedObservationEdge
     s"CheckpointBlock received has incompatible hashes with ObservationEdge=$oe and SignedObservationEdge=$soe"
 }
 
+case class TransactionChainIncorrect() extends CheckpointBlockValidation {
+  override def errorMessage: String = s"Transaction chain incorrect"
+}
+
 object InvalidCheckpointHash {
 
   def apply(c: CheckpointBlock) =
@@ -426,6 +457,11 @@ object DuplicatedTransaction {
 
   implicit val duplicatedTransactionEncoder: Encoder[DuplicatedTransaction] = deriveEncoder
   implicit val duplicatedTransactionDecoder: Decoder[DuplicatedTransaction] = deriveDecoder
+}
+
+object TransactionChainIncorrect {
+  implicit val transactionsChainIncorrectEncoder: Encoder[TransactionChainIncorrect] = deriveEncoder
+  implicit val transactionsChainIncorrectDecoder: Decoder[TransactionChainIncorrect] = deriveDecoder
 }
 
 case class NoAddressCacheFound(txHash: String, srcAddress: String) extends CheckpointBlockValidation {

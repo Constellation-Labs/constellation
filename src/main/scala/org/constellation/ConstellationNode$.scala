@@ -145,7 +145,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       ) <+>
         ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
         ConsensusEndpoints
-          .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.transactionService) <+>
+          .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.checkpointBlockValidator) <+>
         ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
         SnapshotEndpoints.peerEndpoints[IO](
           dao.id,

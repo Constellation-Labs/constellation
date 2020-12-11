@@ -60,6 +60,7 @@ class TransactionMaxValueTest
         ss,
         cps,
         tv,
+        transactionChainService,
         dao
       )
 

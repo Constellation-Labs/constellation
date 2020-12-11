@@ -2,17 +2,19 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Validation of transactions ordinal chain during block acceptance
+### Changed
+- Order of block transaction acceptance (based on ordinal)
 
 ## [v2.20.0] 2020-12-15
+### Added
+- Reference implementation of concise transaction data format
+- Reference implementation of bip44
 ### Changed
 - Remove two node operators
 - Skip removing genesis tips
 - Objects in mem-pool no longer expire after some time
-### Added
-- Reference implementation of concise transaction data format
-- Reference implementation of bip44
-
-### Changed
 - Removed twitter chill and algebird from wallet dependencies and moved them to schema and core
 - Small rearrangement of dependencies in build file
 
