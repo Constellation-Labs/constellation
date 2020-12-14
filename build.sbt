@@ -152,7 +152,9 @@ lazy val walletSharedDependencies = bitcoinjDependencies ++ sharedDependencies
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ twitterChillDependencies
 
-lazy val integrationTestsSharedDependencies = spongyCastleDependencies ++ sharedDependencies ++ fs2Dependencies ++ http4sClientDependencies ++ pureconfigDependencies
+lazy val integrationTestsSharedDependencies = Seq (
+ "com.decodified" %% "scala-ssh" % "0.10.0" % "it,test"
+) ++ spongyCastleDependencies ++ sharedDependencies ++ fs2Dependencies ++ http4sClientDependencies ++ pureconfigDependencies
 
 lazy val coreDependencies = Seq(
   ("com.github.pathikrit" %% "better-files" % versions.betterFiles).withSources().withJavadoc(),
@@ -252,6 +254,8 @@ lazy val integrationTests = (project in file("integration-tests"))
   .dependsOn(wallet)
   .configs(IntegrationTest)
   .settings(
+    parallelExecution in Test := false,
+    parallelExecution in IntegrationTest := false,
     Defaults.itSettings,
     libraryDependencies ++= (integrationTestsSharedDependencies ++ testDependencies)
   )

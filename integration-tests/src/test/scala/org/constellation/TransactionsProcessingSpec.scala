@@ -7,14 +7,14 @@ import cats.syntax.all._
 import com.typesafe.scalalogging.StrictLogging
 import fs2.{Pipe, Stream}
 import io.circe.syntax._
+import org.constellation.testutils.HttpUtil.evalRequestForHosts
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.schema.address.AddressCacheData
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
+import org.constellation.testutils.CustomMatchers
 import org.constellation.wallet.{TransactionExt, Wallet}
 import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe.CirceEntityEncoder._
-import org.http4s.client.Client
-import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.client.dsl.io._
 import org.http4s.dsl.io._
 import org.http4s.{EntityDecoder, Request, Uri}
@@ -23,9 +23,8 @@ import org.scalatest.GivenWhenThen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.matchers.{MatchResult, Matcher}
-import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.time.SpanSugar._
+import org.scalatest.tagobjects.Slow
 
 import scala.concurrent.ExecutionContext.global
 
@@ -33,7 +32,7 @@ class TransactionsProcessingSpec
     extends AnyFreeSpec
     with StrictLogging
     with GivenWhenThen
-    with Matchers
+    with CustomMatchers
     with TestConfig
     with TerraformOutput
     with Eventually
@@ -47,14 +46,6 @@ class TransactionsProcessingSpec
       timeout = scaled(2 minutes),
       interval = scaled(5 seconds)
     )
-
-  private val containTheSameElements = (not be empty).and(Matcher { (left: Seq[_]) =>
-    MatchResult(
-      left.forall(_ == left.head),
-      left + " did not contain the same elements",
-      left + " did contain the same elements"
-    )
-  })
 
   "sending transactions from single src address" in {
     // given
@@ -112,7 +103,7 @@ class TransactionsProcessingSpec
       Stream(tx) ++ generateTxs(tx)
     }
 
-    evalRequestForHosts[String] {
+    evalRequestForHosts[String](terraform.instanceIps.value) {
       _.flatMap(Stream(_).repeatN(config.txGen.countPerHost))
         .zipWith(generateTxs(firstTx)) { (host, tx) =>
           POST(tx.asJson, Uri.unsafeFromString(s"http://$host:9000/transaction"))
@@ -122,26 +113,15 @@ class TransactionsProcessingSpec
   }
 
   private def getBalances(address: String) =
-    evalRequestForHosts[AddressCacheData] {
+    evalRequestForHosts[AddressCacheData](terraform.instanceIps.value) {
       _.map(host => GET(Uri.unsafeFromString(s"http://$host:9000/address/$address")))
     }.map(_.balance)
 
-  private def getLasTxRefs(address: String) = evalRequestForHosts[LastTransactionRef] {
+  private def getLasTxRefs(address: String) =
+    evalRequestForHosts[LastTransactionRef](terraform.instanceIps.value) {
     _.map(host => GET(Uri.unsafeFromString(s"http://$host:9000/transaction/last-ref/$address")))
   }
 
-  private def evalRequestForHosts[T](pipe: Pipe[IO, String, IO[Request[IO]]])(implicit ev: EntityDecoder[IO, T]): List[T] = {
-    BlazeClientBuilder[IO](global).resource.use { httpClient =>
-      Stream
-        .emits(terraform.instanceIps.value)
-        .through(pipe)
-        .evalMap { req =>
-          httpClient.expect[T](req)
-        }
-        .compile
-        .toList
-    }
-      .unsafeRunSync()
-  }
+
 
 }
