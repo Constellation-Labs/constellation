@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Remove two node operators
 - Skip removing genesis tips
+- Objects in mem-pool no longer expire after some time
 ### Added
 - Reference implementation of concise transaction data format
 - Reference implementation of bip44

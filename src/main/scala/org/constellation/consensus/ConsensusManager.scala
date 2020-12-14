@@ -68,7 +68,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   )
   private[consensus] val ownConsensus: Ref[F, Option[OwnConsensus[F]]] = Ref.unsafe(None)
   private[consensus] val proposals: StorageService[F, List[ConsensusProposal]] =
-    new StorageService("ConsensusProposal".some, proposalsExpireTimeCache.some)
+    new StorageService("ConsensusProposal".some, proposalsExpireTimeCache.minutes.some)
 
   private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
 

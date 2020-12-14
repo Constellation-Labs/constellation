@@ -19,7 +19,7 @@ class CheckpointService[F[_]: Concurrent](
   private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
 
   private[checkpoint] val memPool =
-    new ConcurrentStorageService[F, CheckpointCacheMetadata](semaphore, "CheckpointMemPool".some, 120.some)
+    new ConcurrentStorageService[F, CheckpointCacheMetadata](semaphore, "CheckpointMemPool".some)
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 

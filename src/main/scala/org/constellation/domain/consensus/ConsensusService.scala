@@ -19,10 +19,7 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
   private val logger = Slf4jLogger.getLogger[F]
 
   protected[domain] val merklePool =
-    new ConcurrentStorageService[F, Seq[String]](
-      createSemaphore(),
-      metricRecordPrefix.map(_ + "_merklePool")
-    )
+    new ConcurrentStorageService[F, Seq[String]](createSemaphore(), metricRecordPrefix.map(_ + "_merklePool"))
 
   val semaphores: Map[String, Semaphore[F]] = Map(
     "inConsensusUpdate" -> Semaphore.in[IO, F](1).unsafeRunSync(),
@@ -37,9 +34,9 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
       .use(thunk)
 
   protected[domain] val pending: PendingMemPool[F, String, A]
-  protected[domain] val inConsensus = new StorageService[F, A](metricRecordPrefix.map(_ + "_inConsensus"), Some(240))
-  protected[domain] val accepted = new StorageService[F, A](metricRecordPrefix.map(_ + "_accepted"), Some(240))
-  protected[domain] val unknown = new StorageService[F, A](metricRecordPrefix.map(_ + "_unknown"), Some(240))
+  protected[domain] val inConsensus = new StorageService[F, A](metricRecordPrefix.map(_ + "_inConsensus"))
+  protected[domain] val accepted = new StorageService[F, A](metricRecordPrefix.map(_ + "_accepted"))
+  protected[domain] val unknown = new StorageService[F, A](metricRecordPrefix.map(_ + "_unknown"))
 
   def applySnapshot(a: List[A], merkleRoot: String): F[Unit] =
     withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>

@@ -11,18 +11,16 @@ import scala.collection.immutable.Queue
 import scala.concurrent.duration._
 
 class StorageService[F[_]: Concurrent, V](
-  metricName: Option[String] = None,
-  expireAfterMinutes: Option[Int] = Some(240)
-) extends StorageAlgebra[F, String, V] {
+   metricName: Option[String] = None,
+   expireAfter: Option[FiniteDuration] = None
+ ) extends StorageAlgebra[F, String, V] {
 
   private val lruCache: Cache[String, V] = {
     val cacheWithStats = metricName.fold(Scaffeine())(_ => Scaffeine().recordStats())
 
-    val cache = expireAfterMinutes
-      .map(mins => cacheWithStats.expireAfterAccess(mins.minutes))
-      .getOrElse(cacheWithStats)
-
-    cache.build[String, V]()
+    expireAfter
+      .fold(cacheWithStats)(cacheWithStats.expireAfterAccess)
+      .build[String, V]()
   }
 
   private val queueRef: Ref[F, Queue[V]] = Ref.unsafe[F, Queue[V]](Queue[V]())

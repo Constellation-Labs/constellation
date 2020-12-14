@@ -13,7 +13,7 @@ class AddressService[F[_]: Concurrent]() {
 
   private val locks = new MultiLock[F, String]()
 
-  private val memPool = new StorageService[F, AddressCacheData]("address_mem_pool".some, None)
+  private val memPool = new StorageService[F, AddressCacheData]("address_mem_pool".some)
 
   def getAll: F[Map[String, AddressCacheData]] = memPool.toMap()
 
