@@ -12,7 +12,7 @@ class SOEService[F[_]: Concurrent]() {
   private val logger = Slf4jLogger.getLogger[F]
 
   private val semaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
-  private val memPool = new ConcurrentStorageService[F, SignedObservationEdge](semaphore, "SoeMemPool".some, 120.some)
+  private val memPool = new ConcurrentStorageService[F, SignedObservationEdge](semaphore, "SoeMemPool".some)
 
   def lookup(key: String): F[Option[SignedObservationEdge]] =
     memPool.lookup(key)

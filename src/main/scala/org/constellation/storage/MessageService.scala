@@ -3,27 +3,19 @@ package org.constellation.storage
 import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.ConstellationExecutionContext.createSemaphore
+import org.constellation.DAO
 import org.constellation.schema.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
-import org.constellation.DAO
 
 class MessageService[F[_]: Concurrent]()(implicit dao: DAO)
     extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
 
-  val merklePool = new ConcurrentStorageService[F, Seq[String]](
-    createSemaphore(),
-    "message_merkle_pool".some
-  )
+  val merklePool = new ConcurrentStorageService[F, Seq[String]](createSemaphore(), "message_merkle_pool".some)
 
-  val arbitraryPool = new ConcurrentStorageService[F, ChannelMessageMetadata](
-    createSemaphore(),
-    "message_arbitrary_pool".some
-  )
+  val arbitraryPool =
+    new ConcurrentStorageService[F, ChannelMessageMetadata](createSemaphore(), "message_arbitrary_pool".some)
 
-  val memPool = new ConcurrentStorageService[F, ChannelMessageMetadata](
-    createSemaphore(),
-    "message_mem_pool".some
-  )
+  val memPool = new ConcurrentStorageService[F, ChannelMessageMetadata](createSemaphore(), "message_mem_pool".some)
 
   def put(key: String, value: ChannelMessageMetadata): F[ChannelMessageMetadata] =
     memPool

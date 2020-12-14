@@ -6,9 +6,8 @@ import org.constellation.concurrency.SingleLock
 
 class ConcurrentStorageService[F[_]: Concurrent, V](
   semaphore: Semaphore[F],
-  metricName: Option[String],
-  expireAfterMinutes: Option[Int] = Some(240)
-) extends StorageService[F, V](metricName, expireAfterMinutes) {
+  metricName: Option[String]
+) extends StorageService[F, V](metricName) {
 
   private def withLock[R](thunk: F[R]) = new SingleLock[F, R]("ConcurrentStorageService", semaphore).use(thunk)
 
