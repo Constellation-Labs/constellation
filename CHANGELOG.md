@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.20.0] 2020-12-15
 ### Changed
 - Remove two node operators
 - Skip removing genesis tips
