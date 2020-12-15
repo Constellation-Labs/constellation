@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@master
-      - uses: olegtarasov/get-tag@v2
+      - uses: little-core-labs/get-git-tag@v3.0.1 # https://github.com/olegtarasov/get-tag/issues/14
         id: tagName
         with:
           tagRegex: "v(.*)"
