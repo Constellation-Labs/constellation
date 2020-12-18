@@ -398,7 +398,43 @@ class TransactionServiceTest
       txService.put(tx, ConsensusStatus.Unknown).unsafeRunSync
 
       val txs = txService.findByPredicate(_ => true).unsafeRunSync
-      txs isEmpty
+      txs shouldBe empty
+    }
+  }
+
+  "findAndRemoveInvalidPendingTxs" - {
+    "should remove transaction that no longer can be accepted" in {
+      val otherTx = mock[TransactionCacheData]
+      otherTx.hash shouldReturn "other"
+      otherTx.transaction shouldReturn mock[Transaction]
+      otherTx.transaction.src shouldReturn Address("src")
+      otherTx.transaction.ordinal shouldReturn 0
+
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
+      txService.put(otherTx, ConsensusStatus.Pending).unsafeRunSync
+
+      txService.accept(tx).unsafeRunSync
+      txService.findAndRemoveInvalidPendingTxs().unsafeRunSync
+
+      val result = txService.lookup("other").unsafeRunSync
+      result shouldBe empty
+    }
+
+    "should keep transaction that can be accepted" in {
+      val otherTx = mock[TransactionCacheData]
+      otherTx.hash shouldReturn "other"
+      otherTx.transaction shouldReturn mock[Transaction]
+      otherTx.transaction.src shouldReturn Address("src")
+      otherTx.transaction.ordinal shouldReturn 10
+
+      txService.put(tx, ConsensusStatus.Pending).unsafeRunSync
+      txService.put(otherTx, ConsensusStatus.Pending).unsafeRunSync
+
+      txService.accept(tx).unsafeRunSync
+      txService.findAndRemoveInvalidPendingTxs().unsafeRunSync
+
+      val result = txService.lookup("other").unsafeRunSync
+      result should contain (otherTx)
     }
   }
 

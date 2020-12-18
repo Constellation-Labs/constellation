@@ -223,6 +223,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         _ <- acceptTransactions(cb, Some(checkpoint), doubleSpendTxs.map(_.hash))
         _ <- acceptObservations(cb, Some(checkpoint))
         _ <- updateRateLimiting(cb)
+        _ <- transactionService.findAndRemoveInvalidPendingTxs()
         _ <- logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
         _ <- concurrentTipService.update(cb, height)
         _ <- snapshotService.updateAcceptedCBSinceSnapshot(cb)

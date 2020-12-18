@@ -63,6 +63,24 @@ class TransactionService[F[_]: Concurrent](
   def removeConflicting(txs: List[String]): F[Unit] =
     pending.remove(txs.toSet) >> unknown.remove(txs.toSet)
 
+  def findAndRemoveInvalidPendingTxs(): F[Unit] =
+    for {
+      pm <- pending.toMap()
+      invalidTxHashes <- pm.toList.traverseFilter {
+        case (hash, tx) =>
+          transactionChainService
+            .getLastAcceptedTransactionRef(tx.transaction.src.address)
+            .map { lastTx =>
+              if (tx.transaction.ordinal <= lastTx.ordinal)
+                Some(hash)
+              else
+                None
+            }
+      }
+      _ <- logger.debug(s"Removing pending txs with ordinal less or equal to ordinal of last accepted tx, hashes=$invalidTxHashes")
+      _ <- pending.remove(invalidTxHashes.toSet)
+    } yield ()
+
   def createTransaction(
     src: String,
     dst: String,
