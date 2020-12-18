@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Validation of transactions ordinal chain during block acceptance
 ### Changed
+- Pending transactions that no longer can be accepted are removed
 - Order of block transaction acceptance (based on ordinal)
 
 ## [v2.20.0] 2020-12-15
