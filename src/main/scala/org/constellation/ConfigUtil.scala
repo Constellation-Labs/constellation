@@ -1,13 +1,12 @@
 package org.constellation
 
-import java.lang
-import java.util.concurrent.TimeUnit
-
 import cats.data.NonEmptyList
 import com.typesafe.config.{Config, ConfigFactory}
 
+import java.lang
+import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.util.Try
 
 object ConfigUtil {
@@ -16,6 +15,10 @@ object ConfigUtil {
   val constellation = config.getConfig("constellation")
   private val configAuth = config.getConfig("auth")
   private val configStorage = config.getConfig("constellation.storage")
+  private val gossip = config.getConfig("gossip")
+
+  val gossipSpreadRequestTimeout = getDurationFromConfig("spread-request-timeout", 5 seconds, gossip)
+  val gossipMaxRetries = Try(gossip.getInt("max-retries")).getOrElse(5)
 
   val snapshotSizeDiskLimit: lang.Long =
     Try(config.getBytes("constellation.snapshot-size-disk-limit")).getOrElse(java.lang.Long.valueOf(1000000))

@@ -1,7 +1,11 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+### Added
+- Retrying logic for gossip
 ### Changed
 - Remove two node operators
 - Skip removing genesis tips
