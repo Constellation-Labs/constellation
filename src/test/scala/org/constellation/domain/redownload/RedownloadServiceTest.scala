@@ -7,7 +7,6 @@ import cats.syntax.all._
 import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
-import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
@@ -15,10 +14,12 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
 import org.constellation.invertedmap.InvertedMap
+import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.signature.{HashSignature, Signed}
+import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.constellation.{PeerMetadata, ResourceInfo}
@@ -62,6 +63,8 @@ class RedownloadServiceTest
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
   val snapshotInterval = 2
+  val signature = HashSignature("xyz", Id("xyz"))
+  val keyPair = KeyUtils.makeKeyPair()
 
   before {
     cluster = mock[Cluster[IO]]
@@ -96,6 +99,7 @@ class RedownloadServiceTest
       checkpointAcceptanceService,
       rewardsManager,
       apiClient,
+      keyPair,
       metrics,
       ExecutionContext.global,
       Blocker.liftExecutionContext(ExecutionContext.global)
@@ -243,7 +247,9 @@ class RedownloadServiceTest
       val trust = SortedMap(Id("a") -> 0.2, Id("b") -> -0.4)
       val persist = redownloadService.persistCreatedSnapshot(2L, "aabbcc", trust)
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
-      (persist >> check).unsafeRunSync shouldBe PersistedSnapshotProposal("aabbcc", trust).some
+      (persist >> check).unsafeRunSync.get should matchPattern {
+        case Signed(signature, SnapshotProposal("aabbcc", 2L, trust)) => ()
+      }
     }
 
     "should not override previously persisted snapshot if snapshot at given height already exists" in {
@@ -251,7 +257,9 @@ class RedownloadServiceTest
       val persistSecond = redownloadService.persistCreatedSnapshot(2L, "bbbb", SortedMap.empty)
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
 
-      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe PersistedSnapshotProposal("aaaa", SortedMap.empty).some
+      (persistFirst >> persistSecond >> check).unsafeRunSync.get should matchPattern {
+        case Signed(_, SnapshotProposal("aaaa", 2L, _)) => ()
+      }
     }
 
     s"should limit the Map to removal point" in {
@@ -308,10 +316,12 @@ class RedownloadServiceTest
       val persistSecond = redownloadService.persistCreatedSnapshot(4L, "bbbb", SortedMap.empty)
       val check = redownloadService.getCreatedSnapshots()
 
-      (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe Map(
-        2L -> PersistedSnapshotProposal("aaaa", SortedMap.empty),
-        4L -> PersistedSnapshotProposal("bbbb", SortedMap.empty)
-      )
+      (persistFirst >> persistSecond >> check).unsafeRunSync.toList should matchPattern {
+        case List(
+        (2L, Signed(_, SnapshotProposal("aaaa", 2L, _))),
+        (4L, Signed(_, SnapshotProposal("bbbb", 4L, _)))
+        ) => ()
+      }
     }
   }
 
@@ -342,16 +352,16 @@ class RedownloadServiceTest
       PeerMetadata("host2", 9999, peer2, resourceInfo = mock[ResourceInfo]),
       NonEmptyList(mock[MajorityHeight], Nil)
     )
-    val initialPeersProposals = InvertedMap(peer1 -> Map(1L -> PersistedSnapshotProposal("hash1p1", SortedMap.empty)))
+    val initialPeersProposals = InvertedMap(peer1 -> Map(1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
     val peer1Proposals =
       Map(
-        1L -> PersistedSnapshotProposal("hash2p1", SortedMap.empty),
-        2L -> PersistedSnapshotProposal("hash3p1", SortedMap.empty)
+        1L -> Signed(signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
+        2L -> Signed(signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
       )
     val peer2Proposals =
       Map(
-        1L -> PersistedSnapshotProposal("hash1p2", SortedMap.empty),
-        2L -> PersistedSnapshotProposal("hash2p2", SortedMap.empty)
+        1L -> Signed(signature, SnapshotProposal("hash1p2", 1L, SortedMap.empty)),
+        2L -> Signed(signature, SnapshotProposal("hash2p2", 2L, SortedMap.empty))
       )
 
     "for empty proposals Map" - {
@@ -399,8 +409,8 @@ class RedownloadServiceTest
         val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
         val expected = Map(
           peer1 -> Map(
-            1L -> PersistedSnapshotProposal("hash1p1", SortedMap.empty),
-            2L -> PersistedSnapshotProposal("hash3p1", SortedMap.empty)
+            1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty)),
+            2L -> Signed(signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
           )
         )
 
@@ -645,6 +655,7 @@ class RedownloadServiceTest
           checkpointAcceptanceService,
           rewardsManager,
           apiClient,
+          KeyUtils.makeKeyPair(),
           metrics,
           ExecutionContext.global,
           Blocker.liftExecutionContext(ExecutionContext.global)

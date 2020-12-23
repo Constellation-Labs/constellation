@@ -4,17 +4,13 @@ import cats.effect.{Concurrent, ContextShift}
 import io.circe.Decoder
 import io.circe.generic.semiauto._
 import org.constellation.domain.p2p.client.SnapshotClientAlgebra
-import org.constellation.domain.redownload.RedownloadService.{
-  LatestMajorityHeight,
-  SnapshotProposalsAtHeight,
-  SnapshotsAtHeight,
-  _
-}
-import org.constellation.gossip.snapshot.SnapshotProposalGossip
+import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.SnapshotProposal
 import org.constellation.session.SessionTokenService
 import org.http4s.Method._
 import org.http4s.Status.Successful
@@ -82,7 +78,7 @@ class SnapshotClientInterpreter[F[_]: ContextShift](
   def getLatestMajorityHeight(): PeerResponse[F, LatestMajorityHeight] =
     PeerResponse[F, LatestMajorityHeight](s"latestMajorityHeight")(client, sessionTokenService)
 
-  def postPeerProposal(message: GossipMessage[SnapshotProposalGossip]): PeerResponse[F, Unit] =
+  def postPeerProposal(message: GossipMessage[Signed[SnapshotProposal]]): PeerResponse[F, Unit] =
     PeerResponse[F, Boolean](s"peer/snapshot/created", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(message))
     }.flatMapF(
@@ -90,7 +86,7 @@ class SnapshotClientInterpreter[F[_]: ContextShift](
         if (a) F.unit
         else
           F.raiseError(
-            new Throwable(s"Cannot post proposal of hash ${message.data.hash} and height ${message.data.height}")
+            new Throwable(s"Cannot post proposal of hash ${message.data.value.hash} and height ${message.data.value.height}")
           )
     )
 }
