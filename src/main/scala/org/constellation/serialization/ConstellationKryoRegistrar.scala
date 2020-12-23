@@ -5,11 +5,12 @@ import atb.trustmodel.{EigenTrust => EigenTrustJ}
 import cern.jet.random.engine.MersenneTwister
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.gossip.sampling.GossipPath
-import org.constellation.gossip.snapshot.SnapshotProposalGossip
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.rewards.EigenTrustAgents
 import org.constellation.schema.serialization.ExplicitKryoRegistrar
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.SnapshotProposal
 
 object ConstellationKryoRegistrar
     extends ExplicitKryoRegistrar(
@@ -22,8 +23,8 @@ object ConstellationKryoRegistrar
         (classOf[EigenTrustAgents], 184),
         (classOf[StoredRewards], 185),
         (classOf[BuildInfoJson], 187),
-        (classOf[SnapshotProposalGossip], 1032),
-        (classOf[GossipMessage[SnapshotProposalGossip]], 1033),
+        (classOf[Signed[SnapshotProposal]], 1032),
+        (classOf[GossipMessage[Signed[SnapshotProposal]]], 1033),
         (classOf[GossipPath], 1034)
       )
     ) {}
