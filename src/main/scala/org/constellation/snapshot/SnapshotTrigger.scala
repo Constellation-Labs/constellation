@@ -3,9 +3,11 @@ package org.constellation.snapshot
 import cats.effect.IO
 import cats.syntax.all._
 import org.constellation.domain.exception.InvalidNodeState
-import org.constellation.gossip.snapshot.{SnapshotProposalGossip, SnapshotProposalGossipService}
+import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
+import org.constellation.schema.signature.Signed.signed
+import org.constellation.schema.snapshot.SnapshotProposal
 import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState}
 import org.constellation.util.Logging._
 import org.constellation.util.{Metrics, PeriodicIO}
@@ -61,13 +63,17 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
               resetNodeState(stateSet) >>
               snapshotProposalGossipService
                 .spread(
-                  SnapshotProposalGossip(
-                    created.hash,
-                    created.height,
-                    SortedMap(created.publicReputation.toSeq: _*)
+                  signed(
+                    SnapshotProposal(
+                      created.hash,
+                      created.height,
+                      SortedMap(created.publicReputation.toSeq: _*)
+                    ),
+                    dao.keyPair
                   )
                 )
                 .start
+
         }
       } yield (),
       IO.unit

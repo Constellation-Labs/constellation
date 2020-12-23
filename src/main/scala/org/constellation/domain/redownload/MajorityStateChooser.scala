@@ -4,14 +4,10 @@ import cats.syntax.all._
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.domain.redownload.MajorityStateChooser.ExtendedSnapshotProposal
-import org.constellation.domain.redownload.RedownloadService.{
-  PeersCache,
-  PeersProposals,
-  SnapshotProposalsAtHeight,
-  SnapshotsAtHeight
-}
+import org.constellation.domain.redownload.RedownloadService.{PeersCache, PeersProposals, SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
+import org.constellation.schema.signature.HashSignature
 
 import scala.collection.SortedMap
 
@@ -68,7 +64,7 @@ class MajorityStateChooser(id: Id) {
     else value
 
   private def totalReputation(proposals: PeersProposals, height: Long, id: Id): Double =
-    proposals.values.flatMap { _.get(height).map(_.reputation.getOrElse(id, 0d)) }.sum
+    proposals.values.flatMap { _.get(height).map(_.value.reputation.getOrElse(id, 0d)) }.sum
 
   private def mergeByHeights(
     proposals: PeersProposals,
@@ -81,7 +77,7 @@ class MajorityStateChooser(id: Id) {
             (
               height,
               ExtendedSnapshotProposal(
-                p.hash,
+                p.value.hash,
                 height,
                 totalReputation(proposals, height, id),
                 Set(id),
@@ -140,19 +136,6 @@ class MajorityStateChooser(id: Id) {
 
 object MajorityStateChooser {
   def apply(id: Id): MajorityStateChooser = new MajorityStateChooser(id)
-
-  case class PersistedSnapshotProposal(hash: String, reputation: SortedMap[Id, Double])
-
-  object PersistedSnapshotProposal {
-    implicit val smDecoder: Decoder[SortedMap[Id, Double]] =
-      Decoder.decodeMap[Id, Double].map(m => SortedMap(m.toSeq: _*))
-
-    implicit val smEncoder: Encoder[SortedMap[Id, Double]] =
-      Encoder.encodeMap[Id, Double].contramap(m => m.toMap)
-
-    implicit val snapshotProposalEncoder: Encoder[PersistedSnapshotProposal] = deriveEncoder
-    implicit val snapshotProposalDecoder: Decoder[PersistedSnapshotProposal] = deriveDecoder
-  }
 
   case class MajorityIntegrityError(gaps: Set[Long]) extends Throwable {
     def message: String = s"Majority state has gaps: ${gaps.toSeq.sorted.mkString(",")}"
