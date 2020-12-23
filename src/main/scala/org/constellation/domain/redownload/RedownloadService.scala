@@ -1,5 +1,7 @@
 package org.constellation.domain.redownload
 
+import java.security.KeyPair
+
 import cats.NonEmptyParallel
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.concurrent.Ref
@@ -10,7 +12,6 @@ import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
-import org.constellation.domain.redownload.MajorityStateChooser.PersistedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -18,7 +19,9 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.signature.Signed.signed
+import org.constellation.schema.signature.{SignHelp, Signed}
+import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
@@ -44,6 +47,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   checkpointAcceptanceService: CheckpointAcceptanceService[F],
   rewardsManager: RewardsManager[F],
   apiClient: ClientInterpreter[F],
+  keyPair: KeyPair,
   metrics: Metrics,
   boundedExecutionContext: ExecutionContext,
   unboundedBlocker: Blocker
@@ -99,20 +103,23 @@ class RedownloadService[F[_]: NonEmptyParallel](
       (updated, ())
     }
 
-  def persistPeerProposal(peer: Id, height: Long, hash: String, reputation: Reputation): F[Unit] =
-    logger.debug(s"Persisting proposal of ${peer.short} at height $height and hash $hash") >> peersProposals.modify {
+  def persistPeerProposal(peer: Id, proposal: Signed[SnapshotProposal]): F[Unit] = {
+    logger.debug(s"Persisting proposal of ${peer.short} at height ${proposal.value.height} and hash ${proposal.value.hash}") >> peersProposals.modify {
       m =>
         val existing = m.getOrElse(peer, Map.empty)
         val updated =
-          if (existing.contains(height)) m
-          else m.updated(peer, existing + (height -> PersistedSnapshotProposal(hash, reputation)))
+          if (existing.contains(proposal.value.height)) m
+          else m.updated(peer, existing + (proposal.value.height -> proposal))
         val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
         (ignored, ())
     }
+  }
 
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
-      val updated = if (m.contains(height)) m else m.updated(height, PersistedSnapshotProposal(hash, reputation))
+      val updated = if (m.contains(height)) m else {
+        m.updated(height, signed(SnapshotProposal(hash, height, reputation), keyPair))
+      }
       val max = maxHeight(updated)
       val removalPoint = getRemovalPoint(max)
       val limited = takeHighestUntilKey(updated, removalPoint)
@@ -198,7 +205,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
         unboundedBlocker
       )(client)
       .handleErrorWith { e =>
-        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty[Long, PersistedSnapshotProposal])
+        logger.error(e)(s"Fetch peers proposals error") >> F.pure(Map.empty[Long, Signed[SnapshotProposal]])
       }
 
   // TODO: Extract to HTTP layer
@@ -603,7 +610,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       nextSnapshotHash <- snapshotService.nextSnapshotHash.get.attemptT
       stored <- snapshotStorage.list().map(_.toSet)
       accepted <- getAcceptedSnapshots().attemptT.map(_.values.toSet)
-      created <- getCreatedSnapshots().attemptT.map(_.values.map(_.hash).toSet)
+      created <- getCreatedSnapshots().attemptT.map(_.values.map(_.value.hash).toSet)
       diff = stored.diff(accepted ++ created ++ Set(nextSnapshotHash))
       sentToCloud <- cloudService.getAlreadySent().map(_.map(_.hash)).attemptT
       toRemove = diff.intersect(sentToCloud).toList
@@ -731,6 +738,7 @@ object RedownloadService {
     checkpointAcceptanceService: CheckpointAcceptanceService[F],
     rewardsManager: RewardsManager[F],
     apiClient: ClientInterpreter[F],
+    keyPair: KeyPair,
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
     unboundedBlocker: Blocker
@@ -749,6 +757,7 @@ object RedownloadService {
       checkpointAcceptanceService,
       rewardsManager,
       apiClient,
+      keyPair,
       metrics,
       boundedExecutionContext,
       unboundedBlocker
@@ -756,16 +765,16 @@ object RedownloadService {
 
   type Reputation = SortedMap[Id, Double]
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
-  type SnapshotProposalsAtHeight = Map[Long, PersistedSnapshotProposal]
+  type SnapshotProposalsAtHeight = Map[Long, Signed[SnapshotProposal]]
   type PeersProposals = InvertedMap[Id, SnapshotProposalsAtHeight]
   type PeersCache = Map[Id, NonEmptyList[MajorityHeight]]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]
 
-  implicit val snapshotProposalsAtHeightEncoder: Encoder[Map[Long, PersistedSnapshotProposal]] =
-    Encoder.encodeMap[Long, PersistedSnapshotProposal]
-  implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, PersistedSnapshotProposal]] =
-    Decoder.decodeMap[Long, PersistedSnapshotProposal]
+  implicit val snapshotProposalsAtHeightEncoder: Encoder[Map[Long, SnapshotProposal]] =
+    Encoder.encodeMap[Long, SnapshotProposal]
+  implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, SnapshotProposal]] =
+    Decoder.decodeMap[Long, SnapshotProposal]
 
   case class LatestMajorityHeight(lowest: Long, highest: Long)
 

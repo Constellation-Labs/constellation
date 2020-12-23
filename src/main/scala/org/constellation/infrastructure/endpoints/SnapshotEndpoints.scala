@@ -9,15 +9,16 @@ import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
 import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
 import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight._
-import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, _}
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.gossip.snapshot.{SnapshotProposalGossip, SnapshotProposalGossipService}
+import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.gossip.validation._
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id._
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.Registration.`X-Id`
@@ -186,23 +187,18 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     HttpRoutes.of[F] {
       case req @ POST -> Root / "peer" / "snapshot" / "created" =>
         for {
-          message <- req.as[GossipMessage[SnapshotProposalGossip]]
+          message <- req.as[GossipMessage[Signed[SnapshotProposal]]]
           data = message.data
           senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
 
           res <- messageValidator.validateForForward(message, senderId) match {
-            case Invalid(EndOfCycle)                                                            => snapshotProposalGossipService.finishCycle(message) >> Ok()
+            case Invalid(EndOfCycle) => snapshotProposalGossipService.finishCycle(message) >> Ok()
             case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) => BadRequest()
-            case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
-            case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
+            case Invalid(IncorrectSenderId(_)) => Response[F](status = Unauthorized).pure[F]
+            case Invalid(e) => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
               for {
-                _ <- redownloadService.persistPeerProposal(
-                  message.origin,
-                  data.height,
-                  data.hash,
-                  data.reputation
-                )
+                _ <- redownloadService.persistPeerProposal(message.origin, data)
                 _ <- snapshotProposalGossipService.spread(message)
                 res <- Ok()
               } yield res
