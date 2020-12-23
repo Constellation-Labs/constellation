@@ -13,6 +13,8 @@ import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.SnapshotProposal
 
 class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
   selfId: Id,
@@ -20,32 +22,32 @@ class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
   peerSampling: PeerSampling[F],
   cluster: Cluster[F],
   apiClient: ClientInterpreter[F]
-) extends GossipService[F, SnapshotProposalGossip](
+) extends GossipService[F, Signed[SnapshotProposal]](
       selfId,
       keyPair,
       peerSampling,
       cluster,
-      new GossipMessagePathTracker[F, SnapshotProposalGossip]
+      new GossipMessagePathTracker[F, Signed[SnapshotProposal]]
     ) {
 
   override protected def spreadFn(
     nextClientMetadata: PeerResponse.PeerClientMetadata,
-    message: GossipMessage[SnapshotProposalGossip]
+    message: GossipMessage[Signed[SnapshotProposal]]
   ): F[Unit] = apiClient.snapshot.postPeerProposal(message)(nextClientMetadata)
 
   override protected def validationFn(
     peerClientMetadata: PeerClientMetadata,
-    message: GossipMessage[SnapshotProposalGossip]
+    message: GossipMessage[Signed[SnapshotProposal]]
   ): F[Boolean] =
     for {
       proposals: Option[SnapshotProposalsAtHeight] <- apiClient.snapshot.getPeerProposals(peerClientMetadata.id)(
         peerClientMetadata
       )
-      expectedHeight = message.data.height
-      expectedHash = message.data.hash
+      expectedHeight = message.data.value.height
+      expectedHash = message.data.value.hash
       validProposalAtHeight = proposals
         .flatMap(_.get(expectedHeight))
-        .exists(_.hash == expectedHash)
+        .exists(_.value.hash == expectedHash)
     } yield validProposalAtHeight
 }
 
