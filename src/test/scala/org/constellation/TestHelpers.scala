@@ -14,12 +14,14 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
-import org.constellation.gossip.snapshot.{SnapshotProposalGossip, SnapshotProposalGossipService}
+import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.SnapshotProposal
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
@@ -74,8 +76,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         dao.alias shouldReturn None
 
         dao.snapshotProposalGossipService shouldReturn mock[SnapshotProposalGossipService[IO]]
-        dao.snapshotProposalGossipService.spread(*[SnapshotProposalGossip]) shouldReturnF Unit
-        dao.snapshotProposalGossipService.spread(*[GossipMessage[SnapshotProposalGossip]]) shouldReturnF Unit
+        dao.snapshotProposalGossipService.spread(*[Signed[SnapshotProposal]]) shouldReturnF Unit
+        dao.snapshotProposalGossipService.spread(*[GossipMessage[Signed[SnapshotProposal]]]) shouldReturnF Unit
 
         val rds = mock[RedownloadService[IO]]
         dao.redownloadService shouldReturn rds

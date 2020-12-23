@@ -412,6 +412,7 @@ class DAO(
       checkpointAcceptanceService,
       rewardsManager,
       apiClient,
+      keyPair,
       metrics,
       boundedExecutionContext,
       Blocker.liftExecutionContext(unboundedExecutionContext)
