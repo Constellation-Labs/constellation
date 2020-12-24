@@ -91,8 +91,7 @@ lazy val loggingDependencies = Seq(
   "io.chrisdavenport" %% "log4cats-slf4j" % "1.1.1",
   ("com.splunk.logging" %% "splunk-library-javalogging" % "1.8.0").from(
     "https://splunk.jfrog.io/artifactory/ext-releases-local/com/splunk/logging/splunk-library-javalogging/1.8.0/splunk-library-javalogging-1.8.0.jar"
-  ),
-  "de.siegmar" % "logback-gelf" % "3.0.0"
+  )
 )
 
 lazy val catsDependencies = Seq(
@@ -156,8 +155,8 @@ lazy val walletSharedDependencies = bitcoinjDependencies ++ sharedDependencies
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ twitterChillDependencies
 
-lazy val integrationTestsSharedDependencies = Seq (
- "com.decodified" %% "scala-ssh" % "0.10.0" % "it,test"
+lazy val integrationTestsSharedDependencies = Seq(
+  "com.decodified" %% "scala-ssh" % "0.10.0" % "it,test"
 ) ++ spongyCastleDependencies ++ sharedDependencies ++ fs2Dependencies ++ http4sClientDependencies ++ pureconfigDependencies
 
 lazy val coreDependencies = Seq(
@@ -249,7 +248,7 @@ lazy val wallet = (project in file("wallet"))
     assemblyExcludedJars in assembly := {
       val cp = (fullClasspath in assembly).value
       // comes with bitcoinj which we only use for a bip44 reference implementation and it causes assembly issues
-      cp filter {_.data.getName == "bcprov-jdk15to18-1.63.jar"}
+      cp.filter { _.data.getName == "bcprov-jdk15to18-1.63.jar" }
     }
   )
 

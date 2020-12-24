@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Added
 - Validation of transactions ordinal chain during block acceptance
+- Splunk support
 ### Changed
 - Pending transactions that no longer can be accepted are removed
 - Order of block transaction acceptance (based on ordinal)
