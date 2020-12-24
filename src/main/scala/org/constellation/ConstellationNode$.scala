@@ -35,6 +35,7 @@ import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.{Router, middleware}
 import org.slf4j.MDC
 import pureconfig._
+import pureconfig.generic.auto._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._

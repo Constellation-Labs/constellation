@@ -8,6 +8,16 @@
     <property name="JSON_LOG" value="logs/json_logs/dag.log"/>
     <property name="JSON_ROLLING_LOG" value="logs/json_logs/dag.%d{yyyy-MM-dd_HH}.%i.log"/>
 
+    <appender name="splunk" class="com.splunk.logging.HttpEventCollectorLogbackAppender">
+        <url>https://splink-hec-url:8088</url>
+        <token>token</token>
+        <index>index</index>
+        <disableCertificateValidation>true</disableCertificateValidation>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>%msg</pattern>
+        </layout>
+    </appender>
+
     <appender name="rollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${HOME_LOG}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -40,10 +50,12 @@
     <logger name="org.constellation" level="debug">
         <appender-ref ref="rollingFile" />
         <appender-ref ref="jsonFile" />
+        <appender-ref ref="splunk" />
     </logger>
 
     <logger name="org.http4s" level="info">
         <appender-ref ref="rollingFile" />
+        <appender-ref ref="splunk" />
     </logger>
 
     <root level="info">
