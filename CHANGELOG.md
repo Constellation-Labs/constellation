@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Pending transactions that no longer can be accepted are removed
 - Order of block transaction acceptance (based on ordinal)
+- Fail the joining flow and leave the cluster if any step during the joining process fails
 
 ## [v2.20.0] 2020-12-15
 ### Added

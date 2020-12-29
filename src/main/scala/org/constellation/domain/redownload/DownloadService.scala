@@ -49,7 +49,8 @@ class DownloadService[F[_]](
       if (state.isNewSet) {
         wrappedDownload.handleErrorWith { error =>
           logger.error(error)(s"Error during download process") >>
-            cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void
+            cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
+            error.raiseError[F, Unit]
         }
       } else F.unit
     }) >> redownloadService.acceptCheckpointBlocks().rethrowT

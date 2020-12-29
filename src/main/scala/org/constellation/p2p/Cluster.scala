@@ -722,15 +722,22 @@ class Cluster[F[_]](
 
   def join(hp: PeerClientMetadata): F[Unit] =
     logThread(
-      for {
-        state <- nodeState.get
-        _ <- if (NodeState.canJoin(state)) F.unit else F.raiseError(new Throwable("Node attempted to double join"))
-        _ <- clearServicesBeforeJoin()
-        _ <- attemptRegisterPeer(hp)
-        _ <- T.sleep(15.seconds)
-        _ <- LiftIO[F].liftIO(dao.downloadService.download())
-        _ <- broadcastOwnJoinedHeight()
-      } yield (),
+      {
+        for {
+          state <- nodeState.get
+          _ <- if (NodeState.canJoin(state)) F.unit else F.raiseError(new Throwable("Node attempted to double join"))
+          _ <- clearServicesBeforeJoin()
+          _ <- attemptRegisterPeer(hp)
+          _ <- T.sleep(15.seconds)
+          _ <- LiftIO[F].liftIO(dao.downloadService.download())
+          _ <- broadcastOwnJoinedHeight()
+        } yield ()
+      }.handleErrorWith { error =>
+        logger.error(error)("Error during joining process! Leaving the cluster!") >>
+          leave(
+            logger.warn("Left the cluster because of failed joining process!")
+          )
+      },
       "cluster_join"
     )
 

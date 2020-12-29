@@ -334,7 +334,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       shouldRedownload: Boolean,
       meaningfulAcceptedSnapshots: SnapshotsAtHeight,
       meaningfulMajorityState: SnapshotsAtHeight
-    ) =
+    ): F[Unit] =
       for {
         _ <- if (shouldRedownload) {
           val plan = calculateRedownloadPlan(meaningfulAcceptedSnapshots, meaningfulMajorityState)
@@ -343,7 +343,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
             _ <- logger.debug(s"Alignment result: $result")
             _ <- logger.debug("Redownload needed! Applying the following redownload plan:")
             _ <- applyPlan(plan, meaningfulMajorityState).value.flatMap(F.fromEither)
+            _ <- metrics.updateMetricAsync[F]("redownload_hasLastRedownloadFailed", 0)
           } yield ()
+        }.handleErrorWith { error =>
+          metrics.updateMetricAsync[F]("redownload_hasLastRedownloadFailed", 1) >>
+            metrics.incrementMetricAsync("redownload_redownloadFailures_total") >>
+            error.raiseError[F, Unit]
         } else logger.debug("No redownload needed - snapshots have been already aligned with majority state. ")
       } yield ()
 
@@ -400,9 +405,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
           if (state.isNewSet) {
             wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
               error =>
-                logger.error(error)(s"Redownload error: ${stringifyStackTrace(error)}") >> cluster
-                  .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
-                  .void
+                logger.error(error)(s"Redownload error, isDownload=$isDownload: ${stringifyStackTrace(error)}") >> {
+                  if (isDownload)
+                    error.raiseError[F, Unit]
+                  else
+                    cluster
+                      .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+                      .void
+                }
             }
           } else F.unit
         }
@@ -419,7 +429,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
 
-      _ <- if (shouldPerformRedownload) {
+      _ <- if (shouldPerformRedownload && !isDownload) { // I think we should only set it to Ready when we are not joining
         cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       } else F.unit
 
@@ -434,6 +444,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
         wrappedCheck,
         logger.debug("Node state is not valid for redownload, skipping") >> F.unit
       )
+  }.handleErrorWith { error =>
+      logger.error(error)("Error during checking alignment with majority snapshot.") >>
+      error.raiseError[F, Unit]
   }
 
   private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] = {
