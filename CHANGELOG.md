@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.21.0] 2020-12-31
 ### Added
 - Validation of transactions ordinal chain during block acceptance
 - Splunk support
