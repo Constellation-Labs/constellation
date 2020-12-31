@@ -4,8 +4,6 @@ import cats.effect.{Concurrent, ContextShift}
 import org.constellation.domain.p2p.client.SignClientAlgebra
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
-//import org.constellation.p2p.Cluster.JoiningError
-//import org.constellation.p2p.Cluster.EitherCodec._
 import org.constellation.p2p.{PeerAuthSignRequest, PeerRegistrationRequest}
 import org.constellation.schema.signature.SingleHashSignature
 import org.http4s.Method._
@@ -23,14 +21,11 @@ class SignClientInterpreter[F[_]: ContextShift](client: Client[F])(implicit F: C
       c.expect[SingleHashSignature](req.withEntity(authSignRequest))
     }
 
-  //def register(registrationRequest: Either[JoiningError, PeerRegistrationRequest]): PeerResponse[F, Unit] =
   def register(registrationRequest: PeerRegistrationRequest): PeerResponse[F, Unit] =
     PeerResponse[F, Boolean]("register", POST)(client) { (req, c) =>
       c.successful(req.withEntity(registrationRequest))
     }.flatMapF(a => if (a) F.unit else F.raiseError(new Throwable("Cannot register peer")))
 
-  //  def getRegistrationRequest(): PeerResponse[F, Either[JoiningError, PeerRegistrationRequest]] =
-  //    PeerResponse[F, Either[JoiningError, PeerRegistrationRequest]]("registration/request")(client)
   def getRegistrationRequest(): PeerResponse[F, PeerRegistrationRequest] =
     PeerResponse[F, PeerRegistrationRequest]("registration/request")(client)
 

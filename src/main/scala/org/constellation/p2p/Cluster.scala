@@ -234,7 +234,8 @@ class Cluster[F[_]](
 
   def pendingRegistration(
     ip: String,
-    request: PeerRegistrationRequest
+    request: PeerRegistrationRequest,
+    withDiscovery: Boolean = true
   ): F[Unit] =
     logThread(
       for {
@@ -340,7 +341,7 @@ class Cluster[F[_]](
                   .getOrElse(NonEmptyList.one(majorityHeight))
                 peerData = PeerData(peerMetadata, majorityHeights)
                 _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> updateToken >> C.shift >> F.start(
-                  peerDiscovery.discoverFrom(peerMetadata)
+                  if (withDiscovery) peerDiscovery.discoverFrom(peerMetadata) else F.unit
                 )
               } yield ()
           }.handleErrorWith { err =>
@@ -605,7 +606,7 @@ class Cluster[F[_]](
     )
 
   // Someone joins to me
-  def pendingRegistrationRequest: F[PeerRegistrationRequest] = {
+  def pendingRegistrationRequest(isReconciliationJoin: Boolean = false): F[PeerRegistrationRequest] = {
     for {
       height <- getOwnJoinedHeight()
 
@@ -636,7 +637,8 @@ class Cluster[F[_]](
           participatesInRollbackFlow = participatedInRollbackFlow,
           joinsAsInitialFacilitator = isInitialFacilitator,
           whitelistingHash,
-          ownToken
+          ownToken,
+          isReconciliationJoin
         )
       }
     } yield prr
@@ -646,11 +648,14 @@ class Cluster[F[_]](
   }
 
   // I join to someone
-  def attemptRegisterPeer(peerClientMetadata: PeerClientMetadata): F[Unit] =
+  def attemptRegisterPeer(peerClientMetadata: PeerClientMetadata, isReconciliationJoin: Boolean = false): F[Unit] =
     logThread(
       withMetric(
         {
-          sessionTokenService.createAndSetNewOwnToken() >>
+          {
+            if (isReconciliationJoin) F.unit
+            else sessionTokenService.createAndSetNewOwnToken().map(_ => ())
+          } >>
             dao.nodeConfig.whitelisting
               .contains(peerClientMetadata.id)
               .pure[F]
@@ -663,8 +668,8 @@ class Cluster[F[_]](
                   )(peerClientMetadata)
                   .flatMap { registrationRequest =>
                     for {
-                      _ <- pendingRegistration(peerClientMetadata.host, registrationRequest)
-                      prr <- pendingRegistrationRequest
+                      _ <- pendingRegistration(peerClientMetadata.host, registrationRequest, !isReconciliationJoin)
+                      prr <- pendingRegistrationRequest(isReconciliationJoin)
                       response <- PeerResponse.run(apiClient.sign.register(prr), unboundedBlocker)(peerClientMetadata)
                     } yield response
                   }

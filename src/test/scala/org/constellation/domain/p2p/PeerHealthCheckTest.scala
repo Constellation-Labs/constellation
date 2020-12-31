@@ -28,7 +28,7 @@ class PeerHealthCheckTest
     with Matchers
     with ArgumentMatchersSugar
     with BeforeAndAfter {
-  /*implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+  implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
   implicit val logger = Slf4jLogger.getLogger[IO]
 
@@ -58,93 +58,41 @@ class PeerHealthCheckTest
       apiClient,
       metrics,
       Blocker.liftExecutionContext(ExecutionContext.global),
-      Blocker.liftExecutionContext(ExecutionContext.global)
+      "9003"
     )
-    cluster.removePeer(*) shouldReturnF Unit
-    cluster.markOfflinePeer(*) shouldReturnF Unit
-    cluster.broadcastOfflineNodeState(*) shouldReturnF Unit
     metrics.updateMetricAsync[IO](*, any[String])(*) shouldReturnF Unit
   }
 
   "check" - {
-    "should not remove peers if all are available" in {
+    "should return an empty list of peers if all are healthy" in {
       apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
       apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { _ =>
         IO.unit
       }
       apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
-      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
-        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerAvailable(0L))
-        }
-
-      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
 
-      peerHealthCheck.check().unsafeRunSync
+      val result = peerHealthCheck.check(Set.empty, Set.empty).unsafeRunSync
 
-      cluster.markOfflinePeer(*).wasNever(called)
+      result shouldBe List.empty
     }
 
-    "should mark peer as offline if peer is unhealthy" in {
-      cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
+    "should return a list of peers that are unhealthy if such peers are found" in {
       apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
       apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { pm =>
         if (pm.id == Id("node1")) {
           IO.raiseError(new Throwable("error"))
         } else IO.unit
       }
+
       apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
-      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
-        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerUnresponsive(0L, 1))
-        }
-      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
-      peerHealthCheck.check().unsafeRunSync
-
-      cluster.markOfflinePeer(*).was(called)
-    }
-
-    "should broadcast offline state if peer is unhealthy" in {
       cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
-      apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { pm =>
-        if (pm.id == Id("node1")) {
-          IO.raiseError(new Throwable("error"))
-        } else IO.unit
-      }
-      apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
-      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
-        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerUnresponsive(0L, 1))
-        }
-      cluster.broadcast(*, *, *) shouldReturnF Map.empty
 
-      peerHealthCheck.check().unsafeRunSync
+      val result = peerHealthCheck.check(Set.empty, Set.empty).unsafeRunSync
 
-      cluster.broadcastOfflineNodeState(*).was(called)
+      result shouldBe List(peer1)
     }
-
-    "should broadcast offline state if peer returned error" in {
-      cluster.getPeerInfo shouldReturnF Map(Id("node1") -> peer1, Id("node2") -> peer2)
-      apiClient.metrics shouldReturn mock[MetricsClientInterpreter[IO]]
-      apiClient.metrics.checkHealth() shouldReturn Kleisli.apply[IO, PeerClientMetadata, Unit] { pm =>
-        if (pm.id == Id("node1")) {
-          IO.raiseError(new Throwable("error"))
-        } else IO.unit
-      }
-      apiClient.cluster shouldReturn mock[ClusterClientInterpreter[IO]]
-      apiClient.cluster.checkPeerResponsiveness(*) shouldReturn Kleisli
-        .apply[IO, PeerClientMetadata, PeerHealthCheckStatus] { _ =>
-          IO.pure(PeerUnresponsive(0L, 1))
-        }
-      cluster.broadcast(*, *, *) shouldReturnF Map.empty
-
-      peerHealthCheck.check().unsafeRunSync
-
-      cluster.broadcastOfflineNodeState(*).was(called)
-    }
-  }*/
+  }
 }

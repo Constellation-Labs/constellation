@@ -33,9 +33,6 @@ class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTok
       c.successful(req.withEntity(status))
     }.flatMapF(a => if (a) F.unit else F.raiseError(new Throwable("Cannot set node status")))
 
-  def checkPeerResponsiveness(id: Id): PeerResponse[F, PeerHealthCheck.PeerHealthCheckStatus] =
-    PeerResponse[F, PeerHealthCheck.PeerHealthCheckStatus](s"peer-responsiveness/$id")(client, sessionTokenService)
-
   def setJoiningHeight(height: JoinedHeight): PeerResponse[F, Unit] =
     PeerResponse[F, Boolean]("joinedHeight", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(height))

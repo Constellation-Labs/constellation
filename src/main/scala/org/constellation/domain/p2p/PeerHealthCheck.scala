@@ -52,6 +52,7 @@ class PeerHealthCheck[F[_]](
               .values
               .toList // we could pick random peers only if checkThesePeers contains less then 3 nodes
         )
+      _ <- logger.debug(s"Checking peers: ${peersToCheck.map(_.peerMetadata.id.short)}")
       statuses <- peersToCheck
         .traverse(pd => checkPeer(pd.peerMetadata.toPeerClientMetadata, periodicCheckTimeout).map(pd -> _))
       unresponsiveStatuses = statuses.filter { case (_, status) => status.isInstanceOf[PeerUnresponsive] }.map {
@@ -87,7 +88,7 @@ class PeerHealthCheck[F[_]](
           .map[PeerHealthCheckStatus](_ => PeerAvailable(peer.id))
           .handleErrorWith(
             e =>
-              logger.error(e)("error checking peer responsiveness") >>
+              logger.warn(s"Error checking peer responsiveness. ErrorMessage: ${e.getMessage}") >>
                 PeerUnresponsive(peer.id)
                   .asInstanceOf[PeerHealthCheckStatus]
                   .pure[F]
@@ -113,7 +114,6 @@ class PeerHealthCheck[F[_]](
     peers.traverse { pd =>
       (for {
         _ <- logger.info(s"Marking dead peer: ${pd.peerMetadata.id.short} (${pd.peerMetadata.host}) as offline")
-        //_ <- F.start(cluster.broadcastOfflineNodeState(pd.peerMetadata.id))
         _ <- unboundedHealthBlocker.blockOn(cluster.markOfflinePeer(pd.peerMetadata.id))
         _ <- metrics.updateMetricAsync("deadPeer", pd.peerMetadata.host)
       } yield ())

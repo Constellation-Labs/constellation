@@ -51,7 +51,7 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
         peer <- EitherT.fromOption[F](nextPeer, new Throwable("Next peer is empty")).rethrowT
         registrationRequest <- PeerResponse.run(apiClient.sign.getRegistrationRequest(), unboundedBlocker)(peer)
         _ <- cluster.pendingRegistration(peer.host, registrationRequest)
-        prr <- cluster.pendingRegistrationRequest
+        prr <- cluster.pendingRegistrationRequest()
         _ <- PeerResponse.run(apiClient.sign.register(prr), unboundedBlocker)(peer)
       } yield ()
 

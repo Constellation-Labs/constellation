@@ -6,7 +6,6 @@ sealed trait NodeState extends EnumEntry
 
 object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
-  //case object Joining extends NodeState
   case object PendingDownload extends NodeState
   case object ReadyForDownload extends NodeState
   case object DownloadInProgress extends NodeState
