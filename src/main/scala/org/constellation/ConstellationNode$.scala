@@ -200,6 +200,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       signedPeerHealthCheckEndpoints = PeerAuthMiddleware
         .responseSignerMiddleware(dao.keyPair.getPrivate, dao.sessionTokenService)(
           PeerAuthMiddleware.requestVerifierMiddleware(getKnownPeerId, isIdWhitelisted)(
+            // TODO: shouldn't THIS endpoint also be verified by verifiers below? if one node removes another by mistake the node it removed will not figure that out during healthcheck
             MetricsEndpoints.peerHealthCheckEndpoints[IO]() <+>
               PeerAuthMiddleware.requestTokenVerifierMiddleware(dao.sessionTokenService)(
                 PeerAuthMiddleware.enforceKnownPeersMiddleware(getKnownPeerId, isIdWhitelisted)(

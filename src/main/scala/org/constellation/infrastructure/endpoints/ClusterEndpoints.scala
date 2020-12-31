@@ -33,9 +33,6 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       deregisterEndpoint(cluster) <+>
       trustEndpoint(trustManager)
 
-//  def peerHealthCheckEndpoints(peerHealthCheck: PeerHealthCheck[F]) =
-//    checkPeerResponsiveness(peerHealthCheck)
-
   private def infoEndpoint(cluster: Cluster[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "cluster" / "info" =>
@@ -53,11 +50,6 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         }
       } yield ()) >> Ok()
   }
-
-//  private def checkPeerResponsiveness(peerHealthCheck: PeerHealthCheck[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-//    case GET -> Root / "peer-responsiveness" / id =>
-//      peerHealthCheck.verify(Id(id)).map(_.asJson).flatMap(Ok(_))
-//  }
 
   private def setJoiningHeightEndpoint(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "joinedHeight" =>
@@ -95,8 +87,4 @@ object ClusterEndpoints {
   ): HttpRoutes[F] =
     new ClusterEndpoints[F].peerEndpoints(cluster, trustManager)
 
-//  def peerHealthCheckEndpoints[F[_]: Concurrent](
-//    peerHealthCheck: PeerHealthCheck[F]
-//  ): HttpRoutes[F] =
-//    new ClusterEndpoints[F].peerHealthCheckEndpoints(peerHealthCheck)
 }

@@ -7,6 +7,8 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
+import org.constellation.domain.healthcheck.HealthCheckConsensus.HealthcheckRoundId
+import org.constellation.domain.healthcheck.HealthCheckLoggingHelper.logId
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState.{canActAsJoiningSource, isInitiallyJoining, isInvalidForJoining}
@@ -46,7 +48,9 @@ class ReconciliationRound[F[_]](
     for {
       isFirstRun <- (attemptsLeft == retryAttempts).pure[F]
       isLastRun = attemptsLeft == 0
-      _ <- logger.debug(s"Reconciliation round with id=$roundId, is running. isFirstRun=$isFirstRun isLastRun=$isLastRun attemptsLeft=$attemptsLeft.")
+      _ <- logger.debug(
+        s"Reconciliation round with id=$roundId, is running. isFirstRun=$isFirstRun isLastRun=$isLastRun attemptsLeft=$attemptsLeft."
+      )
       _ <- if (isFirstRun) F.unit else T.sleep(retryAfter)
       result <- runReconciliation()
       _ <- result match {
@@ -100,13 +104,13 @@ class ReconciliationRound[F[_]](
           NodeReconciliationData(
             pd.peerMetadata.id,
             pd.peerMetadata.nodeState.some,
-            none[Set[RoundId]],
+            none[Set[HealthcheckRoundId]],
             pd.majorityHeight.head.joined // is that correct, head???
           )
       ) + (ownId -> NodeReconciliationData(
         ownId,
         ownState.some,
-        none[Set[RoundId]],
+        none[Set[HealthcheckRoundId]],
         ownJoinedHeight
       ))
       responses <- peers.toList.traverse {
@@ -118,7 +122,7 @@ class ReconciliationRound[F[_]](
             )(peerData.peerMetadata.toPeerClientMetadata.copy(port = healthHttpPort))
             .map(_.some)
             .handleErrorWith { e =>
-              logger.debug(e)(s"Error during fetching clusterState from id=$id") >>
+              logger.debug(e)(s"Error during fetching clusterState from id=${logId(id)}") >>
                 none[ClusterState].pure[F]
             }
             .map(id -> _)
@@ -147,7 +151,7 @@ object ReconciliationRound {
     roundId: RoundId,
     apiClient: ClientInterpreter[F],
     unboundedHealthBlocker: Blocker,
-    healthCheckPort: String
+    healthHttpPort: Int
   ): ReconciliationRound[F] =
     new ReconciliationRound(
       ownId,
@@ -156,7 +160,7 @@ object ReconciliationRound {
       roundId,
       apiClient,
       unboundedHealthBlocker,
-      healthHttpPort = healthCheckPort
+      healthHttpPort = healthHttpPort.toString
     )
 
   // should we have a check if the cluster inconsistency isn't coming from one node only? then run consensus for that node, and not all nodes it sees inconsistently (to avoid consensuses blast)?
@@ -253,7 +257,7 @@ object ReconciliationRound {
   case class NodeReconciliationData(
     id: Id,
     nodeState: Option[NodeState],
-    roundInProgress: Option[Set[RoundId]],
+    roundInProgress: Option[Set[HealthcheckRoundId]],
     joiningHeight: Option[Long]
   )
 

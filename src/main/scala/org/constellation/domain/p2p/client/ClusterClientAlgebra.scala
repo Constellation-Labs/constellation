@@ -12,8 +12,6 @@ trait ClusterClientAlgebra[F[_]] {
 
   def setNodeStatus(status: SetNodeStatus): PeerResponse[F, Unit]
 
-  def checkPeerResponsiveness(id: Id): PeerResponse[F, PeerHealthCheckStatus]
-
   def setJoiningHeight(height: JoinedHeight): PeerResponse[F, Unit]
 
   def deregister(peerUnregister: PeerUnregister): PeerResponse[F, Unit]

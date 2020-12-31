@@ -1,6 +1,7 @@
 package org.constellation.domain.healthcheck
 
 import cats.syntax.all._
+import org.constellation.domain.healthcheck.HealthCheckConsensus.HealthcheckRoundId
 import org.constellation.domain.healthcheck.ReconciliationRound.{NodeAligned, NodeInconsistentlySeenAsOnlineOrOffline, NodeNotPresentOnAllNodes, NodeReconciliationData, calculateClusterAlignment}
 import org.constellation.schema.Id
 import org.constellation.schema.NodeState.{DownloadInProgress, Leaving, Offline, PendingDownload, Ready, ReadyForDownload, SnapshotCreation}
@@ -51,7 +52,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
         val peersClusterState = Map(
           peerA -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
-            peerB -> NodeReconciliationData(peerB, Offline.some, Some(Set(RoundId("r1"))), Some(100L)),
+            peerB -> NodeReconciliationData(peerB, Offline.some, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), Some(100L)),
             peerC -> NodeReconciliationData(peerC, DownloadInProgress.some, None, Some(100L))
           ),
           peerB -> Map(
@@ -81,7 +82,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
         val peersClusterState = Map(
           peerA -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
-            peerB -> NodeReconciliationData(peerB, Ready.some, Some(Set(RoundId("r1"))), Some(100L)),
+            peerB -> NodeReconciliationData(peerB, Ready.some, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), Some(100L)),
             peerC -> NodeReconciliationData(peerC, DownloadInProgress.some, None, Some(100L))
           ),
           peerB -> Map(
@@ -178,7 +179,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           ),
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
-            peerB -> NodeReconciliationData(peerB, DownloadInProgress.some, Some(Set(RoundId("r1"))), Some(100L)),
+            peerB -> NodeReconciliationData(peerB, DownloadInProgress.some, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), Some(100L)),
             peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
           )
         )
@@ -199,7 +200,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerA -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             // we should have an info here about the node that we are running consensus for, even if we don't have it in our list, unless we have that -> this case won't work
-            peerB -> NodeReconciliationData(peerB, None, Some(Set(RoundId("r1"))), None),
+            peerB -> NodeReconciliationData(peerB, None, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), None),
             peerC -> NodeReconciliationData(peerC, DownloadInProgress.some, None, Some(100L))
           ),
           peerB -> Map(

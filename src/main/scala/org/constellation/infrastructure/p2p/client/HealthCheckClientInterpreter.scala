@@ -6,7 +6,7 @@ import org.constellation.domain.healthcheck.HealthCheckConsensus.{FetchPeerHealt
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager.{FetchProposalError, SendProposalError}
 import org.constellation.domain.healthcheck.ReconciliationRound.ClusterState
 import org.constellation.domain.p2p.client.HealthCheckClientAlgebra
-import org.constellation.p2p.Cluster.EitherCodec._
+import org.constellation.domain.healthcheck.HealthCheckConsensusManager.EitherCodec._
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.session.SessionTokenService

@@ -4,10 +4,15 @@ import cats.effect.Concurrent
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
-import org.constellation.domain.healthcheck.HealthCheckConsensus.{FetchPeerHealthStatus, HealthConsensusCommand, NotifyAboutMissedConsensus, SendPerceivedHealthStatus}
+import org.constellation.domain.healthcheck.HealthCheckConsensus.{
+  FetchPeerHealthStatus,
+  HealthConsensusCommand,
+  NotifyAboutMissedConsensus,
+  SendPerceivedHealthStatus
+}
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager.SendProposalError
-import org.constellation.p2p.Cluster.EitherCodec._
+import org.constellation.domain.healthcheck.HealthCheckConsensusManager.EitherCodec._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.HttpRoutes
 import org.http4s.circe._
@@ -27,15 +32,14 @@ class HealthCheckEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
       for {
         cmd <- req.decodeJson[HealthConsensusCommand]
         response <- cmd match {
-          case SendPerceivedHealthStatus(consensusHealthStatus, asProxyForId) =>
-            {asProxyForId match {
+          case SendPerceivedHealthStatus(consensusHealthStatus, asProxyForId) => {
+            asProxyForId match {
               case Some(proxyToPeer) =>
                 healthCheckConsensusManager.proxySendHealthProposal(consensusHealthStatus, proxyToPeer)
               case None =>
-                // are we sure that it will be processes no matter what and therefore we can return Accepted immediately?
-                F.start(healthCheckConsensusManager.handleConsensusHealthProposal(consensusHealthStatus))
-                  .map(_ => ().asRight[SendProposalError])
-            }}.flatMap(result => Ok(result.asJson))
+                healthCheckConsensusManager.handleConsensusHealthProposal(consensusHealthStatus)
+            }
+          }.flatMap(result => Ok(result.asJson))
 
           case a @ NotifyAboutMissedConsensus(_, _, _) =>
             F.start(healthCheckConsensusManager.handleNotificationAboutMissedConsensus(a))
@@ -52,9 +56,11 @@ class HealthCheckEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
           fetchPeerHealtStatus <- req.decodeJson[FetchPeerHealthStatus]
           result <- fetchPeerHealtStatus.asProxyForId match {
             case Some(proxyToPeer) =>
-              healthCheckConsensusManager.proxyGetHealthStatusForRound(fetchPeerHealtStatus.roundIds, proxyToPeer)
+              healthCheckConsensusManager
+                .proxyGetHealthStatusForRound(fetchPeerHealtStatus.roundIds, proxyToPeer, fetchPeerHealtStatus.originId)
             case None =>
-              healthCheckConsensusManager.getHealthStatusForRound(fetchPeerHealtStatus.roundIds)
+              healthCheckConsensusManager
+                .getHealthStatusForRound(fetchPeerHealtStatus.roundIds, fetchPeerHealtStatus.originId)
           }
           response <- Ok(result.asJson)
         } yield response
@@ -63,8 +69,10 @@ class HealthCheckEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
   private def getClusterState(healthCheckConsensusManager: HealthCheckConsensusManager[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "health-check" / "cluster-state" =>
-        healthCheckConsensusManager.getClusterState()
-          .map(_.asJson).flatMap(Ok(_))
+        healthCheckConsensusManager
+          .getClusterState()
+          .map(_.asJson)
+          .flatMap(Ok(_))
     }
 }
 

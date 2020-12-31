@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- New implementation of Peer Healthcheck based on consensus between nodes
 
 ## [v2.21.3] 2021-01-25
 ### Added

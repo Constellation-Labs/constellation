@@ -16,7 +16,8 @@ case class PeerRegistrationRequest(
   participatesInRollbackFlow: Boolean,
   joinsAsInitialFacilitator: Boolean,
   whitelistingHash: String,
-  token: Token
+  token: Token,
+  isReconciliationJoin: Boolean
 )
 
 object PeerRegistrationRequest {

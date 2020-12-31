@@ -269,16 +269,19 @@ class DAO(
     healthCheckConsensusManager = {
       val cs = IO.contextShift(unboundedHealthExecutionContext)
       val ce = IO.ioConcurrentEffect(cs)
+      val p = IO.ioParallel(cs)
       val timer = IO.timer(unboundedHealthExecutionContext)
 
       HealthCheckConsensusManager[IO](
         id,
         cluster,
         peerHealthCheck,
+        metrics,
         apiClient,
         Blocker.liftExecutionContext(unboundedHealthExecutionContext),
-        healthHttpPort = nodeConfig.healthHttpPort.toString
-      )(ce, cs, timer)
+        healthHttpPort = nodeConfig.healthHttpPort,
+        peerHttpPort = nodeConfig.peerHttpPort
+      )(ce, cs, p, timer)
     }
 
     peerHealthCheckWatcher =

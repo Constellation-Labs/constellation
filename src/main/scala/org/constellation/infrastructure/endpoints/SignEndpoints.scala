@@ -41,7 +41,7 @@ class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends
       (for {
         registrationRequest <- req.decodeJson[PeerRegistrationRequest]
         ip = req.remoteAddr.getOrElse("")
-        _ <- cluster.pendingRegistration(ip, registrationRequest)
+        _ <- cluster.pendingRegistration(ip, registrationRequest, !registrationRequest.isReconciliationJoin)
       } yield ()) >> Ok()
   }
 
@@ -60,7 +60,7 @@ class SignEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends
 
   private def getRegistrationRequest(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "registration" / "request" =>
-      cluster.pendingRegistrationRequest.map(_.asJson).flatMap(Ok(_))
+      cluster.pendingRegistrationRequest().map(_.asJson).flatMap(Ok(_))
   }
 
 }
