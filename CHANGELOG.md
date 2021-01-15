@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.21.2] 2021-01-15
+### Changed
+- Update whitelisting file
+
 ## [v2.21.1] 2021-01-08
 ### Changed
 - Remove node operator
