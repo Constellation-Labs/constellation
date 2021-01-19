@@ -24,7 +24,7 @@ import org.constellation.schema.checkpoint.{
 }
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
-import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
 import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.serializer.KryoSerializer
 import org.constellation.trust.TrustManager
@@ -216,6 +216,13 @@ class SnapshotService[F[_]: Concurrent](
         snapshotCache = s.checkpointCache.toList,
         lastAcceptedTransactionRef = lastAcceptedTransactionRef
       )
+
+  def getTotalSupply(): F[TotalSupply] =
+    for {
+      snapshotInfo <- getSnapshotInfo()
+      height = snapshotInfo.snapshot.height
+      totalSupply = snapshotInfo.addressCacheData.values.map(_.balanceByLatestSnapshot).sum
+    } yield TotalSupply(height, totalSupply)
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {

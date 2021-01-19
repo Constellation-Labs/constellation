@@ -40,7 +40,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       getPeerProposals(redownloadService) <+>
       getNextSnapshotHeight(nodeId, snapshotService) <+>
       getLatestMajorityHeight(redownloadService) <+>
-      getLatestMajorityState(redownloadService)
+      getLatestMajorityState(redownloadService) <+>
+      getTotalSupply(snapshotService)
 
   def peerEndpoints(
     nodeId: Id,
@@ -170,6 +171,14 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     case GET -> Root / "majority" / "state" =>
       redownloadService
         .getLastMajorityState()
+        .map(_.asJson)
+        .flatMap(Ok(_))
+  }
+
+  private def getTotalSupply(snapshotService: SnapshotService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "total-supply" =>
+      snapshotService
+        .getTotalSupply()
         .map(_.asJson)
         .flatMap(Ok(_))
   }

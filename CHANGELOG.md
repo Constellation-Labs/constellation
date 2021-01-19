@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Endpoint with total supply
 
 ## [v2.21.2] 2021-01-15
 ### Changed
