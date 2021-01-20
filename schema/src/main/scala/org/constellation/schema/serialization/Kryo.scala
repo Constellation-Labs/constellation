@@ -20,6 +20,8 @@ object Kryo {
 
   private var kryoPool: KryoPool = _
 
+  private var kryoHashingPool: KryoPool = _
+
   def guessThreads: Int = {
     val cores = Runtime.getRuntime.availableProcessors
     val GUESS_THREADS_PER_CORE = 4
@@ -39,13 +41,26 @@ object Kryo {
           10,
           instance
         )
+
+        kryoHashingPool = KryoPool.withByteArrayOutputStream(
+          10,
+          instance
+            .setReferences(false)
+        )
       }
     }
 
   def init[F[_]: Concurrent](): F[Unit] = init(SchemaKryoRegistrar)
 
-  def serializeAnyRef(anyRef: AnyRef): Array[Byte] =
-    kryoPool.toBytesWithClass(anyRef)
+  /**
+    * @param trackRefs set trackRefs to false to turn off reference tracking during serialization
+    * @see <a href="https://github.com/EsotericSoftware/kryo#references">Kryo references</a>
+    */
+  def serializeAnyRef(anyRef: AnyRef, trackRefs: Boolean = true): Array[Byte] =
+    if (trackRefs)
+      kryoPool.toBytesWithClass(anyRef)
+    else
+      kryoHashingPool.toBytesWithClass(anyRef)
 
   def deserializeCast[T](bytes: Array[Byte]): T =
     kryoPool.fromBytes(bytes).asInstanceOf[T]

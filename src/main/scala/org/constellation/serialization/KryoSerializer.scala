@@ -14,8 +14,8 @@ object KryoSerializer {
     )
   )
 
-  def serializeAnyRef(anyRef: AnyRef): Array[Byte] =
-    Kryo.serializeAnyRef(anyRef)
+  def serializeAnyRef(anyRef: AnyRef, trackRefs: Boolean = true): Array[Byte] =
+    Kryo.serializeAnyRef(anyRef, trackRefs)
 
   def deserializeCast[T](bytes: Array[Byte]): T =
     Kryo.deserializeCast(bytes)

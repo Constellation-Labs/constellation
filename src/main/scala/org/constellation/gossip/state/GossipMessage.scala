@@ -15,6 +15,8 @@ case class GossipMessage[A](
   signatures: IndexedSeq[HashSignature] = IndexedSeq.empty
 ) extends Signable {
 
+  override def trackRefs: Boolean = false
+
   def sign(kp: KeyPair): GossipMessage[A] = {
     val signature = SignHelp.hashSign(hash, kp)
     this.copy(
