@@ -55,6 +55,21 @@ class MessageValidatorTest
       val result = eValiator.validateForForward(msg, dId)
       result.isValid shouldBe true
     }
+
+    "when validates message with empty strings" in {
+      val bValiator = new MessageValidator(bId)
+      val path = GossipPath(IndexedSeq(aId, bId, aId), "")
+      val payload = ("", new String(""))
+      val msg: GossipMessage[(String, String)] = GossipMessage(payload, path, aId).sign(aKp)
+
+      val bytes: Array[Byte] = KryoSerializer.serializeAnyRef(msg)
+
+      val receivedMsg: GossipMessage[(String, String)] =
+        KryoSerializer.deserializeCast[GossipMessage[(String, String)]](bytes)
+
+      val result = bValiator.validateForForward(receivedMsg, aId)
+      result.isValid shouldBe true
+    }
   }
 
   "invalidates" - {

@@ -3,22 +3,11 @@ package org.constellation.schema.serialization
 import cats.effect.Concurrent
 import com.twitter.chill.{IKryoRegistrar, KryoPool, ScalaKryoInstantiator}
 
-/*
-  TODO: Consider making it just a class:
-
-  class KryoSerializer[F[_]: Concurrent] extends Serializer {
-    def addRegistrar(registrar: IKryoRegistrar) = ???
-
-    def serializeAnyRef(anyRef: AnyRef): F[Array[Byte]] =
-      kryoPool.toBytesWithClass(anyRef)
-
-    def deserializeCast[T](bytes: Array[Byte]): F[T] =
-      kryoPool.fromBytes(bytes).asInstanceOf[T]
-  }
- */
 object Kryo {
 
   private var kryoPool: KryoPool = _
+
+  private var kryoHashingPool: KryoPool = _
 
   def guessThreads: Int = {
     val cores = Runtime.getRuntime.availableProcessors
@@ -39,13 +28,26 @@ object Kryo {
           10,
           instance
         )
+
+        kryoHashingPool = KryoPool.withByteArrayOutputStream(
+          10,
+          instance
+            .setReferences(false)
+        )
       }
     }
 
   def init[F[_]: Concurrent](): F[Unit] = init(SchemaKryoRegistrar)
 
-  def serializeAnyRef(anyRef: AnyRef): Array[Byte] =
-    kryoPool.toBytesWithClass(anyRef)
+  /**
+    * @param withRefs set to false to turn off reference tracking during serialization
+    * @see <a href="https://github.com/EsotericSoftware/kryo#references">Kryo references</a>
+    */
+  def serializeAnyRef(anyRef: AnyRef, withRefs: Boolean = true): Array[Byte] =
+    if (withRefs)
+      kryoPool.toBytesWithClass(anyRef)
+    else
+      kryoHashingPool.toBytesWithClass(anyRef)
 
   def deserializeCast[T](bytes: Array[Byte]): T =
     kryoPool.fromBytes(bytes).asInstanceOf[T]
