@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+### Fixed
+- Fixed signature validation for gossip messages when payload contains more than one empty string
+
 ## [v2.24.10] 2021-06-29
 ### Changed
 - Do not resolve blocks on compare that are known on the node

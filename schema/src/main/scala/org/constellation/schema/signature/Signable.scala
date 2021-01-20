@@ -8,15 +8,17 @@ trait Signable {
 
   protected def toEncode: AnyRef = this
 
+  def serializeWithRefs: Boolean = true
+
   def signInput: Array[Byte] = hash.getBytes()
 
-  def hash: String = hashSerialized(getEncoding)
+  def hash: String = hashSerialized(getEncoding, serializeWithRefs)
 
   def short: String = hash.slice(0, 5)
 
-  def getEncoding: String = hashSerialized(toEncode)
+  def getEncoding: String = hashSerialized(toEncode, serializeWithRefs)
 
-  def getHexEncoding = KeyUtils.bytes2hex(hashSerializedBytes(toEncode))
+  def getHexEncoding = KeyUtils.bytes2hex(hashSerializedBytes(toEncode, serializeWithRefs))
 }
 
 object Signable {
