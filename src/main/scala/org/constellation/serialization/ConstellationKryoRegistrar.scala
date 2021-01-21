@@ -23,8 +23,9 @@ object ConstellationKryoRegistrar
         (classOf[EigenTrustAgents], 184),
         (classOf[StoredRewards], 185),
         (classOf[BuildInfoJson], 187),
-        (classOf[Signed[SnapshotProposal]], 1032),
-        (classOf[GossipMessage[Signed[SnapshotProposal]]], 1033),
-        (classOf[GossipPath], 1034)
+        (classOf[GossipMessage[Signed[SnapshotProposal]]], 1032),
+        (classOf[Signed[SnapshotProposal]], 1033),
+        (classOf[SnapshotProposal], 1034),
+        (classOf[GossipPath], 1035)
       )
     ) {}
