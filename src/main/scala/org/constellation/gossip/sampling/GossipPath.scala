@@ -41,7 +41,4 @@ case class GossipPath private (path: IndexedSeq[Id], id: String, cursor: Int = 0
 
 object GossipPath {
   def apply(path: IndexedSeq[Id], id: String): GossipPath = new GossipPath(path, id)
-
-  implicit val gossipPathEncoder: Encoder[GossipPath] = deriveEncoder
-  implicit val gossipPathDecoder: Decoder[GossipPath] = deriveDecoder
 }
