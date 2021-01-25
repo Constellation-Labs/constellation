@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Endpoint with total supply
 
+### Changed
+- Update whitelisting file
+
 ## [v2.21.2] 2021-01-15
 ### Changed
 - Update whitelisting file
