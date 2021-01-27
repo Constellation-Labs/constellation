@@ -39,52 +39,6 @@ class MajorityStateChooserTest
     case (height: Long, hash: String) => (height, Signed(signature, SnapshotProposal(hash, height, trust)))
   }
 
-  "find gaps" - {
-    "finds single gaps" in {
-      val majority = Map[Long, String](
-        2L -> "a",
-        4L -> "b",
-        6L -> "c",
-        10L -> "d",
-        12L -> "e",
-        16L -> "f"
-      )
-
-      val chooser = MajorityStateChooser(ownId)
-      val gaps = chooser.findGaps(majority, 2)
-      gaps shouldEqual Set(8L, 14L)
-    }
-
-    "finds multiple gaps" in {
-      val majority = Map[Long, String](
-        2L -> "a",
-        4L -> "b",
-        12L -> "e",
-        16L -> "f"
-      )
-
-      val chooser = MajorityStateChooser(ownId)
-      val gaps = chooser.findGaps(majority, 2)
-      gaps shouldEqual Set(6L, 8L, 10L, 14L)
-    }
-
-    "returns np gaps for empty majority" in {
-      val majority = Map.empty[Long, String]
-      val chooser = MajorityStateChooser(ownId)
-      val gaps = chooser.findGaps(majority, 2)
-      gaps shouldEqual Set.empty[Long]
-    }
-
-    "returns np gaps for single item majority" in {
-      val majority = Map(
-        2L -> "a"
-      )
-      val chooser = MajorityStateChooser(ownId)
-      val gaps = chooser.findGaps(majority, 2)
-      gaps shouldEqual Set.empty[Long]
-    }
-  }
-
   "choose majority state" - {
     "returns Map.empty" - {
       "if there are no created snapshots and peers proposals" - {

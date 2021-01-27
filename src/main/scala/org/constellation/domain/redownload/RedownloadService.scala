@@ -19,9 +19,9 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
+import org.constellation.schema.signature.Signed
 import org.constellation.schema.signature.Signed.signed
-import org.constellation.schema.signature.{SignHelp, Signed}
-import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
+import org.constellation.schema.snapshot._
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
@@ -36,10 +36,10 @@ import scala.util.Random
 class RedownloadService[F[_]: NonEmptyParallel](
   meaningfulSnapshotsCount: Int,
   redownloadInterval: Int,
-  snapshotInterval: Int,
   isEnabledCloudStorage: Boolean,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
+  missingProposalFinder: MissingProposalFinder,
   snapshotStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   snapshotService: SnapshotService[F],
@@ -74,6 +74,20 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   private[redownload] var lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
+  private val peerMajorityInfo: Ref[F, Map[Id, MajorityInfo]] = Ref.unsafe(Map.empty)
+
+  def updatePeerMajorityInfo(peerId: Id, majorityInfo: MajorityInfo): F[Unit] = {
+    val height: MajorityInfo => Long = _.majorityRange.to
+
+    peerMajorityInfo.modify(m => {
+      if (m.get(peerId).forall(height(_) < height(majorityInfo))) {
+        (m.updated(peerId, majorityInfo), ())
+      } else {
+        (m, ())
+      }
+    })
+  }
+
   private val logger = Slf4jLogger.getLogger[F]
 
   def setLastSentHeight(height: Long): F[Unit] =
@@ -97,29 +111,37 @@ class RedownloadService[F[_]: NonEmptyParallel](
     (s, minHeight(s))
   }
 
+  def getMajorityRange: F[HeightRange] = lastMajorityState.get.map { s =>
+    HeightRange(minHeight(s), maxHeight(s))
+  }
+
+  def getMajorityGapRanges: F[List[HeightRange]] = lastMajorityState.get.map(missingProposalFinder.findGapRanges)
+
   def updatePeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
     peersProposals.modify { m =>
       val updated = m.updated(peer, proposals)
       (updated, ())
     }
 
-  def persistPeerProposal(peer: Id, proposal: Signed[SnapshotProposal]): F[Unit] = {
-    logger.debug(s"Persisting proposal of ${peer.short} at height ${proposal.value.height} and hash ${proposal.value.hash}") >> peersProposals.modify {
-      m =>
-        val existing = m.getOrElse(peer, Map.empty)
-        val updated =
-          if (existing.contains(proposal.value.height)) m
-          else m.updated(peer, existing + (proposal.value.height -> proposal))
-        val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
-        (ignored, ())
+  def persistPeerProposal(peer: Id, proposal: Signed[SnapshotProposal]): F[Unit] =
+    logger.debug(
+      s"Persisting proposal of ${peer.short} at height ${proposal.value.height} and hash ${proposal.value.hash}"
+    ) >> peersProposals.modify { m =>
+      val existing = m.getOrElse(peer, Map.empty)
+      val updated =
+        if (existing.contains(proposal.value.height)) m
+        else m.updated(peer, existing + (proposal.value.height -> proposal))
+      val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
+      (ignored, ())
     }
-  }
 
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
-      val updated = if (m.contains(height)) m else {
-        m.updated(height, signed(SnapshotProposal(hash, height, reputation), keyPair))
-      }
+      val updated =
+        if (m.contains(height)) m
+        else {
+          m.updated(height, signed(SnapshotProposal(hash, height, reputation), keyPair))
+        }
       val max = maxHeight(updated)
       val removalPoint = getRemovalPoint(max)
       val limited = takeHighestUntilKey(updated, removalPoint)
@@ -242,6 +264,28 @@ class RedownloadService[F[_]: NonEmptyParallel](
       .run(
         apiClient.snapshot
           .getStoredSnapshot(hash),
+        unboundedBlocker
+      )(client)
+
+  private[redownload] def fetchAndUpdatePeerProposals(peerId: Id)(client: PeerClientMetadata): F[Unit] =
+    for {
+      maybeProposals <- fetchPeerProposals(peerId, client)
+      _ <- maybeProposals.traverse { proposals =>
+        peersProposals.modify { m =>
+          val existingProposals = m.getOrElse(peerId, Map.empty)
+          (m.updated(peerId, existingProposals ++ proposals), ())
+        }
+      }
+    } yield ()
+
+  private[redownload] def fetchPeerProposals(
+    peerId: Id,
+    client: PeerClientMetadata
+  ): F[Option[SnapshotProposalsAtHeight]] =
+    PeerResponse
+      .run(
+        apiClient.snapshot
+          .getPeerProposals(peerId),
         unboundedBlocker
       )(client)
 
@@ -389,7 +433,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
         peersCache
       )
 
-      potentialGaps = majorityStateChooser.findGaps(majorityState, snapshotInterval)
+      potentialGaps = missingProposalFinder.findGaps(majorityState)
 
       _ <- if (potentialGaps.isEmpty) {
         logger.debug("Calculated majority state has no gaps")
@@ -445,6 +489,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- logger.debug("Accepting all the checkpoint blocks received during the redownload.")
       _ <- acceptCheckpointBlocks().value.flatMap(F.fromEither)
 
+      _ <- if (!shouldPerformRedownload) findAndFetchMissingProposals(peersProposals, peersCache) else F.unit
     } yield ()
 
     cluster.getNodeState
@@ -454,6 +499,32 @@ class RedownloadService[F[_]: NonEmptyParallel](
         logger.debug("Node state is not valid for redownload, skipping") >> F.unit
       )
   }
+
+  private def findAndFetchMissingProposals(peersProposals: PeersProposals, peersCache: PeersCache): F[Unit] =
+    for {
+      majorityRange <- getMajorityRange
+      peerMajorityInfo <- peerMajorityInfo.get
+      missingProposals = missingProposalFinder.findMissingPeerProposals(majorityRange, peersProposals, peersCache)
+      _ <- missingProposals.nonEmpty
+        .pure[F]
+        .ifM(
+          logger.info(s"Found missing proposals ${missingProposals}"),
+          logger.info(s"No missing proposals found")
+        )
+      _ <- missingProposals.toList.traverse {
+        case (peerId, peerGaps) =>
+          val maybeSelectedPeerId = missingProposalFinder
+            .selectPeerForFetchingMissingProposals(majorityRange, peerGaps, peerMajorityInfo - peerId)
+          maybeSelectedPeerId.traverse(fetchProposalForPeer(peerId))
+      }
+    } yield ()
+
+  private def fetchProposalForPeer(peerId: Id)(fromPeerId: Id): F[Unit] =
+    for {
+      peer <- cluster.getPeerInfo.map(_.get(fromPeerId))
+      apiClient = peer.map(_.peerMetadata.toPeerClientMetadata)
+      _ <- apiClient.traverse(fetchAndUpdatePeerProposals(peerId))
+    } yield ()
 
   private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] = {
     val send = for {
@@ -706,10 +777,10 @@ object RedownloadService {
   def apply[F[_]: Concurrent: ContextShift: NonEmptyParallel: Timer](
     meaningfulSnapshotsCount: Int,
     redownloadInterval: Int,
-    snapshotInterval: Int,
     isEnabledCloudStorage: Boolean,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
+    missingProposalFinder: MissingProposalFinder,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
@@ -725,10 +796,10 @@ object RedownloadService {
     new RedownloadService[F](
       meaningfulSnapshotsCount,
       redownloadInterval,
-      snapshotInterval,
       isEnabledCloudStorage,
       cluster,
       majorityStateChooser,
+      missingProposalFinder,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
@@ -755,10 +826,4 @@ object RedownloadService {
   implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, SnapshotProposal]] =
     Decoder.decodeMap[Long, SnapshotProposal]
 
-  case class LatestMajorityHeight(lowest: Long, highest: Long)
-
-  object LatestMajorityHeight {
-    implicit val latestMajorityHeightEncoder: Encoder[LatestMajorityHeight] = deriveEncoder
-    implicit val latestMajorityHeightDecoder: Decoder[LatestMajorityHeight] = deriveDecoder
-  }
 }

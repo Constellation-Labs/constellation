@@ -14,7 +14,12 @@ import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, RedownloadService}
+import org.constellation.domain.redownload.{
+  DownloadService,
+  MajorityStateChooser,
+  MissingProposalFinder,
+  RedownloadService
+}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.{
@@ -130,7 +135,6 @@ class DAO(
   var partitionerPeerSampling: PartitionerPeerSampling[IO] = _
   var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
   var messageValidator: MessageValidator = _
-
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
   val soeService = new SOEService[IO]()
@@ -398,13 +402,20 @@ class DAO(
       boundedExecutionContext
     )
 
+    val missingProposalFinder = MissingProposalFinder(
+      ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval"),
+      ConfigUtil.constellation.getLong("snapshot.missingProposalOffset"),
+      ConfigUtil.constellation.getLong("snapshot.missingProposalLimit"),
+      id
+    )
+
     redownloadService = RedownloadService[IO](
       ConfigUtil.constellation.getInt("snapshot.meaningfulSnapshotsCount"),
       ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"),
-      ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval"),
       ConfigUtil.isEnabledCloudStorage,
       cluster,
       MajorityStateChooser(id),
+      missingProposalFinder,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,

@@ -20,8 +20,7 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
-import org.constellation.schema.signature.Signed
-import org.constellation.schema.snapshot.SnapshotProposal
+import org.constellation.schema.snapshot.{SnapshotProposalPayload}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
@@ -76,8 +75,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         dao.alias shouldReturn None
 
         dao.snapshotProposalGossipService shouldReturn mock[SnapshotProposalGossipService[IO]]
-        dao.snapshotProposalGossipService.spread(*[Signed[SnapshotProposal]]) shouldReturnF Unit
-        dao.snapshotProposalGossipService.spread(*[GossipMessage[Signed[SnapshotProposal]]]) shouldReturnF Unit
+        dao.snapshotProposalGossipService.spread(*[SnapshotProposalPayload]) shouldReturnF Unit
+        dao.snapshotProposalGossipService.spread(*[GossipMessage[SnapshotProposalPayload]]) shouldReturnF Unit
 
         val rds = mock[RedownloadService[IO]]
         dao.redownloadService shouldReturn rds

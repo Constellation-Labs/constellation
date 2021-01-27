@@ -46,6 +46,7 @@ class RedownloadServiceTest
   var cluster: Cluster[IO] = _
   var redownloadService: RedownloadService[IO] = _
   var majorityStateChooser: MajorityStateChooser = _
+  var missingProposalFinder: MissingProposalFinder = _
   var snapshotStorage: LocalFileStorage[IO, StoredSnapshot] = _
   var snapshotCloudStorage: HeightHashFileStorage[IO, StoredSnapshot] = _
   var snapshotService: SnapshotService[IO] = _
@@ -62,7 +63,6 @@ class RedownloadServiceTest
 
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
-  val snapshotInterval = 2
   val signature = HashSignature("xyz", Id("xyz"))
   val keyPair = KeyUtils.makeKeyPair()
 
@@ -71,6 +71,7 @@ class RedownloadServiceTest
     // TODO: Mock methods!
     metrics = mock[Metrics]
     majorityStateChooser = mock[MajorityStateChooser]
+    missingProposalFinder = mock[MissingProposalFinder]
     snapshotStorage = mock[LocalFileStorage[IO, StoredSnapshot]]
     snapshotInfoStorage = mock[LocalFileStorage[IO, SnapshotInfo]]
     rewardsStorage = mock[LocalFileStorage[IO, StoredRewards]]
@@ -88,10 +89,10 @@ class RedownloadServiceTest
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,
-      snapshotInterval,
       true,
       cluster,
       majorityStateChooser,
+      missingProposalFinder,
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
@@ -644,10 +645,10 @@ class RedownloadServiceTest
         val redownloadService = RedownloadService[IO](
           meaningfulSnapshotsCount,
           redownloadInterval,
-          snapshotInterval,
           false,
           cluster,
           majorityStateChooser,
+          missingProposalFinder,
           snapshotStorage,
           snapshotInfoStorage,
           snapshotService,

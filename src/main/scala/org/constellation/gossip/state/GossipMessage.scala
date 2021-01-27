@@ -10,7 +10,7 @@ import org.constellation.schema.signature.{HashSignature, SignHelp, Signable}
 import org.http4s.{EntityDecoder, EntityEncoder}
 
 case class GossipMessage[A](
-  data: A,
+  payload: A,
   path: GossipPath,
   origin: Id,
   signatures: IndexedSeq[HashSignature] = IndexedSeq.empty
@@ -26,6 +26,9 @@ case class GossipMessage[A](
 }
 
 object GossipMessage {
-  implicit def gossipMessageEncoder[F[_], A]: EntityEncoder[F, GossipMessage[A]] = BinaryCodec.encoder[F, GossipMessage[A]]
-  implicit def gossipMessageDecoder[F[_] : Sync, A]: EntityDecoder[F, GossipMessage[A]] = BinaryCodec.decoder[F, GossipMessage[A]]
+  implicit def gossipMessageEncoder[F[_], A]: EntityEncoder[F, GossipMessage[A]] =
+    BinaryCodec.encoder[F, GossipMessage[A]]
+
+  implicit def gossipMessageDecoder[F[_]: Sync, A]: EntityDecoder[F, GossipMessage[A]] =
+    BinaryCodec.decoder[F, GossipMessage[A]]
 }
