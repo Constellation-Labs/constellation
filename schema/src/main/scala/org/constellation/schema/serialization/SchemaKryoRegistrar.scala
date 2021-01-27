@@ -4,8 +4,16 @@ import org.constellation.schema.address.{Address, AddressCacheData, AddressMetaD
 import org.constellation.schema.checkpoint._
 import org.constellation.schema.edge._
 import org.constellation.schema.observation._
-import org.constellation.schema.signature.{HashSignature, SignatureBatch}
-import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.signature.{HashSignature, SignatureBatch, Signed}
+import org.constellation.schema.snapshot.{
+  HeightRange,
+  MajorityInfo,
+  Snapshot,
+  SnapshotInfo,
+  SnapshotProposal,
+  SnapshotProposalPayload,
+  StoredSnapshot
+}
 import org.constellation.schema.transaction._
 import org.constellation.schema.{
   ChannelMessage,
@@ -90,6 +98,11 @@ object SchemaKryoRegistrar
         (Class.forName("scala.collection.immutable.$colon$colon"), 1020),
         (Class.forName("scala.None$"), 114),
         (Class.forName("scala.collection.immutable.Nil$"), 116),
-        (Class.forName("scala.collection.immutable.Map$EmptyMap$"), 136)
+        (Class.forName("scala.collection.immutable.Map$EmptyMap$"), 136),
+        (classOf[SnapshotProposalPayload], 200),
+        (classOf[Signed[SnapshotProposal]], 201),
+        (classOf[SnapshotProposal], 202),
+        (classOf[MajorityInfo], 203),
+        (classOf[HeightRange], 204)
       )
     ) {}

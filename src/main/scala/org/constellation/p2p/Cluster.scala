@@ -1,34 +1,30 @@
 package org.constellation.p2p
 
-import java.time.LocalDateTime
-
-import cats.data.{EitherT, NonEmptyList, OptionT}
+import cats.data.NonEmptyList
 import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Timer}
-import cats.syntax.all._
 import cats.kernel.Order
+import cats.syntax.all._
 import constellation._
-import enumeratum._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
+import io.circe.parser._
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder}
 import org.constellation._
-import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
+import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster.ClusterNode
+import org.constellation.schema.snapshot.LatestMajorityHeight
 import org.constellation.schema.{Id, NodeState, PeerNotification}
 import org.constellation.serialization.KryoSerializer
+import org.constellation.session.SessionTokenService
 import org.constellation.util.Logging._
 import org.constellation.util._
 
 import scala.concurrent.duration._
 import scala.util.Random
-import io.circe.syntax._
-import io.circe.parser._
-import org.constellation.domain.redownload.RedownloadService.{LatestMajorityHeight, SnapshotProposalsAtHeight}
-import org.constellation.schema.signature.Signable
-import org.constellation.session.SessionTokenService
-import org.constellation.session.SessionTokenService.Token
 
 case class SetNodeStatus(id: Id, nodeStatus: NodeState)
 
