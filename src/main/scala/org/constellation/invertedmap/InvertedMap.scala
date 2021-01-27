@@ -21,10 +21,8 @@ final class InvertedMap[A, B] private (m: Map[B, Set[A]])
   override def updated[B1 >: B](key: A, value: B1): InvertedMap[A, B1] =
     new InvertedMap(Inverted.update(m.toMap[B1, Set[A]], key, value))
 
-  override def +[B1 >: B](kv: (A, B1)): InvertedMap[A, B1] = {
-    assert(!Inverted.contains(m, kv._1), "Given key already exists!")
+  override def +[B1 >: B](kv: (A, B1)): InvertedMap[A, B1] =
     updated(kv._1, kv._2)
-  }
 
   override def +[B1 >: B](elem1: (A, B1), elem2: (A, B1), elems: (A, B1)*): InvertedMap[A, B1] =
     this + elem1 + elem2 ++ elems

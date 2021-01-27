@@ -42,14 +42,18 @@ abstract class GossipService[F[_]: Parallel, A](
   protected def validationFn(peerClientMetadata: PeerClientMetadata, message: GossipMessage[A]): F[Boolean]
 
   def recover(message: GossipMessage[A]): F[Unit] = {
-    val sequence = message.path.toIndexedSeq
+    val sequence = message.path.toIndexedSeq match {
+      case `selfId` +: mid :+ `selfId` => mid
+      case _ @seq                      => seq
+    }
 
     for {
       _ <- messageTracker.fail(message.path.id)
       failureNode <- bisectA(
-        (id: Id) => getClientMetadata(id).flatMap(validationFn(_, message))
-      )(sequence)
-      sequenceToRetry = sequence.dropWhile(failureNode.contains)
+        (id: Id) => getClientMetadata(id).flatMap(validationFn(_, message)),
+        sequence
+      )
+      sequenceToRetry = sequence.dropWhile(node => !failureNode.contains(node))
       clients <- sequenceToRetry.toList.traverse(getClientMetadata)
       _ <- clients.traverse(spreadFn(_, message)) // TODO: Force trigger peer healthcheck if it fails
       _ <- messageTracker.remove(message.path.id)

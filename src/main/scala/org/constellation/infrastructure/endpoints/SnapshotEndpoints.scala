@@ -8,22 +8,18 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
-import org.constellation.domain.redownload.RedownloadService
-import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight
-import org.constellation.domain.redownload.RedownloadService.LatestMajorityHeight._
+import org.constellation.domain.redownload.{RedownloadService}
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.gossip.validation._
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id._
-import org.constellation.schema.signature.Signed
-import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
+import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotInfo, SnapshotProposalPayload, StoredSnapshot}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.Registration.`X-Id`
 import org.constellation.storage.SnapshotService
-import org.http4s.circe.CirceEntityDecoder._
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
@@ -172,8 +168,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
   private def getLatestMajorityHeight(redownloadService: RedownloadService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "latestMajorityHeight" =>
-      (redownloadService.lowestMajorityHeight, redownloadService.latestMajorityHeight)
-        .mapN(LatestMajorityHeight(_, _))
+      redownloadService.getMajorityRange
+        .map(LatestMajorityHeight(_))
         .map(_.asJson)
         .flatMap(Ok(_))
   }
@@ -186,18 +182,19 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     HttpRoutes.of[F] {
       case req @ POST -> Root / "peer" / "snapshot" / "created" =>
         for {
-          message <- req.as[GossipMessage[Signed[SnapshotProposal]]]
-          data = message.data
+          message <- req.as[GossipMessage[SnapshotProposalPayload]]
+          payload = message.payload
           senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
 
           res <- messageValidator.validateForForward(message, senderId) match {
-            case Invalid(EndOfCycle) => snapshotProposalGossipService.finishCycle(message) >> Ok()
+            case Invalid(EndOfCycle)                                                            => snapshotProposalGossipService.finishCycle(message) >> Ok()
             case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) => BadRequest()
-            case Invalid(IncorrectSenderId(_)) => Response[F](status = Unauthorized).pure[F]
-            case Invalid(e) => logger.error(e)(e.getMessage) >> InternalServerError()
+            case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
+            case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
               for {
-                _ <- redownloadService.persistPeerProposal(message.origin, data)
+                _ <- redownloadService.persistPeerProposal(message.origin, payload.proposal)
+                _ <- redownloadService.updatePeerMajorityInfo(message.origin, payload.majorityInfo)
                 _ <- snapshotProposalGossipService.spread(message)
                 res <- Ok()
               } yield res
