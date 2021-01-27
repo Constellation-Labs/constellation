@@ -2,14 +2,15 @@ package org.constellation.gossip.validation
 
 import cats.data.Validated
 import cats.implicits._
+import com.typesafe.scalalogging.StrictLogging
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.schema.Id
 import org.constellation.schema.signature.HashSignature
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
-class MessageValidator(selfId: Id) {
+class MessageValidator(selfId: Id) extends StrictLogging {
 
   def validateForForward[A](
     message: GossipMessage[A],
