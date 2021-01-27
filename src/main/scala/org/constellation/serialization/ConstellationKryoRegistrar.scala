@@ -9,8 +9,7 @@ import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.rewards.EigenTrustAgents
 import org.constellation.schema.serialization.ExplicitKryoRegistrar
-import org.constellation.schema.signature.Signed
-import org.constellation.schema.snapshot.SnapshotProposal
+import org.constellation.schema.snapshot.SnapshotProposalPayload
 
 object ConstellationKryoRegistrar
     extends ExplicitKryoRegistrar(
@@ -23,9 +22,7 @@ object ConstellationKryoRegistrar
         (classOf[EigenTrustAgents], 184),
         (classOf[StoredRewards], 185),
         (classOf[BuildInfoJson], 187),
-        (classOf[GossipMessage[Signed[SnapshotProposal]]], 1032),
-        (classOf[Signed[SnapshotProposal]], 1033),
-        (classOf[SnapshotProposal], 1034),
-        (classOf[GossipPath], 1035)
+        (classOf[GossipPath], 1032),
+        (classOf[GossipMessage[SnapshotProposalPayload]], 1033),
       )
     ) {}

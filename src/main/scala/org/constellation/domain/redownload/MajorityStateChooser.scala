@@ -1,15 +1,11 @@
 package org.constellation.domain.redownload
 
 import cats.syntax.all._
-import io.circe.generic.semiauto._
-import io.circe.{Decoder, Encoder}
 import org.constellation.domain.redownload.MajorityStateChooser.ExtendedSnapshotProposal
 import org.constellation.domain.redownload.RedownloadService.{PeersCache, PeersProposals, SnapshotProposalsAtHeight, SnapshotsAtHeight}
 import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
-import org.constellation.schema.signature.HashSignature
 
-import scala.collection.SortedMap
 
 class MajorityStateChooser(id: Id) {
 
@@ -29,23 +25,6 @@ class MajorityStateChooser(id: Id) {
 
     flat.mapFilter(identity)
   }
-
-  def findGaps(majorityState: SnapshotsAtHeight, snapshotInterval: Int): Set[Long] =
-    if (majorityState.size < 2) {
-      Set.empty[Long]
-    } else {
-      majorityState.toList.sortBy { case (height, _) => height }
-        .sliding(2)
-        .filter { case List((prevHeight, _), (currHeight, _)) => currHeight - prevHeight != snapshotInterval }
-        .flatMap {
-          case List((prevHeight, _), (currHeight, _)) =>
-            val diff = currHeight - prevHeight - snapshotInterval
-            val gapsCount = diff / snapshotInterval
-            val gaps = (1L to gapsCount).map(prevHeight + _ * snapshotInterval)
-            gaps
-        }
-        .toSet
-    }
 
   private def getTheMostQuantity(
     proposals: Set[ExtendedSnapshotProposal],
