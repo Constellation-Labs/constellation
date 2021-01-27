@@ -2,12 +2,15 @@ package org.constellation.invertedmap
 
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
 
-class InvertedMapTest extends AnyFreeSpec with Matchers {
+class InvertedMapTest extends AnyFreeSpec with Matchers with TableDrivenPropertyChecks {
   type Node = String
 
   sealed trait NodeState
+
   object Ready extends NodeState
+
   object Offline extends NodeState
 
   type SingleObservation = Map[Node, NodeState]
@@ -53,10 +56,8 @@ class InvertedMapTest extends AnyFreeSpec with Matchers {
     (m + (("node4", allReady))).get("node4").isDefined shouldBe true
   }
 
-  "does not allow to set same key again" in {
-    assertThrows[AssertionError] {
-      m + (("node3", allReady))
-    }
+  "adding the same key again, replaces the value" in {
+    (m + (("node3", allReady))).get("node3") should contain(allReady)
   }
 
   "updated" - {
@@ -103,4 +104,19 @@ class InvertedMapTest extends AnyFreeSpec with Matchers {
       m.filter(_._2 == oneOffline) should have size 1
     }
   }
+
+  private val addEntryTestCases = Table[InvertedMap[Int, String], (Int, String), Map[String, Set[Int]]](
+    ("inverted map", "entry to add", "expected underlying map"),
+    (InvertedMap(), 1 -> "a", Map("a" -> Set(1))),
+    (InvertedMap(1 -> "a"), 1 -> "b", Map("b" -> Set(1))),
+    (InvertedMap(1 -> "a"), 2 -> "a", Map("a" -> Set(1, 2))),
+    (InvertedMap(1 -> "a", 2 -> "a"), 2 -> "b", Map("a" -> Set(1), "b" -> Set(2))),
+    (InvertedMap(1 -> "a", 2 -> "a"), 3 -> "b", Map("a" -> Set(1, 2), "b" -> Set(3)))
+  )
+
+  forAll(addEntryTestCases) { (invertedMap, entry, expectedUnderlyingMap) =>
+    val result = (invertedMap + entry).underlyingMap
+    result shouldEqual expectedUnderlyingMap
+  }
+
 }
