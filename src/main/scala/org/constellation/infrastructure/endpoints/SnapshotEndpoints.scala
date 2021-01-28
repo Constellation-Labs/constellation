@@ -174,7 +174,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         .flatMap(Ok(_))
   }
 
-  private def postSnapshotProposal(
+  private[endpoints] def postSnapshotProposal(
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
     redownloadService: RedownloadService[F],
     messageValidator: MessageValidator
@@ -192,12 +192,17 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
             case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
             case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
-              for {
-                _ <- redownloadService.persistPeerProposal(message.origin, payload.proposal)
-                _ <- redownloadService.updatePeerMajorityInfo(message.origin, payload.majorityInfo)
-                _ <- snapshotProposalGossipService.spread(message)
-                res <- Ok()
-              } yield res
+              payload.proposal.validSignature
+                .pure[F]
+                .ifM(
+                  for {
+                    _ <- redownloadService.persistPeerProposal(message.origin, payload.proposal)
+                    _ <- redownloadService.updatePeerMajorityInfo(message.origin, payload.majorityInfo)
+                    _ <- snapshotProposalGossipService.spread(message)
+                    ok <- Ok()
+                  } yield ok,
+                  BadRequest()
+                )
           }
         } yield res
     }

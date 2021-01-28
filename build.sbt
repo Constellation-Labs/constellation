@@ -26,6 +26,7 @@ lazy val versions = new {
   val scaffeine = "4.0.1"
   val betterFiles = "3.9.1"
   val pureconfig = "0.13.0"
+  val monocle = "2.0.3"
 }
 
 // -----------------
@@ -62,7 +63,7 @@ lazy val coreSettings = Seq(
 lazy val http4sClientDependencies = Seq(
   "org.http4s" %% "http4s-dsl",
   "org.http4s" %% "http4s-blaze-client",
-  "org.http4s" %% "http4s-circe",
+  "org.http4s" %% "http4s-circe"
 ).map(_ % versions.http4s)
 
 lazy val http4sDependencies = Seq(
@@ -117,6 +118,11 @@ lazy val pureconfigDependencies = Seq(
   "com.github.pureconfig" %% "pureconfig" % versions.pureconfig
 )
 
+lazy val monocleDependencies = Seq(
+  "com.github.julien-truffaut" %% "monocle-core" % versions.monocle,
+  "com.github.julien-truffaut" %% "monocle-macro" % versions.monocle
+).map(_ % "test")
+
 // -----------------
 
 lazy val sharedDependencies = Seq(
@@ -147,7 +153,7 @@ lazy val coreDependencies = Seq(
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
   "io.chrisdavenport" %% "fuuid" % "0.4.0"
-) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ pureconfigDependencies
+) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ pureconfigDependencies ++ monocleDependencies
 
 //Test dependencies
 lazy val testDependencies = Seq(
