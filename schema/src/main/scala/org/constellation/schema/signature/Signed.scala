@@ -8,7 +8,9 @@ import io.circe.{Decoder, Encoder}
 /**
   * Container for signature and signed value
   */
-case class Signed[A <: Signable](signature: HashSignature, value: A)
+case class Signed[A <: Signable](signature: HashSignature, value: A) {
+  def validSignature: Boolean = signature.valid(value.hash)
+}
 
 object Signed {
 
