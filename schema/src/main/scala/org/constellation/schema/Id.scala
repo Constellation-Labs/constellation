@@ -35,6 +35,9 @@ case class Id(hex: String) extends Ordered[Id] {
 }
 
 object Id {
+
+  def fromPublicKey(publicKey: PublicKey): Id = Id(KeyUtils.publicKeyToHex(publicKey))
+
   implicit val idEncoder: Encoder[Id] = deriveEncoder
   implicit val idDecoder: Decoder[Id] = deriveDecoder
 

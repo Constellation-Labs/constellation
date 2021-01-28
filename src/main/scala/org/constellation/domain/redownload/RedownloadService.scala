@@ -8,7 +8,6 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
@@ -270,7 +269,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def fetchAndUpdatePeerProposals(peerId: Id)(client: PeerClientMetadata): F[Unit] =
     for {
       maybeProposals <- fetchPeerProposals(peerId, client)
-      _ <- maybeProposals.traverse { proposals =>
+      _ <- maybeProposals.map { proposals =>
+        proposals.filter { case (_, signedProposal) => signedProposal.validSignature }
+      }.traverse { proposals =>
         peersProposals.modify { m =>
           val existingProposals = m.getOrElse(peerId, Map.empty)
           (m.updated(peerId, existingProposals ++ proposals), ())
