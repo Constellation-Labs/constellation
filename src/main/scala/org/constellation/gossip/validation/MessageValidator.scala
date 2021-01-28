@@ -8,7 +8,6 @@ import org.constellation.schema.Id
 import org.constellation.schema.signature.HashSignature
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
 
 class MessageValidator(selfId: Id) extends StrictLogging {
 
@@ -31,8 +30,7 @@ class MessageValidator(selfId: Id) extends StrictLogging {
         case Some((previousMessage, signature)) =>
           validate(
             previousMessage,
-            result && previousMessage.path.isCurrent(signature.id) && Try(signature.valid(previousMessage.hash))
-              .getOrElse(false)
+            result && previousMessage.path.isCurrent(signature.id) && signature.valid(previousMessage.hash)
           )
         case None => result
       }
