@@ -1,13 +1,21 @@
 package org.constellation.wallet
 
+import cats.syntax.all._
+import cats.effect.{ContextShift, IO}
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
+import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, SignedObservationEdge, TypedEdgeHash}
+import org.constellation.schema.serialization.{Kryo, SchemaKryoRegistrar}
 import org.constellation.schema.signature.SignHelp
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-class TransactionDataConciseFormatTest extends AnyFlatSpec with Matchers {
+import scala.concurrent.ExecutionContext
+
+class TransactionDataConciseFormatTest extends AnyFlatSpec with Matchers with BeforeAndAfter {
+
+  implicit val cs: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
 
   val src = "DAG4EqbfJNSYZDDfs7AUzofotJzZXeRYgHaGZ6jQ"
   val dst = "DAG48nmxgpKhZzEzyc86y9oHotxxG57G8sBBwj56"
@@ -26,8 +34,14 @@ class TransactionDataConciseFormatTest extends AnyFlatSpec with Matchers {
     ),
     TypedEdgeHash(txData.getEncoding, EdgeHashType.TransactionDataHash)
   )
-  val soe = SignHelp.signedObservationEdge(oe)(KeyUtils.makeKeyPair())
-  val tx = Transaction(edge = Edge(oe, soe, txData), lastTxRef = lastTxRef, isDummy = false, isTest = false)
+  var soe: SignedObservationEdge = _
+  var tx: Transaction = _
+
+  before {
+    Kryo.init[IO](SchemaKryoRegistrar).handleError(_ => Unit).unsafeRunSync()
+    soe = SignHelp.signedObservationEdge(oe)(KeyUtils.makeKeyPair())
+    tx = Transaction(edge = Edge(oe, soe, txData), lastTxRef = lastTxRef, isDummy = false, isTest = false)
+  }
 
   "generate" should "correctly encode transaction data" in {
     val expected =
