@@ -15,6 +15,7 @@ import org.constellation.gossip.validation.EndOfCycle
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
+import org.constellation.util.Metrics
 
 import scala.concurrent.duration._
 
@@ -23,6 +24,7 @@ abstract class GossipService[F[_]: Parallel, A](
   keyPair: KeyPair,
   peerSampling: PeerSampling[F],
   cluster: Cluster[F],
+  metrics: Metrics,
   messageTracker: GossipMessagePathTracker[F, A]
 )(
   implicit F: Concurrent[F],
@@ -80,7 +82,9 @@ abstract class GossipService[F[_]: Parallel, A](
         s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next.map(_.short)})."
       )
       _ <- signAndForward(message).handleErrorWith(
-        e => logger.error(e)(s"Forwarding message on path ${message.path.id} failed")
+        e =>
+          logger.error(e)(s"Forwarding message on path ${message.path.id} failed")
+            >> metrics.incrementMetricAsync(s"gossip_failedSpreadForwardCount")
       )
     } yield ()
 
@@ -96,13 +100,14 @@ abstract class GossipService[F[_]: Parallel, A](
     val round = for {
       _ <- messageTracker.start(message)
       _ <- logger.debug(s"Started path ${message.path.id}: ${message.path.toIndexedSeq.map(_.short).mkString(" -> ")}")
+      _ <- metrics.incrementMetricAsync[F]("gossip_spreadInitCount")
       _ <- signAndForward(message)
       _ <- T.sleep(getPathTimeout(message.path))
       succeeded <- messageTracker.isSuccess(message)
       _ <- if (succeeded) {
         messageTracker.remove(message.path.id) >> logger.debug(s"Succeeded path ${message.path.id}")
       } else {
-        recover(message)
+        recover(message) >> metrics.incrementMetricAsync("gossip_failedSpreadInitCount")
       }
     } yield ()
 
