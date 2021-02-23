@@ -301,7 +301,7 @@ class DAO(
     messageValidator = MessageValidator(id)
 
     snapshotProposalGossipService =
-      SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient)
+      SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient, metrics)
 
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,

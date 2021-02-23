@@ -14,19 +14,22 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.schema.snapshot.SnapshotProposalPayload
+import org.constellation.util.Metrics
 
 class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
   selfId: Id,
   keyPair: KeyPair,
   peerSampling: PeerSampling[F],
   cluster: Cluster[F],
-  apiClient: ClientInterpreter[F]
+  apiClient: ClientInterpreter[F],
+  metrics: Metrics
 ) extends GossipService[F, SnapshotProposalPayload](
       selfId,
       keyPair,
       peerSampling,
       cluster,
-      new GossipMessagePathTracker[F, SnapshotProposalPayload]
+      metrics,
+      new GossipMessagePathTracker[F, SnapshotProposalPayload](metrics)
     ) {
 
   override protected def spreadFn(
@@ -57,7 +60,8 @@ object SnapshotProposalGossipService {
     keyPair: KeyPair,
     peerSampling: PeerSampling[F],
     cluster: Cluster[F],
-    apiClient: ClientInterpreter[F]
+    apiClient: ClientInterpreter[F],
+    metrics: Metrics
   ): SnapshotProposalGossipService[F] =
-    new SnapshotProposalGossipService(selfId, keyPair, peerSampling, cluster, apiClient)
+    new SnapshotProposalGossipService(selfId, keyPair, peerSampling, cluster, apiClient, metrics)
 }
