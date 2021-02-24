@@ -124,7 +124,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def persistPeerProposal(peer: Id, proposal: Signed[SnapshotProposal]): F[Unit] =
     logger.debug(
-      s"Persisting proposal of ${peer.short} at height ${proposal.value.height} and hash ${proposal.value.hash}"
+      s"Persisting proposal of ${peer.hex} at height ${proposal.value.height} and hash ${proposal.value.hash}"
     ) >> peersProposals.modify { m =>
       val existing = m.getOrElse(peer, Map.empty)
       val updated =
@@ -510,7 +510,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
         logger.debug("Node state is not valid for redownload, skipping") >> F.unit
       )
   }.handleErrorWith { error =>
-      logger.error(error)("Error during checking alignment with majority snapshot.") >>
+    logger.error(error)("Error during checking alignment with majority snapshot.") >>
       error.raiseError[F, Unit]
   }
 
