@@ -1,6 +1,6 @@
 package org.constellation.gossip.sampling
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, Sync}
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import io.chrisdavenport.fuuid.FUUID
@@ -14,24 +14,33 @@ import org.constellation.util.Partitioner._
 
 class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F], trustManager: TrustManager[F])
     extends PeerSampling[F] {
-  private val partitionCache: Ref[F, List[GossipPath]] = Ref.unsafe(List.empty[GossipPath])
+  type Partition = IndexedSeq[Id]
+
+  private val partitionCache: Ref[F, List[Partition]] = Ref.unsafe(List.empty[Partition])
   private val trustDataInternalCache: Ref[F, List[TrustDataInternal]] = Ref.unsafe(List.empty[TrustDataInternal])
 
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   override def selectPaths: F[List[GossipPath]] =
     cachedPartitionsCoverAllPeers.ifM(
-      logger.debug("Cached partitions cover all the peers. Returning.") >> partitionCache.get,
+      logger.debug("Cached partitions cover all the peers. Returning.") >> partitionCache.get
+        .flatMap(partitionsToGossipPaths),
       logger
         .debug("Some nodes are missing in cached partitions. Repartitioning.") >> repartitionWithDefaults() >> partitionCache.get
+        .flatMap(partitionsToGossipPaths)
     )
 
   def repartition(selfTdi: TrustDataInternal, tdi: List[TrustDataInternal]): F[Unit] =
     for {
-      partitions <- calculatePartitions(selfTdi, tdi)
+      partitions <- Sync[F].delay {
+        calculatePartitions(selfTdi, tdi)
+      }
       _ <- trustDataInternalCache.modify(_ => (tdi, ()))
       _ <- partitionCache.modify(_ => (partitions, ()))
     } yield ()
+
+  private def partitionsToGossipPaths(partitions: List[Partition]): F[List[GossipPath]] =
+    partitions.traverse(p => generatePathId.map(GossipPath(p, _)))
 
   private def cachedPartitionsCoverAllPeers: F[Boolean] =
     for {
@@ -52,7 +61,7 @@ class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F],
       _ <- repartition(selfTdi, updatedTdi)
     } yield ()
 
-  private def calculatePartitions(selfTdi: TrustDataInternal, tdi: List[TrustDataInternal]): F[List[GossipPath]] = {
+  private def calculatePartitions(selfTdi: TrustDataInternal, tdi: List[TrustDataInternal]): List[Partition] = {
     val partitioner = HausdorffPartition(tdi)(selfTdi)
     val partitions = partitioner.nerve
       .filterKeys(_ != 0) // To get rid of self Id
@@ -62,7 +71,7 @@ class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F],
       .map(selfId +: _ :+ selfId)
       .map(IndexedSeq[Id](_: _*))
 
-    partitions.toList.traverse(partition => generatePathId.map(GossipPath(partition, _)))
+    partitions.toList
   }
 
   private def generatePathId: F[String] =
