@@ -19,7 +19,7 @@ import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.schema.signature.{HashSignature, Signed}
-import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
+import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, SnapshotInfo, SnapshotProposal, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.constellation.{PeerMetadata, ResourceInfo}
@@ -319,9 +319,10 @@ class RedownloadServiceTest
 
       (persistFirst >> persistSecond >> check).unsafeRunSync.toList should matchPattern {
         case List(
-        (2L, Signed(_, SnapshotProposal("aaaa", 2L, _))),
-        (4L, Signed(_, SnapshotProposal("bbbb", 4L, _)))
-        ) => ()
+            (2L, Signed(_, SnapshotProposal("aaaa", 2L, _))),
+            (4L, Signed(_, SnapshotProposal("bbbb", 4L, _)))
+            ) =>
+          ()
       }
     }
   }
@@ -353,7 +354,8 @@ class RedownloadServiceTest
       PeerMetadata("host2", 9999, peer2, resourceInfo = mock[ResourceInfo]),
       NonEmptyList(mock[MajorityHeight], Nil)
     )
-    val initialPeersProposals = InvertedMap(peer1 -> Map(1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
+    val initialPeersProposals =
+      InvertedMap(peer1 -> Map(1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
     val peer1Proposals =
       Map(
         1L -> Signed(signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
@@ -431,6 +433,29 @@ class RedownloadServiceTest
         val expected = initialPeersProposals ++ Map(peer2 -> peer2Proposals)
 
         result shouldEqual expected
+      }
+    }
+
+    "getLookupRange" - {
+      "should use max height from peer majority state" in {
+        (redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")) >>
+          redownloadService.updatePeerMajorityInfo(Id("a"), MajorityInfo(HeightRange(0L, 10L), List.empty)) >>
+          redownloadService.updatePeerMajorityInfo(Id("b"), MajorityInfo(HeightRange(0L, 6L), List.empty)))
+          .unsafeRunSync()
+
+        val result = redownloadService.getLookupRange.unsafeRunSync()
+
+        result shouldBe HeightRange(4L, 10L)
+      }
+
+      "should use max height from own majority state" in {
+        (redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")) >>
+          redownloadService.updatePeerMajorityInfo(Id("b"), MajorityInfo(HeightRange(0L, 6L), List.empty)))
+          .unsafeRunSync()
+
+        val result = redownloadService.getLookupRange.unsafeRunSync()
+
+        result shouldBe HeightRange(4L, 8L)
       }
     }
 
