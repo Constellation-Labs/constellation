@@ -20,18 +20,21 @@ class MissingProposalFinder(
     * @return Map where the key is the Id of a peer and the value is a set of heights with missing proposals from the peer
     */
   def findMissingPeerProposals(
-    majorityRange: HeightRange,
+    lookupRange: HeightRange,
     proposals: PeersProposals,
     peersCache: PeersCache
   ): Map[Id, Set[Long]] = {
     val receivedProposals = proposals.mapValues(_.keySet)
-    val bounds = boundedRange(majorityRange)
+    val bounds = boundedRange(lookupRange)
 
     (peersCache - selfId)
       .mapValues(
-        _.map { majorityHeight =>
-          HeightRange(majorityHeight.joined.getOrElse(MaxRange.from), majorityHeight.left.getOrElse(MaxRange.to))
-        }.toList
+        _.toList.mapFilter { majorityHeight =>
+          majorityHeight.joined.map { joinedHeight =>
+            val leftHeight = majorityHeight.left.getOrElse(MaxRange.to)
+            HeightRange(joinedHeight, leftHeight)
+          }
+        }
       )
       .map {
         case (id, majorityHeights) =>
@@ -47,11 +50,11 @@ class MissingProposalFinder(
     * @return Id of the peer that can provide the most proposals that are missing, if one could be found
     */
   def selectPeerForFetchingMissingProposals(
-    majorityRange: HeightRange,
+    lookupRange: HeightRange,
     missingProposals: Set[Long],
     peerMajorityInfo: Map[Id, MajorityInfo]
   ): Option[Id] = {
-    val bounds = boundedRange(majorityRange)
+    val bounds = boundedRange(lookupRange)
 
     (peerMajorityInfo - selfId).mapValues { majorityInfo =>
       val peerGaps = expandIntervals(bounds, majorityInfo.majorityGaps) ++

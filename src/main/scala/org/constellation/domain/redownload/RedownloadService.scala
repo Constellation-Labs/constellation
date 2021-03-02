@@ -514,11 +514,20 @@ class RedownloadService[F[_]: NonEmptyParallel](
       error.raiseError[F, Unit]
   }
 
+  private[redownload] def getLookupRange: F[HeightRange] =
+    for {
+      mr <- getMajorityRange
+      pmi <- peerMajorityInfo.get
+      maxPmiHeight = pmi.values.foldLeft(mr.to) {
+        case (acc, peer) => Math.max(acc, peer.majorityRange.to)
+      }
+    } yield HeightRange(mr.from, maxPmiHeight)
+
   private def findAndFetchMissingProposals(peersProposals: PeersProposals, peersCache: PeersCache): F[Unit] =
     for {
-      majorityRange <- getMajorityRange
+      lookupRange <- getLookupRange
       peerMajorityInfo <- peerMajorityInfo.get
-      missingProposals = missingProposalFinder.findMissingPeerProposals(majorityRange, peersProposals, peersCache)
+      missingProposals = missingProposalFinder.findMissingPeerProposals(lookupRange, peersProposals, peersCache)
       _ <- missingProposals.nonEmpty
         .pure[F]
         .ifM(
@@ -528,7 +537,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- missingProposals.toList.traverse {
         case (peerId, peerGaps) =>
           val maybeSelectedPeerId = missingProposalFinder
-            .selectPeerForFetchingMissingProposals(majorityRange, peerGaps, peerMajorityInfo - peerId)
+            .selectPeerForFetchingMissingProposals(lookupRange, peerGaps, peerMajorityInfo - peerId)
           maybeSelectedPeerId.traverse(fetchProposalForPeer(peerId))
       }
     } yield ()
