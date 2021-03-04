@@ -51,4 +51,14 @@ object Base58 {
     )
     if (trim.isEmpty) zeroes else zeroes ++ decoded.toByteArray.dropWhile(_ == 0) // BigInteger.toByteArray may add a leading 0x00
   }
+
+  /**
+    * Checks if the input contains base58 chars only
+    *
+    * @param input string to check
+    * @return true if input contains base58 chars only, false otherwise
+    */
+  def isBase58(input: String): Boolean = {
+    input.forall(alphabet.toSet.contains)
+  }
 }
