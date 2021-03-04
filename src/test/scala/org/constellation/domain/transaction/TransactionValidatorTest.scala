@@ -2,6 +2,9 @@ package org.constellation.domain.transaction
 
 import cats.data.Validated
 import cats.effect.IO
+import cats.syntax.all._
+import org.constellation.Fixtures
+import org.constellation.schema.address.Address
 import org.constellation.schema.edge.EdgeHashType.{AddressHash, TransactionDataHash}
 import org.constellation.schema.signature.SignatureBatch
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
@@ -31,6 +34,72 @@ class TransactionValidatorTest
     transactionService = mock[TransactionService[IO]]
     transactionService.transactionChainService shouldReturn transactionChainService
     transactionValidator = new TransactionValidator[IO](transactionService)
+  }
+
+  "validateDestinationAddress" - {
+    val validAddress = Fixtures.id.address
+
+    "should fail validation" - {
+      "when destination address is smaller than 40 characters" in {
+        val tx = createTransaction("sender", validAddress.substring(0, 39), LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+
+      "when destination address is larger than 40 characters" in {
+        val tx = createTransaction("sender", validAddress + "A", LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+
+      "when destination address contains non base58 character" in {
+        val tx = createTransaction("sender", validAddress.substring(0, 39) + "%", LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+
+      "when destination address contains whitespace character" in {
+        val tx = createTransaction("sender", s"${validAddress.substring(0, 39)} ", LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+
+      "when destination address does not contain DAG prefix" in {
+        val tx = createTransaction("sender", s"ABC${validAddress.substring(3)} ", LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+
+      "when destination address is equal to source address" in {
+        val tx = createTransaction(validAddress, validAddress, LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+
+      "when the parity number does not match" in {
+        val par = validAddress.substring(4).filter(Character.isDigit).map(_.toString.toInt).sum % 9
+        val invalidPar = if (par > 5) 0 else 9
+        val tx = createTransaction("sender", s"${validAddress.substring(0, 3)}${invalidPar}${validAddress.substring(4)} ", LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe Validated.invalidNel(InvalidDestinationAddress(tx))
+      }
+    }
+
+    "should pass validation" - {
+      "when the destination address is correct" in {
+        val tx = createTransaction("sender", validAddress, LastTransactionRef.empty, LastTransactionRef.empty)
+        val result = TransactionValidator.validateDestinationAddress(tx)
+
+        result shouldBe tx.validNel
+      }
+    }
   }
 
   "validateLastTransactionRef" - {

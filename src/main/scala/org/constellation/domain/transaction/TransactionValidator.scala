@@ -4,6 +4,7 @@ import cats.data.ValidatedNel
 import cats.effect.Sync
 import cats.syntax.all._
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
+import org.constellation.keytool.Base58
 
 object TransactionValidator {
   type ValidationResult[A] = ValidatedNel[TransactionValidationError, A]
@@ -14,11 +15,19 @@ object TransactionValidator {
   def validateEmptyDestinationAddress(tx: Transaction): ValidationResult[Transaction] =
     if (tx.dst.address.nonEmpty) tx.validNel else EmptyDestinationAddress(tx).invalidNel
 
-  def validateDestinationAddress(tx: Transaction): ValidationResult[Transaction] =
-    if (tx.dst.address.length > 30 && tx.dst.address.startsWith("DAG") && tx.src != tx.dst)
+  def validateDestinationAddress(tx: Transaction): ValidationResult[Transaction] = {
+    val par = tx.dst.address.substring(4).filter(Character.isDigit).map(_.toString.toInt).sum % 9
+
+    val isBase58 = Base58.isBase58(tx.dst.address.substring(4))
+    val hasDAGPrefixAndParity = tx.dst.address.startsWith(s"DAG${par}")
+    val has40Chars = tx.dst.address.length == 40
+    val isDifferentDstThanSrc = tx.src != tx.dst
+
+    if (isBase58 && hasDAGPrefixAndParity && has40Chars && isDifferentDstThanSrc)
       tx.validNel
     else
       InvalidDestinationAddress(tx).invalidNel
+  }
 
   def validateAmount(tx: Transaction): ValidationResult[Transaction] =
     if (tx.isDummy) {
