@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.22.1] 2021-03-07
 ### Changed
 - Better tx destination address validation (parity number and base58 characters)
 - Update whitelisting file
