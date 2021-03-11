@@ -131,9 +131,9 @@ class DownloadService[F[_]](
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
         .flatTap { genesis =>
-          ContextShift[F].evalOn(boundedExecutionContext)(F.delay {
-            Genesis.acceptGenesis(genesis)
-          })
+          ContextShift[F].evalOn(boundedExecutionContext)(
+            Genesis.acceptGenesis(genesis)(dao)
+          )
         }
         .void
     } yield ()

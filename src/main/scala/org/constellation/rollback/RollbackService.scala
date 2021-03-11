@@ -99,9 +99,8 @@ class RollbackService[F[_]: Concurrent](
     } yield highest
 
   private def acceptGenesis(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
-    Concurrent[F].delay {
       Genesis.acceptGenesis(genesisObservation)(dao)
-    }.attemptT
+        .attemptT
 
   private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): EitherT[F, Throwable, Unit] =
     for {

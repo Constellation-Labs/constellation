@@ -312,7 +312,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       _ <- Stream.eval {
         if (nodeConfig.isGenesisNode) {
           logger.info("Creating genesis block") >>
-            IO(Genesis.start()(dao)) >>
+            Genesis.start[IO](dao) >>
             logger.info(s"Genesis block ${dao.genesisBlock.map(CheckpointBlock.checkpointToJsonString).getOrElse("")}") >>
             dao.sessionTokenService.createAndSetNewOwnToken() >>
             dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready)

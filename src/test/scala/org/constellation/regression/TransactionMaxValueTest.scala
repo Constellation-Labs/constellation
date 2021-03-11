@@ -1,7 +1,6 @@
 package org.constellation.regression
 
 import java.security.KeyPair
-
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
@@ -20,6 +19,8 @@ import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
+import scala.concurrent.ExecutionContext
+
 // TODO: Consider moving to transaction validation test suite
 class TransactionMaxValueTest
     extends AnyFreeSpec
@@ -28,7 +29,10 @@ class TransactionMaxValueTest
     with IdiomaticMockitoCats
     with ArgumentMatchersSugar {
 
-  def go()(implicit dao: DAO): GenesisObservation = Genesis.createGenesisObservation(Seq.empty)
+  implicit val concurrent = IO.ioConcurrentEffect(IO.contextShift(ExecutionContext.global))
+  implicit val cs = IO.contextShift(ExecutionContext.global)
+
+  def go(dao: DAO): GenesisObservation = Genesis.createGenesisObservation(Seq.empty)(dao).unsafeRunSync()
 
   def startingTips(go: GenesisObservation)(implicit dao: DAO): Seq[SignedObservationEdge] =
     Seq(go.initialDistribution.soe, go.initialDistribution2.soe)
@@ -76,7 +80,7 @@ class TransactionMaxValueTest
 
           as.lookup(*) shouldReturnF None
 
-          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go(dao)))
 
           val isValid = cbv.simpleValidation(cb).map(_.isValid)
 
@@ -93,7 +97,7 @@ class TransactionMaxValueTest
 
           as.lookup(*) shouldReturnF AddressCacheData(20L, 20L, balanceByLatestSnapshot = 20L).some
 
-          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go(dao)))
 
           val isValid = cbv.simpleValidation(cb).map(_.isValid)
 
@@ -110,7 +114,7 @@ class TransactionMaxValueTest
             Fixtures.makeTransaction(src, dst3, Long.MaxValue, keyPair)
           )
           as.lookup(*) shouldReturnF AddressCacheData(20L, 20L, balanceByLatestSnapshot = 20L).some
-          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go(dao)))
           val isValid = cbv.simpleValidation(cb).map(_.isValid)
           isValid.unsafeRunSync shouldBe false
         }
@@ -123,7 +127,7 @@ class TransactionMaxValueTest
             Fixtures.makeTransaction(src, dst3, Long.MaxValue - 1, keyPair)
           )
           as.lookup(*) shouldReturnF AddressCacheData(20L, 20L, balanceByLatestSnapshot = 20L).some
-          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go()))
+          val cb = CheckpointBlock.createCheckpointBlockSOE(txs, startingTips(go(dao)))
           val isValid = cbv.simpleValidation(cb).map(_.isValid)
           isValid.unsafeRunSync shouldBe false
         }
