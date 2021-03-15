@@ -401,7 +401,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
       )
 
       _ <- if (shouldPerformRedownload) {
-        cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { state =>
+        {
+          if (isDownload)
+            cluster.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress)
+          else
+            cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress)
+        }.flatMap { state =>
           if (state.isNewSet) {
             wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
               error =>
@@ -414,7 +419,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
                       .void
                 }
             }
-          } else F.unit
+          } else logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=$isDownload")
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
@@ -439,10 +444,13 @@ class RedownloadService[F[_]: NonEmptyParallel](
     } yield ()
 
     cluster.getNodeState
-      .map(NodeState.validForRedownload.contains)
+      .map { current =>
+        if (isDownload) NodeState.validForDownload.contains(current)
+        else NodeState.validForRedownload.contains(current)
+      }
       .ifM(
         wrappedCheck,
-        logger.debug("Node state is not valid for redownload, skipping") >> F.unit
+        logger.debug(s"Node state is not valid for redownload, skipping. isDownload=$isDownload") >> F.unit
       )
   }.handleErrorWith { error =>
       logger.error(error)("Error during checking alignment with majority snapshot.") >>
