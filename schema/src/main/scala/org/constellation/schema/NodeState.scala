@@ -34,13 +34,11 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
   val validDuringDownload: Set[NodeState] =
     Set(ReadyForDownload, DownloadInProgress, DownloadCompleteAwaitingFinalSync)
 
-  val validForDownload: Set[NodeState] = Set(PendingDownload, Ready)
+  val validForDownload: Set[NodeState] = Set(ReadyForDownload)
 
-  val validForRedownload: Set[NodeState] = Set(ReadyForDownload, Ready)
+  val validForRedownload: Set[NodeState] = Set(Ready)
 
   val validForSnapshotCreation: Set[NodeState] = Set(Ready, Leaving)
-
-  val validForTransactionGeneration: Set[NodeState] = Set(Ready, SnapshotCreation)
 
   val validForOwnConsensus: Set[NodeState] = Set(Ready, SnapshotCreation)
 
@@ -56,7 +54,7 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
   val invalidForCommunication: Set[NodeState] = Set(Offline)
 
-  val validForHealthCheck: Set[NodeState] = readyStates ++ validDuringDownload ++ validForDownload
+  val validForHealthCheck: Set[NodeState] = all -- invalidForJoining
 
   // TODO: Use initial for allowing joining after leaving
   def canJoin(current: NodeState): Boolean = current == PendingDownload
@@ -73,11 +71,7 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
   def canActAsRedownloadSource(current: NodeState): Boolean = validForLettingOthersRedownload.contains(current)
 
-  def canRunClusterCheck(current: NodeState): Boolean = validForRedownload.contains(current)
-
   def canCreateSnapshot(current: NodeState): Boolean = validForSnapshotCreation.contains(current)
-
-  def canGenerateTransactions(current: NodeState): Boolean = validForTransactionGeneration.contains(current)
 
   def canStartOwnConsensus(current: NodeState): Boolean = validForOwnConsensus.contains(current)
 

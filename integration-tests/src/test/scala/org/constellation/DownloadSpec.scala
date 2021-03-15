@@ -3,7 +3,7 @@ package org.constellation
 import cats.effect.{ContextShift, ExitCode, IO, Timer}
 import com.decodified.scalassh._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.schema.NodeState.Offline
+import org.constellation.schema.NodeState.{Offline, PendingDownload}
 import org.constellation.schema.{ClusterNode, LatestMajorityHeight, NodeState, NodeStateInfo}
 import org.constellation.testutils.CustomMatchers
 import org.constellation.testutils.HttpUtil.{evalRequest, evalRequestForHosts}
@@ -69,7 +69,7 @@ class DownloadSpec
     evalSSHCommand(startCmd)
 
     eventually {
-      NodeState.validForDownload should contain(getNodeState)
+      getNodeState shouldEqual PendingDownload
     }
 
     val headIP = s"headIP=${terraform.instanceIps.value.head};"
