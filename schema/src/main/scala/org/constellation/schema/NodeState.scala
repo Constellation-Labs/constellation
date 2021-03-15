@@ -36,11 +36,11 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
   val validForDownload: Set[NodeState] = Set(PendingDownload, Ready)
 
-  val validForRedownload: Set[NodeState] = Set(ReadyForDownload, Ready)
+  val validForInitialRedownload: Set[NodeState] = Set(ReadyForDownload)
+
+  val validForRedownload: Set[NodeState] = Set(Ready)
 
   val validForSnapshotCreation: Set[NodeState] = Set(Ready, Leaving)
-
-  val validForTransactionGeneration: Set[NodeState] = Set(Ready, SnapshotCreation)
 
   val validForOwnConsensus: Set[NodeState] = Set(Ready, SnapshotCreation)
 
@@ -73,11 +73,7 @@ object NodeState extends Enum[NodeState] with CirceEnum[NodeState] {
 
   def canActAsRedownloadSource(current: NodeState): Boolean = validForLettingOthersRedownload.contains(current)
 
-  def canRunClusterCheck(current: NodeState): Boolean = validForRedownload.contains(current)
-
   def canCreateSnapshot(current: NodeState): Boolean = validForSnapshotCreation.contains(current)
-
-  def canGenerateTransactions(current: NodeState): Boolean = validForTransactionGeneration.contains(current)
 
   def canStartOwnConsensus(current: NodeState): Boolean = validForOwnConsensus.contains(current)
 

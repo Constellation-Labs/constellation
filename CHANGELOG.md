@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Changed
 - Genesis acceptance rewritten to depend on generic effect type
+- Prevent running periodic redownload before download flow finishes
 
 ## [Unreleased]
 ### Changed
