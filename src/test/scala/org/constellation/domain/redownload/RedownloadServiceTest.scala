@@ -13,7 +13,6 @@ import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.client.SnapshotClientInterpreter
-import org.constellation.invertedmap.InvertedMap
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
@@ -355,7 +354,7 @@ class RedownloadServiceTest
       NonEmptyList(mock[MajorityHeight], Nil)
     )
     val initialPeersProposals =
-      InvertedMap(peer1 -> Map(1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
+      Map(peer1 -> Map(1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
     val peer1Proposals =
       Map(
         1L -> Signed(signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
@@ -370,7 +369,10 @@ class RedownloadServiceTest
     "for empty proposals Map" - {
       "should not override previously stored proposals" in {
         // preparing mocks and initial state
-        redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
+        initialPeersProposals.toList.traverse {
+          case (id, proposals) =>
+            redownloadService.replacePeerProposals(id, proposals)
+        }.unsafeRunSync()
         cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
         apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
@@ -378,10 +380,12 @@ class RedownloadServiceTest
             IO.pure(Map.empty)
           }
 
-        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+
+        val actual = redownloadService.getAllPeerProposals().unsafeRunSync()
         val expected = initialPeersProposals
 
-        result shouldEqual expected
+        actual shouldEqual expected
       }
     }
 
@@ -394,14 +398,19 @@ class RedownloadServiceTest
             IO.pure(peer1Proposals)
           }
 
-        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+
+        val actual = redownloadService.getAllPeerProposals().unsafeRunSync()
         val expected = Map(peer1 -> peer1Proposals)
 
-        result shouldEqual expected
+        actual shouldEqual expected
       }
 
-      "should not override peers proposals at already specified heights" in {
-        redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
+      "should override peers proposals at already specified heights" in {
+        initialPeersProposals.toList.traverse {
+          case (id, proposals) =>
+            redownloadService.replacePeerProposals(id, proposals)
+        }.unsafeRunSync()
         cluster.getPeerInfo shouldReturnF Map(peer1 -> peer1Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
         apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
@@ -409,19 +418,23 @@ class RedownloadServiceTest
             IO.pure(peer1Proposals)
           }
 
-        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        val actual = redownloadService.getAllPeerProposals().unsafeRunSync()
         val expected = Map(
           peer1 -> Map(
-            1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty)),
+            1L -> Signed(signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
             2L -> Signed(signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
           )
         )
 
-        result shouldEqual expected
+        actual shouldEqual expected
       }
 
       "should add proposals for new node" in {
-        redownloadService.peersProposals.set(initialPeersProposals).unsafeRunSync
+        initialPeersProposals.toList.traverse {
+          case (id, proposals) =>
+            redownloadService.replacePeerProposals(id, proposals)
+        }.unsafeRunSync()
         cluster.getPeerInfo shouldReturnF Map(peer2 -> peer2Data)
         apiClient.snapshot shouldReturn mock[SnapshotClientInterpreter[IO]]
         apiClient.snapshot.getCreatedSnapshots() shouldReturn Kleisli
@@ -429,31 +442,35 @@ class RedownloadServiceTest
             IO.pure(peer2Proposals)
           }
 
-        val result = redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+        redownloadService.fetchAndUpdatePeersProposals().unsafeRunSync
+
+        val actual = redownloadService.getAllPeerProposals().unsafeRunSync()
         val expected = initialPeersProposals ++ Map(peer2 -> peer2Proposals)
 
-        result shouldEqual expected
+        actual shouldEqual expected
       }
     }
 
     "getLookupRange" - {
       "should use max height from peer majority state" in {
-        (redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")) >>
-          redownloadService.updatePeerMajorityInfo(Id("a"), MajorityInfo(HeightRange(0L, 10L), List.empty)) >>
-          redownloadService.updatePeerMajorityInfo(Id("b"), MajorityInfo(HeightRange(0L, 6L), List.empty)))
-          .unsafeRunSync()
+        redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")).unsafeRunSync()
+        val majorityInfos = Map(
+          Id("a") -> MajorityInfo(HeightRange(0L, 10L), List.empty),
+          Id("b") -> MajorityInfo(HeightRange(0L, 6L), List.empty)
+        )
 
-        val result = redownloadService.getLookupRange.unsafeRunSync()
+        val result = redownloadService.getLookupRange(majorityInfos).unsafeRunSync()
 
         result shouldBe HeightRange(4L, 10L)
       }
 
       "should use max height from own majority state" in {
-        (redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")) >>
-          redownloadService.updatePeerMajorityInfo(Id("b"), MajorityInfo(HeightRange(0L, 6L), List.empty)))
-          .unsafeRunSync()
+        redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")).unsafeRunSync()
+        val majorityInfos = Map(
+          Id("b") -> MajorityInfo(HeightRange(0L, 6L), List.empty)
+        )
 
-        val result = redownloadService.getLookupRange.unsafeRunSync()
+        val result = redownloadService.getLookupRange(majorityInfos).unsafeRunSync()
 
         result shouldBe HeightRange(4L, 8L)
       }

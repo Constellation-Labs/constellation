@@ -8,14 +8,16 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.chrisdavenport.mapref.MapRef
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
+import org.constellation.concurrency.MapRefUtils
+import org.constellation.concurrency.MapRefUtils.MapRefOps
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
-import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.signature.Signed
@@ -67,25 +69,17 @@ class RedownloadService[F[_]: NonEmptyParallel](
   /**
     * Majority proposals from other peers. It is used to calculate majority state.
     */
-  private[redownload] val peersProposals: Ref[F, PeersProposals] = Ref.unsafe(InvertedMap.empty)
+  private[redownload] val peersProposals: MapRef[F, Id, Option[SnapshotProposalsAtHeight]] =
+    MapRefUtils.ofConcurrentHashMap()
 
   private[redownload] val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
 
   private[redownload] var lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
-  private val peerMajorityInfo: Ref[F, Map[Id, MajorityInfo]] = Ref.unsafe(Map.empty)
+  private[redownload] val peerMajorityInfo: MapRef[F, Id, Option[MajorityInfo]] = MapRefUtils.ofConcurrentHashMap()
 
-  def updatePeerMajorityInfo(peerId: Id, majorityInfo: MajorityInfo): F[Unit] = {
-    val height: MajorityInfo => Long = _.majorityRange.to
-
-    peerMajorityInfo.modify(m => {
-      if (m.get(peerId).forall(height(_) < height(majorityInfo))) {
-        (m.updated(peerId, majorityInfo), ())
-      } else {
-        (m, ())
-      }
-    })
-  }
+  def updatePeerMajorityInfo(peerId: Id, majorityInfo: MajorityInfo): F[Unit] =
+    peerMajorityInfo(peerId).set(majorityInfo.some)
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -116,22 +110,19 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def getMajorityGapRanges: F[List[HeightRange]] = lastMajorityState.get.map(missingProposalFinder.findGapRanges)
 
-  def updatePeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
-    peersProposals.modify { m =>
-      val updated = m.updated(peer, proposals)
-      (updated, ())
-    }
+  def replacePeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
+    peersProposals(peer).set(proposals.some)
 
   def persistPeerProposal(peer: Id, proposal: Signed[SnapshotProposal]): F[Unit] =
     logger.debug(
       s"Persisting proposal of ${peer.hex} at height ${proposal.value.height} and hash ${proposal.value.hash}"
-    ) >> peersProposals.modify { m =>
-      val existing = m.getOrElse(peer, Map.empty)
-      val updated =
-        if (existing.contains(proposal.value.height)) m
-        else m.updated(peer, existing + (proposal.value.height -> proposal))
-      val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
-      (ignored, ())
+    ) >> persistPeerProposals(peer, Map(proposal.value.height -> proposal))
+
+  def persistPeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
+    peersProposals(peer).modify { maybeMap =>
+      val updatedMap = maybeMap.getOrElse(Map.empty) ++ proposals
+      val trimmedMap = takeHighestUntilKey(updatedMap, getRemovalPoint(maxHeight(updatedMap)))
+      (trimmedMap.some, ())
     }
 
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
@@ -160,20 +151,22 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def getAcceptedSnapshots(): F[SnapshotsAtHeight] = acceptedSnapshots.get
 
-  def getPeerProposals(): F[PeersProposals] = peersProposals.get
+  def getAllPeerProposals(): F[PeersProposals] = peersProposals.toMap
+
+  def getPeerProposals(peerId: Id): F[Option[SnapshotProposalsAtHeight]] = peersProposals(peerId).get
 
   def clear: F[Unit] =
     for {
       _ <- createdSnapshots.modify(_ => (Map.empty, ()))
       _ <- acceptedSnapshots.modify(_ => (Map.empty, ()))
-      _ <- peersProposals.modify(_ => (InvertedMap.empty, ()))
+      _ <- peersProposals.clear
       _ <- setLastMajorityState(Map.empty)
       _ <- setLastSentHeight(-1)
       _ <- rewardsManager.clearLastRewardedHeight()
     } yield ()
 
   @deprecated("Proposals are now pushed via gossip instead of pulling")
-  def fetchAndUpdatePeersProposals(): F[PeersProposals] =
+  def fetchAndUpdatePeersProposals(): F[Unit] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
       peers <- cluster.getPeerInfo.map(
@@ -183,19 +176,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
       responses <- apiClients.traverse { client =>
         fetchCreatedSnapshots(client).map(client.id -> _)
       }
-      newProposals: Map[Id, SnapshotProposalsAtHeight] = responses.toMap
-      proposals <- peersProposals.modify { m =>
-        val updated = m.map {
-          case (id, proposalsAtHeight) =>
-            val diff = newProposals.getOrElse(id, Map.empty) -- proposalsAtHeight.keySet
 
-            id -> (proposalsAtHeight ++ diff)
-        } ++ (newProposals -- m.keySet)
-
-        val ignored = InvertedMap(updated.mapValues(a => takeHighestUntilKey(a, getRemovalPoint(maxHeight(a)))))
-        (ignored, ignored)
+      _ <- responses.traverse {
+        case (id, proposals) => persistPeerProposals(id, proposals)
       }
-    } yield proposals
+    } yield ()
 
   private[redownload] def fetchStoredSnapshotsFromAllPeers(): F[Map[PeerClientMetadata, Set[String]]] =
     for {
@@ -272,10 +257,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- maybeProposals.map { proposals =>
         proposals.filter { case (_, signedProposal) => signedProposal.validSignature }
       }.traverse { proposals =>
-        peersProposals.modify { m =>
-          val existingProposals = m.getOrElse(peerId, Map.empty)
-          (m.updated(peerId, existingProposals ++ proposals), ())
-        }
+        persistPeerProposals(peerId, proposals)
       }
     } yield ()
 
@@ -418,7 +400,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
     val wrappedCheck = for {
       _ <- logger.debug("Checking alignment with majority snapshot...")
-      peersProposals <- getPeerProposals()
+      peersProposals <- getAllPeerProposals()
       createdSnapshots <- getCreatedSnapshots()
       acceptedSnapshots <- getAcceptedSnapshots()
 
@@ -432,6 +414,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- peersCache.toList.traverse {
         case (id, majorityHeight) => logger.debug(s"[$id]: $majorityHeight")
       }
+
+      _ <- logger.debug(s"Created snapshots: ${formatProposals(createdSnapshots)} ")
+      _ <- logger.debug(s"Peers proposals: ${peersProposals.mapValues(formatProposals)} ")
 
       majorityState = majorityStateChooser.chooseMajorityState(
         createdSnapshots,
@@ -522,31 +507,31 @@ class RedownloadService[F[_]: NonEmptyParallel](
       error.raiseError[F, Unit]
   }
 
-  private[redownload] def getLookupRange: F[HeightRange] =
+  private[redownload] def getLookupRange(majorityInfos: Map[Id, MajorityInfo]): F[HeightRange] =
     for {
       mr <- getMajorityRange
-      pmi <- peerMajorityInfo.get
-      maxPmiHeight = pmi.values.foldLeft(mr.to) {
-        case (acc, peer) => Math.max(acc, peer.majorityRange.to)
-      }
-    } yield HeightRange(mr.from, maxPmiHeight)
+      createdHeights <- createdSnapshots.get.map(_.values.map(_.value.height))
+      peersHeights = majorityInfos.values.map(_.majorityRange.to)
+      maxHeight = (mr.to :: (createdHeights ++ peersHeights).toList).max
+    } yield HeightRange(mr.from, maxHeight)
 
   private def findAndFetchMissingProposals(peersProposals: PeersProposals, peersCache: PeersCache): F[Unit] =
     for {
-      lookupRange <- getLookupRange
-      peerMajorityInfo <- peerMajorityInfo.get
+      peerMajorityInfo <- peerMajorityInfo.toMap
+      lookupRange <- getLookupRange(peerMajorityInfo)
       missingProposals = missingProposalFinder.findMissingPeerProposals(lookupRange, peersProposals, peersCache)
       _ <- missingProposals.nonEmpty
         .pure[F]
         .ifM(
-          logger.info(s"Found missing proposals ${missingProposals}"),
+          logger.info(s"Found missing proposals $missingProposals"),
           logger.info(s"No missing proposals found")
         )
       _ <- missingProposals.toList.traverse {
         case (peerId, peerGaps) =>
-          val maybeSelectedPeerId = missingProposalFinder
+          val selectedPeer = missingProposalFinder
             .selectPeerForFetchingMissingProposals(lookupRange, peerGaps, peerMajorityInfo - peerId)
-          maybeSelectedPeerId.traverse(fetchProposalForPeer(peerId))
+            .getOrElse(peerId)
+          fetchProposalForPeer(peerId)(selectedPeer)
       }
     } yield ()
 
@@ -650,20 +635,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     majorityState: SnapshotsAtHeight
   ): EitherT[F, Throwable, Unit] =
     for {
-      _ <- EitherT.liftF(logger.debug("Majority state:"))
-      _ <- majorityState.toList.sortBy { case (height, _) => height }.traverse {
-        case (height, hash) => logger.debug(s"[$height] - $hash")
-      }.attemptT
-
-      _ <- EitherT.liftF(logger.debug("To download:"))
-      _ <- plan.toDownload.toList.sortBy { case (height, _) => height }.traverse {
-        case (height, hash) => logger.debug(s"[$height] - $hash")
-      }.attemptT
-
-      _ <- EitherT.liftF(logger.debug("To remove:"))
-      _ <- plan.toRemove.toList.sortBy { case (height, _) => height }.traverse {
-        case (height, hash) => logger.debug(s"[$height] - $hash")
-      }.attemptT
+      _ <- EitherT.liftF(logRedownload(plan, majorityState))
 
       _ <- EitherT.liftF(logger.debug("Fetching and storing missing snapshots on disk."))
       _ <- fetchAndStoreMissingSnapshots(plan.toDownload)
@@ -680,6 +652,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- EitherT.liftF(logger.debug("RedownloadPlan has been applied succesfully."))
 
       _ <- EitherT.liftF(metrics.incrementMetricAsync("reDownloadFinished_total"))
+    } yield ()
+
+  private def logRedownload(plan: RedownloadPlan, majorityState: SnapshotsAtHeight): F[Unit] =
+    for {
+      _ <- logger.debug(s"Majority state: ${formatSnapshots(majorityState)}")
+      _ <- logger.debug(s"To download: ${formatSnapshots(plan.toDownload)}")
+      _ <- logger.debug(s"To remove: ${formatSnapshots(plan.toRemove)}")
+      _ <- logger.debug(s"To leave: ${formatSnapshots(plan.toLeave)}")
     } yield ()
 
   private[redownload] def getIgnorePoint(maxHeight: Long): Long = maxHeight - meaningfulSnapshotsCount
@@ -801,6 +781,12 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def minHeight[V](snapshots: Map[Long, V]): Long =
     if (snapshots.isEmpty) 0
     else snapshots.keySet.min
+
+  private def formatProposals(proposals: SnapshotProposalsAtHeight) =
+    SortedMap[Long, String]() ++ proposals.mapValues(_.value.hash)
+
+  private def formatSnapshots(snapshots: SnapshotsAtHeight) =
+    SortedMap[Long, String]() ++ snapshots
 }
 
 object RedownloadService {
@@ -847,7 +833,7 @@ object RedownloadService {
   type Reputation = SortedMap[Id, Double]
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type SnapshotProposalsAtHeight = Map[Long, Signed[SnapshotProposal]]
-  type PeersProposals = InvertedMap[Id, SnapshotProposalsAtHeight]
+  type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
   type PeersCache = Map[Id, NonEmptyList[MajorityHeight]]
   type SnapshotInfoSerialized = Array[Byte]
   type SnapshotSerialized = Array[Byte]

@@ -17,5 +17,6 @@ object Signed {
   def signed[A <: Signable](value: A, kp: KeyPair): Signed[A] = Signed(SignHelp.hashSign(value.hash, kp), value)
 
   implicit def signedEncoder[A <: Signable](implicit ev: Encoder[A]): Encoder[Signed[A]] = deriveEncoder
+
   implicit def signedDecoder[A <: Signable](implicit ev: Decoder[A]): Decoder[Signed[A]] = deriveDecoder
 }
