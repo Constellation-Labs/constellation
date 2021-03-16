@@ -174,7 +174,8 @@ lazy val coreDependencies = Seq(
   "com.amazonaws" % "aws-java-sdk-s3" % "1.11.863",
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
-  "io.chrisdavenport" %% "fuuid" % "0.4.0"
+  "io.chrisdavenport" %% "fuuid" % "0.4.0",
+  "io.chrisdavenport" %% "mapref" % "0.1.1"
 ) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ twitterAlgebirdDependencies ++ pureconfigDependencies ++ monocleDependencies
 
 //Test dependencies

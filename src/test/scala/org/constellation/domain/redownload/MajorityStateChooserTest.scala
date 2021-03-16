@@ -1,8 +1,12 @@
 package org.constellation.domain.redownload
 
 import cats.data.NonEmptyList
-import org.constellation.domain.redownload.RedownloadService.{PeersCache, PeersProposals, SnapshotProposalsAtHeight, SnapshotsAtHeight}
-import org.constellation.invertedmap.InvertedMap
+import org.constellation.domain.redownload.RedownloadService.{
+  PeersCache,
+  PeersProposals,
+  SnapshotProposalsAtHeight,
+  SnapshotsAtHeight
+}
 import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
 import org.constellation.schema.signature.{HashSignature, Signed}
@@ -28,11 +32,15 @@ class MajorityStateChooserTest
   val height = 1L
 
   implicit class MapImpl(value: Map[Long, String]) {
-    val toSnapshotProposals = value.mapValues((hash: String) => Signed(signature, SnapshotProposal(hash, height, SortedMap.empty)))
+
+    val toSnapshotProposals =
+      value.mapValues((hash: String) => Signed(signature, SnapshotProposal(hash, height, SortedMap.empty)))
   }
 
   implicit class NMapImpl(value: Map[Id, Map[Long, String]]) {
-    val toSnapshotProposals = InvertedMap(value.mapValues(_.mapValues((hash: String) => Signed(signature, SnapshotProposal(hash, height, SortedMap.empty)))))
+
+    val toSnapshotProposals =
+      value.mapValues(_.mapValues((hash: String) => Signed(signature, SnapshotProposal(hash, height, SortedMap.empty))))
   }
 
   def toPeerProposal(trust: SortedMap[Id, Double]): ((Long, String)) => (Long, Signed[SnapshotProposal]) = {
@@ -42,7 +50,7 @@ class MajorityStateChooserTest
   "choose majority state" - {
     "returns Map.empty" - {
       "if there are no created snapshots and peers proposals" - {
-        chooseMajorityState(Map.empty, InvertedMap.empty, Map.empty) shouldBe Map.empty
+        chooseMajorityState(Map.empty, Map.empty, Map.empty) shouldBe Map.empty
       }
 
       "if there are no created snapshots and there are 2 peers (but only one with snapshot)" in {
@@ -61,7 +69,7 @@ class MajorityStateChooserTest
         val peersCache =
           List("z", "a", "b").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
         val createdSnapshots = Map(2L -> "aa").toSnapshotProposals
-        val peersProposals = InvertedMap(
+        val peersProposals = Map(
           Id("a") -> Map.empty[Long, Signed[SnapshotProposal]],
           Id("b") -> Map.empty[Long, Signed[SnapshotProposal]]
         )
@@ -153,7 +161,7 @@ class MajorityStateChooserTest
           val trust = SortedMap[Id, Double](Id("z") -> 1, Id("a") -> 1, Id("b") -> 0.1, Id("c") -> 0.1)
           val createdSnapshots = Map(2L -> "xx", 4L -> "yy", 6L -> "zz").map(toPeerProposal(trust))
 
-          val peersProposals = InvertedMap(
+          val peersProposals = Map(
             Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz").map(toPeerProposal(trust)),
             Id("b") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").map(toPeerProposal(trust)),
             Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").map(toPeerProposal(trust))
@@ -171,7 +179,7 @@ class MajorityStateChooserTest
             List("z", "a", "b", "c").map(Id(_)).map(_ -> NonEmptyList.one(MajorityHeight.genesis)).toMap
           val trust = SortedMap[Id, Double](Id("z") -> 1, Id("a") -> -1, Id("b") -> -0.1, Id("c") -> -0.1)
           val createdSnapshots = Map(2L -> "xx", 4L -> "yy", 6L -> "zz").map(toPeerProposal(trust))
-          val peersProposals = InvertedMap(
+          val peersProposals = Map(
             Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz").map(toPeerProposal(trust)),
             Id("b") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").map(toPeerProposal(trust)),
             Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").map(toPeerProposal(trust))
@@ -235,10 +243,10 @@ class MajorityStateChooserTest
 
           val createdSnapshots =
             Map(2L -> "gg", 4L -> "hh", 6L -> "ii").map(toPeerProposal(trustOwn))
-          val peersProposals = InvertedMap(
+          val peersProposals = Map(
             Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz", 8L -> "dd").map(toPeerProposal(trustA)),
             Id("b") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").map(toPeerProposal(trustB)),
-            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd").map(toPeerProposal(trustC)),
+            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd").map(toPeerProposal(trustC))
           )
 
           val result = Map(2L -> "gg", 4L -> "hh", 6L -> "ii")
@@ -255,10 +263,10 @@ class MajorityStateChooserTest
           val trustC = SortedMap[Id, Double](Id("z") -> 0.0, Id("a") -> -1, Id("b") -> 0.1, Id("c") -> -0.1)
 
           val createdSnapshots = Map(2L -> "gg", 4L -> "hh", 6L -> "ii").map(toPeerProposal(trustOwn))
-          val peersProposals = InvertedMap(
+          val peersProposals = Map(
             Id("a") -> Map(2L -> "xx", 4L -> "yy", 6L -> "zz", 8L -> "dd").map(toPeerProposal(trustA)),
             Id("b") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc").map(toPeerProposal(trustB)),
-            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd").map(toPeerProposal(trustC)),
+            Id("c") -> Map(2L -> "aa", 4L -> "bb", 6L -> "cc", 8L -> "dd").map(toPeerProposal(trustC))
           )
 
           val result = Map(2L -> "aa", 4L -> "bb", 6L -> "cc")

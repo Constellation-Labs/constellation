@@ -8,8 +8,6 @@ object GossipMessageState extends Enum[GossipMessageState] {
 
   case object Pending extends GossipMessageState
 
-  case object PendingAfterFailure extends GossipMessageState
-
   case object Success extends GossipMessageState
 
   val values = findValues
