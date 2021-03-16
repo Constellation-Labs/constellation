@@ -2,7 +2,6 @@ package org.constellation.domain.redownload
 
 import cats.data.NonEmptyList
 import cats.syntax.all._
-import org.constellation.invertedmap.InvertedMap
 import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
 import org.constellation.schema.signature.{HashSignature, Signed}
@@ -98,7 +97,7 @@ class MissingProposalFinderTest
 
   "findMissingPeerProposals" - {
     "should find missing proposals" in {
-      val peerProposals = InvertedMap(
+      val peerProposals = Map(
         Id("a") -> List(2, 4, 6),
         Id("b") -> List(2, 4),
         Id("c") -> List(4)
@@ -118,7 +117,7 @@ class MissingProposalFinderTest
     }
 
     "should not find missing proposals when nodes were absent" in {
-      val peerProposals = InvertedMap(
+      val peerProposals = Map(
         Id("a") -> List(2, 4),
         Id("b") -> List(2, 4),
         Id("c") -> List(2, 6)
