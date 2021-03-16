@@ -168,7 +168,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         StatisticsEndpoints.ownerEndpoints[IO](dao.recentBlockTracker, dao.transactionService, dao.cluster) <+>
         NodeMetadataEndpoints.ownerEndpoints[IO](dao.cluster, dao.addressService, dao.nodeType) <+>
         SignEndpoints.ownerEndpoints[IO](dao.cluster) <+>
-        SnapshotEndpoints.ownerEndpoints[IO](dao.snapshotStorage, dao.redownloadService)
+        SnapshotEndpoints.ownerEndpoints[IO](dao.id, dao.snapshotStorage, dao.redownloadService)
 
       getKnownPeerId = { (ip: String) =>
         dao.cluster

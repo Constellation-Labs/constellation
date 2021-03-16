@@ -53,7 +53,7 @@ abstract class GossipService[F[_]: Parallel, A](
     }
 
     for {
-      _ <- messageTracker.fail(message.path.id)
+      _ <- messageTracker.remove(message.path.id)
       failureNode <- bisectA(
         (id: Id) => getClientMetadata(id).flatMap(validationFn(_, message)),
         sequence
@@ -70,7 +70,6 @@ abstract class GossipService[F[_]: Parallel, A](
           )
         }
       } // TODO: Force trigger peer healthcheck if it fails
-      _ <- messageTracker.remove(message.path.id)
     } yield ()
   }
 
@@ -91,7 +90,7 @@ abstract class GossipService[F[_]: Parallel, A](
   def spread(message: GossipMessage[A]): F[Unit] =
     for {
       _ <- logger.debug(
-        s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next.map(_.short)})."
+        s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next.map(_.hex)})."
       )
       _ <- signAndForward(message).handleErrorWith(
         e =>
@@ -121,14 +120,14 @@ abstract class GossipService[F[_]: Parallel, A](
           logger.debug(s"Succeeded path ${message.path.id}") >>
           metrics.incrementMetricAsync("gossip_succeededSpreadInitCount")
       } else {
-        recover(message) >> metrics.incrementMetricAsync("gossip_failedSpreadInitCount")
+        metrics.incrementMetricAsync("gossip_failedSpreadInitCount") >> recover(message)
       }
     } yield ()
 
     round.handleErrorWith(
       e =>
-        recover(message) >> logger.error(e)(s"Spreading message on path ${message.path.id} failed") >>
-          metrics.incrementMetricAsync("gossip_errorSpreadInitCount")
+        logger.error(e)(s"Spreading message on path ${message.path.id} failed") >>
+          metrics.incrementMetricAsync("gossip_errorSpreadInitCount") >> recover(message)
     )
   }
 
