@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.22.2] 2021-03-17
 ### Changed
 - Prevent running periodic redownload until download finishes
 
