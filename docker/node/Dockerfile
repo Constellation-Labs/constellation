@@ -21,5 +21,6 @@ USER constellation
 EXPOSE 9000
 EXPOSE 9001
 EXPOSE 9002
+EXPOSE 9003
 
 ENTRYPOINT java -Dlogback.configurationFile=/var/lib/constellation/logback.xml -Xmx$xmx -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -jar cl-node.jar --ip $ip --port 9000 -k $CL_KEYSTORE_NAME --alias $CL_ALIAS --whitelisting $CL_WHITELISTING_NAME
