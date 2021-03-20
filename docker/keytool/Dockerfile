@@ -1,4 +1,5 @@
-FROM davidcaste/alpine-java-unlimited-jce
+ARG BASE_IMAGE=amazoncorretto:8-alpine
+FROM $BASE_IMAGE
 
 RUN adduser -S -h /var/lib/constellation constellation
 

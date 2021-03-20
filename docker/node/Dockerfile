@@ -1,4 +1,5 @@
-FROM openjdk:8-jdk-alpine
+ARG BASE_IMAGE=amazoncorretto:8-alpine
+FROM $BASE_IMAGE
 
 RUN adduser -S -h /var/lib/constellation constellation
 
