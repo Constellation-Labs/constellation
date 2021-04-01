@@ -116,15 +116,18 @@ class HealthCheckConsensus[F[_]](
   def getRoundPeers(): F[Map[Id, RoundData]] = roundPeers.get
 
   private def addPeerToRemoved(id: Id, removalReason: PeerRemovalReason): F[Unit] =
-    removedPeers.modify { alreadyRemoved =>
-      val updatedRemovalReasons =
-        alreadyRemoved
-          .get(id)
-          .map(_ :+ removalReason)
-          .getOrElse(NonEmptyList.one(removalReason))
+    for {
+      _ <- metrics.incrementMetricAsync[F](s"healthcheck_peerRemovedFromConsensus_$removalReason")
+      _ <- removedPeers.modify { alreadyRemoved =>
+        val updatedRemovalReasons =
+          alreadyRemoved
+            .get(id)
+            .map(_ :+ removalReason)
+            .getOrElse(NonEmptyList.one(removalReason))
 
-      (alreadyRemoved + (id -> updatedRemovalReasons), ())
-    }
+        (alreadyRemoved + (id -> updatedRemovalReasons), ())
+      }
+    } yield ()
 
   private def removeRoundPeer(id: Id, removalReason: PeerRemovalReason): F[Unit] =
     for {
@@ -666,6 +669,7 @@ class HealthCheckConsensus[F[_]](
             checkedPeer.id,
             allPeers,
             peersRemaining,
+            removedPeers,
             onlinePercentage,
             parallelRounds,
             roundIds,
@@ -676,6 +680,7 @@ class HealthCheckConsensus[F[_]](
             checkedPeer.id,
             allPeers,
             peersRemaining,
+            removedPeers,
             offlinePercentage,
             parallelRounds,
             roundIds,
@@ -823,6 +828,7 @@ object HealthCheckConsensus {
     val id: Id
     val allPeers: Set[Id]
     val remainingPeers: Set[Id]
+    val removedPeers: Map[Id, NonEmptyList[PeerRemovalReason]]
     val percentage: BigDecimal
     val parallelRounds: Map[Id, Set[HealthcheckRoundId]]
     val roundIds: NonEmptySet[HealthcheckRoundId]
@@ -833,6 +839,7 @@ object HealthCheckConsensus {
     id: Id,
     allPeers: Set[Id],
     remainingPeers: Set[Id],
+    removedPeers: Map[Id, NonEmptyList[PeerRemovalReason]],
     percentage: BigDecimal,
     parallelRounds: Map[Id, Set[HealthcheckRoundId]],
     roundIds: NonEmptySet[HealthcheckRoundId],
@@ -843,6 +850,7 @@ object HealthCheckConsensus {
     id: Id,
     allPeers: Set[Id],
     remainingPeers: Set[Id],
+    removedPeers: Map[Id, NonEmptyList[PeerRemovalReason]],
     percentage: BigDecimal,
     parallelRounds: Map[Id, Set[HealthcheckRoundId]],
     roundIds: NonEmptySet[HealthcheckRoundId],

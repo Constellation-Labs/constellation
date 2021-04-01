@@ -1,6 +1,6 @@
 package org.constellation.domain.healthcheck
 
-import cats.data.NonEmptySet
+import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.Sync
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -11,6 +11,7 @@ import org.constellation.domain.healthcheck.HealthCheckConsensus.{
   HealthcheckRoundId,
   PeerOffline,
   PeerOnline,
+  PeerRemovalReason,
   RoundData
 }
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager.{
@@ -95,6 +96,13 @@ object HealthCheckLoggingHelper {
   ): String =
     maybeIdToClusterAlignmentResultsMapping.map(logIdToClusterAlignmentResultsMapping).toString
 
+  def logIdToPeerRemovalReasonsMapping(
+    idToPeerRemovalReasonsMapping: Map[Id, NonEmptyList[PeerRemovalReason]]
+  ): String =
+    idToPeerRemovalReasonsMapping.map {
+      case (id, peerRemovalReasons) => logIdShort(id) -> peerRemovalReasons.toString
+    }.toString()
+
   def logReconciliationResult(reconciliationResult: ReconciliationResult): String = {
     val ReconciliationResult(peersToRunHealthCheckFor, misalignedPeers, clusterAlignment) = reconciliationResult
 
@@ -109,22 +117,45 @@ object HealthCheckLoggingHelper {
 
   // Logging and metrics
   def logHealthcheckConsensusDecicion[F[_]: Sync](
-    decision: HealthcheckConsensusDecision,
+    decision: HealthcheckConsensusDecision)(
+    metrics: Metrics,
     logger: SelfAwareStructuredLogger[F]
   ): F[Unit] =
     decision match {
-      case PeerOffline(id, allPeers, remainingPeers, percentage, parallelRounds, roundIds, isKeepUpRound) =>
+      case PeerOffline(
+          id,
+          allPeers,
+          remainingPeers,
+          removedPeers,
+          percentage,
+          parallelRounds,
+          roundIds,
+          isKeepUpRound
+          ) =>
         logger.debug(
-          s"HealthcheckConsensus decision for id=${logId(id)} is: PeerOffline allPeers=${logIds(allPeers)} remainingPeers=${logIds(
+          s"HealthcheckConsensus decision for id=${logId(id)} is: PeerOffline remainingPeers(${remainingPeers.size})=${logIds(
             remainingPeers
+          )} removedPeers(${removedPeers.size})=${logIdToPeerRemovalReasonsMapping(removedPeers)} allPeers(${allPeers.size})=${logIds(
+            allPeers
           )} percentage=$percentage parallelRounds=${logIdToRoundIdsMapping(parallelRounds)} roundIds=${logRoundIds(roundIds)} isKeepUpRound=$isKeepUpRound"
-        )
-      case PeerOnline(id, allPeers, remainingPeers, percentage, parallelRounds, roundIds, isKeepUpRound) =>
+        ) >> metrics.incrementMetricAsync("healthcheck_decision_PeerOffline")
+      case PeerOnline(
+          id,
+          allPeers,
+          remainingPeers,
+          removedPeers,
+          percentage,
+          parallelRounds,
+          roundIds,
+          isKeepUpRound
+          ) =>
         logger.debug(
-          s"HealthcheckConsensus decision for id=${logId(id)} is: PeerOnline allPeers=${logIds(allPeers)} remainingPeers=${logIds(
+          s"HealthcheckConsensus decision for id=${logId(id)} is: PeerOnline remainingPeers(${remainingPeers.size})=${logIds(
             remainingPeers
+          )} removedPeers(${removedPeers.size})=${logIdToPeerRemovalReasonsMapping(removedPeers)} allPeers(${allPeers.size})=${logIds(
+            allPeers
           )} percentage=$percentage parallelRounds=${logIdToRoundIdsMapping(parallelRounds)} roundIds=${logRoundIds(roundIds)} isKeepUpRound=$isKeepUpRound"
-        )
+        ) >> metrics.incrementMetricAsync("healthcheck_decision_PeerOnline")
     }
 
   def incrementFatalIntegrityHealthcheckError[F[_]: Sync](metrics: Metrics): F[Unit] =
