@@ -64,6 +64,8 @@ class HealthCheckConsensusManager[F[_]](
 
   def getTimeInSeconds(): F[FiniteDuration] = C.monotonic(SECONDS).map(_.seconds)
 
+  private def getHistoricalRounds(): F[List[HistoricalRoundData]] = consensusRounds.get.map(_.historical)
+
   private def getInProgressRounds(): F[Map[Id, HealthCheckConsensus[F]]] = consensusRounds.get.map(_.inProgress)
 
   private def getKeepUpRounds(): F[Map[Id, HealthCheckConsensus[F]]] = consensusRounds.get.map(_.keepUpRounds)
@@ -688,22 +690,30 @@ class HealthCheckConsensusManager[F[_]](
       else F.unit
       // mark offline those peers that we do have in our list
       toMarkOfflinePeers = peers.filterKeys(toRemove.keySet.contains).values.toList
-      _ <- peerHealthCheck.markOffline(toMarkOfflinePeers)
+      _ <- F.start(
+        peerHealthCheck.markOffline(toMarkOfflinePeers)
+      )
       // should I check the status??? I think yes as it may be that it's offline but stuck so not removed from the list and we will not add because of that
       peersToAdd = toRemain -- notOfflinePeers
       _ <- if (peersToAdd.nonEmpty)
         logger.warn(s"Peers that we don't have online but we should: ${logIds(peersToAdd.keySet)}")
       else F.unit
-      _ <- peersToAdd.toList.traverse { case (id, (_, consensus)) => addMissingPeer(id, consensus) }
+      _ <- F.start(
+        peersToAdd.toList.traverse { case (id, (_, consensus)) => addMissingPeer(id, consensus) }
+      )
       _ <- peersToRunConsensusFor.modify(peers => (peers ++ peersWeStillDontHave, ()))
       _ <- peersThatNeedReconciliation.modify(peers => (peers ++ newPeers, ()))
-      _ <- notifyRemainingPeersAboutMissedConsensuses(toRemain.keySet)
+      _ <- F.start(
+        notifyRemainingPeersAboutMissedConsensuses(toRemain.keySet)
+      )
       finishedRounds = toRemove ++ toRemain
       _ <- finishedRounds.toList.traverse {
         case (id, (decision, _)) =>
           decision match {
-            case Some(decision) => logHealthcheckConsensusDecicion(decision, logger)
-            case None           => logger.debug(s"HealthcheckConsensus decision for id=${logId(id)} COULDN'T BE CALCULATED")
+            case Some(decision) => logHealthcheckConsensusDecicion(decision)(metrics, logger)
+            case None =>
+              logger.debug(s"HealthcheckConsensus decision for id=${logId(id)} COULDN'T BE CALCULATED") >>
+                metrics.incrementMetricAsync("healthcheck_decision_Unknown")
           }
       }
       finishedWithHistoricalData <- finishedRounds.toList.traverse {
@@ -855,15 +865,21 @@ class HealthCheckConsensusManager[F[_]](
     def check(): F[Unit] =
       for {
         peersUnderConsensus <- getPeersUnderConsensus()
-        peersToRunHealthcheckFor <- peersToRunHealthcheckFor.get
+        peersToRunHealthcheckFor <- peersToRunHealthcheckFor.modify(current => (Set.empty, current))
+        healthcheckStartTime <- getTimeInSeconds()
         unresponsivePeers <- peerHealthCheck
           .check(peersUnderConsensus, peersToRunHealthcheckFor)
           .map(_.map(_.peerMetadata.id).toSet)
         notOfflinePeers <- cluster.getPeerInfo.map(_.filter {
           case (_, peerData) => canActAsJoiningSource(peerData.peerMetadata.nodeState)
         }.keySet)
-        unresponsiveNotOfflinePeers = unresponsivePeers.intersect(notOfflinePeers)
-        _ <- unresponsiveNotOfflinePeers.toList.traverse(id => startOwnConsensusForId(id))
+        historical <- getHistoricalRounds()
+        peerToRunConsensusFor = unresponsivePeers
+          .intersect(notOfflinePeers)
+          .filterNot(
+            id => historical.exists(hrd => hrd.checkedPeer.id == id && hrd.finishedAtSecond > healthcheckStartTime)
+          )
+        _ <- peerToRunConsensusFor.toList.traverse(id => startOwnConsensusForId(id))
       } yield ()
 
     for {

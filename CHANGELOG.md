@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Changed
+- Multiple small healthcheck improvements:
+    - Logging and metrics for peer removal and healthcheck decision
+    - Running time heavy processes concurrently not to block the main management flow
+    - Check if healthcheck for an unresponsive peer wasn't run recently before running new healthcheck
+    - Clear a Set of peers to check after fetching them to prevent running checks continuously for the same peers
 
 ## [v2.22.2] 2021-03-17
 ### Changed
