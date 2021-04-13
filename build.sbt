@@ -2,7 +2,7 @@ import sbt.Keys.mainClass
 
 // -----------------
 
-lazy val _version = "2.22.3"
+lazy val _version = "2.23.0"
 
 lazy val commonSettings = Seq(
   version := _version,

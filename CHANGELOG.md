@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.23.0] 2021-04-13
+### Added
+- Gossip protocol implementation for spreading snapshot proposals
+
 ## [v2.22.3] 2021-04-12
 ### Changed
 - Multiple small healthcheck improvements:
