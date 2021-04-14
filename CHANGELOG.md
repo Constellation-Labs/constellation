@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.23.1] 2021-04-14
+### Changed
+- Update whitelisting file
+
 ## [v2.23.0] 2021-04-13
 ### Added
 - Gossip protocol implementation for spreading snapshot proposals
