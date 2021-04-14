@@ -3,14 +3,13 @@ package org.constellation.gossip
 import java.security.KeyPair
 
 import cats.Parallel
-import cats.effect.{Concurrent, Timer}
-import cats.syntax.all._
 import cats.effect.syntax.all._
-import io.chrisdavenport.fuuid.FUUID
+import cats.effect.{Concurrent, ContextShift, Timer}
+import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
-import org.constellation.gossip.bisect.bisectA
+import org.constellation.gossip.bisect.Bisect
 import org.constellation.gossip.sampling.{GossipPath, PeerSampling}
 import org.constellation.gossip.state.{GossipMessage, GossipMessagePathTracker}
 import org.constellation.gossip.validation.EndOfCycle
@@ -30,11 +29,13 @@ abstract class GossipService[F[_]: Parallel, A](
   messageTracker: GossipMessagePathTracker[F, A]
 )(
   implicit F: Concurrent[F],
+  C: ContextShift[F],
   T: Timer[F]
 ) {
   protected val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  private val bisect = Bisect[F]
   private val spreadRequestTimeout = ConfigUtil.getDurationFromConfig("gossip.spread-request-timeout", 5 seconds)
-  private val recoverThreadLimit = ConfigUtil.getOrElse("gossip.recover-thread-limit", 4L)
+  private val spreadThreadLimit = ConfigUtil.getOrElse("gossip.spread-thread-limit", 10L)
 
   /**
     * How to spread the message to peer
@@ -53,25 +54,36 @@ abstract class GossipService[F[_]: Parallel, A](
     }
 
     for {
-      _ <- messageTracker.remove(message.path.id)
-      failureNode <- bisectA(
+      _ <- logger.debug(s"Recovering path ${message.path.id}")
+      failureNode <- bisect.runA(
         (id: Id) => getClientMetadata(id).flatMap(validationFn(_, message)),
         sequence
       )
-      sequenceToRetry = sequence.dropWhile(node => !failureNode.contains(node))
-      clients <- sequenceToRetry.toList.traverse(getClientMetadata)
-      _ <- clients.parTraverseN(recoverThreadLimit) { client =>
-        generatePathId.flatMap { pathId =>
-          spreadFn(
-            client,
-            message
-              .copy(path = GossipPath(IndexedSeq(selfId, client.id, selfId), s"${message.path.id}_$pathId"))
-              .sign(keyPair)
-          )
-        }
-      } // TODO: Force trigger peer healthcheck if it fails
+      retryIds = sequence.dropWhile(node => !failureNode.contains(node))
+      _ <- retryIds.headOption.traverse { headId =>
+        F.start(C.shift >> retryHead(headId, message))
+      }
+      _ <- if (retryIds.tail.isEmpty)
+        F.unit
+      else
+        F.start(C.shift >> retryTail(retryIds.tail, message))
     } yield ()
   }
+
+  // This method uses spreadFn instead of spreadInit to avoid infinite recovery loops
+  private def retryHead(headId: Id, message: GossipMessage[A]): F[Unit] =
+    for {
+      client <- getClientMetadata(headId)
+      headPathId = s"retryHead_${message.path.id}"
+      ids = selfId +: headId +: selfId +: IndexedSeq.empty
+      newMessage = message.copy(path = GossipPath(ids, headPathId)).sign(keyPair)
+      _ <- spreadFn(client, newMessage).handleErrorWith { e =>
+        logger.error(e)(s"Error retrying bisect head $headPathId")
+      }
+    } yield ()
+
+  private def retryTail(tailIds: IndexedSeq[Id], message: GossipMessage[A]): F[Unit] =
+    spreadInit(message.copy(path = GossipPath(selfId +: tailIds :+ selfId, s"retryTail_${message.path.id}")))
 
   /**
     * Start spreading the message to fanout
@@ -81,7 +93,7 @@ abstract class GossipService[F[_]: Parallel, A](
       _ <- logger.debug(s"Starting spreading of data: $data")
       messages <- peerSampling.selectPaths
         .map(_.map(GossipMessage(data, _, selfId)))
-      _ <- messages.map(spreadInit).parSequence
+      _ <- messages.parTraverseN(spreadThreadLimit)(spreadInit)
     } yield ()
 
   /**
@@ -92,11 +104,10 @@ abstract class GossipService[F[_]: Parallel, A](
       _ <- logger.debug(
         s"Received rumor on path ${message.path.id}. Passing to next peer on path (${message.path.next.map(_.hex)})."
       )
-      _ <- signAndForward(message).handleErrorWith(
-        e =>
-          logger.error(e)(s"Forwarding message on path ${message.path.id} failed")
-            >> metrics.incrementMetricAsync(s"gossip_errorSpreadForwardCount")
-      )
+      _ <- signAndForward(message).handleErrorWith { e =>
+        logger.error(e)(s"Error forwarding message on path ${message.path.id}") >>
+          metrics.incrementMetricAsync(s"gossip_errorSpreadForwardCount")
+      }
     } yield ()
 
   def finishCycle(message: GossipMessage[A]): F[Unit] = messageTracker.success(message.path.id)
@@ -108,7 +119,7 @@ abstract class GossipService[F[_]: Parallel, A](
     }
 
   private def spreadInit(message: GossipMessage[A]): F[Unit] = {
-    val round = for {
+    val roundResult = for {
       _ <- messageTracker.start(message)
       _ <- logger.debug(s"Started path ${message.path.id}: ${message.path.toIndexedSeq.map(_.short).mkString(" -> ")}")
       _ <- metrics.incrementMetricAsync[F]("gossip_spreadInitCount")
@@ -116,18 +127,20 @@ abstract class GossipService[F[_]: Parallel, A](
       _ <- T.sleep(getPathTimeout(message.path))
       succeeded <- messageTracker.isSuccess(message)
       _ <- if (succeeded) {
-        messageTracker.remove(message.path.id) >>
-          logger.debug(s"Succeeded path ${message.path.id}") >>
+        logger.debug(s"Succeeded path ${message.path.id}") >>
           metrics.incrementMetricAsync("gossip_succeededSpreadInitCount")
       } else {
-        metrics.incrementMetricAsync("gossip_failedSpreadInitCount") >> recover(message)
+        logger.debug(s"Failed path ${message.path.id}") >>
+          metrics.incrementMetricAsync("gossip_failedSpreadInitCount")
       }
-    } yield ()
+    } yield succeeded
 
-    round.handleErrorWith(
-      e =>
-        logger.error(e)(s"Spreading message on path ${message.path.id} failed") >>
-          metrics.incrementMetricAsync("gossip_errorSpreadInitCount") >> recover(message)
+    roundResult.handleErrorWith { e =>
+      logger.error(e)(s"Error spreading message on path ${message.path.id}") >>
+        metrics.incrementMetricAsync("gossip_errorSpreadInitCount") >> false.pure[F]
+    }.ifM(
+      messageTracker.remove(message.path.id),
+      messageTracker.remove(message.path.id) >> recover(message)
     )
   }
 
@@ -139,7 +152,4 @@ abstract class GossipService[F[_]: Parallel, A](
       case Some(metadata) => metadata.peerMetadata.toPeerClientMetadata.pure[F]
       case None           => F.raiseError[PeerClientMetadata](MissingClientForId(id))
     })
-
-  private def generatePathId: F[String] =
-    FUUID.randomFUUID.map(_.toString)
 }
