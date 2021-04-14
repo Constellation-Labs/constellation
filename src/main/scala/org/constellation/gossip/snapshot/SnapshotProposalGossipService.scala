@@ -3,7 +3,7 @@ package org.constellation.gossip.snapshot
 import java.security.KeyPair
 
 import cats.Parallel
-import cats.effect.{Concurrent, Timer}
+import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 import org.constellation.gossip.GossipService
@@ -16,7 +16,7 @@ import org.constellation.schema.Id
 import org.constellation.schema.snapshot.SnapshotProposalPayload
 import org.constellation.util.Metrics
 
-class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
+class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel: ContextShift](
   selfId: Id,
   keyPair: KeyPair,
   peerSampling: PeerSampling[F],
@@ -55,7 +55,7 @@ class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel](
 
 object SnapshotProposalGossipService {
 
-  def apply[F[_]: Concurrent: Timer: Parallel](
+  def apply[F[_]: Concurrent: Timer: Parallel: ContextShift](
     selfId: Id,
     keyPair: KeyPair,
     peerSampling: PeerSampling[F],

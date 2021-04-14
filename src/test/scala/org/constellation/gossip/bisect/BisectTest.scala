@@ -1,6 +1,6 @@
 package org.constellation.gossip.bisect
 
-import cats.Id
+import cats.effect.IO
 import cats.implicits._
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -8,7 +8,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 
 class BisectTest extends AnyFreeSpec with TableDrivenPropertyChecks with Matchers {
 
-  private val testCases = Table[Seq[Int], Int => Id[Boolean], Id[Option[Int]]](
+  private val testCases = Table[Seq[Int], Int => Boolean, Option[Int]](
     ("sequence", "predicate", "expected result"),
     (Seq(1, 2, 3, 4, 5), _ => false, 1.some),
     (Seq(1, 2, 3, 4, 5), _ < 2, 2.some),
@@ -28,7 +28,7 @@ class BisectTest extends AnyFreeSpec with TableDrivenPropertyChecks with Matcher
   )
 
   forAll(testCases) { (sequence, predicate, expectedResult) =>
-    val result = bisectA[Id, Int](predicate, sequence)
+    val result = Bisect[IO].runA[Int](predicate.map(IO(_)), sequence).unsafeRunSync()
     result shouldEqual expectedResult
   }
 

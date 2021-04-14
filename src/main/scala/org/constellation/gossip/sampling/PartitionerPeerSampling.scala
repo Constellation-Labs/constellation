@@ -9,6 +9,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
+import org.constellation.schema.NodeState.isNotOffline
 import org.constellation.trust.TrustManager
 import org.constellation.util.Partitioner._
 
@@ -44,9 +45,11 @@ class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F],
 
   private def cachedPartitionsCoverAllPeers: F[Boolean] =
     for {
-      peerIds <- cluster.getPeerInfo.map(_.keySet) // TODO: Should we filter out offline nodes?
+      peerIds <- cluster.getPeerInfo.map(_.filter {
+        case (_, peerData) => isNotOffline(peerData.peerMetadata.nodeState)
+      }.keySet)
       cachedTdi <- trustDataInternalCache.get.map(_.map(_.id).toSet)
-    } yield peerIds.subsetOf(cachedTdi)
+    } yield peerIds == cachedTdi
 
   private def repartitionWithDefaults(): F[Unit] =
     for {
