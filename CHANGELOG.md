@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Changed
 - Missing proposal offset set to 0
+- Rename of a duplicated alias in the whitelisting
 ### Reverted
 - Majority selected with no gaps
 
