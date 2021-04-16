@@ -426,17 +426,27 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       potentialGaps = missingProposalFinder.findGaps(majorityState)
 
+      majorityStateWithNoGaps = if (potentialGaps.nonEmpty) {
+        takeLowestUntilKey(majorityState, potentialGaps.min)
+      } else majorityState
+
       _ <- if (potentialGaps.isEmpty) {
         logger.debug("Calculated majority state has no gaps")
       } else {
         logger.error(s"Found following gaps ${potentialGaps} in majority: ${majorityState.keys.toList.sorted}")
       }
 
-      maxMajorityHeight = maxHeight(majorityState)
+      lastMajorityState <- getLastMajorityState()
+
+      maxMajorityHeight = maxHeight(majorityStateWithNoGaps)
       ignorePoint = getIgnorePoint(maxMajorityHeight)
       majorityStateCutoff = if (isDownload) maxMajorityHeight else ownPeer.getOrElse(maxMajorityHeight)
       meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
-      meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint).filterKeys(_ >= majorityStateCutoff)
+      meaningfulMajorityState = {
+        val cut = takeHighestUntilKey(majorityStateWithNoGaps, ignorePoint)
+
+        if (cut.keySet.intersect(lastMajorityState.keySet).nonEmpty) cut else majorityStateWithNoGaps
+      }.filterKeys(_ >= majorityStateCutoff)
 
       _ <- setLastMajorityState(meaningfulMajorityState)
 
@@ -684,6 +694,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   private def takeHighestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
     data.filterKeys(_ > key)
+
+  private def takeLowestUntilKey[K <: Long, V](data: Map[K, V], key: K): Map[K, V] =
+    data.filterKeys(_ < key)
 
   private[redownload] def updateCreatedSnapshots(plan: RedownloadPlan): EitherT[F, Throwable, Unit] =
     plan.toDownload.map {
