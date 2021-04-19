@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Reverted
+- Majority selected with no gaps
 
 ## [v2.23.2] 2021-04-16
 ### Changed
