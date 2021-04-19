@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Changed
+- Missing proposal offset set to 0
 ### Reverted
 - Majority selected with no gaps
 
