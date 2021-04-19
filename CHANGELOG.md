@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.23.3] 2021-04-19
 ### Changed
 - Missing proposal offset set to 0
 - Rename of a duplicated alias in the whitelisting
