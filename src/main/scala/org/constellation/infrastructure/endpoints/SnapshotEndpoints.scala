@@ -202,7 +202,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
             case Valid(_) =>
               val processProposalAsync = F.start(
                 C.shift >>
-                  redownloadService.persistPeerProposal(message.origin, payload.proposal) >>
+                  redownloadService.addPeerProposal(message.origin, payload.proposal) >>
                   redownloadService.updatePeerMajorityInfo(message.origin, payload.majorityInfo) >>
                   snapshotProposalGossipService.spread(message)
               )

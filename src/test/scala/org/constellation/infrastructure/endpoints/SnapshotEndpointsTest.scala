@@ -48,7 +48,7 @@ class SnapshotEndpointsTest
   override def beforeAll: Unit = KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   before {
-    redownloadService.persistPeerProposal(*, *) shouldReturnF Unit
+    redownloadService.addPeerProposal(*, *) shouldReturnF Unit
     redownloadService.updatePeerMajorityInfo(*, *) shouldReturnF Unit
     snapshotProposalGossipService.spread(*[GossipMessage[SnapshotProposalPayload]]) shouldReturnF Unit
   }

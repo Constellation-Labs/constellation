@@ -436,7 +436,6 @@ class DAO(
     redownloadService = RedownloadService[IO](
       ConfigUtil.constellation.getInt("snapshot.meaningfulSnapshotsCount"),
       ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"),
-      ConfigUtil.isEnabledCloudStorage,
       cluster,
       MajorityStateChooser(id),
       missingProposalFinder,
