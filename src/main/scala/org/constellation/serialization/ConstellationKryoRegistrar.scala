@@ -10,20 +10,21 @@ import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJs
 import org.constellation.rewards.EigenTrustAgents
 import org.constellation.schema.checkpoint.CheckpointBlockPayload
 import org.constellation.schema.serialization.ExplicitKryoRegistrar
+import org.constellation.schema.serialization.ExplicitKryoRegistrar.KryoSerializer.DefaultSerializer
 import org.constellation.schema.snapshot.SnapshotProposalPayload
 
 object ConstellationKryoRegistrar
     extends ExplicitKryoRegistrar(
       Set(
-        (classOf[DefaultRandomGenerator], 178),
-        (classOf[MersenneTwister], 179),
-        (classOf[cern.jet.random.Normal], 180),
-        (classOf[cern.jet.random.Uniform], 181),
-        (classOf[EigenTrustJ], 183),
-        (classOf[EigenTrustAgents], 184),
-        (classOf[StoredRewards], 185),
-        (classOf[BuildInfoJson], 187),
-        (classOf[GossipPath], 1032),
-        (classOf[GossipMessage[_]], 1033),
+        (classOf[DefaultRandomGenerator], 178, DefaultSerializer),
+        (classOf[MersenneTwister], 179, DefaultSerializer),
+        (classOf[cern.jet.random.Normal], 180, DefaultSerializer),
+        (classOf[cern.jet.random.Uniform], 181, DefaultSerializer),
+        (classOf[EigenTrustJ], 183, DefaultSerializer),
+        (classOf[EigenTrustAgents], 184, DefaultSerializer),
+        (classOf[StoredRewards], 185, DefaultSerializer),
+        (classOf[BuildInfoJson], 187, DefaultSerializer),
+        (classOf[GossipPath], 1032, DefaultSerializer),
+        (classOf[GossipMessage[_]], 1033, DefaultSerializer),
       )
     ) {}
