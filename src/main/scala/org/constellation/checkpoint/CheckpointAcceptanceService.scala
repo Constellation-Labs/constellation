@@ -127,6 +127,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
     val acceptCheckpoint: F[Unit] =
       for {
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Added for acceptance")
+        _ <- concurrentTipService.registerUsages(checkpoint)
         _ <- acceptLock.acquire
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Acquired lock")
         _ <- syncPending(pendingAcceptance, cb.baseHash)
@@ -216,7 +217,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Accept data")
         _ <- checkpointService.put(checkpoint.copy(height = maybeHeight))
-        _ <- checkpointParentService.incrementChildrenCount(cb)
+        _ <- checkpointParentService.incrementChildrenCount(cb) // TODO: is it used?
         _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
         _ <- acceptMessages(cb)
         doubleSpendTxs <- checkDoubleSpendTransaction(cb)

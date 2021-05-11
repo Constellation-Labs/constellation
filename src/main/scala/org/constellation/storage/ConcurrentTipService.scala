@@ -12,7 +12,7 @@ import org.constellation.checkpoint.CheckpointParentService
 import org.constellation.concurrency.SingleLock
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.p2p.PeerData
-import org.constellation.schema.checkpoint.{CheckpointBlock, TipData}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint, TipData}
 import org.constellation.schema.edge.SignedObservationEdge
 import org.constellation.schema.{Height, Id, checkpoint}
 import org.constellation.util.Logging._
@@ -74,6 +74,8 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
   private val tipsRef: Ref[F, Map[String, TipData]] = Ref.unsafe(Map.empty)
   private val semaphore: Semaphore[F] = createSemaphore()
 
+  private val usages: Ref[F, Map[String, Set[String]]] = Ref.unsafe(Map.empty)
+
   private def withLock[R](name: String, thunk: F[R]) = new SingleLock[F, R](name, semaphore).use(thunk)
 
   def set(newTips: Map[String, TipData]): F[Unit] =
@@ -104,9 +106,11 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
     )
 
   def update(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false): F[Unit] =
-    withLock("updateTips", updateUnsafe(checkpointBlock, height: Height, isGenesis))
+    countUsages(checkpointBlock.soeHash) >>= { usages =>
+      withLock("updateTips", updateUnsafe(checkpointBlock, height, usages, isGenesis))
+    }
 
-  def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, isGenesis: Boolean = false): F[Unit] = {
+  def updateUnsafe(checkpointBlock: CheckpointBlock, height: Height, usages: Int, isGenesis: Boolean = false): F[Unit] = {
     val tipUpdates = checkpointParentService
       .parentSOEBaseHashes(checkpointBlock)
       .flatMap(
@@ -134,9 +138,9 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         .flatMap(_ => getMinTipHeight(None))
         .flatMap(
           min =>
-            if (isGenesis || min < height.min)
-              putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, 0, height))(dao.metrics)
-            else logger.debug(s"Block height: ${height.min} below min tip: $min update skipped")
+            if (isGenesis || min < height.min || usages < maxTipUsage)
+              putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, usages, height))(dao.metrics)
+            else logger.debug(s"Block height: ${height.min} with usages=${usages} above the limit or below min tip: $min | update skipped")
         )
         .recoverWith {
           case err: TipThresholdException =>
@@ -209,6 +213,25 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
       },
       "concurrentTipService_pull"
     )
+
+  def registerUsages(checkpoint: CheckpointCache): F[Unit] = {
+    val parents = checkpoint.checkpointBlock.parentSOEHashes.distinct.toList
+    val hash = checkpoint.checkpointBlock.soeHash
+
+    parents.traverse { parent =>
+      usages.modify { m =>
+        val data = m.get(parent)
+        val updated = data.map(_ ++ Set(hash)).getOrElse(Set(hash))
+        (m.updated(parent, updated), ())
+      }
+    }.void
+  }
+
+  def registerUsages(checkpoint: FinishedCheckpoint): F[Unit] =
+    registerUsages(checkpoint.checkpointCacheData)
+
+  def countUsages(soeHash: String): F[Int] =
+    usages.get.map(_.get(soeHash).map(_.size).getOrElse(0))
 
   private def calculateTipsSOE(tips: Map[String, TipData]): F[TipSoe] =
     Random

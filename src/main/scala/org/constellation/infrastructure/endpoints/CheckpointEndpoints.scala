@@ -16,7 +16,7 @@ import org.constellation.gossip.validation.{
   MessageValidator,
   PathDoesNotStartAndEndWithOrigin
 }
-import org.constellation.storage.SnapshotService
+import org.constellation.storage.{ConcurrentTipService, SnapshotService}
 import org.constellation.util.Metrics
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
@@ -40,7 +40,8 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     metrics: Metrics,
     snapshotService: SnapshotService[F],
     checkpointBlockGossipService: CheckpointBlockGossipService[F],
-    messageValidator: MessageValidator
+    messageValidator: MessageValidator,
+    tipService: ConcurrentTipService[F]
   ) =
     genesisEndpoint(genesisObservation) <+>
       getCheckpointEndpoint(checkpointService) <+>
@@ -51,7 +52,8 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         messageValidator,
         snapshotService,
         checkpointService,
-        checkpointAcceptanceService
+        checkpointAcceptanceService,
+        tipService
       )
 
   private def genesisEndpoint(genesisObservation: => Option[GenesisObservation]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -73,7 +75,8 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     messageValidator: MessageValidator,
     snapshotService: SnapshotService[F],
     checkpointService: CheckpointService[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F]
+    checkpointAcceptanceService: CheckpointAcceptanceService[F],
+    tipService: ConcurrentTipService[F]
   ): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case req @ POST -> Root / "peer" / "checkpoint" / "finished" =>
@@ -106,6 +109,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
                 payload.block.value.checkpointCacheData.checkpointBlock.soeHash,
                 payload.block.value.checkpointCacheData
               ) >>
+                tipService.registerUsages(payload.block.value.checkpointCacheData) >>
                 payload.block.validSignature
                   .pure[F]
                   .ifM(
@@ -143,7 +147,8 @@ object CheckpointEndpoints {
     metrics: Metrics,
     snapshotService: SnapshotService[F],
     checkpointBlockGossipService: CheckpointBlockGossipService[F],
-    messageValidator: MessageValidator
+    messageValidator: MessageValidator,
+    tipService: ConcurrentTipService[F]
   ): HttpRoutes[F] =
     new CheckpointEndpoints[F]()
       .peerEndpoints(
@@ -153,6 +158,7 @@ object CheckpointEndpoints {
         metrics,
         snapshotService,
         checkpointBlockGossipService,
-        messageValidator
+        messageValidator,
+        tipService
       )
 }
