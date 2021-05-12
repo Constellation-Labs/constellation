@@ -4,9 +4,9 @@ import org.constellation.schema.address.{Address, AddressCacheData, AddressMetaD
 import org.constellation.schema.checkpoint._
 import org.constellation.schema.edge._
 import org.constellation.schema.observation._
-import org.constellation.schema.serialization.ExplicitKryoRegistrar.KryoSerializer.DefaultSerializer
+import org.constellation.schema.serialization.ExplicitKryoRegistrar.KryoSerializer.{DefaultSerializer, CompatibleSerializer}
 import org.constellation.schema.signature.{HashSignature, SignatureBatch, Signed}
-import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, Snapshot, SnapshotInfo, SnapshotProposal, SnapshotProposalPayload, StoredSnapshot}
+import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, Snapshot, SnapshotInfo, SnapshotInfoV1, SnapshotProposal, SnapshotProposalPayload, StoredSnapshot}
 import org.constellation.schema.transaction._
 import org.constellation.schema.{ChannelMessage, ChannelMessageData, CommonMetadata, GenesisObservation, Height, Id, PeerNotification, SignedData}
 
@@ -20,7 +20,7 @@ object SchemaKryoRegistrar
         (classOf[ChannelMessage], 147, DefaultSerializer),
         (classOf[Seq[ChannelMessage]], 148, DefaultSerializer),
         (classOf[StoredSnapshot], 149, DefaultSerializer),
-        (classOf[SnapshotInfo], 150, DefaultSerializer),
+        (classOf[SnapshotInfoV1], 150, DefaultSerializer),
         (classOf[TipData], 151, DefaultSerializer),
         (classOf[Height], 152, DefaultSerializer),
         (classOf[Option[Height]], 153, DefaultSerializer),
@@ -89,6 +89,7 @@ object SchemaKryoRegistrar
         (classOf[MajorityInfo], 203, DefaultSerializer),
         (classOf[HeightRange], 204, DefaultSerializer),
         (classOf[CheckpointBlockPayload], 205, DefaultSerializer),
-        (classOf[FinishedCheckpointBlock], 206, DefaultSerializer)
+        (classOf[FinishedCheckpointBlock], 206, DefaultSerializer),
+        (classOf[SnapshotInfo], 1034, CompatibleSerializer)
       )
     ) {}

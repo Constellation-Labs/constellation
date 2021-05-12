@@ -10,10 +10,12 @@ import org.constellation.domain.redownload.RedownloadService
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.migrations.SnapshotInfoV1Migration
 import org.constellation.p2p.Cluster
 import org.constellation.schema.GenesisObservation
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotInfoV1, StoredSnapshot}
+import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
 
@@ -23,7 +25,7 @@ case class RollbackData(
   genesisObservation: GenesisObservation
 )
 
-class RollbackService[F[_]: Concurrent](
+class RollbackService[F[_]](
   dao: DAO,
   snapshotService: SnapshotService[F],
   snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
@@ -33,9 +35,11 @@ class RollbackService[F[_]: Concurrent](
   genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
   redownloadService: RedownloadService[F],
   cluster: Cluster[F]
-)(implicit C: ContextShift[F]) {
+)(implicit F: Concurrent[F], C: ContextShift[F]) {
   private val logger = Slf4jLogger.getLogger[F]
   private val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+
+  private val snapshotInfoV1MaxHeight: Long = ConfigUtil.constellation.getLong("schema.v1.snapshotInfo")
 
   def restore(): EitherT[F, Throwable, Unit] =
     for {
@@ -61,11 +65,19 @@ class RollbackService[F[_]: Concurrent](
         }
     }
 
+  private[rollback] def readSnapshotInfo(height: Long, hash: String): EitherT[F, Throwable, SnapshotInfo] =
+    if (height > snapshotInfoV1MaxHeight)
+      executeWithFallback(snapshotInfoCloudStorage)(_.read(height, hash))
+    else
+      executeWithFallback(snapshotInfoCloudStorage)(_.readBytes(height, hash).map { bytes =>
+        KryoSerializer.deserializeCast[SnapshotInfoV1](bytes)
+      }.map(SnapshotInfoV1Migration.convert))
+
   private[rollback] def validate(height: Long, hash: String): EitherT[F, Throwable, RollbackData] =
     for {
       _ <- logger.debug(s"Validating rollback data for height $height and hash $hash").attemptT
       snapshot <- executeWithFallback(snapshotCloudStorage)(_.read(height, hash))
-      snapshotInfo <- executeWithFallback(snapshotInfoCloudStorage)(_.read(height, hash))
+      snapshotInfo <- readSnapshotInfo(height, hash)
       genesisObservation <- executeWithFallback(genesisObservationCloudStorage)(_.read())
       addressData = snapshotInfo.addressCacheData.map {
         case (address, data) => (address, data.balance)

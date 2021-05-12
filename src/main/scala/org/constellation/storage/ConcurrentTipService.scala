@@ -233,9 +233,15 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
   def countUsages(soeHash: String): F[Int] =
     usages.get.map(_.get(soeHash).map(_.size).getOrElse(0))
 
+  def getUsages: F[Map[String, Set[String]]] =
+    usages.get
+
+  def setUsages(u: Map[String, Set[String]]): F[Unit] =
+    usages.set(u)
+
   private def calculateTipsSOE(tips: Map[String, TipData]): F[TipSoe] =
     Random
-      .shuffle(if (tips.size > 50) tips.slice(0, 50).toSeq else tips.toSeq)
+      .shuffle(tips.toSeq)
       .take(numFacilitatorPeers)
       .toList
       .traverse { t =>

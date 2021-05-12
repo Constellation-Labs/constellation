@@ -205,6 +205,7 @@ class SnapshotService[F[_]: Concurrent](
       addressCacheData <- addressService.getAll
       tips <- concurrentTipService.toMap
       lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
+      tipUsages <- concurrentTipService.getUsages
     } yield
       SnapshotInfo(
         s,
@@ -214,7 +215,8 @@ class SnapshotService[F[_]: Concurrent](
         addressCacheData = addressCacheData,
         tips = tips,
         snapshotCache = s.checkpointCache.toList,
-        lastAcceptedTransactionRef = lastAcceptedTransactionRef
+        lastAcceptedTransactionRef = lastAcceptedTransactionRef,
+        tipUsages = tipUsages
       )
 
   def getTotalSupply(): F[TotalSupply] =
@@ -231,6 +233,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
+      _ <- concurrentTipService.setUsages(snapshotInfo.tipUsages)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
       _ <- C.evalOn(boundedExecutionContext)(addressService.setAll(snapshotInfo.addressCacheData))
