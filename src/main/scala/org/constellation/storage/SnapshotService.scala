@@ -546,6 +546,7 @@ class SnapshotService[F[_]: Concurrent](
       soeHashes <- getSOEHashesFrom(currentSnapshot.checkpointBlocks.toList)
       _ <- checkpointService.batchRemove(currentSnapshot.checkpointBlocks.toList)
       _ <- soeService.batchRemove(soeHashes)
+      _ <- concurrentTipService.batchRemoveUsages(currentSnapshot.checkpointBlocks.toSet)
       _ <- logger.info(s"Removed soeHashes : $soeHashes")
       _ <- dao.metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
       _ <- dao.metrics.incrementMetricAsync(Metrics.snapshotCount)

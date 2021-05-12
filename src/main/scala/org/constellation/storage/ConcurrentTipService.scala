@@ -239,6 +239,11 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
   def setUsages(u: Map[String, Set[String]]): F[Unit] =
     usages.set(u)
 
+  def batchRemoveUsages(cbs: Set[String]): F[Unit] =
+    usages.modify { u =>
+      (u -- cbs, ())
+    }
+
   private def calculateTipsSOE(tips: Map[String, TipData]): F[TipSoe] =
     Random
       .shuffle(tips.toSeq)

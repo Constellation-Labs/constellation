@@ -25,11 +25,11 @@ class SnapshotHashIntegrityTest extends AnyFreeSpec with Matchers with BeforeAnd
 
   }
 
-  "snapshot info read" ignore { // TODO: generate new snapshot info class
+  "snapshot info read" in {
     val storage = SnapshotInfoLocalStorage[IO]("src/test/resources")
-    val snapshotInfo = storage.read("snapshot-info").rethrowT.unsafeRunSync()
+    val snapshotInfo = storage.read("snapshot-info-v2").rethrowT.unsafeRunSync()
 
-    snapshotInfo.snapshot.snapshot.hash shouldBe "79cb7849a74c83dd299868305503a8852e092d8f928c703dafa20f547b7f9540"
+    snapshotInfo.snapshot.snapshot.hash shouldBe "08d3a9f7e899523a14c1476fa90456413835c3e6f6a76ad3c4247650076bae36"
 
   }
 

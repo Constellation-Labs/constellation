@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 - Gossiping for checkpoint blocks
 ### Changed
 - Whitelisting update
+### Fixed
+- Tip usages cache
 
 ## [v2.23.3] 2021-04-19
 ### Changed
