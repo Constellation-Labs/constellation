@@ -22,7 +22,7 @@ lazy val versions = new {
   val circeEnumeratum = "1.6.1"
   val circeGenericExtras = "0.13.0"
   val fs2 = "2.4.4"
-  val httpSigner = "0.3.3"
+  val httpSigner = "0.3.4"
   val scaffeine = "4.0.1"
   val betterFiles = "3.9.1"
   val pureconfig = "0.13.0"
@@ -55,7 +55,7 @@ lazy val coreSettings = Seq(
   resolvers += "Typesafe Releases".at("https://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io"),
   resolvers += Resolver.sonatypeRepo("releases"),
-  resolvers += Resolver.bintrayRepo("abankowski", "maven")
+  resolvers += "Artifactory" at "https://abankowski.jfrog.io/artifactory/scala/"
 )
 
 // -----------------
