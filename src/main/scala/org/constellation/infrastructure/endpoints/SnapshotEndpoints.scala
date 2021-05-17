@@ -34,7 +34,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def publicEndpoints(
-    nodeId: Id,
+    selfId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotService: SnapshotService[F],
     redownloadService: RedownloadService[F]
@@ -42,8 +42,9 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
       getCreatedSnapshotsEndpoint(redownloadService) <+>
       getAcceptedSnapshotsEndpoint(redownloadService) <+>
-      getPeerProposals(nodeId, redownloadService) <+>
-      getNextSnapshotHeight(nodeId, snapshotService) <+>
+      getPeerProposals(selfId, redownloadService) <+>
+      queryPeerProposals(selfId, redownloadService) <+>
+      getNextSnapshotHeight(selfId, snapshotService) <+>
       getLatestMajorityHeight(redownloadService) <+>
       getLatestMajorityState(redownloadService) <+>
       getTotalSupply(snapshotService)
@@ -63,6 +64,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       getCreatedSnapshotsEndpoint(redownloadService) <+>
       getAcceptedSnapshotsEndpoint(redownloadService) <+>
       getPeerProposals(nodeId, redownloadService) <+>
+      queryPeerProposals(nodeId, redownloadService) <+>
       getNextSnapshotHeight(nodeId, snapshotService) <+>
       getSnapshotInfo(snapshotService, cluster) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
@@ -79,6 +81,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       getCreatedSnapshotsEndpoint(redownloadService) <+>
       getAcceptedSnapshotsEndpoint(redownloadService) <+>
       getPeerProposals(nodeId, redownloadService) <+>
+      queryPeerProposals(nodeId, redownloadService) <+>
       getLatestMajorityHeight(redownloadService)
 
   private def getStoredSnapshotsEndpoint(snapshotStorage: LocalFileStorage[F, StoredSnapshot]): HttpRoutes[F] =
@@ -116,16 +119,32 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
         redownloadService.getAcceptedSnapshots().map(_.asJson).flatMap(Ok(_))
     }
 
-  private def getPeerProposals(nodeId: Id, redownloadService: RedownloadService[F]): HttpRoutes[F] =
+  private def getPeerProposals(ownId: Id, redownloadService: RedownloadService[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
-      case GET -> Root / "peer" / peerId / "snapshot" / "created" =>
+      case GET -> Root / "peer" / hex / "snapshot" / "created" =>
+        val peerId = Id(hex)
         val peerProposals =
-          if (Id(peerId) == nodeId)
+          if (peerId == ownId)
             redownloadService.getCreatedSnapshots()
           else
-            redownloadService.getPeerProposals(nodeId).map(_.getOrElse(Map.empty))
+            redownloadService.getPeerProposals(peerId).map(_.getOrElse(Map.empty))
 
         peerProposals.map(_.asJson).flatMap(Ok(_))
+    }
+
+  private def queryPeerProposals(ownId: Id, redownloadService: RedownloadService[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case req @ POST -> Root / "snapshot" / "proposal" / "_query" =>
+        for {
+          query <- req.decodeJson[List[(Id, Long)]]
+          result <- query.traverse {
+            case (`ownId`, height) =>
+              redownloadService.getCreatedSnapshots().map(_.get(height))
+            case (peerId, height) =>
+              redownloadService.getPeerProposals(peerId).map(_.flatMap(_.get(height)))
+          }
+          resp <- Ok(result.asJson)
+        } yield resp
     }
 
   implicit val idLongEncoder: Encoder[(Id, Long)] = deriveEncoder
@@ -202,8 +221,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
             case Valid(_) =>
               val processProposalAsync = F.start(
                 C.shift >>
-                  redownloadService.persistPeerProposal(message.origin, payload.proposal) >>
-                  redownloadService.updatePeerMajorityInfo(message.origin, payload.majorityInfo) >>
+                  redownloadService.addPeerProposal(payload.proposal) >>
+                  redownloadService.replaceRemoteFilter(message.origin, payload.filterData) >>
                   snapshotProposalGossipService.spread(message)
               )
 

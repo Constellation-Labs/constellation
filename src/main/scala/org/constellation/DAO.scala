@@ -428,15 +428,13 @@ class DAO(
 
     val missingProposalFinder = MissingProposalFinder(
       ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval"),
-      ConfigUtil.constellation.getLong("snapshot.missingProposalOffset"),
-      ConfigUtil.constellation.getLong("snapshot.missingProposalLimit"),
       id
     )
 
     redownloadService = RedownloadService[IO](
       ConfigUtil.constellation.getInt("snapshot.meaningfulSnapshotsCount"),
       ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"),
-      ConfigUtil.isEnabledCloudStorage,
+      ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval"),
       cluster,
       MajorityStateChooser(id),
       missingProposalFinder,

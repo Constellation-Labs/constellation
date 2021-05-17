@@ -175,7 +175,8 @@ lazy val coreDependencies = Seq(
   "pl.abankowski" %% "http-request-signer-core" % versions.httpSigner,
   "pl.abankowski" %% "http4s-request-signer" % versions.httpSigner,
   "io.chrisdavenport" %% "fuuid" % "0.4.0",
-  "io.chrisdavenport" %% "mapref" % "0.1.1"
+  "io.chrisdavenport" %% "mapref" % "0.1.1",
+  "net.cinnom" % "nano-cuckoo" % "2.0.0"
 ) ++ prometheusDependencies ++ http4sDependencies ++ schemaSharedDependencies ++ twitterAlgebirdDependencies ++ pureconfigDependencies ++ monocleDependencies
 
 //Test dependencies

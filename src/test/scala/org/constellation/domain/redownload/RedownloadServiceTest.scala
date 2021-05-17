@@ -18,7 +18,7 @@ import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.rewards.RewardsManager
 import org.constellation.schema.Id
 import org.constellation.schema.signature.{HashSignature, Signed}
-import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, SnapshotInfo, SnapshotProposal, StoredSnapshot}
+import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotProposal, StoredSnapshot}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.constellation.{PeerMetadata, ResourceInfo}
@@ -62,7 +62,7 @@ class RedownloadServiceTest
 
   val meaningfulSnapshotsCount = 4
   val redownloadInterval = 2
-  val signature = HashSignature("xyz", Id("xyz"))
+  val heightInterval = 2
   val keyPair = KeyUtils.makeKeyPair()
 
   before {
@@ -88,7 +88,7 @@ class RedownloadServiceTest
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,
       redownloadInterval,
-      true,
+      heightInterval,
       cluster,
       majorityStateChooser,
       missingProposalFinder,
@@ -248,7 +248,7 @@ class RedownloadServiceTest
       val persist = redownloadService.persistCreatedSnapshot(2L, "aabbcc", trust)
       val check = redownloadService.createdSnapshots.get.map(_.get(2L))
       (persist >> check).unsafeRunSync.get should matchPattern {
-        case Signed(signature, SnapshotProposal("aabbcc", 2L, trust)) => ()
+        case Signed(_, SnapshotProposal("aabbcc", 2L, _)) => ()
       }
     }
 
@@ -260,17 +260,6 @@ class RedownloadServiceTest
       (persistFirst >> persistSecond >> check).unsafeRunSync.get should matchPattern {
         case Signed(_, SnapshotProposal("aaaa", 2L, _)) => ()
       }
-    }
-
-    s"should limit the Map to removal point" in {
-      val removalPoint = 30
-      val snapshots = (1 to removalPoint + 10 by 2).map(_.toLong).toList
-
-      val persist = snapshots.traverse(s => redownloadService.persistCreatedSnapshot(s, s.toString, SortedMap.empty))
-      val check =
-        redownloadService.createdSnapshots.get.map(_.find { case (height, _) => height <= removalPoint }).map(_.isEmpty)
-
-      (persist >> check).unsafeRunSync shouldBe true
     }
   }
 
@@ -289,18 +278,54 @@ class RedownloadServiceTest
 
       (persistFirst >> persistSecond >> check).unsafeRunSync shouldBe "bbbb".some
     }
+  }
 
-    s"should limit the Map to removal point" in {
-      val removalPoint = 30
-      val snapshots = (1 to removalPoint + 10 by 2).map(_.toLong).toList
+  "removeSnapshotsAndProposalsBelowHeight" - {
+    val peer1 = Id("p1")
+    val peer2 = Id("p2")
+    val peer1signature = HashSignature("xyz1", peer1)
+    val peer2signature = HashSignature("xyz2", peer2)
 
-      val persist = snapshots.traverse(s => redownloadService.persistAcceptedSnapshot(s, s.toString))
-      val check =
-        redownloadService.acceptedSnapshots.get
-          .map(_.find { case (height, _) => height <= removalPoint })
-          .map(_.isEmpty)
+    "should remove snapshots and proposals below 12 and keep all other" in {
+      // given
+      (for {
+        _ <- redownloadService.persistAcceptedSnapshot(10, "hash10")
+        _ <- redownloadService.persistAcceptedSnapshot(12, "hash12")
+        _ <- redownloadService.persistCreatedSnapshot(10, "hash10", SortedMap.empty)
+        _ <- redownloadService.persistCreatedSnapshot(12, "hash12", SortedMap.empty)
+        _ <- redownloadService.addPeerProposal(
+          Signed(peer1signature, SnapshotProposal("hash10p1", 10, SortedMap.empty))
+        )
+        _ <- redownloadService.addPeerProposal(
+          Signed(peer1signature, SnapshotProposal("hash12p1", 12, SortedMap.empty))
+        )
+        _ <- redownloadService.addPeerProposal(
+          Signed(peer2signature, SnapshotProposal("hash10p2", 10, SortedMap.empty))
+        )
+        _ <- redownloadService.addPeerProposal(
+          Signed(peer2signature, SnapshotProposal("hash10p2", 12, SortedMap.empty))
+        )
+      } yield ()).unsafeRunSync()
 
-      (persist >> check).unsafeRunSync shouldBe true
+      // when
+      redownloadService.removeSnapshotsAndProposalsBelowHeight(12).unsafeRunSync()
+
+      // then
+      val acceptedSnapshots = redownloadService.getAcceptedSnapshots().unsafeRunSync()
+      acceptedSnapshots should not contain key(10L)
+      (acceptedSnapshots should contain).key(12L)
+
+      val createdSnapshots = redownloadService.getCreatedSnapshots().unsafeRunSync()
+      createdSnapshots should not contain key(10L)
+      (createdSnapshots should contain).key(12L)
+
+      val peer1Proposals = redownloadService.getPeerProposals(peer1).unsafeRunSync().getOrElse(Map.empty)
+      peer1Proposals should not contain key(10L)
+      (peer1Proposals should contain).key(12L)
+
+      val peer2Proposals = redownloadService.getPeerProposals(peer2).unsafeRunSync().getOrElse(Map.empty)
+      peer2Proposals should not contain key(10L)
+      (peer2Proposals should contain).key(12L)
     }
   }
 
@@ -345,6 +370,8 @@ class RedownloadServiceTest
   "fetchAndUpdatePeersProposals" - {
     val peer1 = Id("p1")
     val peer2 = Id("p2")
+    val peer1signature = HashSignature("xyz1", peer1)
+    val peer2signature = HashSignature("xyz2", peer2)
     val peer1Data = PeerData(
       PeerMetadata("host1", 9999, peer1, resourceInfo = mock[ResourceInfo]),
       NonEmptyList(mock[MajorityHeight], Nil)
@@ -354,16 +381,16 @@ class RedownloadServiceTest
       NonEmptyList(mock[MajorityHeight], Nil)
     )
     val initialPeersProposals =
-      Map(peer1 -> Map(1L -> Signed(signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
+      Map(peer1 -> Map(1L -> Signed(peer1signature, SnapshotProposal("hash1p1", 1L, SortedMap.empty))))
     val peer1Proposals =
       Map(
-        1L -> Signed(signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
-        2L -> Signed(signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
+        1L -> Signed(peer1signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
+        2L -> Signed(peer1signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
       )
     val peer2Proposals =
       Map(
-        1L -> Signed(signature, SnapshotProposal("hash1p2", 1L, SortedMap.empty)),
-        2L -> Signed(signature, SnapshotProposal("hash2p2", 2L, SortedMap.empty))
+        1L -> Signed(peer2signature, SnapshotProposal("hash1p2", 1L, SortedMap.empty)),
+        2L -> Signed(peer2signature, SnapshotProposal("hash2p2", 2L, SortedMap.empty))
       )
 
     "for empty proposals Map" - {
@@ -422,8 +449,8 @@ class RedownloadServiceTest
         val actual = redownloadService.getAllPeerProposals().unsafeRunSync()
         val expected = Map(
           peer1 -> Map(
-            1L -> Signed(signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
-            2L -> Signed(signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
+            1L -> Signed(peer1signature, SnapshotProposal("hash2p1", 1L, SortedMap.empty)),
+            2L -> Signed(peer1signature, SnapshotProposal("hash3p1", 2L, SortedMap.empty))
           )
         )
 
@@ -448,31 +475,6 @@ class RedownloadServiceTest
         val expected = initialPeersProposals ++ Map(peer2 -> peer2Proposals)
 
         actual shouldEqual expected
-      }
-    }
-
-    "getLookupRange" - {
-      "should use max height from peer majority state" in {
-        redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")).unsafeRunSync()
-        val majorityInfos = Map(
-          Id("a") -> MajorityInfo(HeightRange(0L, 10L), List.empty),
-          Id("b") -> MajorityInfo(HeightRange(0L, 6L), List.empty)
-        )
-
-        val result = redownloadService.getLookupRange(majorityInfos).unsafeRunSync()
-
-        result shouldBe HeightRange(4L, 10L)
-      }
-
-      "should use max height from own majority state" in {
-        redownloadService.setLastMajorityState(Map(4L -> "hash2", 6L -> "hash3", 8L -> "hash3")).unsafeRunSync()
-        val majorityInfos = Map(
-          Id("b") -> MajorityInfo(HeightRange(0L, 6L), List.empty)
-        )
-
-        val result = redownloadService.getLookupRange(majorityInfos).unsafeRunSync()
-
-        result shouldBe HeightRange(4L, 8L)
       }
     }
 
@@ -687,7 +689,7 @@ class RedownloadServiceTest
         val redownloadService = RedownloadService[IO](
           meaningfulSnapshotsCount,
           redownloadInterval,
-          false,
+          heightInterval,
           cluster,
           majorityStateChooser,
           missingProposalFinder,

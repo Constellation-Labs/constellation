@@ -2,17 +2,19 @@ package org.constellation.domain.redownload
 
 import java.security.KeyPair
 
-import cats.NonEmptyParallel
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
+import cats.{Applicative, NonEmptyParallel}
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.mapref.MapRef
 import io.circe.{Decoder, Encoder}
+import org.constellation.ConfigUtil
 import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
 import org.constellation.concurrency.MapRefUtils
 import org.constellation.concurrency.MapRefUtils.MapRefOps
+import org.constellation.concurrency.cuckoo.{CuckooFilter, MutableCuckooFilter}
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.storage.LocalFileStorage
@@ -32,12 +34,13 @@ import org.constellation.util.Metrics
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.math.{max, min}
 import scala.util.Random
 
-class RedownloadService[F[_]: NonEmptyParallel](
+class RedownloadService[F[_]: NonEmptyParallel: Applicative](
   meaningfulSnapshotsCount: Int,
   redownloadInterval: Int,
-  isEnabledCloudStorage: Boolean,
+  heightInterval: Long,
   cluster: Cluster[F],
   majorityStateChooser: MajorityStateChooser,
   missingProposalFinder: MissingProposalFinder,
@@ -69,97 +72,131 @@ class RedownloadService[F[_]: NonEmptyParallel](
   /**
     * Majority proposals from other peers. It is used to calculate majority state.
     */
-  private[redownload] val peersProposals: MapRef[F, Id, Option[SnapshotProposalsAtHeight]] =
+  private[redownload] val peerProposals: MapRef[F, Id, Option[SnapshotProposalsAtHeight]] =
     MapRefUtils.ofConcurrentHashMap()
 
   private[redownload] val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
 
   private[redownload] var lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
 
-  private[redownload] val peerMajorityInfo: MapRef[F, Id, Option[MajorityInfo]] = MapRefUtils.ofConcurrentHashMap()
+  private[redownload] val majorityStallCount: Ref[F, Int] = Ref.unsafe(0)
 
-  def updatePeerMajorityInfo(peerId: Id, majorityInfo: MajorityInfo): F[Unit] =
-    peerMajorityInfo(peerId).set(majorityInfo.some)
+  private[redownload] val localFilter: MutableCuckooFilter[F, ProposalCoordinate] =
+    MutableCuckooFilter[F, ProposalCoordinate]()
+
+  private[redownload] val remoteFilters: MapRef[F, Id, Option[CuckooFilter]] =
+    MapRefUtils.ofConcurrentHashMap()
 
   private val logger = Slf4jLogger.getLogger[F]
 
+  private val stallCountThreshold = ConfigUtil.getOrElse("constellation.snapshot.stallCount", 4)
+  private val proposalLookupLimit = ConfigUtil.getOrElse("constellation.snapshot.proposalLookupLimit", 8)
+
   def setLastSentHeight(height: Long): F[Unit] =
-    lastSentHeight.modify { _ =>
-      (height, ())
-    } >> metrics.updateMetricAsync[F]("redownload_lastSentHeight", height)
+    lastSentHeight.set(height) >> metrics.updateMetricAsync[F]("redownload_lastSentHeight", height)
 
   def setLastMajorityState(majorityState: SnapshotsAtHeight): F[Unit] =
-    lastMajorityState.modify { _ =>
-      (majorityState, maxHeight(majorityState))
-    }.flatMap(metrics.updateMetricAsync[F]("redownload_lastMajorityStateHeight", _))
+    lastMajorityState.set(majorityState) >>
+      metrics.updateMetricAsync[F]("redownload_lastMajorityStateHeight", majorityState.maxHeight)
 
   def getLastMajorityState(): F[SnapshotsAtHeight] =
     lastMajorityState.get
 
-  def latestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
-    (s, maxHeight(s))
-  }
+  def latestMajorityHeight: F[Long] = lastMajorityState.get.map(_.maxHeight)
 
-  def lowestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
-    (s, minHeight(s))
-  }
+  def lowestMajorityHeight: F[Long] = lastMajorityState.get.map(_.minHeight)
 
   def getMajorityRange: F[HeightRange] = lastMajorityState.get.map { s =>
     HeightRange(minHeight(s), maxHeight(s))
   }
 
-  def getMajorityGapRanges: F[List[HeightRange]] = lastMajorityState.get.map(missingProposalFinder.findGapRanges)
-
   def replacePeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
-    peersProposals(peer).set(proposals.some)
+    peerProposals(peer).get.flatMap { maybeMap =>
+      maybeMap.traverse(removeFromLocalFilter)
+    } >> peerProposals(peer).set(proposals.some) >> addToLocalFilter(proposals)
 
-  def persistPeerProposal(peer: Id, proposal: Signed[SnapshotProposal]): F[Unit] =
+  def removePeerProposalsBelowHeight(height: Long): F[PeersProposals] =
+    for {
+      ids <- peerProposals.keys
+      results <- ids.traverse { id =>
+        peerProposals(id).modify { maybeMap =>
+          val oldProposals = maybeMap.getOrElse(Map.empty)
+          val removedProposals = oldProposals.filterKeys(_ < height)
+          val result = oldProposals.removeHeightsBelow(height)
+          (result.some, (removedProposals, result))
+        }.flatMap { case (removed, result) => removeFromLocalFilter(removed) >> F.pure((id, result)) }
+      }
+    } yield results.toMap
+
+  private def removeFromLocalFilter(proposals: SnapshotProposalsAtHeight): F[Unit] =
+    proposals.values.toList.map { spp =>
+      (spp.signature.id, spp.value.height)
+    }.traverse { p =>
+      localFilter
+        .delete(p)
+        .ifM(F.unit, logger.warn(s"Proposal $p could not be removed from local filter"))
+    } >> F.unit
+
+  def addPeerProposal(proposal: Signed[SnapshotProposal]): F[Unit] =
     logger.debug(
-      s"Persisting proposal of ${peer.hex} at height ${proposal.value.height} and hash ${proposal.value.hash}"
-    ) >> persistPeerProposals(peer, Map(proposal.value.height -> proposal))
+      s"Persisting proposal of ${proposal.signature.id.hex} at height ${proposal.value.height} and hash ${proposal.value.hash}"
+    ) >> addPeerProposals(List(proposal))
 
-  def persistPeerProposals(peer: Id, proposals: SnapshotProposalsAtHeight): F[Unit] =
-    peersProposals(peer).modify { maybeMap =>
-      val updatedMap = maybeMap.getOrElse(Map.empty) ++ proposals
-      val trimmedMap = takeHighestUntilKey(updatedMap, getRemovalPoint(maxHeight(updatedMap)))
-      (trimmedMap.some, ())
-    }
+  def addPeerProposals(proposals: Iterable[Signed[SnapshotProposal]]): F[Unit] =
+    proposals.groupBy(_.signature.id).toList.traverse {
+      case (id, proposals) =>
+        peerProposals(id)
+          .modify[SnapshotProposalsAtHeight] { maybeMap =>
+            val oldProposals = maybeMap.getOrElse(Map.empty)
+            val newProposals = proposals.map(s => (s.value.height, s)).toMap
+            ((oldProposals ++ newProposals).some, newProposals -- oldProposals.keySet)
+          }
+          .flatMap(addToLocalFilter)
+    } >> F.unit
+
+  private def addToLocalFilter(proposals: SnapshotProposalsAtHeight): F[Unit] =
+    proposals.values.toList.map { spp =>
+      (spp.signature.id, spp.value.height)
+    }.traverse { p =>
+      localFilter
+        .insert(p)
+        .ifM(F.unit, F.raiseError(new RuntimeException(s"Unable to insert proposal $p to local filter")))
+    } >> F.unit
+
+  def replaceRemoteFilter(peerId: Id, filterData: FilterData): F[Unit] =
+    remoteFilters(peerId).set(CuckooFilter(filterData).some)
+
+  def localFilterData: F[FilterData] = localFilter.getFilterData
 
   def persistCreatedSnapshot(height: Long, hash: String, reputation: Reputation): F[Unit] =
     createdSnapshots.modify { m =>
       val updated =
         if (m.contains(height)) m
-        else {
-          m.updated(height, signed(SnapshotProposal(hash, height, reputation), keyPair))
-        }
-      val max = maxHeight(updated)
-      val removalPoint = getRemovalPoint(max)
-      val limited = takeHighestUntilKey(updated, removalPoint)
-      (limited, ())
-    } >> metrics.updateMetricAsync[F]("redownload_maxCreatedSnapshotHeight", height)
+        else m.updated(height, signed(SnapshotProposal(hash, height, reputation), keyPair))
+      (updated, updated.maxHeight)
+    }.flatMap(metrics.updateMetricAsync[F]("redownload_maxCreatedSnapshotHeight", _))
 
   def persistAcceptedSnapshot(height: Long, hash: String): F[Unit] =
     acceptedSnapshots.modify { m =>
       val updated = m.updated(height, hash)
-      val max = maxHeight(updated)
-      val removalPoint = getRemovalPoint(max)
-      val limited = takeHighestUntilKey(updated, removalPoint)
-      (limited, ())
-    } >> metrics.updateMetricAsync[F]("redownload_maxAcceptedSnapshotHeight", height)
+      (updated, updated.maxHeight)
+    }.flatMap(metrics.updateMetricAsync[F]("redownload_maxAcceptedSnapshotHeight", _))
 
   def getCreatedSnapshots(): F[SnapshotProposalsAtHeight] = createdSnapshots.get
 
   def getAcceptedSnapshots(): F[SnapshotsAtHeight] = acceptedSnapshots.get
 
-  def getAllPeerProposals(): F[PeersProposals] = peersProposals.toMap
+  def getAllPeerProposals(): F[PeersProposals] = peerProposals.toMap
 
-  def getPeerProposals(peerId: Id): F[Option[SnapshotProposalsAtHeight]] = peersProposals(peerId).get
+  def getPeerProposals(peerId: Id): F[Option[SnapshotProposalsAtHeight]] = peerProposals(peerId).get
 
   def clear: F[Unit] =
     for {
       _ <- createdSnapshots.modify(_ => (Map.empty, ()))
       _ <- acceptedSnapshots.modify(_ => (Map.empty, ()))
-      _ <- peersProposals.clear
+      _ <- peerProposals.clear
+      _ <- localFilter.clear
+      _ <- remoteFilters.clear
       _ <- setLastMajorityState(Map.empty)
       _ <- setLastSentHeight(-1)
       _ <- rewardsManager.clearLastRewardedHeight()
@@ -178,7 +215,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }
 
       _ <- responses.traverse {
-        case (id, proposals) => persistPeerProposals(id, proposals)
+        case (_, proposals) => addPeerProposals(proposals.values)
       }
     } yield ()
 
@@ -251,24 +288,14 @@ class RedownloadService[F[_]: NonEmptyParallel](
         unboundedBlocker
       )(client)
 
-  private[redownload] def fetchAndUpdatePeerProposals(peerId: Id)(client: PeerClientMetadata): F[Unit] =
-    for {
-      maybeProposals <- fetchPeerProposals(peerId, client)
-      _ <- maybeProposals.map { proposals =>
-        proposals.filter { case (_, signedProposal) => signedProposal.validSignature }
-      }.traverse { proposals =>
-        persistPeerProposals(peerId, proposals)
-      }
-    } yield ()
-
   private[redownload] def fetchPeerProposals(
-    peerId: Id,
+    query: List[ProposalCoordinate],
     client: PeerClientMetadata
-  ): F[Option[SnapshotProposalsAtHeight]] =
+  ): F[List[Option[Signed[SnapshotProposal]]]] =
     PeerResponse
       .run(
         apiClient.snapshot
-          .getPeerProposals(peerId),
+          .queryPeerProposals(query),
         unboundedBlocker
       )(client)
 
@@ -400,9 +427,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
     val wrappedCheck = for {
       _ <- logger.debug("Checking alignment with majority snapshot...")
-      peersProposals <- getAllPeerProposals()
-      createdSnapshots <- getCreatedSnapshots()
-      acceptedSnapshots <- getAcceptedSnapshots()
+
+      lastMajority <- getLastMajorityState()
+      (_, createdSnapshots, peerProposals) <- removeSnapshotsAndProposalsBelowHeight(lastMajority.minHeight)
 
       peers <- cluster.getPeerInfo
       ownPeer <- cluster.getOwnJoinedHeight()
@@ -410,41 +437,57 @@ class RedownloadService[F[_]: NonEmptyParallel](
         case (id, peerData) => (id, peerData.majorityHeight)
       } ++ Map(cluster.id -> NonEmptyList.one(MajorityHeight(ownPeer, None)))
 
-      _ <- logger.debug(s"Peers with majority heights")
-      _ <- peersCache.toList.traverse {
-        case (id, majorityHeight) => logger.debug(s"[$id]: $majorityHeight")
-      }
+      _ <- logger.debug(s"Peers with majority heights $peersCache")
 
-      _ <- logger.debug(s"Created snapshots: ${formatProposals(createdSnapshots)} ")
-      _ <- logger.debug(s"Peers proposals: ${peersProposals.mapValues(formatProposals)} ")
-
-      majorityState = majorityStateChooser.chooseMajorityState(
+      calculatedMajority = majorityStateChooser.chooseMajorityState(
         createdSnapshots,
-        peersProposals,
+        peerProposals,
         peersCache
       )
 
-      potentialGaps = missingProposalFinder.findGaps(majorityState)
-
-      _ <- if (potentialGaps.isEmpty) {
-        logger.debug("Calculated majority state has no gaps")
+      gaps = missingProposalFinder.findGaps(calculatedMajority)
+      _ <- if (gaps.isEmpty) {
+        logger.debug(
+          s"Majority calculated in range ${calculatedMajority.heightRange} has no gaps"
+        )
       } else {
-        logger.error(s"Found following gaps ${potentialGaps} in majority: ${majorityState.keys.toList.sorted}")
+        logger.warn(
+          s"Majority calculated in range ${calculatedMajority.heightRange} has following gaps $gaps"
+        )
       }
 
-      maxMajorityHeight = maxHeight(majorityState)
-      ignorePoint = getIgnorePoint(maxMajorityHeight)
-      majorityStateCutoff = if (isDownload) maxMajorityHeight else ownPeer.getOrElse(maxMajorityHeight)
-      meaningfulAcceptedSnapshots = takeHighestUntilKey(acceptedSnapshots, ignorePoint)
-      meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint).filterKeys(_ >= majorityStateCutoff)
+      calculatedMajorityWithoutGaps = if (gaps.isEmpty) calculatedMajority
+      else calculatedMajority.removeHeightsAbove(gaps.min)
 
-      _ <- setLastMajorityState(meaningfulMajorityState)
+      joinHeight = if (isDownload) calculatedMajorityWithoutGaps.maxHeight
+      else ownPeer.getOrElse(calculatedMajorityWithoutGaps.maxHeight)
 
-      _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
+      majorityBeforeCutOff = {
+        val intersect = lastMajority.keySet & calculatedMajorityWithoutGaps.keySet
+        if (lastMajority.isEmpty || intersect.nonEmpty)
+          calculatedMajorityWithoutGaps
+        else
+          lastMajority
+      }
+
+      cutOffHeight = getCutOffHeight(joinHeight, calculatedMajorityWithoutGaps, lastMajority)
+      meaningfulMajority = majorityBeforeCutOff.removeHeightsBelow(cutOffHeight)
+      _ <- setLastMajorityState(meaningfulMajority)
+
+      (meaningfulAcceptedSnapshots, _, _) <- removeSnapshotsAndProposalsBelowHeight(cutOffHeight)
+
+      _ <- logger.debug(s"Meaningful majority in range ${calculatedMajority.heightRange}")
+
+      _ <- F
+        .pure(meaningfulMajority.maxHeight > lastMajority.maxHeight)
+        .ifM(majorityStallCount.set(0), majorityStallCount.update(_ + 1))
+
+      _ <- if (meaningfulMajority.isEmpty) logger.debug("Meaningful majority is empty - skipping redownload")
+      else F.unit
 
       shouldPerformRedownload = shouldRedownload(
         meaningfulAcceptedSnapshots,
-        meaningfulMajorityState,
+        meaningfulMajority,
         redownloadInterval,
         isDownload
       )
@@ -457,7 +500,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
             cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress)
         }.flatMap { state =>
           if (state.isNewSet) {
-            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
+            wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajority).handleErrorWith {
               error =>
                 logger.error(error)(s"Redownload error, isDownload=$isDownload: ${stringifyStackTrace(error)}") >> {
                   if (isDownload)
@@ -468,16 +511,17 @@ class RedownloadService[F[_]: NonEmptyParallel](
                       .void
                 }
             }
-          } else logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=$isDownload")
+          } else
+            logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=$isDownload")
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
       _ <- logger.debug("Sending majority snapshots to cloud.")
-      _ <- if (meaningfulMajorityState.nonEmpty) sendMajoritySnapshotsToCloud()
+      _ <- if (meaningfulMajority.nonEmpty) sendMajoritySnapshotsToCloud()
       else logger.debug("No majority - skipping sending to cloud")
 
       _ <- logger.debug("Rewarding majority snapshots.")
-      _ <- if (meaningfulMajorityState.nonEmpty) rewardMajoritySnapshots().value.flatMap(F.fromEither)
+      _ <- if (meaningfulMajority.nonEmpty) rewardMajoritySnapshots().value.flatMap(F.fromEither)
       else logger.debug("No majority - skipping rewarding")
 
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
@@ -490,56 +534,113 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- logger.debug("Accepting all the checkpoint blocks received during the redownload.")
       _ <- acceptCheckpointBlocks().value.flatMap(F.fromEither)
 
-      _ <- if (!shouldPerformRedownload) findAndFetchMissingProposals(peersProposals, peersCache) else F.unit
+      _ <- if (!shouldPerformRedownload) findAndFetchMissingProposals(peerProposals, peersCache) else F.unit
     } yield ()
 
-    cluster.getNodeState
-      .map { current =>
-        if (isDownload) NodeState.validForDownload.contains(current)
-        else NodeState.validForRedownload.contains(current)
-      }
-      .ifM(
-        wrappedCheck,
-        logger.debug(s"Node state is not valid for redownload, skipping. isDownload=$isDownload") >> F.unit
-      )
+    cluster.getNodeState.map { current =>
+      if (isDownload) NodeState.validForDownload.contains(current)
+      else NodeState.validForRedownload.contains(current)
+    }.ifM(
+      wrappedCheck,
+      logger.debug(s"Node state is not valid for redownload, skipping. isDownload=$isDownload") >> F.unit
+    )
   }.handleErrorWith { error =>
     logger.error(error)("Error during checking alignment with majority snapshot.") >>
       error.raiseError[F, Unit]
   }
 
-  private[redownload] def getLookupRange(majorityInfos: Map[Id, MajorityInfo]): F[HeightRange] =
+  private def getCutOffHeight(
+    joinHeight: Long,
+    candidateMajority: SnapshotsAtHeight,
+    lastMajority: SnapshotsAtHeight
+  ): Long = {
+    val ignorePoint = getIgnorePoint(candidateMajority.maxHeight)
+    min(max(ignorePoint, joinHeight), lastMajority.maxHeight)
+  }
+
+  private[redownload] def removeSnapshotsAndProposalsBelowHeight(
+    height: Long
+  ): F[(SnapshotsAtHeight, SnapshotProposalsAtHeight, PeersProposals)] =
     for {
-      mr <- getMajorityRange
-      createdHeights <- createdSnapshots.get.map(_.values.map(_.value.height))
-      peersHeights = majorityInfos.values.map(_.majorityRange.to)
-      maxHeight = (mr.to :: (createdHeights ++ peersHeights).toList).max
-    } yield HeightRange(mr.from, maxHeight)
+      as <- acceptedSnapshots.updateAndGet(_.removeHeightsBelow(height))
+      cs <- createdSnapshots.updateAndGet(_.removeHeightsBelow(height))
+      pp <- removePeerProposalsBelowHeight(height)
+    } yield (as, cs, pp)
+
+  private[redownload] def getLookupRange: F[HeightRange] =
+    for {
+      stallCount <- majorityStallCount.get
+      majorityHeight <- latestMajorityHeight
+      result = if (stallCount > stallCountThreshold)
+        HeightRange(majorityHeight + heightInterval, majorityHeight + proposalLookupLimit)
+      else HeightRange.Empty
+    } yield result
 
   private def findAndFetchMissingProposals(peersProposals: PeersProposals, peersCache: PeersCache): F[Unit] =
     for {
-      peerMajorityInfo <- peerMajorityInfo.toMap
-      lookupRange <- getLookupRange(peerMajorityInfo)
-      missingProposals = missingProposalFinder.findMissingPeerProposals(lookupRange, peersProposals, peersCache)
-      _ <- missingProposals.nonEmpty
+      lookupRange <- getLookupRange
+      _ <- lookupRange.empty
         .pure[F]
         .ifM(
-          logger.info(s"Found missing proposals $missingProposals"),
-          logger.info(s"No missing proposals found")
+          logger.info("Skip looking for missing proposals"), {
+            val missingProposals =
+              missingProposalFinder.findMissingPeerProposals(lookupRange, peersProposals, peersCache)
+            missingProposals.nonEmpty
+              .pure[F]
+              .ifM(
+                logger.info(s"Missing proposals found in range $lookupRange, $missingProposals") >>
+                  queryMissingProposals(missingProposals),
+                logger.info(s"No missing proposals found")
+              )
+          }
         )
-      _ <- missingProposals.toList.traverse {
-        case (peerId, peerGaps) =>
-          val selectedPeer = missingProposalFinder
-            .selectPeerForFetchingMissingProposals(lookupRange, peerGaps, peerMajorityInfo - peerId)
-            .getOrElse(peerId)
-          fetchProposalForPeer(peerId)(selectedPeer)
+
+    } yield ()
+
+  private def queryMissingProposals(coordinates: Set[ProposalCoordinate]): F[Unit] =
+    for {
+      remoteFilters <- shuffledRemoteFilterList
+      peerToQuery = selectPeersForQueries(coordinates, remoteFilters)
+      _ <- logger.info(s"Querying missing proposals from peers $peerToQuery")
+      _ <- peerToQuery.toList.traverse {
+        case (peerId, query) => fetchAndUpdatePeerProposals(query, peerId)
       }
     } yield ()
 
-  private def fetchProposalForPeer(peerId: Id)(fromPeerId: Id): F[Unit] =
+  private def shuffledRemoteFilterList: F[List[(Id, CuckooFilter)]] =
     for {
-      peer <- cluster.getPeerInfo.map(_.get(fromPeerId))
+      map <- remoteFilters.toMap
+      result <- F.delay {
+        Random.shuffle(map.toList)
+      }
+    } yield result
+
+  private def selectPeersForQueries(
+    missingProposals: Set[ProposalCoordinate],
+    remoteFilters: List[(Id, CuckooFilter)]
+  ): Map[Id, Set[ProposalCoordinate]] =
+    missingProposals
+      .foldLeft(Map.empty[Id, Set[ProposalCoordinate]]) { (acc, proposalCoordinate) =>
+        remoteFilters.find {
+          case (_, f) => f.contains(proposalCoordinate)
+        }.map {
+          case (id, _) => acc |+| Map(id -> Set(proposalCoordinate))
+        }.getOrElse(acc)
+      }
+
+  private def fetchAndUpdatePeerProposals(query: Set[ProposalCoordinate], peerId: Id): F[Unit] =
+    for {
+      peer <- cluster.getPeerInfo.map(_.get(peerId))
       apiClient = peer.map(_.peerMetadata.toPeerClientMetadata)
-      _ <- apiClient.traverse(fetchAndUpdatePeerProposals(peerId))
+      _ <- apiClient.traverse { client =>
+        for {
+          proposals <- fetchPeerProposals(query.toList, client)
+          filteredProposals = proposals
+            .mapFilter(identity)
+            .filter(_.validSignature)
+          _ <- addPeerProposals(filteredProposals)
+        } yield ()
+      }
     } yield ()
 
   private[redownload] def sendMajoritySnapshotsToCloud(): F[Unit] = {
@@ -782,11 +883,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
     if (snapshots.isEmpty) 0
     else snapshots.keySet.min
 
-  private def formatProposals(proposals: SnapshotProposalsAtHeight) =
-    SortedMap[Long, String]() ++ proposals.mapValues(_.value.hash)
-
   private def formatSnapshots(snapshots: SnapshotsAtHeight) =
     SortedMap[Long, String]() ++ snapshots
+
 }
 
 object RedownloadService {
@@ -794,7 +893,7 @@ object RedownloadService {
   def apply[F[_]: Concurrent: ContextShift: NonEmptyParallel: Timer](
     meaningfulSnapshotsCount: Int,
     redownloadInterval: Int,
-    isEnabledCloudStorage: Boolean,
+    heightInterval: Long,
     cluster: Cluster[F],
     majorityStateChooser: MajorityStateChooser,
     missingProposalFinder: MissingProposalFinder,
@@ -813,7 +912,7 @@ object RedownloadService {
     new RedownloadService[F](
       meaningfulSnapshotsCount,
       redownloadInterval,
-      isEnabledCloudStorage,
+      heightInterval,
       cluster,
       majorityStateChooser,
       missingProposalFinder,
@@ -831,6 +930,7 @@ object RedownloadService {
     )
 
   type Reputation = SortedMap[Id, Double]
+  type ProposalCoordinate = (Id, Long)
   type SnapshotsAtHeight = Map[Long, String] // height -> hash
   type SnapshotProposalsAtHeight = Map[Long, Signed[SnapshotProposal]]
   type PeersProposals = Map[Id, SnapshotProposalsAtHeight]
@@ -843,4 +943,26 @@ object RedownloadService {
   implicit val snapshotProposalsAtHeightDecoder: Decoder[Map[Long, SnapshotProposal]] =
     Decoder.decodeMap[Long, SnapshotProposal]
 
+  implicit val proposalCoordinateToString: ProposalCoordinate => String = {
+    case (id, height) => s"$id:$height"
+  }
+
+  implicit class HeightMapOps[V](val map: Map[Long, V]) {
+
+    def removeHeightsBelow(height: Long): Map[Long, V] =
+      map.filterKeys(_ >= height).toSeq.toMap // `.toSeq.toMap` is used for strict (eager) filtering
+
+    def removeHeightsAbove(height: Long): Map[Long, V] =
+      map.filterKeys(_ <= height).toSeq.toMap // `.toSeq.toMap` is used for strict (eager) filtering
+
+    def minHeight: Long = minHeightEntry.map(_._1).getOrElse(0)
+
+    def maxHeight: Long = maxHeightEntry.map(_._1).getOrElse(0)
+
+    def minHeightEntry: Option[(Long, V)] = map.toList.minimumByOption { case (height, _) => height }
+
+    def maxHeightEntry: Option[(Long, V)] = map.toList.maximumByOption { case (height, _) => height }
+
+    def heightRange: HeightRange = HeightRange(minHeight, maxHeight)
+  }
 }

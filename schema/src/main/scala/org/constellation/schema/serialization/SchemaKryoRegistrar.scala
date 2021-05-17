@@ -6,8 +6,7 @@ import org.constellation.schema.edge._
 import org.constellation.schema.observation._
 import org.constellation.schema.signature.{HashSignature, SignatureBatch, Signed}
 import org.constellation.schema.snapshot.{
-  HeightRange,
-  MajorityInfo,
+  FilterData,
   Snapshot,
   SnapshotInfo,
   SnapshotProposal,
@@ -100,9 +99,8 @@ object SchemaKryoRegistrar
         (Class.forName("scala.collection.immutable.Nil$"), 116),
         (Class.forName("scala.collection.immutable.Map$EmptyMap$"), 136),
         (classOf[SnapshotProposalPayload], 200),
-        (classOf[Signed[SnapshotProposal]], 201),
+        (classOf[Signed[_]], 201),
         (classOf[SnapshotProposal], 202),
-        (classOf[MajorityInfo], 203),
-        (classOf[HeightRange], 204)
+        (classOf[FilterData], 203)
       )
     ) {}

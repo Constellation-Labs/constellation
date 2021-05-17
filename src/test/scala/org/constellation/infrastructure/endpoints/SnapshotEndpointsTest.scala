@@ -11,7 +11,7 @@ import org.constellation.gossip.validation.{MessageValidationError, MessageValid
 import org.constellation.keytool.KeyUtils
 import org.constellation.schema.Id
 import org.constellation.schema.signature.Signed.signed
-import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, SnapshotProposal, SnapshotProposalPayload}
+import org.constellation.schema.snapshot.{FilterData, SnapshotProposal, SnapshotProposalPayload}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.Registration.`X-Id`
 import org.http4s.Status.{BadRequest, Ok}
@@ -48,8 +48,8 @@ class SnapshotEndpointsTest
   override def beforeAll: Unit = KryoSerializer.init[IO].handleError(_ => Unit).unsafeRunSync()
 
   before {
-    redownloadService.persistPeerProposal(*, *) shouldReturnF Unit
-    redownloadService.updatePeerMajorityInfo(*, *) shouldReturnF Unit
+    redownloadService.addPeerProposal(*) shouldReturnF Unit
+    redownloadService.replaceRemoteFilter(*, *) shouldReturnF Unit
     snapshotProposalGossipService.spread(*[GossipMessage[SnapshotProposalPayload]]) shouldReturnF Unit
   }
 
@@ -67,7 +67,7 @@ class SnapshotEndpointsTest
           SnapshotProposal("proposal-hash", 50L, SortedMap.empty[Id, Double]),
           originKeyPair
         ),
-        MajorityInfo(HeightRange(10L, 50L), List.empty)
+        FilterData(Array.empty, 0)
       ),
       path = GossipPath(IndexedSeq(originId, selfId, originId), "path-id", 1),
       originId

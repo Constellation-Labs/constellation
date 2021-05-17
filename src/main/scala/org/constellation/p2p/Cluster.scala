@@ -12,6 +12,7 @@ import io.circe.parser._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder}
 import org.constellation._
+import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -456,9 +457,6 @@ class Cluster[F[_]](
 
   def markOfflinePeer(nodeId: Id): F[Unit] = logThread(
     {
-      implicit val snapOrder: Order[SnapshotProposalsAtHeight] =
-        Order.by[SnapshotProposalsAtHeight, List[Long]](a => a.keySet.toList.sorted)
-
       val leavingFlow: F[Unit] = for {
         p <- peers.get
         notOfflinePeers = p.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) }
@@ -472,38 +470,11 @@ class Cluster[F[_]](
           )(_.pure[F])
         leavingPeerId = leavingPeer.peerMetadata.id
         majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
+        maxProposal <- LiftIO[F]
+          .liftIO(dao.redownloadService.getPeerProposals(leavingPeerId))
+          .map(_.flatMap(_.maxHeightEntry))
 
-        proposals <- notOfflinePeers.toList.traverse {
-          case (_, pd) =>
-            timeoutTo(
-              PeerResponse
-                .run(
-                  apiClient.snapshot
-                    .getPeerProposals(leavingPeerId),
-                  unboundedBlocker
-                )(pd.peerMetadata.toPeerClientMetadata)
-                .handleErrorWith(
-                  _ =>
-                    logger.debug(
-                      s"Cannot get peer proposals for leaving node (id=${leavingPeerId} host=${leavingPeer.peerMetadata.host}) from peer (id=${pd.peerMetadata.id} host=${pd.peerMetadata.host}). Fallback to empty"
-                    ) >> F.pure(None)
-                ),
-              5.seconds,
-              F.pure(none[SnapshotProposalsAtHeight])
-            )
-        }.flatMap { list =>
-          LiftIO[F]
-            .liftIO(dao.redownloadService.getPeerProposals(leavingPeerId))
-            .map(list.::)
-        }.map(_.flatten)
-
-        maxProposal = proposals.maximumOption
-        _ <- maxProposal.map { proposal =>
-          logger.debug(s"Maximum proposal for leaving node id=${leavingPeerId} is empty? ${proposal.isEmpty}") >>
-            LiftIO[F].liftIO(dao.redownloadService.replacePeerProposals(leavingPeerId, proposal))
-        }.getOrElse(F.unit)
-
-        maxProposalHeight = maxProposal.flatMap(_.keySet.toList.maximumOption)
+        maxProposalHeight = maxProposal.map(_._1)
         joiningHeight = leavingPeer.majorityHeight.head.joined
 
         leavingHeight = maxProposalHeight

@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Changed
 - Whitelisting update
+- Majority selection algorithm
+- Missing proposal lookup algorithm
 
 ## [v2.23.3] 2021-04-19
 ### Changed

@@ -4,7 +4,8 @@ import org.constellation.domain.redownload.RedownloadService.{SnapshotProposalsA
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
-import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotProposalPayload}
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotProposal, SnapshotProposalPayload}
 
 trait SnapshotClientAlgebra[F[_]] {
   def getStoredSnapshots(): PeerResponse[F, List[String]]
@@ -16,6 +17,8 @@ trait SnapshotClientAlgebra[F[_]] {
   def getAcceptedSnapshots(): PeerResponse[F, SnapshotsAtHeight]
 
   def getPeerProposals(id: Id): PeerResponse[F, Option[SnapshotProposalsAtHeight]]
+
+  def queryPeerProposals(query: List[(Id, Long)]): PeerResponse[F, List[Option[Signed[SnapshotProposal]]]]
 
   def getNextSnapshotHeight(): PeerResponse[F, (Id, Long)]
 

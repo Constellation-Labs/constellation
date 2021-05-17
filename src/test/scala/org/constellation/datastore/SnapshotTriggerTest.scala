@@ -15,7 +15,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import cats.implicits._
-import org.constellation.schema.snapshot.HeightRange
+import org.constellation.schema.snapshot.{FilterData, HeightRange}
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
@@ -47,7 +47,7 @@ class SnapshotTriggerTest
         val snapshotTrigger = new SnapshotTrigger(5, ExecutionContext.global)
         dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
         dao.redownloadService.getMajorityRange shouldReturnF HeightRange(2L, 4L)
-        dao.redownloadService.getMajorityGapRanges shouldReturnF List.empty
+        dao.redownloadService.localFilterData shouldReturnF FilterData(Array.empty, 0)
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
 
@@ -66,7 +66,7 @@ class SnapshotTriggerTest
         val snapshotTrigger = new SnapshotTrigger(5, ExecutionContext.global)
         dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
         dao.redownloadService.getMajorityRange shouldReturnF HeightRange(2L, 4L)
-        dao.redownloadService.getMajorityGapRanges shouldReturnF List.empty
+        dao.redownloadService.localFilterData shouldReturnF FilterData(Array.empty, 0)
 
         dao.cluster.compareAndSet(*, *, *) shouldReturnF SetStateResult(NodeState.SnapshotCreation, true)
 
