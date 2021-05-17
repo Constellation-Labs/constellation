@@ -52,19 +52,6 @@ class CheckpointClientInterpreter[F[_]: ContextShift](
           )
         )
     }
-
-  def postFinishedCheckpoint(message: GossipMessage[CheckpointBlockPayload]): PeerResponse[F, Unit] =
-    PeerResponse[F, Boolean](s"peer/checkpoint/finished", POST)(client, sessionTokenService) { (req, c) =>
-      c.successful(req.withEntity(message))
-    }.flatMapF { a =>
-      if (a) F.unit
-      else
-        F.raiseError(
-          new Throwable(
-            s"Cannot post finished checkpoint of hash ${message.payload.block.value.hash}"
-          )
-        )
-    }
 }
 
 object CheckpointClientInterpreter {

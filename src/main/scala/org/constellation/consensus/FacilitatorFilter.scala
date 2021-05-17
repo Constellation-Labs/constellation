@@ -51,7 +51,7 @@ class FacilitatorFilter[F[_]: Concurrent](
       checkHeight.flatMap(updatedResult => filterByHeight(filteredPeers, ownHeight, numFacilitatorPeers, updatedResult))
     }
 
-  private def getFacilitatorNextSnapshotHeights(facilitator: (Id, PeerData)): F[(Id, Long)] =
+  private def getFacilitatorNextSnapshotHeights(facilitator: (Id, PeerData)): F[(Id, Long)] = // TODO: @mwadon cache and rerun every n seconds
     PeerResponse.run(apiClient.snapshot.getNextSnapshotHeight(), unboundedBlocker)(
       facilitator._2.peerMetadata.toPeerClientMetadata
     )

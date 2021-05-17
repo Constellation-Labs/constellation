@@ -48,7 +48,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
   val pendingAcceptanceFromOthers: Ref[F, Set[String]] = Ref.unsafe(Set())
   val maxDepth: Int = 10
 
-  val waitingForAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set()) // soeHash, used to check before resolving parents
+  val waitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set()) // soeHash, used to check before resolving parents
 
   val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
 
@@ -231,7 +231,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
         _ <- incrementMetricIfDummy(cb)
         _ <- pendingAcceptance.modify(pa => (pa.filterNot(_ == cb.baseHash), ()))
-        _ <- waitingForAcceptance.modify(w => (w.filterNot(_ == cb.soeHash), ()))
+        _ <- waitingForResolving.modify(w => (w.filterNot(_ == cb.soeHash), ()))
         _ <- acceptLock.release
         awaitingBlocks <- awaiting.modify { s =>
           val ret = s.filterNot(_.checkpointBlock.baseHash == cb.baseHash)
@@ -265,7 +265,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
       case ex =>
         pendingAcceptance.modify { pa =>
           (pa.filterNot(_ == checkpoint.checkpointBlock.baseHash), ())
-        } >> waitingForAcceptance.modify { w =>
+        } >> waitingForResolving.modify { w =>
           (w.filterNot(_ == checkpoint.checkpointBlock.soeHash), ())
         } >> acceptErrorHandler(ex)
     }
@@ -345,7 +345,7 @@ class CheckpointAcceptanceService[F[_]: Concurrent: Timer](
         .map(_.flatten)
         .map(_.map(_.hash))
       awaitingSoeHashes <- awaiting.get.map(_.toList.map(_.checkpointBlock.soeHash))
-      waitingForAcceptanceSoeHashes <- waitingForAcceptance.get.map(_.toList)
+      waitingForAcceptanceSoeHashes <- waitingForResolving.get.map(_.toList)
       existing = alreadyAcceptedSoeHashes ++ awaitingSoeHashes ++ waitingForAcceptanceSoeHashes
       missingSoeHashes = soeHashes.diff(existing)
 

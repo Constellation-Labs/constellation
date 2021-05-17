@@ -105,7 +105,7 @@ class DataResolver[F[_]](
     hash: String,
     priorityClient: Option[PeerClientMetadata] = None
   ): F[CheckpointCache] =
-    checkpointAcceptanceService().waitingForAcceptance.modify(a => (a + hash, ())) >>
+    checkpointAcceptanceService().waitingForResolving.modify(a => (a + hash, ())) >>
       getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
 
   def resolveCheckpoint(
@@ -116,7 +116,7 @@ class DataResolver[F[_]](
     logThread(
       resolveDataByDistance[CheckpointCache](
         List(hash),
-        apiClient.checkpoint.getCheckpoint,
+        apiClient.checkpoint.checkFinishedCheckpoint, // TODO: @mwadon rename endpoint
         pool,
         priorityClient
       ).head
@@ -124,7 +124,7 @@ class DataResolver[F[_]](
         .flatTap { cb =>
           logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}")
         }
-        .onError { case _ => checkpointAcceptanceService().waitingForAcceptance.modify(a => (a - hash, ())) },
+        .onError { case _ => checkpointAcceptanceService().waitingForResolving.modify(a => (a - hash, ())) },
       s"dataResolver_resolveCheckpoint [$hash]"
     )
 

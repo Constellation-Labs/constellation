@@ -89,10 +89,7 @@ lazy val fs2Dependencies = Seq(
 lazy val loggingDependencies = Seq(
   "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "io.chrisdavenport" %% "log4cats-slf4j" % "1.1.1",
-  ("com.splunk.logging" %% "splunk-library-javalogging" % "1.8.0").from(
-    "https://splunk.jfrog.io/artifactory/ext-releases-local/com/splunk/logging/splunk-library-javalogging/1.8.0/splunk-library-javalogging-1.8.0.jar"
-  )
+  "io.chrisdavenport" %% "log4cats-slf4j" % "1.1.1"
 )
 
 lazy val catsDependencies = Seq(

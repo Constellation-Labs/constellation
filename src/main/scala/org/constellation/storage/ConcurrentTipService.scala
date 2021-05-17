@@ -1,7 +1,7 @@
 package org.constellation.storage
 
 import cats.effect.concurrent.{Ref, Semaphore}
-import cats.effect.{Clock, Concurrent, Sync}
+import cats.effect.{Clock, Concurrent, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -178,15 +178,18 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         _ <- logger.debug(s"Active tip height: $minActiveTipHeight")
         keys <- tipsRef.get.map(_.keys.toList)
         maybeData <- keys.traverse(checkpointParentService.lookupCheckpoint)
+        waitingHeights <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get).map(_.flatMap(_.height.map(_.min)).toList)
+
         diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
         _ <- if (diff.nonEmpty) logger.debug(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
+
         heights = maybeData.flatMap {
           _.flatMap {
             _.height.map {
               _.min
             }
           }
-        } ++ minActiveTipHeight.toList
+        } ++ minActiveTipHeight.toList ++ waitingHeights
         minHeight = if (heights.isEmpty) 0 else heights.min
       } yield minHeight,
       "concurrentTipService_getMinTipHeight"
@@ -198,14 +201,13 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         metrics.updateMetric("activeTips", tips.size)
         (tips.size, readyFacilitators) match {
           case (size, facilitators) if size >= numFacilitatorPeers && facilitators.nonEmpty =>
-            calculateTipsSOE(tips).flatMap(
-              tipSOE =>
-                facilitatorFilter.filterPeers(facilitators, numFacilitatorPeers, tipSOE).map {
-                  case f if f.size >= numFacilitatorPeers =>
-                    Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
-                  case _ => None
-                }
-            )
+            calculateTipsSOE(tips).flatMap { tipSOE =>
+              facilitatorFilter.filterPeers(facilitators, numFacilitatorPeers, tipSOE).map {
+                case f if f.size >= numFacilitatorPeers =>
+                  Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
+                case _ => None
+              }
+            }
           case (size, _) if size >= numFacilitatorPeers =>
             calculateTipsSOE(tips).map(t => Some(PulledTips(t, Map.empty[Id, PeerData])))
           case (_, _) => none[PulledTips].pure[F]
@@ -246,14 +248,13 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
 
   private def calculateTipsSOE(tips: Map[String, TipData]): F[TipSoe] =
     Random
-      .shuffle(tips.toSeq)
+      .shuffle(tips.toSeq.sortBy(_._2.height.min).take(10))
       .take(numFacilitatorPeers)
       .toList
       .traverse { t =>
         checkpointParentService
           .calculateHeight(t._2.checkpointBlock)
           .map(h => (h, t._2.checkpointBlock.checkpoint.edge.signedObservationEdge))
-
       }
       .map(_.sortBy(_._2.hash))
       .map(r => TipSoe(r.map(_._2), r.map(_._1.map(_.min)).min))

@@ -353,7 +353,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
-          _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
+          _ <- checkpointAcceptanceService.waitingForResolving.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
             (updated, ())
           }
@@ -703,7 +703,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def acceptCheckpointBlocks(): EitherT[F, Throwable, Unit] =
     (for {
       blocksToAccept <- snapshotService.syncBufferPull().map(_.values.toSeq.map(_.checkpointCacheData).distinct)
-      _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
+      _ <- checkpointAcceptanceService.waitingForResolving.modify { blocks =>
         val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
         (updated, ())
       }

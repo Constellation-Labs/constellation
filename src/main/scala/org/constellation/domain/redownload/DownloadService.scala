@@ -88,7 +88,7 @@ class DownloadService[F[_]](
 
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
-          _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
+          _ <- checkpointAcceptanceService.waitingForResolving.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
             (updated, ())
           }

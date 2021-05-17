@@ -368,7 +368,7 @@ class SnapshotService[F[_]: Concurrent](
   ): EitherT[F, SnapshotError, Unit] =
     EitherT {
 
-      dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight.toString) >>
+      dao.metrics.updateMetricAsync[F]("minTipHeight", minTipHeight) >>
         Sync[F].pure {
           if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval))
             ().asRight[SnapshotError]
