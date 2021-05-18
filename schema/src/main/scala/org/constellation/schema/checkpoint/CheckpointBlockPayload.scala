@@ -13,10 +13,9 @@ object FinishedCheckpointBlock {
   implicit val encoder: Encoder[FinishedCheckpointBlock] = deriveEncoder
   implicit val decoder: Decoder[FinishedCheckpointBlock] = deriveDecoder
 
-  implicit def toFinishedCheckpoint(a: FinishedCheckpointBlock): FinishedCheckpoint
-  = FinishedCheckpoint(a.checkpointCacheData, a.facilitators)
+  implicit def toFinishedCheckpoint(a: FinishedCheckpointBlock): FinishedCheckpoint =
+    FinishedCheckpoint(a.checkpointCacheData, a.facilitators)
 }
-
 
 case class CheckpointBlockPayload(block: Signed[FinishedCheckpointBlock])
 
@@ -24,4 +23,3 @@ object CheckpointBlockPayload {
   implicit val encoder: Encoder[CheckpointBlockPayload] = deriveEncoder
   implicit val decoder: Decoder[CheckpointBlockPayload] = deriveDecoder
 }
-

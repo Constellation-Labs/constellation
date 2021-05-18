@@ -52,7 +52,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         messageValidator,
         snapshotService,
         checkpointService,
-        checkpointAcceptanceService,
+        checkpointAcceptanceService
       )
 
   private def genesisEndpoint(genesisObservation: => Option[GenesisObservation]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -132,26 +132,30 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
                   checkpointBlockGossipService.spread(message)
               )
 
-              checkpointService.gossipCache.put(payload.block.value.checkpointCacheData.checkpointBlock.soeHash, payload.block.value.checkpointCacheData) >>
-              payload.block.validSignature
-                .pure[F]
-                .ifM(
-                  processFinishedCheckpointAsync >> Ok(),
-                  BadRequest()
-                )
+              checkpointService.gossipCache.put(
+                payload.block.value.checkpointCacheData.checkpointBlock.soeHash,
+                payload.block.value.checkpointCacheData
+              ) >>
+                payload.block.validSignature
+                  .pure[F]
+                  .ifM(
+                    processFinishedCheckpointAsync >> Ok(),
+                    BadRequest()
+                  )
           }
         } yield res
+    }
+
+  private def checkFinishedCheckpointEndpoint(checkpointService: CheckpointService[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "checkpoint" / hash / "check" =>
+        checkpointService.gossipCache.lookup(hash).map(_.asJson).flatMap(Ok(_))
     }
 
   def publicEndpoints(checkpointService: CheckpointService[F]) = getCheckpointEndpoint(checkpointService)
 
   private def getCheckpointEndpoint(checkpointService: CheckpointService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "checkpoint" / hash => checkpointService.fullData(hash).map(_.asJson).flatMap(Ok(_))
-  }
-
-
-  private def checkFinishedCheckpointEndpoint(checkpointService: CheckpointService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "checkpoint" / hash / "check" => checkpointService.gossipCache.lookup(hash).map(_.asJson).flatMap(Ok(_))
   }
 
 }

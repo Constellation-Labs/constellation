@@ -1,7 +1,7 @@
 package org.constellation.checkpoint
 
 import cats.effect.concurrent.Semaphore
-import cats.effect.{Concurrent, ContextShift, IO}
+import cats.effect.Concurrent
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger

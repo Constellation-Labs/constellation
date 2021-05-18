@@ -5,7 +5,6 @@ import cats.data.NonEmptyList
 import cats.effect.{Blocker, ContextShift, IO, Timer}
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.chrisdavenport.mapref.MapRef
 import org.constellation.ConfigUtil.AWSStorageConfig
 import org.constellation.checkpoint._
 import org.constellation.consensus._

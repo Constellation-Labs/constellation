@@ -41,7 +41,9 @@ class CheckpointBlockGossipService[F[_]: Concurrent: Timer: Parallel: ContextShi
     message: GossipMessage[CheckpointBlockPayload]
   ): F[Boolean] =
     for {
-      block <- apiClient.checkpoint.checkFinishedCheckpoint(message.payload.block.value.checkpointCacheData.checkpointBlock.soeHash)(peerClientMetadata)
+      block <- apiClient.checkpoint.checkFinishedCheckpoint(
+        message.payload.block.value.checkpointCacheData.checkpointBlock.soeHash
+      )(peerClientMetadata)
       expectedHash = message.payload.block.value.checkpointCacheData.checkpointBlock.soeHash
       validBlock = block.map(_.checkpointBlock.soeHash).contains(expectedHash)
     } yield validBlock
