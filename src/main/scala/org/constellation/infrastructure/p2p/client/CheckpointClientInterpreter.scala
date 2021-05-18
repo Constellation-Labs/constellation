@@ -40,11 +40,6 @@ class CheckpointClientInterpreter[F[_]: ContextShift](
       c.expect[SignatureResponse](req.withEntity(signatureRequest))
     }
 
-  def sendFinishedCheckpoint(checkpoint: FinishedCheckpoint): PeerResponse[F, Boolean] =
-    PeerResponse(s"finished/checkpoint", POST)(client, sessionTokenService) { (req, c) =>
-      c.successful(req.withEntity(checkpoint))
-    }
-
   def postFinishedCheckpoint(message: GossipMessage[CheckpointBlockPayload]): PeerResponse[F, Unit] =
     PeerResponse[F, Boolean](s"peer/checkpoint/finished", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(message))

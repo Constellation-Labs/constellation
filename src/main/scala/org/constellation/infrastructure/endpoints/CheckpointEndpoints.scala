@@ -46,7 +46,6 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
       getCheckpointEndpoint(checkpointService) <+>
       checkFinishedCheckpointEndpoint(checkpointService) <+>
       requestBlockSignatureEndpoint(checkpointAcceptanceService) <+>
-      handleFinishedCheckpointEndpoint(metrics, snapshotService, checkpointAcceptanceService) <+>
       postFinishedCheckpoint(
         checkpointBlockGossipService,
         messageValidator,
@@ -67,35 +66,6 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         sigRequest <- req.decodeJson[SignatureRequest]
         response <- checkpointAcceptanceService.handleSignatureRequest(sigRequest)
       } yield response.asJson).flatMap(Ok(_))
-  }
-
-  private def handleFinishedCheckpointEndpoint(
-    metrics: Metrics,
-    snapshotService: SnapshotService[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F]
-  ): HttpRoutes[F] = HttpRoutes.of[F] {
-    case req @ POST -> Root / "finished" / "checkpoint" =>
-      for {
-        finishedCheckpoint <- req.decodeJson[FinishedCheckpoint]
-        baseHash = finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash
-        _ <- logger.debug(s"Handle finished checkpoint for cb: $baseHash")
-        _ <- metrics.incrementMetricAsync[F]("peerApiRXFinishedCheckpoint")
-        accept = checkpointAcceptanceService.acceptWithNodeCheck(finishedCheckpoint)
-        response <- snapshotService.getNextHeightInterval.flatMap { nextHeight =>
-          (nextHeight, finishedCheckpoint.checkpointCacheData.height) match {
-            case (_, None) =>
-              logger.warn(s"Missing height when accepting block hash=$baseHash") >> BadRequest()
-            case (2, _) =>
-              F.start(accept) >> Accepted()
-            case (nextHeight, Some(Height(min, _))) if nextHeight > min =>
-              logger.debug(
-                s"Handle finished checkpoint for cb: $baseHash height condition not met next interval: $nextHeight received: $min"
-              ) >> Conflict()
-            case (_, _) =>
-              F.start(accept) >> Accepted()
-          }
-        }
-      } yield response
   }
 
   private[endpoints] def postFinishedCheckpoint(
