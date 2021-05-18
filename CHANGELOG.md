@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Gossiping for checkpoint blocks
 ### Changed
 - Whitelisting update
 

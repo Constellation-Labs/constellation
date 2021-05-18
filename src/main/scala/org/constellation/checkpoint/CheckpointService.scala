@@ -7,9 +7,11 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.schema.checkpoint.{CheckpointCache, CheckpointCacheMetadata}
 import org.constellation.schema.transaction.Transaction
-import org.constellation.storage.ConcurrentStorageService
+import org.constellation.storage.{ConcurrentStorageService, StorageService}
 import org.constellation.storage.algebra.Lookup
 import org.constellation.{ConstellationExecutionContext, DAO}
+
+import scala.concurrent.duration._
 
 class CheckpointService[F[_]: Concurrent](
   dao: DAO,
@@ -20,6 +22,8 @@ class CheckpointService[F[_]: Concurrent](
 
   private[checkpoint] val memPool =
     new ConcurrentStorageService[F, CheckpointCacheMetadata](semaphore, "CheckpointMemPool".some)
+
+  val gossipCache = new StorageService[F, CheckpointCache](Some("CheckpointGossipPool"), Some(10.minutes))
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 

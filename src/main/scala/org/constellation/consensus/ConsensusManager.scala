@@ -15,6 +15,7 @@ import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.concurrency.SingleLock
+import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
@@ -40,6 +41,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   cluster: Cluster[F],
   apiClient: ClientInterpreter[F],
   dataResolver: DataResolver[F],
+  checkpointBlockGossipService: CheckpointBlockGossipService[F],
   dao: DAO,
   config: Config,
   remoteCall: Blocker,
@@ -104,6 +106,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           remoteSender,
           this,
           apiClient,
+          checkpointBlockGossipService,
           shadowDAO,
           config,
           remoteCall,
@@ -220,6 +223,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           remoteSender,
           this,
           apiClient,
+          checkpointBlockGossipService,
           shadowDAO,
           config,
           remoteCall,

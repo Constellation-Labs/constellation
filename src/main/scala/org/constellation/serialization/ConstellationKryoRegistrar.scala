@@ -8,6 +8,7 @@ import org.constellation.gossip.sampling.GossipPath
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.rewards.EigenTrustAgents
+import org.constellation.schema.checkpoint.CheckpointBlockPayload
 import org.constellation.schema.serialization.ExplicitKryoRegistrar
 import org.constellation.schema.snapshot.SnapshotProposalPayload
 
@@ -23,6 +24,6 @@ object ConstellationKryoRegistrar
         (classOf[StoredRewards], 185),
         (classOf[BuildInfoJson], 187),
         (classOf[GossipPath], 1032),
-        (classOf[GossipMessage[SnapshotProposalPayload]], 1033),
+        (classOf[GossipMessage[_]], 1033),
       )
     ) {}

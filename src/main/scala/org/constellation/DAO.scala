@@ -16,21 +16,12 @@ import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.{
-  DownloadService,
-  MajorityStateChooser,
-  MissingProposalFinder,
-  RedownloadService
-}
+import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, MissingProposalFinder, RedownloadService}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
 import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.sampling.PartitionerPeerSampling
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.gossip.validation.MessageValidator
@@ -38,12 +29,7 @@ import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
 import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
-import org.constellation.infrastructure.snapshot.{
-  SnapshotInfoLocalStorage,
-  SnapshotInfoS3Storage,
-  SnapshotLocalStorage,
-  SnapshotS3Storage
-}
+import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotInfoS3Storage, SnapshotLocalStorage, SnapshotS3Storage}
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
@@ -137,6 +123,7 @@ class DAO(
   var redownloadPeriodicCheck: RedownloadPeriodicCheck = _
   var partitionerPeerSampling: PartitionerPeerSampling[IO] = _
   var snapshotProposalGossipService: SnapshotProposalGossipService[IO] = _
+  var checkpointBlockGossipService: CheckpointBlockGossipService[IO] = _
   var messageValidator: MessageValidator = _
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
@@ -303,6 +290,9 @@ class DAO(
 
     snapshotProposalGossipService =
       SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient, metrics)
+
+    checkpointBlockGossipService =
+      CheckpointBlockGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient, metrics)
 
     snapshotTrigger = new SnapshotTrigger(
       processingConfig.snapshotTriggeringTimeSeconds,
@@ -484,6 +474,7 @@ class DAO(
       cluster,
       apiClient,
       dataResolver,
+      checkpointBlockGossipService,
       this,
       ConfigUtil.config,
       Blocker.liftExecutionContext(unboundedExecutionContext),

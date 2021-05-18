@@ -12,33 +12,23 @@ import org.constellation.checkpoint.CheckpointAcceptanceService
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
-import org.constellation.consensus.ConsensusManager.{
-  BroadcastConsensusDataProposal,
-  BroadcastSelectedUnionBlock,
-  BroadcastUnionBlockProposal
-}
+import org.constellation.consensus.ConsensusManager.{BroadcastConsensusDataProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.PeerData
 import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockPayload, CheckpointCache, FinishedCheckpoint, FinishedCheckpointBlock}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.schema.{ChannelMessage, Id, NodeState, PeerNotification}
 import org.constellation.storage._
-import org.constellation.{
-  CheckpointAcceptBlockAlreadyStored,
-  ConfigUtil,
-  ContainsInvalidTransactionsException,
-  DAO,
-  MissingParents,
-  MissingTransactionReference,
-  PendingAcceptance
-}
+import org.constellation.{CheckpointAcceptBlockAlreadyStored, ConfigUtil, ContainsInvalidTransactionsException, DAO, MissingParents, MissingTransactionReference, PendingAcceptance}
 import org.constellation.ConstellationExecutionContext.createSemaphore
+import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
+import org.constellation.schema.signature.Signed.signed
 
 import scala.concurrent.duration._
 
@@ -52,6 +42,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
   remoteSender: ConsensusRemoteSender[F],
   consensusManager: ConsensusManager[F],
   apiClient: ClientInterpreter[F],
+  checkpointBlockGossipService: CheckpointBlockGossipService[F],
   dao: DAO,
   config: Config,
   remoteCall: Blocker,
@@ -290,7 +281,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         }
 
       _ <- if (finalResult.cb.isEmpty) {
-        List.empty[Boolean].pure[F]
+        Concurrent[F].unit
       } else {
         broadcastSignedBlockToNonFacilitators(
           FinishedCheckpoint(cache, proposals.keySet.map(_.id))
@@ -332,7 +323,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
-  ): F[List[Boolean]] = {
+  ): F[Unit] = {
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     for {
       nonFacilitators <- LiftIO[F]
@@ -347,20 +338,14 @@ class Consensus[F[_]: Concurrent: ContextShift](
       _ <- logger.debug(
         s"[${dao.id.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${baseHash}"
       )
-      responses <- nonFacilitators.traverse { pd =>
-        PeerResponse
-          .run(
-            apiClient.checkpoint
-              .sendFinishedCheckpoint(finishedCheckpoint),
-            remoteCall
-          )(pd.peerMetadata.toPeerClientMetadata)
-          .handleErrorWith { error =>
-            logger.warn(error)(
-              s"Cannot broadcast finished checkpoint block hash=${baseHash} to: ${pd.peerMetadata.host}"
-            ) >> false.pure[F]
-          }
-      }
-    } yield responses
+
+      payload = CheckpointBlockPayload(
+        signed(FinishedCheckpointBlock(
+          finishedCheckpoint.checkpointCacheData, finishedCheckpoint.facilitators
+        ), dao.keyPair))
+
+      _ <- Concurrent[F].start(checkpointBlockGossipService.spread(payload))
+    } yield ()
   }
 
   private[consensus] def mergeBlockProposalsToMajorityBlock(
