@@ -20,8 +20,8 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
   def getTrustDataInternalSelf: F[TrustDataInternal] = getStoredReputation.map(TrustDataInternal(nodeId, _))
 
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
-    cluster.getPeerInfo.flatMap { peers =>
-      if (peers.size > 2) {
+    cluster.getActiveFullNodesPeerInfo.flatMap { peers => //getPeerInfo or getActivePeerInfo here?
+      if (peers.size > 1) {
         for {
           reputation <- getStoredReputation
           _ <- logger.info(s"Begin handleTrustScoreUpdate for peerTrustScores: ${peerTrustScores.toString()}")
@@ -43,7 +43,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
 
           trustNodesInternal = scores ++ simulatedTrustDataForMissingNodes
           trustNodes = TrustManager.calculateTrustNodes(trustNodesInternal.distinct, nodeId, scoringMap)
-          //          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
+          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
 
           idMappedScores: Map[Id, Double] = SelfAvoidingWalk
             .runWalkFeedbackUpdateSingleNode(
@@ -68,7 +68,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
     def filterFn(peers: Map[Id, PeerData])(id: Id): Boolean =
       !peers.get(id).exists(p => NodeState.offlineStates.contains(p.peerMetadata.nodeState))
 
-    cluster.getPeerInfo.flatMap { peers =>
+    cluster.getPeerInfo.flatMap { peers => //getPeerInfo or getActivePeerInfo here
       storedReputation.get.map(
         reputation => peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ reputation.filterKeys(filterFn(peers))
       )
@@ -80,8 +80,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
     val id = o.signedObservationData.data.id
 
     storedReputation.modify { reputation =>
-      //    val updated = Math.max(reputation.getOrElse(id, 1d) + score, -1d)
-      val updated = 1d
+      val updated = Math.max(reputation.getOrElse(id, 1d) + score, -1d)
       (reputation + (id -> updated), ())
     }
   }
@@ -102,6 +101,8 @@ object TrustManager {
       case _: RequestTimeoutOnConsensus         => -0.1
       case _: RequestTimeoutOnResolving         => -0.1
       case _: CheckpointBlockInvalid            => -0.1
+      case _ @NodeMemberOfActivePool            => -0.05
+      case _ @NodeNotMemberOfActivePool         => 0.02
       case _                                    => 0d
     }
 

@@ -5,6 +5,7 @@ import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
 import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotProposalPayload}
+import org.constellation.storage.SnapshotService.JoinActivePoolCommand
 
 trait SnapshotClientAlgebra[F[_]] {
   def getStoredSnapshots(): PeerResponse[F, List[String]]
@@ -26,4 +27,6 @@ trait SnapshotClientAlgebra[F[_]] {
   def getLatestMajorityHeight(): PeerResponse[F, LatestMajorityHeight]
 
   def postPeerProposal(message: GossipMessage[SnapshotProposalPayload]): PeerResponse[F, Unit]
+
+  def notifyNextActivePeer(joinActivePoolCommand: JoinActivePoolCommand): PeerResponse[F, Unit]
 }

@@ -37,15 +37,15 @@ class RollbackService[F[_]: Concurrent](
   private val logger = Slf4jLogger.getLogger[F]
   private val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  def restore(): EitherT[F, Throwable, Unit] =
-    for {
-      _ <- logger.debug("Performing rollback by finding the highest snapshot in the cloud.").attemptT
-      highest <- getHighest()
-      _ <- logger.debug(s"Max height found: $highest").attemptT
-      _ <- highest match {
-        case (height, hash) => restore(height, hash)
-      }
-    } yield ()
+//  def restore(): EitherT[F, Throwable, Unit] =
+//    for {
+//      _ <- logger.debug("Performing rollback by finding the highest snapshot in the cloud.").attemptT
+//      highest <- getHighest()
+//      _ <- logger.debug(s"Max height found: $highest").attemptT
+//      _ <- highest match {
+//        case (height, hash) => restore(height, hash)
+//      }
+//    } yield ()
 
   def restore(height: Long, hash: String): EitherT[F, Throwable, Unit] =
     validate(height, hash).flatMap(restore(_, height))

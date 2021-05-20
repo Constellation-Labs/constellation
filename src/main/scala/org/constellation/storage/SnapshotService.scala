@@ -1,40 +1,43 @@
 package org.constellation.storage
 
 import cats.Parallel
-import cats.data.EitherT
+import cats.data.{EitherT, OptionT}
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Clock, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import constellation.withMetric
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import io.circe.Codec
+import io.circe.generic.semiauto.deriveCodec
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
 import org.constellation.domain.cloud.CloudStorageOld
+import org.constellation.domain.healthcheck.HealthCheckLoggingHelper._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.p2p.Cluster
-import org.constellation.schema.checkpoint.{
-  CheckpointBlock,
-  CheckpointBlockMetadata,
-  CheckpointCache,
-  FinishedCheckpoint
-}
+import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.p2p.{Cluster, MajorityHeight}
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockMetadata, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
+import org.constellation.schema.observation.{NodeMemberOfActivePool, NodeNotMemberOfActivePool, Observation}
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
 import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.serialization.KryoSerializer
+import org.constellation.storage.SnapshotService.{JoinActivePoolCommand, NextActiveNodes}
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.{FiniteDuration, SECONDS}
 
-class SnapshotService[F[_]: Concurrent](
+class SnapshotService[F[_]](
+  apiClient: ClientInterpreter[F],
   concurrentTipService: ConcurrentTipService[F],
   cloudStorage: CloudStorageOld[F],
   addressService: AddressService[F],
@@ -50,10 +53,11 @@ class SnapshotService[F[_]: Concurrent](
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   eigenTrustStorage: LocalFileStorage[F, StoredRewards],
   eigenTrust: EigenTrust[F],
+  metrics: Metrics,
   dao: DAO,
   boundedExecutionContext: ExecutionContext,
   unboundedExecutionContext: ExecutionContext
-)(implicit C: ContextShift[F], P: Parallel[F]) {
+)(implicit F: Concurrent[F], CS: ContextShift[F], P: Parallel[F], C: Clock[F]) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
@@ -67,6 +71,8 @@ class SnapshotService[F[_]: Concurrent](
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
+  val activePeersRotationInterval: Int = ConfigUtil.constellation.getInt("snapshot.activePeersRotationInterval")
+  val activePeersRotationEveryNHeights: Int = snapshotHeightInterval * activePeersRotationInterval
   val nextSnapshotHash: Ref[F, String] = Ref.unsafe("")
 
   def exists(hash: String): F[Boolean] =
@@ -85,43 +91,64 @@ class SnapshotService[F[_]: Concurrent](
       hashes <- acceptedCBSinceSnapshot.get
     } yield hashes
 
+  def getNextSnapshotFacilitators: F[Set[Id]] =
+    storedSnapshot.get
+      .map(_.snapshot.nextActiveFullNodes)
+
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
+      lastStoredSnapshot <- storedSnapshot.get.attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      _ <- checkActivePeersPoolMembership(lastStoredSnapshot)
+      _ <- checkActiveBetweenHeightsCondition()
       _ <- checkDiskSpace()
 
       _ <- validateMaxAcceptedCBHashesInMemory()
       _ <- validateAcceptedCBsSinceSnapshot()
 
-      nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
+      nextHeightInterval <- getNextHeightInterval.attemptT.leftMap[SnapshotError](SnapshotUnexpectedError)
       minActiveTipHeight <- LiftIO[F]
         .liftIO(dao.getActiveMinHeight)
         .attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
       minTipHeight <- concurrentTipService
         .getMinTipHeight(minActiveTipHeight)
         .attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
       blocksWithinHeightInterval <- getBlocksWithinHeightInterval(nextHeightInterval).attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
       allBlocks = blocksWithinHeightInterval.map(_.get).sortBy(_.checkpointBlock.baseHash)
 
       hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash)
       publicReputation <- trustManager.getPredictedReputation.attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
-      nextSnapshot <- getNextSnapshot(hashesForNextSnapshot, publicReputation).attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      publicReputationString = publicReputation.map { case (id, rep) => logIdShort(id) + " -> " + rep }.toList.toString
+      _ <- logger
+        .debug(s"Snapshot attempt current reputation: $publicReputationString")
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      _ <- metrics
+        .updateMetricAsync("currentSnapshotReputation", publicReputationString)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+
+      // should trustManager generate the facilitators below?
+      nextActiveNodes <- calculateNextActiveNodes(publicReputation, nextHeightInterval, lastStoredSnapshot)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      nextSnapshot <- getNextSnapshot(
+        hashesForNextSnapshot,
+        publicReputation,
+        nextActiveFullNodes = nextActiveNodes.full,
+        nextActiveLightNodes = nextActiveNodes.light
+      ).attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
       _ <- nextSnapshotHash
         .modify(_ => (nextSnapshot.hash, ()))
         .attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
 
       _ <- EitherT.liftF(
         logger.debug(
@@ -134,7 +161,7 @@ class SnapshotService[F[_]: Concurrent](
           s"conclude snapshot hash=${nextSnapshot.hash} lastSnapshot=${nextSnapshot.lastSnapshot} with height ${nextHeightInterval}"
         )
       )
-      _ <- C
+      _ <- CS
         .evalOn(boundedExecutionContext)(applySnapshot().rethrowT)
         .attemptT
         .leftMap(SnapshotUnexpectedError)
@@ -170,10 +197,47 @@ class SnapshotService[F[_]: Concurrent](
         nextHeightInterval,
         publicReputation
       )
+
+      activeFullNodes <- cluster.getActiveFullNodes(true)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      activeLightNodes <- cluster.getActiveLightNodes(true) //TODO: withSelfId not necessary as Light node will never attemptSnapshot unless it's a Full node???
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      activePeers = activeFullNodes ++ activeLightNodes
+      inactivePeers <- cluster.getPeerInfo // TODO: take only nodes that successfully sent the Join Cluster Observation?
+        .map(_.keySet -- activePeers)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      _ <- sendActivePoolObservations(activePeers = activePeers, inactivePeers = inactivePeers)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
     } yield created
 
   // TODO
   //_ <- if (ConfigUtil.isEnabledCloudStorage) cloudStorage.upload(Seq(File(path))).void else Sync[F].unit
+
+  private def calculateNextActiveNodes(publicReputation: Map[Id, Double], nextHeightInterval: Long, lastStoredSnapshot: StoredSnapshot): F[NextActiveNodes] =
+    for {
+      fullNodes <- F.liftIO(dao.cluster.getFullNodesIds())
+      lightNodes <- F.liftIO(dao.cluster.getLightNodesIds())
+      nextActiveNodes =
+      if (nextHeightInterval % activePeersRotationEveryNHeights == 0) {
+        val nextFull = publicReputation.filterKeys(fullNodes.contains).toList
+          .sortBy { case (_, reputation) => reputation }
+          .map(_._1).reverse.take(3).toSet
+
+        val lightCandidates = publicReputation.filterKeys(lightNodes.contains)
+        val nextLight = (if (lightCandidates.size >= 3) lightCandidates else publicReputation).toList
+          .sortBy { case (_, reputation) => reputation }
+          .map(_._1).reverse.take(3).toSet
+
+        NextActiveNodes(light = nextLight, full = nextFull)
+      } else if (lastStoredSnapshot.snapshot == Snapshot.snapshotZero)
+        NextActiveNodes(light = dao.nodeConfig.initialActiveFullNodes, full = dao.nodeConfig.initialActiveFullNodes)
+      else
+        NextActiveNodes(light = lastStoredSnapshot.snapshot.nextActiveLightNodes, full = lastStoredSnapshot.snapshot.nextActiveFullNodes)
+    } yield nextActiveNodes
 
   def writeSnapshotInfoToDisk(): EitherT[F, SnapshotInfoIOError, Unit] =
     getSnapshotInfoWithFullData.attemptT.flatMap { info =>
@@ -182,7 +246,7 @@ class SnapshotService[F[_]: Concurrent](
       if (info.snapshot.snapshot == Snapshot.snapshotZero) {
         EitherT.liftF[F, Throwable, Unit](Sync[F].unit)
       } else {
-        C.evalOn(boundedExecutionContext)(Sync[F].delay { KryoSerializer.serializeAnyRef(info) }).attemptT.flatMap {
+        CS.evalOn(boundedExecutionContext)(Sync[F].delay { KryoSerializer.serializeAnyRef(info) }).attemptT.flatMap {
           snapshotInfoStorage.write(hash, _)
         }
       }
@@ -226,15 +290,15 @@ class SnapshotService[F[_]: Concurrent](
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
-      _ <- C.evalOn(boundedExecutionContext)(removeStoredSnapshotDataFromMempool())
+      _ <- CS.evalOn(boundedExecutionContext)(removeStoredSnapshotDataFromMempool())
       _ <- storedSnapshot.modify(_ => (snapshotInfo.snapshot, ()))
       _ <- lastSnapshotHeight.modify(_ => (snapshotInfo.lastSnapshotHeight, ()))
       _ <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.modify(_ => (snapshotInfo.awaitingCbs, ())))
       _ <- concurrentTipService.set(snapshotInfo.tips)
       _ <- acceptedCBSinceSnapshot.modify(_ => (snapshotInfo.acceptedCBSinceSnapshot, ()))
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
-      _ <- C.evalOn(boundedExecutionContext)(addressService.setAll(snapshotInfo.addressCacheData))
-      _ <- C.evalOn(boundedExecutionContext) {
+      _ <- CS.evalOn(boundedExecutionContext)(addressService.setAll(snapshotInfo.addressCacheData))
+      _ <- CS.evalOn(boundedExecutionContext) {
         (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
           soeService.put(h.checkpointBlock.soeHash, h.checkpointBlock.soe) >>
             checkpointService.put(h) >>
@@ -423,11 +487,22 @@ class SnapshotService[F[_]: Concurrent](
 
   private def getNextSnapshot(
     hashesForNextSnapshot: Seq[String],
-    publicReputation: Map[Id, Double]
+    publicReputation: Map[Id, Double],
+    nextActiveFullNodes: Set[Id],
+    nextActiveLightNodes: Set[Id]
   ): F[Snapshot] =
     storedSnapshot.get
       .map(_.snapshot.hash)
-      .map(hash => Snapshot(hash, hashesForNextSnapshot, SortedMap(publicReputation.toSeq: _*)))
+      .map(
+        hash =>
+          Snapshot(
+            hash,
+            hashesForNextSnapshot,
+            SortedMap(publicReputation.toSeq: _*),
+            nextActiveFullNodes = nextActiveFullNodes,
+            nextActiveLightNodes = nextActiveLightNodes
+          )
+      )
 
   private[storage] def applySnapshot()(implicit C: ContextShift[F]): EitherT[F, SnapshotError, Unit] = {
     val write: Snapshot => EitherT[F, SnapshotError, Unit] = (currentSnapshot: Snapshot) =>
@@ -445,10 +520,10 @@ class SnapshotService[F[_]: Concurrent](
   def addSnapshotToDisk(snapshot: StoredSnapshot): EitherT[F, Throwable, Unit] =
     for {
       serialized <- EitherT(
-        C.evalOn(boundedExecutionContext)(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot))).attempt
+        CS.evalOn(boundedExecutionContext)(Sync[F].delay(KryoSerializer.serializeAnyRef(snapshot))).attempt
       )
       write <- EitherT(
-        C.evalOn(unboundedExecutionContext)(writeSnapshot(snapshot, serialized).value)
+        CS.evalOn(unboundedExecutionContext)(writeSnapshot(snapshot, serialized).value)
       )
     } yield write
 
@@ -504,6 +579,7 @@ class SnapshotService[F[_]: Concurrent](
       .flatMap {
         case maybeBlocks
             if maybeBlocks.exists(
+              // What is this?
               maybeCache => maybeCache._2.isEmpty || maybeCache._2.isEmpty
             ) =>
           EitherT {
@@ -533,7 +609,7 @@ class SnapshotService[F[_]: Concurrent](
 
   private def applyAfterSnapshot(currentSnapshot: Snapshot): EitherT[F, SnapshotError, Unit] = {
     val applyAfter = for {
-      _ <- C.evalOn(boundedExecutionContext)(acceptSnapshot(currentSnapshot))
+      _ <- CS.evalOn(boundedExecutionContext)(acceptSnapshot(currentSnapshot))
 
       _ <- totalNumCBsInSnapshots.modify(t => (t + currentSnapshot.checkpointBlocks.size, ()))
       _ <- totalNumCBsInSnapshots.get.flatTap { total =>
@@ -633,11 +709,70 @@ class SnapshotService[F[_]: Concurrent](
         }
       }
       .void
+
+  private def isMemberOfActivePeersPool(snapshot: Snapshot): Boolean =
+    snapshot.nextActiveFullNodes.contains(dao.id)
+
+  private def checkActivePeersPoolMembership(storedSnapshot: StoredSnapshot): EitherT[F, SnapshotError, Unit] = {
+    val checkedSnapshot =
+      if (storedSnapshot.snapshot == Snapshot.snapshotZero)
+        storedSnapshot.snapshot.copy(nextActiveFullNodes = dao.nodeConfig.initialActiveFullNodes)
+      else
+        storedSnapshot.snapshot
+
+    if (isMemberOfActivePeersPool(checkedSnapshot)) {
+      metrics
+        .updateMetricAsync("snapshot_isMemeberOfActivePool", 1)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError) >>
+        EitherT.rightT[F, SnapshotError](())
+    } else
+      metrics
+        .updateMetricAsync("snapshot_isMemeberOfActivePool", 0)
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError) >>
+        EitherT.leftT[F, Unit](NodeNotPartOfL0FacilitatorsPool)
+  }
+
+  private def checkActiveBetweenHeightsCondition(): EitherT[F, SnapshotError, Unit] =
+    for {
+      nextHeight <- getNextHeightInterval.attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      activeBetweenHeights <- LiftIO[F]
+        .liftIO(dao.cluster.getActiveBetweenHeights())
+        .attemptT
+        .leftMap[SnapshotError](SnapshotUnexpectedError)
+      result <- if (activeBetweenHeights.joined.forall(_ <= nextHeight) && activeBetweenHeights.left.forall(
+                      _ >= nextHeight
+                    ))
+        EitherT.rightT[F, SnapshotError](())
+      else
+        EitherT.leftT[F, Unit](ActiveBetweenHeightsConditionNotMet.asInstanceOf[SnapshotError]) //can we do it without asInstanceOf?
+    } yield result
+
+  def getTimeInSeconds(): F[Long] = C.monotonic(SECONDS)
+
+  private def sendActivePoolObservations(activePeers: Set[Id], inactivePeers: Set[Id]): F[Unit] =
+    for {
+      _ <- logger.debug(s"sending observation for ActivePeers: ${logIds(activePeers)}")
+      _ <- logger.debug(s"sending observation for InactivePeers: ${logIds(inactivePeers)}")
+      currentEpoch <- getTimeInSeconds()
+      activePeersObservations = activePeers.map { id =>
+        Observation.create(id, NodeMemberOfActivePool, currentEpoch)(dao.keyPair)
+      }
+      inactivePeersObservations = inactivePeers.map { id =>
+        Observation.create(id, NodeNotMemberOfActivePool, currentEpoch)(dao.keyPair)
+      }
+      _ <- (activePeersObservations ++ inactivePeersObservations).toList.traverse { observation =>
+        trustManager.updateStoredReputation(observation)
+      }
+    } yield ()
 }
 
 object SnapshotService {
 
   def apply[F[_]: Concurrent](
+    apiClient: ClientInterpreter[F],
     concurrentTipService: ConcurrentTipService[F],
     cloudStorage: CloudStorageOld[F],
     addressService: AddressService[F],
@@ -653,11 +788,13 @@ object SnapshotService {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     eigenTrustStorage: LocalFileStorage[F, StoredRewards],
     eigenTrust: EigenTrust[F],
+    metrics: Metrics,
     dao: DAO,
     boundedExecutionContext: ExecutionContext,
     unboundedExecutionContext: ExecutionContext
-  )(implicit C: ContextShift[F], P: Parallel[F]) =
+  )(implicit CS: ContextShift[F], P: Parallel[F], C: Clock[F]) =
     new SnapshotService[F](
+      apiClient,
       concurrentTipService,
       cloudStorage,
       addressService,
@@ -673,10 +810,19 @@ object SnapshotService {
       snapshotInfoStorage,
       eigenTrustStorage,
       eigenTrust,
+      metrics,
       dao,
       boundedExecutionContext,
       unboundedExecutionContext
     )
+
+  case class JoinActivePoolCommand(lastActivePeers: Set[Id], lastActiveBetweenHeight: MajorityHeight)
+
+  case class NextActiveNodes(light: Set[Id], full: Set[Id])
+
+  object JoinActivePoolCommand {
+    implicit val joinActivePoolCommandCodec: Codec[JoinActivePoolCommand] = deriveCodec
+  }
 }
 
 sealed trait SnapshotError extends Throwable {
@@ -724,6 +870,14 @@ case class SnapshotInfoIOError(cause: Throwable) extends SnapshotError {
 
 case class EigenTrustIOError(cause: Throwable) extends SnapshotError {
   def message: String = s"EigenTrust IO error: ${cause.getMessage}"
+}
+
+case object NodeNotPartOfL0FacilitatorsPool extends SnapshotError {
+  def message: String = "Node is not a part of L0 facilitators pool at the current snapshot height!"
+}
+
+case object ActiveBetweenHeightsConditionNotMet extends SnapshotError {
+  def message: String = "Next snapshot height is not between current active heights range on the given node!"
 }
 
 case class SnapshotCreated(hash: String, height: Long, publicReputation: Map[Id, Double])

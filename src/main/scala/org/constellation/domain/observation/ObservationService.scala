@@ -25,6 +25,7 @@ class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: D
   def applyAfterRedownload(o: Observation, cpc: Option[CheckpointCache]): F[Unit] =
     super
       .accept(o)
+      // Why arent we updating trustManager???
       .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAccepted"))
       .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAcceptedFromRedownload"))
 }

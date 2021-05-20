@@ -84,7 +84,8 @@ class TransactionEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
     case GET -> Root / "transaction" :? SourceAddressParamMatcher(sourceAddress) =>
       transactionService
         .findByPredicate(_.transaction.src.address == sourceAddress)
-        .map(_.asJson).flatMap(Ok(_))
+        .map(_.asJson)
+        .flatMap(Ok(_))
   }
 }
 

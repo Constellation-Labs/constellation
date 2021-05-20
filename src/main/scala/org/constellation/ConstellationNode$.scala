@@ -1,7 +1,6 @@
 package org.constellation
 
 import java.security.KeyPair
-
 import better.files.File
 import cats.effect.{ExitCode, IO, IOApp, Resource, Sync, SyncIO}
 import cats.syntax.all._
@@ -38,6 +37,7 @@ import org.slf4j.MDC
 import pureconfig._
 import pureconfig.generic.auto._
 
+import scala.collection.immutable.ListMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.io.Source
@@ -416,7 +416,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
     }
   }
 
-  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Map[Id, Option[String]]] =
+  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[ListMap[Id, Option[String]]] =
     for {
       source <- Sync[F].delay {
         Source.fromFile(cliConfig.whitelisting)
@@ -424,10 +424,10 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       lines = source.getLines().filter(_.nonEmpty).toList
       values = lines.map(_.split(",").map(_.trim).toList)
       mappedValues = values.map {
-        case id :: alias :: Nil => Map(Id(id) -> Some(alias))
-        case id :: Nil          => Map(Id(id) -> None)
-        case _                  => Map.empty[Id, Option[String]]
-      }.fold(Map.empty[Id, Option[String]])(_ ++ _)
+        case id :: alias :: Nil => ListMap(Id(id) -> Some(alias))
+        case id :: Nil          => ListMap(Id(id) -> None)
+        case _                  => ListMap.empty[Id, Option[String]]
+      }.fold(ListMap.empty[Id, Option[String]])(_ ++ _)
       _ <- Sync[F].delay {
         source.close()
       }
@@ -476,11 +476,16 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
         whitelisting <- getWhitelisting(cliConfig)
 
+        initialActiveFullNodes <- whitelisting match {
+          case ids if ids.size >= 3 => ids.take(3).keySet.pure[F]
+          case _                    => Sync[F].raiseError(new Throwable(s"Not enough peers whitelisted to pick initial active peers!"))
+        }
+
         nodeConfig = NodeConfig(
           seeds = Seq.empty[HostPort],
           primaryKeyPair = keyPair,
           isGenesisNode = cliConfig.genesisNode,
-          isLightNode = cliConfig.lightNode,
+          nodeType = cliConfig.nodeType,
           isRollbackNode = cliConfig.rollbackNode,
           rollbackHeight = cliConfig.rollbackHeight,
           rollbackHash = cliConfig.rollbackHash,
@@ -497,7 +502,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
           allocAccountBalances = allocAccountBalances,
           whitelisting = whitelisting,
-          minRequiredSpace = constellationConfig.getInt("min-required-space")
+          minRequiredSpace = constellationConfig.getInt("min-required-space"),
+          initialActiveFullNodes = initialActiveFullNodes
         )
       } yield nodeConfig
     }

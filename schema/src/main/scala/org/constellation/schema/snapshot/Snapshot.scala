@@ -5,11 +5,16 @@ import org.constellation.schema.signature.Signable
 
 import scala.collection.SortedMap
 
-case class Snapshot(lastSnapshot: String, checkpointBlocks: Seq[String], publicReputation: SortedMap[Id, Double])
-    extends Signable {
+case class Snapshot(
+  lastSnapshot: String,
+  checkpointBlocks: Seq[String],
+  publicReputation: SortedMap[Id, Double],
+  nextActiveFullNodes: Set[Id],
+  nextActiveLightNodes: Set[Id]
+) extends Signable {
   override def toEncode = checkpointBlocks :+ lastSnapshot
 }
 
 object Snapshot {
-  val snapshotZero: Snapshot = Snapshot("", Seq(), SortedMap.empty)
+  val snapshotZero: Snapshot = Snapshot("", Seq(), SortedMap.empty, Set.empty, Set.empty)
 }

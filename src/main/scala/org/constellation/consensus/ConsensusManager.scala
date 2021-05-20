@@ -28,7 +28,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.Try
 
-class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
+class ConsensusManager[F[_]](
   transactionService: TransactionService[F],
   concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],
@@ -45,7 +45,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   remoteCall: Blocker,
   calculationContext: ContextShift[F],
   metrics: Metrics
-) {
+)(implicit F: Concurrent[F], CS: ContextShift[F], T: Timer[F]) {
 
   import ConsensusManager._
 
@@ -202,6 +202,10 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   def participateInBlockCreationRound(roundData: RoundData): F[(ConsensusInfo[F], RoundData)] =
     (for {
+      _ <- cluster.isNodeAnActiveLightNode.ifM(
+        F.unit,
+        F.raiseError(new Throwable("Not an active light node!"))
+      )
       _ <- metrics.incrementMetricAsync("consensus_participateInRound")
       state <- cluster.getNodeState
       _ <- if (NodeState.canParticipateConsensus(state)) Sync[F].unit
@@ -355,7 +359,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     } yield ()
 
   private[consensus] def adjustPeers(roundData: RoundData): F[RoundData] =
-    cluster.getPeerInfo.map { peers =>
+    cluster.getActiveFullNodesPeerInfo.map { peers =>
       val initiator = peers.get(roundData.facilitatorId.id) match {
         case Some(value) => value
         case None =>

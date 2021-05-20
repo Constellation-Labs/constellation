@@ -46,7 +46,7 @@ class RandomPeerSampling[F[_]](selfId: Id, cluster: Cluster[F])(implicit F: Conc
   }
 
   private def getPeers: F[Set[Id]] =
-    cluster.getPeerInfo
+    cluster.getActiveFullNodesPeerInfo
       .map(_.filter {
         case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState)
       }.keySet)

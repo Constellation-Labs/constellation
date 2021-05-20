@@ -23,6 +23,10 @@ class PeerHealthCheckWatcher(
 
 object PeerHealthCheckWatcher {
 
-  def apply(config: Config, healthCheckConsensusManager: HealthCheckConsensusManager[IO], unboundedHealthExecutionContext: ExecutionContext) =
+  def apply(
+    config: Config,
+    healthCheckConsensusManager: HealthCheckConsensusManager[IO],
+    unboundedHealthExecutionContext: ExecutionContext
+  ) =
     new PeerHealthCheckWatcher(config, healthCheckConsensusManager, unboundedHealthExecutionContext)
 }

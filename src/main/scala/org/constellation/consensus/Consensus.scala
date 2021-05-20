@@ -336,7 +336,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
     for {
       nonFacilitators <- LiftIO[F]
-        .liftIO(dao.peerInfo)
+        .liftIO(dao.activePeerInfo)
         .map(
           info =>
             info.values.toList

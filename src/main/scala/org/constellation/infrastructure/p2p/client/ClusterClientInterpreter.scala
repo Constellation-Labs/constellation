@@ -16,8 +16,9 @@ import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
 import scala.language.reflectiveCalls
 
-class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])(implicit F: Concurrent[F])
-    extends ClusterClientAlgebra[F] {
+class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])(
+  implicit F: Concurrent[F]
+) extends ClusterClientAlgebra[F] {
 
   import Id._
   import ClusterNode._
@@ -45,10 +46,24 @@ class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTok
 
   def getTrust(): PeerResponse[F, TrustData] =
     PeerResponse[F, TrustData]("trust")(client, sessionTokenService)
+
+  def getActiveFullNodes(): PeerResponse[F, Option[Set[Id]]] =
+    PeerResponse[F, Option[Set[Id]]]("cluster/active-full-nodes")(client, sessionTokenService)
+
+  def notifyAboutClusterJoin(): PeerResponse[F, Unit] =
+    PeerResponse[F, Boolean]("cluster/join-notification", POST)(client, sessionTokenService) { (req, c) =>
+      c.successful(req)
+    }.flatMapF { isSuccess =>
+      if (isSuccess) F.unit
+      else F.raiseError(new Throwable("Failed to notify active full node about cluster joining!"))
+    }
 }
 
 object ClusterClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): ClusterClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): ClusterClientInterpreter[F] =
     new ClusterClientInterpreter[F](client, sessionTokenService)
 }

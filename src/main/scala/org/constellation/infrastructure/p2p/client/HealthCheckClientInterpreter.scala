@@ -20,7 +20,8 @@ import scala.language.reflectiveCalls
 class HealthCheckClientInterpreter[F[_]](
   client: Client[F],
   sessionTokenService: SessionTokenService[F]
-)(implicit F: Concurrent[F], CS: ContextShift[F]) extends HealthCheckClientAlgebra[F] {
+)(implicit F: Concurrent[F], CS: ContextShift[F])
+    extends HealthCheckClientAlgebra[F] {
 
   def sendPeerHealthStatus(healthStatus: SendPerceivedHealthStatus): PeerResponse[F, Either[SendProposalError, Unit]] =
     PeerResponse("health-check/consensus", POST)(client, sessionTokenService) { (req, c) =>
@@ -30,9 +31,13 @@ class HealthCheckClientInterpreter[F[_]](
   def notifyAboutMissedConsensus(notification: HealthCheckConsensus.NotifyAboutMissedConsensus): PeerResponse[F, Unit] =
     PeerResponse("health-check/consensus", POST)(client, sessionTokenService) { (req, c) =>
       c.successful(req.withEntity(notification))
-    }.flatMapF(a => if (a) F.unit else F.raiseError(new Throwable(s"Failed to send notification about missed consensus.")))
+    }.flatMapF(
+      a => if (a) F.unit else F.raiseError(new Throwable(s"Failed to send notification about missed consensus."))
+    )
 
-  def fetchPeerHealthStatus(fetchPeerHealthStatus: FetchPeerHealthStatus): PeerResponse[F, Either[FetchProposalError, SendPerceivedHealthStatus]] =
+  def fetchPeerHealthStatus(
+    fetchPeerHealthStatus: FetchPeerHealthStatus
+  ): PeerResponse[F, Either[FetchProposalError, SendPerceivedHealthStatus]] =
     PeerResponse("health-check/consensus", GET)(client, sessionTokenService) { (req, c) =>
       c.expect[Either[FetchProposalError, SendPerceivedHealthStatus]](req.withEntity(fetchPeerHealthStatus))
     }

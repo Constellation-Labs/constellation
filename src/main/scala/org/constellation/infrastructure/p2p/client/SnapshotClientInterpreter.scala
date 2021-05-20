@@ -11,6 +11,7 @@ import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
 import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotProposalPayload}
 import org.constellation.session.SessionTokenService
+import org.constellation.storage.SnapshotService.JoinActivePoolCommand
 import org.http4s.Method._
 import org.http4s.Status.Successful
 import org.http4s.circe.CirceEntityDecoder._
@@ -88,6 +89,14 @@ class SnapshotClientInterpreter[F[_]: ContextShift](
             new Throwable(s"Cannot post proposal of hash ${message.payload.proposal.value.hash} and height ${message.payload.proposal.value.height}")
           )
     )
+
+  def notifyNextActivePeer(joinActivePoolCommand: JoinActivePoolCommand): PeerResponse[F, Unit] =
+    PeerResponse("join-active-pool", POST)(client, sessionTokenService) { (req, c) =>
+      c.successful(req.withEntity(joinActivePoolCommand))
+    }.flatMapF { isSuccess =>
+      if (isSuccess) F.unit
+      else F.raiseError(new Throwable("Failed to notify next active peer about it's turn to join the pool!"))
+    }
 }
 
 object SnapshotClientInterpreter {

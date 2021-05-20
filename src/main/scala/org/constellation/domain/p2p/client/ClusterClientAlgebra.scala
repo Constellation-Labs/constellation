@@ -17,4 +17,8 @@ trait ClusterClientAlgebra[F[_]] {
   def deregister(peerUnregister: PeerUnregister): PeerResponse[F, Unit]
 
   def getTrust(): PeerResponse[F, TrustData]
+
+  def getActiveFullNodes(): PeerResponse[F, Option[Set[Id]]]
+
+  def notifyAboutClusterJoin(): PeerResponse[F, Unit]
 }

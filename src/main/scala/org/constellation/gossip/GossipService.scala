@@ -148,7 +148,7 @@ abstract class GossipService[F[_]: Parallel, A](
     path.toIndexedSeq.length * spreadRequestTimeout
 
   protected def getClientMetadata(id: Id): F[PeerClientMetadata] =
-    cluster.getPeerInfo.flatMap(_.get(id) match {
+    cluster.getActiveFullNodesPeerInfo.flatMap(_.get(id) match {
       case Some(metadata) => metadata.peerMetadata.toPeerClientMetadata.pure[F]
       case None           => F.raiseError[PeerClientMetadata](MissingClientForId(id))
     })

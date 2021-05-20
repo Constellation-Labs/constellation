@@ -93,7 +93,7 @@ class DAO(
   var transactionService: TransactionService[IO] = _
   var blacklistedAddresses: BlacklistedAddresses[IO] = _
   var transactionChainService: TransactionChainService[IO] = _
-  var transactionGossiping: TransactionGossiping[IO] = _
+  //var transactionGossiping: TransactionGossiping[IO] = _
   var observationService: ObservationService[IO] = _
   var checkpointService: CheckpointService[IO] = _
   var checkpointParentService: CheckpointParentService[IO] = _
@@ -178,7 +178,7 @@ class DAO(
     f
   }
 
-  @volatile var nodeType: NodeType = NodeType.Full
+  def nodeType: NodeType = nodeConfig.nodeType
 
   lazy val messageService: MessageService[IO] = {
     implicit val daoImpl: DAO = this
@@ -196,10 +196,6 @@ class DAO(
     initialNodeConfig = nodeConfigInit
     nodeConfig = nodeConfigInit
 
-    if (nodeConfig.isLightNode) {
-      nodeType = NodeType.Light
-    }
-
     idDir.createDirectoryIfNotExists(createParents = true)
 
     implicit val ioTimer: Timer[IO] = IO.timer(unboundedExecutionContext)
@@ -212,7 +208,7 @@ class DAO(
     blacklistedAddresses = BlacklistedAddresses[IO]
     transactionChainService = TransactionChainService[IO]
     transactionService = TransactionService[IO](transactionChainService, rateLimiting, this)
-    transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+    //transactionGossiping = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
     joiningPeerValidator = JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(unboundedExecutionContext))
 
     cluster = Cluster[IO](
@@ -379,6 +375,7 @@ class DAO(
     )
 
     snapshotService = SnapshotService[IO](
+      apiClient,
       concurrentTipService,
       cloudStorage,
       addressService,
@@ -394,6 +391,7 @@ class DAO(
       snapshotInfoStorage,
       rewardsStorage,
       eigenTrust,
+      metrics,
       this,
       boundedExecutionContext,
       unboundedExecutionContext
@@ -519,19 +517,26 @@ class DAO(
   }
 
   def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
+  def activePeerInfo: IO[Map[Id, PeerData]] = cluster.getActiveNodesPeerInfo()
 
   private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType
   private def eqNodeState(nodeStates: Set[NodeState])(m: (Id, PeerData)) =
     nodeStates.contains(m._2.peerMetadata.nodeState)
 
-  def peerInfo(nodeType: NodeType): IO[Map[Id, PeerData]] =
-    peerInfo.map(_.filter(eqNodeType(nodeType)))
+//  def peerInfo(nodeType: NodeType): IO[Map[Id, PeerData]] =
+//    peerInfo.map(_.filter(eqNodeType(nodeType)))
 
   def readyPeers: IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeState(NodeState.readyStates)))
 
+  def activeReadyPeers: IO[Map[Id, PeerData]] =
+    activePeerInfo.map(_.filter(eqNodeState(NodeState.readyStates)))
+
   def readyPeers(nodeType: NodeType): IO[Map[Id, PeerData]] =
     readyPeers.map(_.filter(eqNodeType(nodeType)))
+
+//  def activeReadyPeers(nodeType: NodeType): IO[Map[Id, PeerData]] =
+//    activeReadyPeers.map(_.filter(eqNodeType(nodeType)))
 
   def leavingPeers: IO[Map[Id, PeerData]] =
     peerInfo.map(_.filter(eqNodeState(Set(NodeState.Leaving))))
@@ -544,7 +549,7 @@ class DAO(
     eigenTrust.registerAgent(id)
 
   def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
-    readyPeers(NodeType.Full).map(_.filter {
+    activeReadyPeers.map(_.filter {
       case (_, pd) =>
         pd.peerMetadata.timeAdded < (System
           .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)

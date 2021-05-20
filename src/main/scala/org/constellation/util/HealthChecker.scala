@@ -88,7 +88,7 @@ class HealthChecker[F[_]: Concurrent](
   private def collectNextSnapshotHeights(): F[Map[Id, Long]] =
     for {
       peers <- LiftIO[F]
-        .liftIO(dao.cluster.getPeerInfo)
+        .liftIO(dao.cluster.getActiveFullNodesPeerInfo)
         .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)

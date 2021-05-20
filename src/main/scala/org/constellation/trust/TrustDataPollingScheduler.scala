@@ -25,7 +25,7 @@ class TrustDataPollingScheduler(
 ) extends PeriodicIO("TrustDataPollingScheduler", unboundedExecutionContext) {
 
   override def trigger(): IO[Unit] =
-    cluster.getPeerInfo
+    cluster.getActiveFullNodesPeerInfo // getPeerInfo or getActivePeerInfo here?
       .map(_.filter(t => NodeState.validForLettingOthersDownload.contains(t._2.peerMetadata.nodeState)).values.toList)
       .flatMap(
         _.traverse(

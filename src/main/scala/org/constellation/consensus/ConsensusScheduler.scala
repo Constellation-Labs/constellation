@@ -31,6 +31,7 @@ class ConsensusScheduler(
     if (dao.formCheckpoints) {
       cluster.getNodeState
         .map(NodeState.canStartOwnConsensus)
+        .flatMap(canStartOwnConsensus => cluster.isNodeAnActiveLightNode.map(_ && canStartOwnConsensus))
         .ifM(crossTalkConsensus, skip)
     } else skip
 

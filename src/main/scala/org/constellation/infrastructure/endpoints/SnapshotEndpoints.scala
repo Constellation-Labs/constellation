@@ -25,6 +25,11 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
 
 import scala.collection.SortedMap
+import Id._
+import RedownloadService._
+import LatestMajorityHeight._
+import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.storage.SnapshotService.JoinActivePoolCommand
 
 class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 
@@ -67,7 +72,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       getSnapshotInfo(snapshotService, cluster) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
       getLatestMajorityHeight(redownloadService) <+>
-      postSnapshotProposal(snapshotProposalGossipService, redownloadService, messageValidator)
+      postSnapshotProposal(snapshotProposalGossipService, redownloadService, messageValidator) <+>
+      redownloadAndJoinActivePeersPool(redownloadService)
 
   def ownerEndpoints(
     nodeId: Id,
@@ -232,6 +238,16 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
         .map(_.asJson)
         .flatMap(Ok(_))
   }
+
+  private def redownloadAndJoinActivePeersPool(redownloadService: RedownloadService[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case req @ POST -> Root / "join-active-pool" =>
+        for {
+          joinActivePoolCommand <- req.decodeJson[JoinActivePoolCommand]
+          _ <- F.start(redownloadService.redownloadBeforeJoiningActivePeersPool(joinActivePoolCommand)).void
+          response <- Ok(().asJson)
+        } yield response
+    }
 }
 
 object SnapshotEndpoints {

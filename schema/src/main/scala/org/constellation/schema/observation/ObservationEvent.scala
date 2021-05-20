@@ -11,6 +11,9 @@ case class CheckpointBlockWithMissingSoe(checkpointBaseHash: String) extends Obs
 case class RequestTimeoutOnConsensus(roundId: RoundId) extends ObservationEvent
 case class RequestTimeoutOnResolving(hashes: List[String]) extends ObservationEvent
 case class CheckpointBlockInvalid(checkpointBaseHash: String, reason: String) extends ObservationEvent
+case object NodeMemberOfActivePool extends ObservationEvent
+case object NodeNotMemberOfActivePool extends ObservationEvent
+case object NodeJoinedTheCluster extends ObservationEvent
 
 object ObservationEvent {
   implicit val encodeEvent: Encoder[ObservationEvent] = deriveEncoder

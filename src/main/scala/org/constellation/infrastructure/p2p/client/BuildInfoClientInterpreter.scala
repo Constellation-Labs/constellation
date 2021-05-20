@@ -9,7 +9,10 @@ import org.constellation.session.SessionTokenService
 import org.http4s.circe.CirceEntityDecoder._
 import scala.language.reflectiveCalls
 
-class BuildInfoClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]) extends BuildInfoClientAlgebra[F] {
+class BuildInfoClientInterpreter[F[_]: Concurrent: ContextShift](
+  client: Client[F],
+  sessionTokenService: SessionTokenService[F]
+) extends BuildInfoClientAlgebra[F] {
 
   import BuildInfoJson._
 
@@ -20,6 +23,9 @@ class BuildInfoClientInterpreter[F[_]: Concurrent: ContextShift](client: Client[
 
 object BuildInfoClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): BuildInfoClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): BuildInfoClientInterpreter[F] =
     new BuildInfoClientInterpreter[F](client, sessionTokenService: SessionTokenService[F])
 }

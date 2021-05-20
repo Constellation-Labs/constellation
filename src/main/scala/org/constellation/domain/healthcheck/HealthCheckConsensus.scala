@@ -484,7 +484,9 @@ class HealthCheckConsensus[F[_]](
                   healthStatus <- getOwnPerceivedHealthStatus()
                   _ <- maybePeerRoundData match {
                     case Some(roundData) if roundData.receivedProposal =>
-                      logger.warn(s"Resending proposal to ${logId(id)} for round with roundIds=${logRoundIds(roundIds)}") >>
+                      logger.warn(
+                        s"Resending proposal to ${logId(id)} for round with roundIds=${logRoundIds(roundIds)}"
+                      ) >>
                         incrementSuspiciousHealthcheckWarning(metrics) >>
                         sendProposalToPeer(id, healthStatus, roundIds, roundData.peerData)
                           .map(_ => ())

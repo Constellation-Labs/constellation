@@ -1,17 +1,17 @@
 package org.constellation.domain.configuration
 
 import java.security.KeyPair
-
 import org.constellation.ProcessingConfig
 import org.constellation.keytool.KeyUtils
-import org.constellation.schema.Id
+import org.constellation.schema.NodeType.Light
+import org.constellation.schema.{Id, NodeType}
 import org.constellation.util.{AccountBalance, HostPort}
 
 case class NodeConfig(
   seeds: Seq[HostPort] = Seq(),
   primaryKeyPair: KeyPair = KeyUtils.makeKeyPair(),
   isGenesisNode: Boolean = false,
-  isLightNode: Boolean = false,
+  nodeType: NodeType = Light,
   isRollbackNode: Boolean = false,
   rollbackHeight: Long = 0L,
   rollbackHash: String = "",
@@ -28,5 +28,6 @@ case class NodeConfig(
   dataPollingManagerOn: Boolean = false,
   allocAccountBalances: Seq[AccountBalance] = Seq.empty,
   whitelisting: Map[Id, Option[String]] = Map.empty,
-  minRequiredSpace: Int = 5
+  minRequiredSpace: Int = 5,
+  initialActiveFullNodes: Set[Id] = Set.empty
 )

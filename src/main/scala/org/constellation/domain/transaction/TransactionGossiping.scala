@@ -28,7 +28,7 @@ class TransactionGossiping[F[_]: Concurrent: Clock](
 
   private def getDiffPeers(tx: TransactionCacheData): F[Set[Id]] =
     for {
-      all <- LiftIO[F].liftIO(dao.peerInfo)
+      all <- LiftIO[F].liftIO(dao.activePeerInfo//TODO: not important, not used class)
       used <- getUsedPeers(tx)
     } yield all.keySet.diff(used)
 
