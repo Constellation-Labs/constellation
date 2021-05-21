@@ -84,7 +84,7 @@ class RateLimitingTest
       cb1.checkpointBlock.baseHash shouldReturn "cb1"
       cb1.checkpointBlock.transactions shouldReturn List(tx4, tx5, tx6, tx7)
 
-      cs.fullData("cb1") shouldReturnF cb1.some
+      cs.fullDataCheckpoint("cb1") shouldReturnF cb1.some
 
       rl.reset(List("cb1"))(cs).unsafeRunSync
 
@@ -106,7 +106,7 @@ class RateLimitingTest
       cb1.checkpointBlock.baseHash shouldReturn "cb1"
       cb1.checkpointBlock.transactions shouldReturn List(tx3)
 
-      cs.fullData("cb1") shouldReturnF cb1.some
+      cs.fullDataCheckpoint("cb1") shouldReturnF cb1.some
 
       rl.reset(List("cb1"))(cs).unsafeRunSync
 
@@ -133,7 +133,7 @@ class RateLimitingTest
       cb1.checkpointBlock.baseHash shouldReturn "cb1"
       cb1.checkpointBlock.transactions shouldReturn List(tx4, tx5, tx6)
 
-      cs.fullData("cb1") shouldReturnF cb1.some
+      cs.fullDataCheckpoint("cb1") shouldReturnF cb1.some
 
       rl.reset(List("cb1"))(cs).unsafeRunSync
 

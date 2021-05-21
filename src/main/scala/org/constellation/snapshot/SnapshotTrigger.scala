@@ -3,24 +3,29 @@ package org.constellation.snapshot
 import cats.effect.IO
 import cats.syntax.all._
 import org.constellation.domain.exception.InvalidNodeState
+import org.constellation.domain.redownload.RedownloadService
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
 import org.constellation.schema.signature.Signed.signed
 import org.constellation.schema.snapshot.{MajorityInfo, SnapshotProposal, SnapshotProposalPayload}
-import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState}
+import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState, SnapshotService}
 import org.constellation.util.Logging._
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.{ConfigUtil, DAO}
 
+import java.security.KeyPair
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: ExecutionContext)(
-  implicit dao: DAO,
   cluster: Cluster[IO],
-  snapshotProposalGossipService: SnapshotProposalGossipService[IO]
+  snapshotProposalGossipService: SnapshotProposalGossipService[IO],
+  metrics: Metrics,
+  keyPair: KeyPair,
+  redownloadService: RedownloadService[IO],
+  snapshotService: SnapshotService[IO]
 ) extends PeriodicIO("SnapshotTrigger", unboundedExecutionContext) {
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
@@ -34,16 +39,15 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
   private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
-        stateSet <- dao.cluster
-          .compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation, skipBroadcast = true)
+        stateSet <- cluster.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation, skipBroadcast = true)
         _ <- if (!stateSet.isNewSet)
           IO.raiseError(InvalidNodeState(NodeState.validForSnapshotCreation, stateSet.oldState))
         else IO.unit
         startTime <- IO(System.currentTimeMillis())
-        snapshotResult <- dao.snapshotService.attemptSnapshot().value
+        snapshotResult <- snapshotService.attemptSnapshot()(cluster).value
         elapsed <- IO(System.currentTimeMillis() - startTime)
-        majorityRange <- dao.redownloadService.getMajorityRange
-        majorityGapRanges <- dao.redownloadService.getMajorityGapRanges
+        majorityRange <- redownloadService.getMajorityRange
+        majorityGapRanges <- redownloadService.getMajorityGapRanges
         _ = logger.debug(s"Attempt snapshot took: $elapsed millis")
         _ <- snapshotResult match {
           case Left(NotEnoughSpace) =>
@@ -53,14 +57,14 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
           case Left(err @ HeightIntervalConditionNotMet) =>
             resetNodeState(stateSet) >>
               IO(logger.warn(s"Snapshot attempt: ${err.message}")) >>
-              dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + "_heightIntervalNotMet")
+              metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + "_heightIntervalNotMet")
           case Left(err) =>
             handleError(err, stateSet)
           case Right(created) =>
-            dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success) >>
-              dao.redownloadService
+            metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success) >>
+              redownloadService
                 .persistCreatedSnapshot(created.height, created.hash, SortedMap(created.publicReputation.toSeq: _*)) >>
-              dao.redownloadService
+              redownloadService
                 .persistAcceptedSnapshot(created.height, created.hash) >>
               resetNodeState(stateSet) >>
               snapshotProposalGossipService
@@ -72,7 +76,7 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
                         created.height,
                         SortedMap(created.publicReputation.toSeq: _*)
                       ),
-                      dao.keyPair
+                      keyPair
                     ),
                     MajorityInfo(
                       majorityRange,
@@ -95,7 +99,7 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
 
     resetNodeState(stateSet) >>
       IO(logger.warn(s"Snapshot attempt error: ${err.message}")) >>
-      dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure)
+      metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure)
   }
 
   override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)

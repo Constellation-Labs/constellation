@@ -8,7 +8,7 @@ import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConstellationExecutionContext.createSemaphore
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointParentService, CheckpointService}
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Consensus._
 import org.constellation.domain.observation.ObservationService
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
@@ -21,7 +21,7 @@ import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
 import org.constellation.schema.transaction.Transaction
 import org.constellation.schema.{ChannelMessage, Id, NodeState, NodeType, PeerNotification}
-import org.constellation.storage.{ConcurrentTipService, _}
+import org.constellation.storage._
 import org.constellation.util.{Distance, Metrics}
 import org.constellation.{ConfigUtil, DAO}
 
@@ -31,10 +31,7 @@ import scala.util.Try
 
 class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   transactionService: TransactionService[F],
-  concurrentTipService: ConcurrentTipService[F],
   checkpointService: CheckpointService[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  soeService: SOEService[F],
   messageService: MessageService[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
@@ -100,7 +97,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           roundData._1,
           roundData._2,
           transactionService,
-          checkpointAcceptanceService,
+          checkpointService,
           messageService,
           observationService,
           remoteSender,
@@ -172,7 +169,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       transactions <- transactionService.pullForConsensus(maxTransactionThreshold)
       _ <- logger.info(s"Pulled for new consensus: ${transactions.size}")
       facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
-      tips <- concurrentTipService.pull(facilitators)(dao.metrics)
+      tips <- checkpointService.pullTips(facilitators)(dao.metrics)
       _ <- if (tips.isEmpty)
         Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
@@ -217,7 +214,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           updatedRoundData,
           arbitraryMsgs,
           transactionService,
-          checkpointAcceptanceService,
+          checkpointService,
           messageService,
           observationService,
           remoteSender,
@@ -379,12 +376,12 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
-      existing <- soes.map(_.hash).traverse(soeService.lookup).map(_.flatten)
+      existing <- soes.map(_.hash).traverse(checkpointService.lookupSoe).map(_.flatten)
       missing = soes.diff(existing)
 
       resolved <- missing
         .map(_.baseHash)
-        .filterA(checkpointService.contains(_).map(!_))
+        .filterA(checkpointService.containsCheckpoint(_).map(!_))
         .flatTap { hashes =>
           logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
         }

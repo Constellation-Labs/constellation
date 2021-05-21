@@ -119,7 +119,7 @@ object CheckpointBlockValidator {
 class CheckpointBlockValidator[F[_]: Sync](
   addressService: AddressService[F],
   snapshotService: SnapshotService[F],
-  checkpointParentService: CheckpointParentService[F],
+  checkpointService: CheckpointService[F],
   transactionValidator: TransactionValidator[F],
   txChainService: TransactionChainService[F],
   dao: DAO
@@ -246,7 +246,7 @@ class CheckpointBlockValidator[F[_]: Sync](
   ): F[Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]] = {
 
     val validate: F[Ior[NonEmptyList[CheckpointBlockValidation], AddressBalance]] = for {
-      parents <- checkpointParentService.getParents(cb)
+      parents <- checkpointService.getParents(cb)
       x <- parents.traverse(z => validateCheckpointBlockTree(z))
       folded = x
         .foldLeft(Map.empty[String, Long].rightIor[NonEmptyList[CheckpointBlockValidation]])(
@@ -314,7 +314,7 @@ class CheckpointBlockValidator[F[_]: Sync](
                 snapshotReached
               )
             } else {
-              checkpointParentService
+              checkpointService
                 .getParents(cb)
                 .flatMap(
                   parents =>
@@ -336,7 +336,7 @@ class CheckpointBlockValidator[F[_]: Sync](
           x.filterNot(_._1)
             .traverse(
               z =>
-                checkpointParentService
+                checkpointService
                   .getParents(z._2)
                   .flatMap(parents => getParentTransactions(parents, z._2.transactions.map(_.hash).toList))
             )

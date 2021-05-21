@@ -27,7 +27,7 @@ class RateLimiting[F[_]: Concurrent]() {
 
   def reset(cbHashes: List[String])(checkpointService: CheckpointService[F]): F[Unit] =
     for {
-      cbs <- cbHashes.map(checkpointService.fullData).sequence[F, Option[CheckpointCache]].map(_.flatten)
+      cbs <- cbHashes.map(checkpointService.fullDataCheckpoint).sequence[F, Option[CheckpointCache]].map(_.flatten)
       txs = cbs.flatMap(_.checkpointBlock.transactions.toList)
       filtered = txs.filterNot(_.isDummy)
       grouped = filtered.groupBy(_.src).mapValues(_.size)

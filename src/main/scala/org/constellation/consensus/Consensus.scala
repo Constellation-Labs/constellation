@@ -8,7 +8,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
@@ -36,7 +36,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
   roundData: RoundData,
   arbitraryMessages: Seq[(ChannelMessage, Int)],
   transactionService: TransactionService[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F],
+  checkpointService: CheckpointService[F],
   messageService: MessageService[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
@@ -240,7 +240,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val uniques = proposals.groupBy(_._2.baseHash).size
 
     for {
-      maybeHeight <- checkpointAcceptanceService.calculateHeight(checkpointBlock)
+      maybeHeight <- checkpointService.calculateHeight(checkpointBlock)
       cache = CheckpointCache(checkpointBlock, height = maybeHeight)
       _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
       _ <- dao.metrics.incrementMetricAsync(
@@ -256,7 +256,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
 
-      finalResult <- checkpointAcceptanceService
+      finalResult <- checkpointService
         .accept(cache)
         .map(_ => ConsensusFinalResult(Option(checkpointBlock)))
         .handleErrorWith {

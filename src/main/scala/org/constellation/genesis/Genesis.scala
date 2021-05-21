@@ -104,14 +104,14 @@ object Genesis extends StrictLogging {
     val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
     val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
 
-    (dao.soeService.put(go.genesis.soeHash, go.genesis.soe) >>
+    (dao.soeService.putSoe(go.genesis.soeHash, go.genesis.soe) >>
       dao.soeService
-        .put(go.initialDistribution.soeHash, go.initialDistribution.soe) >>
+        .putSoe(go.initialDistribution.soeHash, go.initialDistribution.soe) >>
       dao.soeService
-        .put(go.initialDistribution2.soeHash, go.initialDistribution2.soe) >>
-      dao.checkpointService.put(genesisBlock) >>
-      dao.checkpointService.put(initialBlock1) >>
-      dao.checkpointService.put(initialBlock2) >>
+        .putSoe(go.initialDistribution2.soeHash, go.initialDistribution2.soe) >>
+      dao.checkpointService.putCheckpoint(genesisBlock) >>
+      dao.checkpointService.putCheckpoint(initialBlock1) >>
+      dao.checkpointService.putCheckpoint(initialBlock2) >>
       IO(dao.recentBlockTracker.put(genesisBlock)) >>
       IO(dao.recentBlockTracker.put(initialBlock1)) >>
       IO(
@@ -144,7 +144,7 @@ object Genesis extends StrictLogging {
 
     if (setAsTips) {
       List(go.initialDistribution, go.initialDistribution2)
-        .map(dao.concurrentTipService.update(_, Height(1, 1), isGenesis = true))
+        .map(dao.concurrentTipService.updateTips(_, Height(1, 1), isGenesis = true))
         .sequence
         .unsafeRunSync() // TODO: Get rid of unsafeRunSync
     }

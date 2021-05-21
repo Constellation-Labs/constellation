@@ -2,13 +2,12 @@ package org.constellation.domain.checkpointBlock
 
 import cats.effect.Concurrent
 import cats.syntax.all._
-import org.constellation.checkpoint.CheckpointBlockValidator
+import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointService}
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.transaction.TransactionChainService
 import org.constellation.genesis.Genesis
 import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.schema.edge.SignedObservationEdge
 import org.constellation.schema.transaction.Transaction
-import org.constellation.storage.SOEService
 
 object AwaitingCheckpointBlock {
 
@@ -19,12 +18,12 @@ object AwaitingCheckpointBlock {
     areTransactionsAllowedForAcceptance(txs)(checkpointBlockValidator)
   }
 
-  def areParentsSOEAccepted[F[_]: Concurrent](soeService: SOEService[F])(cb: CheckpointBlock): F[Boolean] = {
+  def areParentsSOEAccepted[F[_]: Concurrent](lookupSoe: String => F[Option[SignedObservationEdge]])(cb: CheckpointBlock): F[Boolean] = {
     val soeHashes = cb.parentSOEHashes.toList.filterNot(_.equals(Genesis.Coinbase))
     // TODO: should parent's amount be hardcoded?
 
     soeHashes
-      .traverse(soeService.lookup)
+      .traverse(lookupSoe)
       .map(_.flatten)
       .map(_.size == soeHashes.size)
   }

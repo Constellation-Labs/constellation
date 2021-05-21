@@ -52,7 +52,7 @@ class DownloadServiceTest
     dao.blacklistedAddresses.clear shouldReturnF Unit
     dao.transactionChainService.clear shouldReturnF Unit
     dao.addressService.clear shouldReturnF Unit
-    dao.soeService.clear shouldReturnF Unit
+    dao.soeService.clearSoe shouldReturnF Unit
   }
 
   "clearDataBeforeDownload" - {
@@ -86,7 +86,7 @@ class DownloadServiceTest
 
         check.unsafeRunSync()
 
-        dao.soeService.clear.was(called)
+        dao.soeService.clearSoe.was(called)
       }
     }
   }

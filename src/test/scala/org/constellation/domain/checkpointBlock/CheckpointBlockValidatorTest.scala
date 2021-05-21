@@ -7,7 +7,7 @@ import cats.implicits._
 import cats.syntax._
 import io.chrisdavenport.log4cats.Logger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointParentService, InsufficientBalance}
+import org.constellation.checkpoint.{CheckpointBlockValidator, InsufficientBalance}
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService, TransactionValidator}
 import org.constellation.schema.address.{Address, AddressCacheData}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointEdge, CheckpointEdgeData}

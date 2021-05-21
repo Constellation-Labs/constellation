@@ -6,7 +6,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.gossip.validation.{
@@ -36,7 +36,6 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
   def peerEndpoints(
     genesisObservation: => Option[GenesisObservation],
     checkpointService: CheckpointService[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F],
     metrics: Metrics,
     snapshotService: SnapshotService[F],
     checkpointBlockGossipService: CheckpointBlockGossipService[F],
@@ -46,13 +45,12 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     genesisEndpoint(genesisObservation) <+>
       getCheckpointEndpoint(checkpointService) <+>
       checkFinishedCheckpointEndpoint(checkpointService) <+>
-      requestBlockSignatureEndpoint(checkpointAcceptanceService) <+>
+      requestBlockSignatureEndpoint(checkpointService) <+>
       postFinishedCheckpoint(
         checkpointBlockGossipService,
         messageValidator,
         snapshotService,
         checkpointService,
-        checkpointAcceptanceService,
         tipService
       )
 
@@ -61,12 +59,12 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
   }
 
   private def requestBlockSignatureEndpoint(
-    checkpointAcceptanceService: CheckpointAcceptanceService[F]
+    checkpointService: CheckpointService[F]
   ): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "request" / "signature" =>
       (for {
         sigRequest <- req.decodeJson[SignatureRequest]
-        response <- checkpointAcceptanceService.handleSignatureRequest(sigRequest)
+        response <- checkpointService.handleSignatureRequest(sigRequest)
       } yield response.asJson).flatMap(Ok(_))
   }
 
@@ -75,7 +73,6 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     messageValidator: MessageValidator,
     snapshotService: SnapshotService[F],
     checkpointService: CheckpointService[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F],
     tipService: ConcurrentTipService[F]
   ): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -91,7 +88,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
             case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
             case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
-              val accept = checkpointAcceptanceService.acceptWithNodeCheck(payload.block.value)
+              val accept = checkpointService.acceptWithNodeCheck(payload.block.value)
               val processFinishedCheckpointAsync = F.start(
                 C.shift >>
                   snapshotService.getNextHeightInterval.flatMap { nextHeight =>
@@ -129,7 +126,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
   def publicEndpoints(checkpointService: CheckpointService[F]) = getCheckpointEndpoint(checkpointService)
 
   private def getCheckpointEndpoint(checkpointService: CheckpointService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "checkpoint" / hash => checkpointService.fullData(hash).map(_.asJson).flatMap(Ok(_))
+    case GET -> Root / "checkpoint" / hash => checkpointService.fullDataCheckpoint(hash).map(_.asJson).flatMap(Ok(_))
   }
 
 }
@@ -143,7 +140,6 @@ object CheckpointEndpoints {
   def peerEndpoints[F[_]: Concurrent: ContextShift](
     genesisObservation: => Option[GenesisObservation],
     checkpointService: CheckpointService[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F],
     metrics: Metrics,
     snapshotService: SnapshotService[F],
     checkpointBlockGossipService: CheckpointBlockGossipService[F],
@@ -154,7 +150,6 @@ object CheckpointEndpoints {
       .peerEndpoints(
         genesisObservation,
         checkpointService,
-        checkpointAcceptanceService,
         metrics,
         snapshotService,
         checkpointBlockGossipService,

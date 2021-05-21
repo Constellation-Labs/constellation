@@ -131,7 +131,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.redownloadService
         ) <+>
         TipsEndpoints.publicEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
-        SoeEndpoints.publicEndpoints[IO](dao.soeService)
+        SoeEndpoints.publicEndpoints[IO](dao.checkpointService)
 
       peerPublicEndpoints = SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
         BuildInfoEndpoints.peerEndpoints[IO]() <+> MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
@@ -140,7 +140,6 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       peerWhitelistedEndpoints = CheckpointEndpoints.peerEndpoints[IO](
         getGenesisObservation(dao),
         dao.checkpointService,
-        dao.checkpointAcceptanceService,
         dao.metrics,
         dao.snapshotService,
         dao.checkpointBlockGossipService,
@@ -161,7 +160,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.snapshotProposalGossipService,
           dao.messageValidator
         ) <+>
-        SoeEndpoints.peerEndpoints[IO](dao.soeService) <+>
+        SoeEndpoints.peerEndpoints[IO](dao.checkpointService) <+>
         TipsEndpoints.peerEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
         TransactionEndpoints.peerEndpoints[IO](dao.transactionService, dao.metrics)
 

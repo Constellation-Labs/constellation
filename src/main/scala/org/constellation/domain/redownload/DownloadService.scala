@@ -4,7 +4,7 @@ import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
+import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
@@ -17,13 +17,13 @@ import org.constellation.util.Metrics
 import scala.concurrent.ExecutionContext
 
 class DownloadService[F[_]](
-  redownloadService: RedownloadService[F],
-  cluster: Cluster[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F],
-  apiClient: ClientInterpreter[F],
-  metrics: Metrics,
-  boundedExecutionContext: ExecutionContext,
-  unboundedBlocker: Blocker
+                             redownloadService: RedownloadService[F],
+                             cluster: Cluster[F],
+                             checkpointService: CheckpointService[F],
+                             apiClient: ClientInterpreter[F],
+                             metrics: Metrics,
+                             boundedExecutionContext: ExecutionContext,
+                             unboundedBlocker: Blocker
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F]
@@ -88,7 +88,7 @@ class DownloadService[F[_]](
 
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
-          _ <- checkpointAcceptanceService.waitingForResolving.modify { blocks =>
+          _ <- checkpointService.waitingForResolving.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
             (updated, ())
           }
@@ -103,7 +103,7 @@ class DownloadService[F[_]](
               _.traverse { b =>
                 logger.debug(s"Accepting block above majority: ${b.height}") >>
                   C.evalOn(boundedExecutionContext) {
-                      checkpointAcceptanceService.accept(b)
+                    checkpointService.accept(b)
                     }
                     .handleErrorWith { error =>
                       logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
@@ -120,7 +120,7 @@ class DownloadService[F[_]](
       _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
       _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
       _ <- LiftIO[F].liftIO(dao.addressService.clear)
-      _ <- LiftIO[F].liftIO(dao.soeService.clear)
+      _ <- checkpointService.clearSoe
     } yield ()
 
   private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] =
@@ -144,7 +144,7 @@ object DownloadService {
   def apply[F[_]: Concurrent: ContextShift](
     redownloadService: RedownloadService[F],
     cluster: Cluster[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F],
+    checkpointService: CheckpointService[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
@@ -153,7 +153,7 @@ object DownloadService {
     new DownloadService[F](
       redownloadService,
       cluster,
-      checkpointAcceptanceService,
+      checkpointService,
       apiClient,
       metrics,
       boundedExecutionContext,

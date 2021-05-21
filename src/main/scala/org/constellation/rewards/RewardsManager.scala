@@ -171,7 +171,7 @@ class RewardsManager[F[_]: Concurrent](
 
   private def observationsFromSnapshot(snapshot: Snapshot): F[Seq[Observation]] =
     snapshot.checkpointBlocks.toList
-      .traverse(checkpointService.fullData)
+      .traverse(checkpointService.fullDataCheckpoint)
       .map(_.flatten.flatMap(_.checkpointBlock.observations))
 
   private def updateAddressBalances(rewards: Map[String, Long]): F[Map[String, Long]] =

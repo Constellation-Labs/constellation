@@ -148,7 +148,7 @@ class ConsensusManagerTest
       dao.id shouldReturn owner
       dao.transactionService.pullForConsensus(*) shouldReturnF List(TransactionCacheData(tx1))
       dao.readyFacilitatorsAsync shouldReturnF peersMap
-      dao.concurrentTipService.pull(*)(*) shouldReturnF tips
+      dao.concurrentTipService.pullTips(*)(*) shouldReturnF tips
       dao.threadSafeMessageMemPool.pull(*) shouldReturn None
       dao.observationService.pullForConsensus(*) shouldReturnF List(obs1)
       dao.readyPeers(NodeType.Light) shouldReturnF Map.empty

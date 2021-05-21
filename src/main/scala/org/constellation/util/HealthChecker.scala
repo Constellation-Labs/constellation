@@ -3,9 +3,9 @@ package org.constellation.util
 import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.schema.{Id, NodeState}
-import org.constellation.storage.ConcurrentTipService
 import org.constellation.{ConfigUtil, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
@@ -55,7 +55,7 @@ case class RecentSync(hash: String, height: Long)
 
 class HealthChecker[F[_]: Concurrent](
   dao: DAO,
-  concurrentTipService: ConcurrentTipService[F],
+  checkpointService: CheckpointService[F],
   apiClient: ClientInterpreter[F],
   unboundedBlocker: Blocker
 )(implicit C: ContextShift[F]) {
@@ -125,67 +125,12 @@ class HealthChecker[F[_]: Concurrent](
         val maxNextSnapshotHeight = nodesWithHeights.maximumOption
 
         if (maxNextSnapshotHeight.nonEmpty) {
-          concurrentTipService.clearStaleTips(maxNextSnapshotHeight.get)
+          checkpointService.clearStaleTips(maxNextSnapshotHeight.get)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(
           s"[Clear stale tips] Size=${nextSnasphotHeights.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
         )
     } yield ()
-
-  /*
-  def startReDownload(
-    diff: SnapshotDiff,
-    peers: Map[Id, PeerData]
-  ): F[Unit] = {
-    val reDownload = for {
-      _ <- logger.info(s"[${dao.id.short}] Starting re-download process ${diff.snapshotsToDownload.size}")
-
-      _ <- logger.debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
-
-      _ <- LiftIO[F].liftIO(dao.terminateConsensuses())
-      _ <- logger.debug(s"[${dao.id.short}] Consensuses terminated")
-
-      _ <- downloader.reDownload(
-        diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
-        peers.filterKeys(diff.peers.contains)
-      )
-
-      _ <- Snapshot.removeSnapshots(
-        diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash)
-      )
-
-      _ <- logger.info(s"[${dao.id.short}] Re-download process finished")
-      _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
-    } yield ()
-
-    val wrappedDownload =
-      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { stateSetResult =>
-        if (stateSetResult.isNewSet) {
-          val recover = reDownload.handleErrorWith { err =>
-            for {
-              _ <- logger.error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
-              recoverSet <- cluster.compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-              _ <- logger
-                .info(s"[${dao.id.short}] trying set state back to: ${stateSetResult.oldState} result: ${recoverSet}")
-              _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
-              _ <- Sync[F].raiseError[Unit](err)
-            } yield ()
-          }
-
-          recover.flatMap(
-            _ =>
-              cluster
-                .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-                .void
-          )
-        } else {
-          logger.warn(s"Download process can't start due to invalid node state: ${stateSetResult.oldState}")
-        }
-      }
-
-    wrappedDownload
-  }
- */
 
 }

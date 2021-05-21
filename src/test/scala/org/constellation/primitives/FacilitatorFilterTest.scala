@@ -38,7 +38,7 @@ class FacilitatorFilterTest
   dao.processingConfig shouldReturn ProcessingConfig()
 
   val checkpointServiceMock: CheckpointService[IO] = mock[CheckpointService[IO]]
-  checkpointServiceMock.lookup(*) shouldReturn IO.pure { Some(CheckpointCacheMetadata(null, 0, Some(Height(1, 78)))) }
+  checkpointServiceMock.lookupCheckpoint(*) shouldReturn IO.pure { Some(CheckpointCacheMetadata(null, 0, Some(Height(1, 78)))) }
   dao.checkpointService shouldReturn checkpointServiceMock
   val concurrentTipService: ConcurrentTipService[IO] = mock[ConcurrentTipService[IO]]
   dao.concurrentTipService shouldReturn concurrentTipService

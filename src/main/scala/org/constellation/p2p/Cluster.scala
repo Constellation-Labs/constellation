@@ -713,7 +713,7 @@ class Cluster[F[_]](
       _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
       _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
       _ <- LiftIO[F].liftIO(dao.addressService.clear)
-      _ <- LiftIO[F].liftIO(dao.soeService.clear)
+      _ <- LiftIO[F].liftIO(dao.soeService.clearSoe)
       _ <- LiftIO[F].liftIO(dao.transactionService.clear)
       _ <- LiftIO[F].liftIO(dao.observationService.clear)
       _ <- LiftIO[F].liftIO(dao.redownloadService.clear)

@@ -10,7 +10,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.mapref.MapRef
 import io.circe.{Decoder, Encoder}
-import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
+import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
 import org.constellation.concurrency.MapRefUtils
 import org.constellation.concurrency.MapRefUtils.MapRefOps
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
@@ -45,7 +45,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   snapshotService: SnapshotService[F],
   cloudService: CloudServiceEnqueue[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F],
+  checkpointService: CheckpointService[F],
   rewardsManager: RewardsManager[F],
   apiClient: ClientInterpreter[F],
   keyPair: KeyPair,
@@ -353,7 +353,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
-          _ <- checkpointAcceptanceService.waitingForResolving.modify { blocks =>
+          _ <- checkpointService.waitingForResolving.modify { blocks =>
             val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
             (updated, ())
           }
@@ -364,7 +364,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
           _ <- sorted.toList.traverse { b =>
             logger.debug(s"Accepting block above majority: ${b.height}") >>
               C.evalOn(boundedExecutionContext) {
-                  checkpointAcceptanceService
+                checkpointService
                     .accept(b)
                 }
                 .handleErrorWith(
@@ -703,13 +703,13 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private[redownload] def acceptCheckpointBlocks(): EitherT[F, Throwable, Unit] =
     (for {
       blocksToAccept <- snapshotService.syncBufferPull().map(_.values.toSeq.map(_.checkpointCacheData).distinct)
-      _ <- checkpointAcceptanceService.waitingForResolving.modify { blocks =>
+      _ <- checkpointService.waitingForResolving.modify { blocks =>
         val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
         (updated, ())
       }
       _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
         logger.debug(s"Accepting sync buffer block: ${b.height}") >>
-          checkpointAcceptanceService.accept(b).handleErrorWith { error =>
+          checkpointService.accept(b).handleErrorWith { error =>
             logger.warn(error)(s"Error during buffer pool blocks acceptance after redownload") >> F.unit
           }
       }
@@ -802,7 +802,7 @@ object RedownloadService {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     cloudService: CloudServiceEnqueue[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F],
+    checkpointService: CheckpointService[F],
     rewardsManager: RewardsManager[F],
     apiClient: ClientInterpreter[F],
     keyPair: KeyPair,
@@ -821,7 +821,7 @@ object RedownloadService {
       snapshotInfoStorage,
       snapshotService,
       cloudService,
-      checkpointAcceptanceService,
+      checkpointService,
       rewardsManager,
       apiClient,
       keyPair,

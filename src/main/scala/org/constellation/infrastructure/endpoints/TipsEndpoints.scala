@@ -36,7 +36,7 @@ class TipsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
   private def getTipsEndpoint(concurrentTipService: ConcurrentTipService[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
-      case GET -> Root / "tips" => concurrentTipService.toMap.map(_.asJson).flatMap(Ok(_))
+      case GET -> Root / "tips" => concurrentTipService.tipsToMap.map(_.asJson).flatMap(Ok(_))
     }
 
   private def getHeights(
@@ -47,8 +47,8 @@ class TipsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
     HttpRoutes.of[F] {
       case GET -> Root / "heights" =>
         (for {
-          tips <- concurrentTipService.toMap
-          maybeHeights <- tips.toList.traverse { case (hash, _) => checkpointService.lookup(hash) }
+          tips <- concurrentTipService.tipsToMap
+          maybeHeights <- tips.toList.traverse { case (hash, _) => checkpointService.lookupCheckpoint(hash) }
           response = maybeHeights.flatMap(_.flatMap(_.height))
         } yield response.asJson).flatMap(Ok(_))
 
