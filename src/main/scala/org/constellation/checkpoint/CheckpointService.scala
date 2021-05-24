@@ -28,12 +28,12 @@ import org.constellation.concurrency.SingleLock
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.util.Logging.logThread
 
+import java.security.KeyPair
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.Random
 
 class CheckpointService[F[_]: Concurrent: Timer: Clock](
-  dao: DAO,
   merkleService: CheckpointMerkleService[F],
   addressService: AddressService[F],
   blacklistedAddresses: BlacklistedAddresses[F],
@@ -49,8 +49,12 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   maxWidth: Int,
   maxTipUsage: Int,
   numFacilitatorPeers: Int,
-  facilitatorFilter: FacilitatorFilter[F]
-) {
+  facilitatorFilter: FacilitatorFilter[F],
+  id: Id,
+  metrics: Metrics,
+  keyPair: KeyPair,
+  recentBlockTracker: RecentDataTracker[CheckpointCache]
+)(C: ContextShift[F]) {
 
   implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
@@ -80,7 +84,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
 
   def batchRemoveCheckpoint(cbs: List[String]): F[Unit] =
     logger
-      .debug(s"[${dao.id.short}] applying snapshot for blocks: $cbs from others")
+      .debug(s"[${id.short}] applying snapshot for blocks: $cbs from others")
       .flatMap(_ => cbs.map(checkpointMemPool.remove).sequence.void)
 
   def fetchBatchTransactions(merkleRoot: String): F[List[Transaction]] =
@@ -147,13 +151,13 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
           if (parent.isEmpty) {
             logger
               .debug(s"SOEHash $soeHash missing from soeService for cb: ${cb.baseHash}")
-              .flatTap(_ => dao.metrics.incrementMetricAsync("parentSOEServiceQueryFailed"))
+              .flatTap(_ => metrics.incrementMetricAsync("parentSOEServiceQueryFailed"))
               .map(
                 _ => cb.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap { _.baseHash }
               )
               .flatTap(
                 parentDirect =>
-                  if (parentDirect.isEmpty) dao.metrics.incrementMetricAsync("parentDirectTipReferenceMissing")
+                  if (parentDirect.isEmpty) metrics.incrementMetricAsync("parentDirectTipReferenceMissing")
                   else Sync[F].unit
               )
           } else Sync[F].delay(parent.map(_.baseHash))
@@ -165,7 +169,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
     parentSOEBaseHashes(cb)
       .flatTap(
         l =>
-          if (l.isEmpty) dao.metrics.incrementMetricAsync("heightCalculationSoeBaseMissing")
+          if (l.isEmpty) metrics.incrementMetricAsync("heightCalculationSoeBaseMissing")
           else Sync[F].unit
       )
       .flatMap { soeBaseHashes =>
@@ -175,19 +179,19 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         val maybeHeight = parents.flatMap(_.flatMap(_.height))
         if (maybeHeight.isEmpty) None else Some(Height(maybeHeight.map(_.min).min + 1, maybeHeight.map(_.max).max + 1))
       }
-      .flatTap(h => if (h.isEmpty) dao.metrics.incrementMetricAsync("heightCalculationParentMissing") else Sync[F].unit)
+      .flatTap(h => if (h.isEmpty) metrics.incrementMetricAsync("heightCalculationParentMissing") else Sync[F].unit)
 
   def getParents(c: CheckpointBlock): F[List[CheckpointBlock]] =
     parentSOEBaseHashes(c)
       .flatTap(
         l =>
-          if (l.size != 2) dao.metrics.incrementMetricAsync("validationParentSOEBaseHashesMissing")
+          if (l.size != 2) metrics.incrementMetricAsync("validationParentSOEBaseHashesMissing")
           else Sync[F].unit
       )
       .flatMap(_.traverse(fullDataCheckpoint))
       .flatTap(
         cbs =>
-          if (cbs.exists(_.isEmpty)) dao.metrics.incrementMetricAsync("validationParentCBLookupMissing")
+          if (cbs.exists(_.isEmpty)) metrics.incrementMetricAsync("validationParentCBLookupMissing")
           else Sync[F].unit
       )
       .map(_.flatMap(_.map(_.checkpointBlock)))
@@ -213,7 +217,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
     checkpointBlockValidator
       .simpleValidation(sr.checkpointBlock)
       .map(_.isValid)
-      .map(valid => if (valid) Some(hashSign(sr.checkpointBlock.baseHash, dao.keyPair)) else none[HashSignature])
+      .map(valid => if (valid) Some(hashSign(sr.checkpointBlock.baseHash, keyPair)) else none[HashSignature])
       .map(SignatureResponse(_))
 
 
@@ -231,7 +235,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
               .getLastAcceptedTransactionRef(hash)
               .map(
                 la =>
-                  s"${if (correct) s"${Console.GREEN}+++" else s"${Console.RED}---"}[${dao.id.short}] [${cb.baseHash}] Last accepted: ${la} | Tx ref: ${txs.headOption
+                  s"${if (correct) s"${Console.GREEN}+++" else s"${Console.RED}---"}[${id.short}] [${cb.baseHash}] Last accepted: ${la} | Tx ref: ${txs.headOption
                     .map(_.lastTxRef)} | Tx first: ${txs.headOption.map(a => (a.hash, a.ordinal))} | Tx last: ${txs.lastOption
                     .map(a => (a.hash, a.ordinal))} | Src: $hash | Dummy: ${txs.headOption.map(_.isDummy)} ${Console.RESET}"
               )
@@ -256,7 +260,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
       case state =>
         logger.warn(
           s"Node (state=${state}) cannot accept checkpoint hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash}"
-        ) >> Sync[F].raiseError[Unit](PendingDownloadException(dao.id))
+        ) >> Sync[F].raiseError[Unit](PendingDownloadException(id))
     }
 
   def accept(checkpoint: FinishedCheckpoint)(implicit cs: ContextShift[F]): F[Unit] = {
@@ -264,7 +268,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
     val acceptance = for {
       _ <- syncPending(pendingAcceptanceFromOthers, cb.baseHash)
       _ <- checkPending(cb.baseHash)
-      _ <- logger.debug(s"[${dao.id.short}] starting accept block: ${cb.baseHash} from others")
+      _ <- logger.debug(s"[${id.short}] starting accept block: ${cb.baseHash} from others")
       _ <- accept(checkpoint.checkpointCacheData, checkpoint.facilitators)
       _ <- pendingAcceptanceFromOthers.modify(p => (p.filterNot(_ == cb.baseHash), ()))
     } yield ()
@@ -283,14 +287,14 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
     val acceptCheckpoint: F[Unit] =
       for {
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Added for acceptance")
-        _ <- concurrentTipService.registerUsages(checkpoint)
+        _ <- registerUsages(checkpoint)
         _ <- acceptLock.acquire
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Acquired lock")
         _ <- syncPending(pendingAcceptance, cb.baseHash)
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking already stored")
         _ <- containsCheckpoint(cb.baseHash)
           .ifM(
-            dao.metrics
+            metrics
               .incrementMetricAsync[F]("checkpointAcceptBlockAlreadyStored") >> CheckpointAcceptBlockAlreadyStored(cb)
               .raiseError[F, Unit],
             Sync[F].unit
@@ -317,13 +321,12 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
           )
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Checking conflicts")
-        conflicts <- LiftIO[F].liftIO(checkpointBlockValidator.containsAlreadyAcceptedTx(cb))
+        conflicts <- checkpointBlockValidator.containsAlreadyAcceptedTx(cb)
 
         _ <- conflicts match {
           case Nil => Sync[F].unit
           case xs =>
-            concurrentTipService
-              .putConflictingTips(cb.baseHash, cb)
+            putConflictingTips(cb.baseHash, cb)
               .flatMap(_ => transactionService.removeConflicting(xs))
               .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
         }
@@ -337,7 +340,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
             .traverse(
               id =>
                 observationService
-                  .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation.toString))(dao.keyPair))
+                  .put(Observation.create(id, CheckpointBlockInvalid(cb.baseHash, validation.toString))(keyPair))
             )
             .flatMap(
               _ =>
@@ -358,31 +361,30 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         maybeHeight <- calculateHeight(cb).map(h => if (h.isEmpty) checkpoint.height else h)
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Height is empty: ${maybeHeight.isEmpty}")
         height <- if (maybeHeight.isEmpty) {
-          dao.metrics
+          metrics
             .incrementMetricAsync[F](Metrics.heightEmpty)
             .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
         } else Sync[F].pure(maybeHeight.get)
 
         lastSnapshotHeight <- snapshotService.getLastSnapshotHeight
         _ <- if (height.min <= lastSnapshotHeight.toLong) {
-          dao.metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
+          metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
             HeightBelow(checkpoint.checkpointBlock, height).raiseError[F, Unit]
         } else Sync[F].unit
 
         _ <- logger.debug(s"[Accept checkpoint][${cb.baseHash}] Accept data")
         _ <- putCheckpoint(checkpoint.copy(height = maybeHeight))
         _ <- incrementChildrenCount(cb) // TODO: is it used?
-        _ <- Sync[F].delay(dao.recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
-        _ <- acceptMessages(cb)
+        _ <- Sync[F].delay(recentBlockTracker.put(checkpoint.copy(height = maybeHeight)))
         doubleSpendTxs <- checkDoubleSpendTransaction(cb)
         _ <- acceptTransactions(cb, Some(checkpoint), doubleSpendTxs.map(_.hash))
         _ <- acceptObservations(cb, Some(checkpoint))
         _ <- updateRateLimiting(cb)
         _ <- transactionService.findAndRemoveInvalidPendingTxs()
-        _ <- logger.debug(s"[${dao.id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
-        _ <- concurrentTipService.updateTips(cb, height)
+        _ <- logger.debug(s"[${id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
+        _ <- updateTips(cb, height)
         _ <- snapshotService.updateAcceptedCBSinceSnapshot(cb)
-        _ <- dao.metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
+        _ <- metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
         _ <- incrementMetricIfDummy(cb)
         _ <- pendingAcceptance.modify(pa => (pa.filterNot(_ == cb.baseHash), ()))
         _ <- waitingForResolving.modify(w => (w.filterNot(_ == cb.soeHash), ()))
@@ -400,8 +402,8 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
             AwaitingCheckpointBlock.hasNoBlacklistedTxs(c.checkpointBlock)(blacklistedAddresses)
           })
 
-        _ <- dao.metrics.updateMetricAsync[F]("awaitingForAcceptance", awaitingBlocks.size)
-        _ <- dao.metrics.updateMetricAsync[F]("allowedForAcceptance", allowedToAccept.size)
+        _ <- metrics.updateMetricAsync[F]("awaitingForAcceptance", awaitingBlocks.size)
+        _ <- metrics.updateMetricAsync[F]("allowedForAcceptance", allowedToAccept.size)
         _ <- logger.debug(
           s"Awaiting for acceptance: ${awaitingBlocks.size} | Allowed to accept: ${allowedToAccept.size}"
         )
@@ -440,9 +442,9 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
       doubleSpendTxs <- CheckpointBlockDoubleSpendChecker.check(cb)(transactionService.transactionChainService)
       _ <- if (doubleSpendTxs.nonEmpty)
         logger.info(
-          s"[${dao.id.short}] CheckpointBlock with hash=${cb.baseHash} : contains double spend transactions=${doubleSpendTxs
+          s"[${id.short}] CheckpointBlock with hash=${cb.baseHash} : contains double spend transactions=${doubleSpendTxs
             .map(_.hash)} : from address : ${doubleSpendTxs.map(_.src.address)}"
-        ) >> dao.metrics.updateMetricAsync[F]("doubleSpendTransactions", doubleSpendTxs.size)
+        ) >> metrics.updateMetricAsync[F]("doubleSpendTransactions", doubleSpendTxs.size)
       else Sync[F].unit
       _ <- if (doubleSpendTxs.nonEmpty) blacklistedAddresses.addAll(doubleSpendTxs.map(_.src.address)) else Sync[F].unit
     } yield doubleSpendTxs
@@ -464,8 +466,6 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
     }
 
   def resolveMissingReferences(cb: CheckpointBlock)(implicit cs: ContextShift[F]): F[Unit] = {
-    implicit val _dao = dao
-
     getMissingTransactionReferences(cb)(transactionService.transactionChainService).map { txs =>
       txs.flatMap(_.headOption)
     }.flatMap { txs =>
@@ -513,7 +513,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
           _.filterA(hash => awaiting.get.map(_.map(_.checkpointBlock.baseHash).contains(hash)).map(!_))
         }
         .flatMap(_.traverse(hash => dataResolver.resolveCheckpointDefaults(hash)))
-      _ <- cbs.traverse(accept(_)(boundedContextShift).handleErrorWith(_ => Sync[F].unit))
+      _ <- cbs.traverse(accept(_)(C).handleErrorWith(_ => Sync[F].unit))
     } yield cbs
 
   def acceptErrorHandler(err: Throwable)(implicit cs: ContextShift[F]): F[Unit] =
@@ -532,7 +532,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         acceptLock.release >>
           logger.debug(s"[Accept checkpoint][3-${cb.baseHash}] Release lock") >>
           Concurrent[F].start(resolveMissingParents(cb)) >>
-          dao.metrics.incrementMetricAsync("missingParents") >>
+          metrics.incrementMetricAsync("missingParents") >>
           error.raiseError[F, Unit]
 
       case error @ MissingTransactionReference(cb) =>
@@ -545,13 +545,13 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         acceptLock.release >>
           logger.debug(s"[Accept checkpoint][5-?] Release lock") >>
           logger.error(otherError)(s"Error when accepting block") >>
-          dao.metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") >>
+          metrics.incrementMetricAsync[F]("acceptCheckpoint_failure") >>
           otherError.raiseError[F, Unit]
     }
 
   private def incrementMetricIfDummy(checkpointBlock: CheckpointBlock): F[Unit] =
     if (checkpointBlock.transactions.forall(_.isDummy)) {
-      dao.metrics.incrementMetricAsync[F]("checkpointsAcceptedWithDummyTxs")
+      metrics.incrementMetricAsync[F]("checkpointsAcceptedWithDummyTxs")
     } else {
       Sync[F].unit
     }
@@ -585,15 +585,15 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   private def transfer(tx: Transaction): F[Unit] =
     shouldTransfer(tx).ifM(
       addressService.transferTransaction(tx).void,
-      logger.debug(s"[${dao.id.short}] Transaction with hash blocked=${tx.hash} : is dummy=${tx.isDummy}")
+      logger.debug(s"[${id.short}] Transaction with hash blocked=${tx.hash} : is dummy=${tx.isDummy}")
     )
 
   private def shouldTransfer(tx: Transaction): F[Boolean] =
     for {
       isBlacklisted <- isBlacklistedAddress(tx)
-      _ <- if (isBlacklisted) dao.metrics.incrementMetricAsync[F]("blockedBlacklistedTxs") else Sync[F].unit
+      _ <- if (isBlacklisted) metrics.incrementMetricAsync[F]("blockedBlacklistedTxs") else Sync[F].unit
       _ <- if (isBlacklisted)
-        logger.info(s"[$dao.id.short] Transaction with hash=${tx.hash} : is from blacklisted address=${tx.src.address}")
+        logger.info(s"[$id.short] Transaction with hash=${tx.hash} : is from blacklisted address=${tx.src.address}")
       else Sync[F].unit
       isDummy = tx.isDummy
     } yield !(isBlacklisted || isDummy)
@@ -604,50 +604,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   private def updateRateLimiting(cb: CheckpointBlock): F[Unit] =
     rateLimiting.update(cb.transactions.toList)
 
-  private def acceptMessages(cb: CheckpointBlock): F[List[Unit]] =
-    LiftIO[F].liftIO {
-      cb.messages.map { m =>
-        val channelMessageMetadata = ChannelMessageMetadata(m, Some(cb.baseHash))
-        val messageUpdate =
-          if (!m.signedMessageData.data.previousMessageHash.equals(Genesis.Coinbase)) {
-            for {
-              _ <- dao.messageService.memPool.put(
-                m.signedMessageData.data.channelId,
-                channelMessageMetadata
-              )
-              _ <- dao.channelService.update(
-                m.signedMessageData.hash, { cmd =>
-                  val slicedMessages = cmd.last25MessageHashes.slice(0, 25)
-                  cmd.copy(
-                    totalNumMessages = cmd.totalNumMessages + 1,
-                    last25MessageHashes = Seq(m.signedMessageData.hash) ++ slicedMessages
-                  )
-                }
-              )
-            } yield ()
-          } else {
-            IO.unit
-            // Unsafe json extract
-            //            dao.channelService.put(
-            //              m.signedMessageData.hash,
-            //              ChannelMetadata(
-            //                m.signedMessageData.data.message.x[ChannelOpen],
-            //                channelMessageMetadata
-            //              )
-            //            )
-          }
-
-        for {
-          _ <- messageUpdate
-          _ <- dao.messageService.memPool
-            .put(m.signedMessageData.hash, channelMessageMetadata)
-          _ <- dao.metrics.incrementMetricAsync[IO]("messageAccepted")
-        } yield ()
-      }.toList.sequence
-    }
-
   /*** concurrent tip service ***/
-
 
   private val snapshotHeightInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
@@ -715,10 +672,10 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
               _ <- tipData match {
                 case None => Sync[F].unit
                 case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
-                  removeTips(block.baseHash)(dao.metrics)
+                  removeTips(block.baseHash)(metrics)
                 case Some(TipData(block, numUses, tipHeight)) =>
-                  putUnsafeTips(block.baseHash, checkpoint.TipData(block, numUses + 1, tipHeight))(dao.metrics)
-                    .flatMap(_ => dao.metrics.incrementMetricAsync("checkpointTipsIncremented"))
+                  putUnsafeTips(block.baseHash, checkpoint.TipData(block, numUses + 1, tipHeight))(metrics)
+                    .flatMap(_ => metrics.incrementMetricAsync("checkpointTipsIncremented"))
               }
             } yield ()
           }
@@ -730,7 +687,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         .flatMap(
           min =>
             if (isGenesis || min < height.min || usages < maxTipUsage)
-              putUnsafeTips(checkpointBlock.baseHash, TipData(checkpointBlock, usages, height))(dao.metrics)
+              putUnsafeTips(checkpointBlock.baseHash, TipData(checkpointBlock, usages, height))(metrics)
             else
               logger.debug(
                 s"Block height: ${height.min} with usages=${usages} above the limit or below min tip: $min | update skipped"
@@ -738,10 +695,10 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         )
         .recoverWith {
           case err: TipThresholdException =>
-            dao.metrics
+            metrics
               .incrementMetricAsync("memoryExceeded_thresholdMetCheckpoints")
               .flatMap(_ => sizeTips)
-              .flatMap(s => dao.metrics.updateMetricAsync("activeTips", s))
+              .flatMap(s => metrics.updateMetricAsync("activeTips", s))
               .flatMap(_ => Sync[F].raiseError[Unit](err))
         },
       "concurrentTipService_updateUnsafe"
@@ -793,8 +750,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   def putConflictingTips(k: String, v: CheckpointBlock): F[Unit] = {
     val unsafePut = for {
       size <- conflictingTips.get.map(_.size)
-      _ <- dao.metrics
-        .updateMetricAsync("conflictingTips", size)
+      _ <- metrics.updateMetricAsync("conflictingTips", size)
       _ <- conflictingTips.modify(c => (c + (k -> v), ()))
     } yield ()
 

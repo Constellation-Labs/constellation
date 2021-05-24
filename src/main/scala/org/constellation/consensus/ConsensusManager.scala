@@ -39,16 +39,14 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   apiClient: ClientInterpreter[F],
   dataResolver: DataResolver[F],
   checkpointBlockGossipService: CheckpointBlockGossipService[F],
-  dao: DAO,
   config: Config,
   remoteCall: Blocker,
   calculationContext: ContextShift[F],
-  metrics: Metrics
+  metrics: Metrics,
+  nodeId: Id
 ) {
 
   import ConsensusManager._
-
-  implicit val shadowDAO: DAO = dao
 
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   private val maxTransactionThreshold: Int =
@@ -89,7 +87,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     val startRoundTask = for {
       _ <- metrics.incrementMetricAsync("consensus_startOwnRound")
       roundId <- withLock("startOwnRound", syncRoundInProgress())
-      _ <- logger.debug(s"[${dao.id.short}] Starting own consensus $roundId")
+      _ <- logger.debug(s"[${nodeId.short}] Starting own consensus $roundId")
       roundData <- createRoundData(roundId)
       missing <- resolveMissingParents(roundData._1)
       roundInfo = ConsensusInfo[F](
@@ -104,7 +102,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           this,
           apiClient,
           checkpointBlockGossipService,
-          shadowDAO,
           config,
           remoteCall,
           calculationContext
@@ -113,7 +110,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         System.currentTimeMillis()
       )
       _ <- ownConsensus.modify(d => (d.map(o => o.copy(consensusInfo = roundInfo.some)), ()))
-      _ <- logger.debug(s"[${dao.id.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
+      _ <- logger.debug(s"[${nodeId.short}] created data for round: ${roundId} with facilitators: ${roundData._1.peers
         .map(_.peerMetadata.id.short)}")
       responses <- remoteSender.notifyFacilitators(roundData._1)
       _ <- if (responses.forall(_ == true)) Sync[F].unit
@@ -168,28 +165,28 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       transactions <- transactionService.pullForConsensus(maxTransactionThreshold)
       _ <- logger.info(s"Pulled for new consensus: ${transactions.size}")
-      facilitators <- LiftIO[F].liftIO(dao.readyFacilitatorsAsync)
-      tips <- checkpointService.pullTips(facilitators)(dao.metrics)
+      facilitators <- LiftIO[F].liftIO(readyFacilitatorsAsync)
+      tips <- checkpointService.pullTips(facilitators)(metrics)
       _ <- if (tips.isEmpty)
         Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
       _ <- if (tips.get.peers.isEmpty)
         Sync[F].raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
-      messages <- Sync[F].delay(dao.threadSafeMessageMemPool.pull().getOrElse(Seq()))
+      messages <- Seq() // Sync[F].delay(threadSafeMessageMemPool.pull().getOrElse(Seq()))
       observations <- observationService.pullForConsensus(maxObservationThreshold)
-      lightNodes <- LiftIO[F].liftIO(dao.readyPeers(NodeType.Light))
+      lightNodes <- readyPeers(NodeType.Light)
       lightPeers = if (lightNodes.isEmpty) Set.empty[PeerData]
       else
         Set(lightNodes.minBy(p => Distance.calculate(transactions.head.transaction.baseHash, p._1))._2) // TODO: Choose more than one tx and light peers
-      allFacilitators = tips.get.peers.values.map(_.peerMetadata.id).toSet ++ Set(dao.id)
+      allFacilitators = tips.get.peers.values.map(_.peerMetadata.id).toSet ++ Set(nodeId)
       arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators).map(_.filter(t => t._2 == 1))
       roundData = (
         RoundData(
           roundId,
           tips.get.peers.values.toSet,
           lightPeers,
-          FacilitatorId(dao.id),
+          FacilitatorId(nodeId),
           transactions.map(_.transaction),
           tips.get.tipSoe,
           messages,
@@ -206,7 +203,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       state <- cluster.getNodeState
       _ <- if (NodeState.canParticipateConsensus(state)) Sync[F].unit
       else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForConsensusParticipation, state))
-      allFacilitators = roundData.peers.map(_.peerMetadata.id) ++ Set(dao.id)
+      allFacilitators = roundData.peers.map(_.peerMetadata.id) ++ Set(nodeId)
       arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators)
       updatedRoundData <- adjustPeers(roundData)
       roundInfo = ConsensusInfo(
@@ -221,7 +218,6 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           this,
           apiClient,
           checkpointBlockGossipService,
-          shadowDAO,
           config,
           remoteCall,
           calculationContext
@@ -230,7 +226,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         System.currentTimeMillis()
       )
       _ <- consensuses.modify(r => (r + (roundData.roundId -> roundInfo), ()))
-      _ <- logger.debug(s"[${dao.id.short}] Participate in round ${updatedRoundData.roundId}")
+      _ <- logger.debug(s"[${nodeId.short}] Participate in round ${updatedRoundData.roundId}")
     } yield (roundInfo, updatedRoundData)).onError {
       case SnapshotHeightAboveTip(_, _, _) =>
         metrics.incrementMetricAsync("consensus_participateInRound_snapshotHeightAboveTipError")
@@ -253,7 +249,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       missed <- proposals.lookup(roundId.toString).map(_.toList.flatten)
       _ <- proposals.put(roundId.toString, missed :+ roundCommand)
-      _ <- logger.debug(s"[${dao.id.short}] Put to proposals : ${roundId.toString}")
+      _ <- logger.debug(s"[${nodeId.short}] Put to proposals : ${roundId.toString}")
     } yield ()
 
   def passMissed(roundId: RoundId, consensus: Consensus[F]): F[Unit] =
@@ -269,11 +265,11 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   def terminateConsensuses(): F[Unit] =
     for {
       _ <- logger.debug(
-        s"[${dao.id.short}] Terminating all consensuses - waiting"
+        s"[${nodeId.short}] Terminating all consensuses - waiting"
       )
       _ <- Timer[F].sleep(5 seconds)
       _ <- logger.debug(
-        s"[${dao.id.short}] Terminating all consensuses"
+        s"[${nodeId.short}] Terminating all consensuses"
       )
       runningConsensuses <- consensuses.get
       ownRound <- ownConsensus.get.map(_.flatMap(o => o.consensusInfo.map(i => o.roundId -> i)))
@@ -305,11 +301,11 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
       _ <- observationService.clearInConsensus(cmd.observationsToReturn.map(_.hash))
       _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
-      _ = releaseMessages(cmd.maybeCB)
+//      _ = releaseMessages(cmd.maybeCB)
       _ <- proposals.remove(cmd.roundId.toString)
-      _ <- logger.debug(s"[${dao.id.short}] Removed from proposals : ${cmd.roundId.toString}")
+      _ <- logger.debug(s"[${nodeId.short}] Removed from proposals : ${cmd.roundId.toString}")
       _ <- logger.debug(
-        s"[${dao.id.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.baseHash).getOrElse("empty")}"
+        s"[${nodeId.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.baseHash).getOrElse("empty")}"
       )
     } yield ()
 
@@ -327,16 +323,16 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         cluster.updatePeerNotifications(nonEmpty)
     }
 
-  def releaseMessages(maybeCB: Option[CheckpointBlock]): Unit =
-    maybeCB.foreach(
-      cb =>
-        cb.messages.foreach(
-          message =>
-            dao.threadSafeMessageMemPool.activeChannels
-              .get(message.signedMessageData.data.channelId)
-              .foreach(_.release())
-        )
-    )
+//  def releaseMessages(maybeCB: Option[CheckpointBlock]): Unit =
+//    maybeCB.foreach(
+//      cb =>
+//        cb.messages.foreach(
+//          message =>
+//            threadSafeMessageMemPool.activeChannels
+//              .get(message.signedMessageData.data.channelId)
+//              .foreach(_.release())
+//        )
+//    )
 
   def cleanUpLongRunningConsensus: F[Unit] =
     for {
@@ -366,13 +362,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       }
       roundData.copy(
         peers = roundData.peers
-          .filter(_.peerMetadata.id != dao.id) + initiator
+          .filter(_.peerMetadata.id != nodeId) + initiator
       )
     }
 
   private[consensus] def resolveMissingParents(
     roundData: RoundData
-  )(implicit dao: DAO): F[List[CheckpointCache]] =
+  ): F[List[CheckpointCache]] =
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
@@ -391,7 +387,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           }
         }
       _ <- logger.debug(
-        s"[${dao.id.short}] Missing parents size=${missing.size}, existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
+        s"[${nodeId.short}] Missing parents size=${missing.size}, existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
       )
       _ <- if (missing.nonEmpty && (resolved.size != missing.size))
         logger.error(s"Missing parents: ${missing.map(_.hash)} with base hashes: ${missing.map(_.baseHash)}")
@@ -412,7 +408,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
             .toSeq
             .sortBy(_._2)
             .map(_._1)
-            .indexOf(dao.id)
+            .indexOf(nodeId)
         )
       }.toSeq)
   }

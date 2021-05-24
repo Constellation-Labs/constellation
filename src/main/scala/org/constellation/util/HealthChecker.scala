@@ -5,6 +5,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
+import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.{ConfigUtil, DAO}
 
@@ -54,13 +55,13 @@ object HealthChecker {
 case class RecentSync(hash: String, height: Long)
 
 class HealthChecker[F[_]: Concurrent](
-  dao: DAO,
   checkpointService: CheckpointService[F],
   apiClient: ClientInterpreter[F],
-  unboundedBlocker: Blocker
+  unboundedBlocker: Blocker,
+  id: Id,
+  cluster: Cluster[F],
+  numFacilitatorPeers: Int
 )(implicit C: ContextShift[F]) {
-
-  implicit val shadedDao: DAO = dao
 
   val logger = Slf4jLogger.getLogger[F]
 
@@ -73,22 +74,21 @@ class HealthChecker[F[_]: Concurrent](
 
   def checkForStaleTips(): F[Unit] = {
     val check = for {
-      _ <- logger.debug(s"[${dao.id.short}] Re-download checking cluster consistency")
+      _ <- logger.debug(s"[${id.short}] Re-download checking cluster consistency")
       _ <- clearStaleTips()
     } yield ()
 
     check.recoverWith {
       case err =>
         logger
-          .error(err)(s"[${dao.id.short}] Unexpected error during check for stale tips process: ${err.getMessage}")
+          .error(err)(s"[${id.short}] Unexpected error during check for stale tips process: ${err.getMessage}")
           .flatMap(_ => Sync[F].pure[Unit](None))
     }
   }
 
   private def collectNextSnapshotHeights(): F[Map[Id, Long]] =
     for {
-      peers <- LiftIO[F]
-        .liftIO(dao.cluster.getPeerInfo)
+      peers <- cluster.getPeerInfo
         .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)
@@ -111,7 +111,7 @@ class HealthChecker[F[_]: Concurrent](
       heights = nextSnasphotHeights.values.toList
       nodesWithHeights = heights.filter(_ > 0)
 
-      _ <- if (nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
+      _ <- if (nodesWithHeights.size >= numFacilitatorPeers) {
 
         /*
           nodes:            A     B     C
@@ -129,7 +129,7 @@ class HealthChecker[F[_]: Concurrent](
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(
-          s"[Clear stale tips] Size=${nextSnasphotHeights.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
+          s"[Clear stale tips] Size=${nextSnasphotHeights.size} numFacilPeers=${numFacilitatorPeers}"
         )
     } yield ()
 

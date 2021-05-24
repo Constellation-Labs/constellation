@@ -26,7 +26,6 @@ case class RollbackData(
 )
 
 class RollbackService[F[_]](
-  dao: DAO,
   snapshotService: SnapshotService[F],
   snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
@@ -112,7 +111,7 @@ class RollbackService[F[_]](
 
   private def acceptGenesis(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
     Concurrent[F].delay {
-      Genesis.acceptGenesis(genesisObservation)(dao)
+      Genesis.acceptGenesis(genesisObservation)
     }.attemptT
 
   private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): EitherT[F, Throwable, Unit] =

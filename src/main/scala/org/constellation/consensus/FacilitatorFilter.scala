@@ -13,8 +13,8 @@ import scala.util.Random
 
 class FacilitatorFilter[F[_]: Concurrent](
   apiClient: ClientInterpreter[F],
-  dao: DAO,
-  unboundedBlocker: Blocker
+  unboundedBlocker: Blocker,
+  id: Id
 )(implicit val CS: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -22,11 +22,11 @@ class FacilitatorFilter[F[_]: Concurrent](
   def filterPeers(peers: Map[Id, PeerData], numFacilitatorPeers: Int, tipSoe: TipSoe): F[Map[Id, PeerData]] =
     for {
       minTipHeight <- tipSoe.minHeight.getOrElse(0L).pure[F]
-      _ <- logger.debug(s"[${dao.id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
+      _ <- logger.debug(s"[${id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
 
       filteredPeers <- filterByHeight(Random.shuffle(peers.toList), minTipHeight, numFacilitatorPeers)
       peerIds = filteredPeers.map(_._1)
-      _ <- logger.debug(s"[${dao.id.short}] : [Facilitator Filter] : $peerIds : size = ${peerIds.size}")
+      _ <- logger.debug(s"[${id.short}] : [Facilitator Filter] : $peerIds : size = ${peerIds.size}")
     } yield peers.filter(peer => peerIds.contains(peer._1))
 
   private def filterByHeight(
@@ -43,7 +43,7 @@ class FacilitatorFilter[F[_]: Concurrent](
       val checkHeight = for {
         facilitatorHeight <- getFacilitatorNextSnapshotHeights(peer)
         _ <- logger.debug(
-          s"[${dao.id.short}] : [Facilitator Filter] : Checking facilitator with next snapshot height : $facilitatorHeight"
+          s"[${id.short}] : [Facilitator Filter] : Checking facilitator with next snapshot height : $facilitatorHeight"
         )
         height = facilitatorHeight._2
       } yield if (height <= ownHeight + 2) result :+ peer else result

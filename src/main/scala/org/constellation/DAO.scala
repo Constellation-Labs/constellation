@@ -100,8 +100,8 @@ class DAO(
   val messageValidator: MessageValidator = MessageValidator(id)
   val eigenTrust: EigenTrust[IO] = new EigenTrust[IO](id)
 
-  val transactionService: TransactionService[IO] = TransactionService[IO](transactionChainService, rateLimiting, this)
-  val transactionGossiping: TransactionGossiping[IO] = new TransactionGossiping[IO](transactionService, processingConfig.txGossipingFanout, this)
+  val transactionService: TransactionService[IO] = TransactionService[IO](transactionChainService, rateLimiting, metrics)
+  val transactionGossiping: TransactionGossiping[IO] = new TransactionGossiping[IO](transactionService, cluster, processingConfig.txGossipingFanout, id)
   val transactionValidator: TransactionValidator[IO] = new TransactionValidator[IO](transactionService)
 
   val cluster: Cluster[IO] = Cluster[IO](
@@ -109,14 +109,13 @@ class DAO(
     joiningPeerValidator,
     apiClient,
     sessionTokenService,
-    this,
     Blocker.liftExecutionContext(unboundedExecutionContext)
   )
 
   val trustManager: TrustManager[IO] = TrustManager[IO](id, cluster)
   val partitionerPeerSampling: PartitionerPeerSampling[IO] = PartitionerPeerSampling[IO](id, cluster, trustManager)
 
-  val observationService: ObservationService[IO] = new ObservationService[IO](trustManager, this)
+  val observationService: ObservationService[IO] = new ObservationService[IO](trustManager, metrics)
 
   val trustDataPollingScheduler: TrustDataPollingScheduler = TrustDataPollingScheduler(
     ConfigUtil.config,
@@ -124,8 +123,8 @@ class DAO(
     cluster,
     apiClient,
     partitionerPeerSampling,
-    this,
-    unboundedExecutionContext
+    unboundedExecutionContext,
+    metrics
   )
 
   val dataResolver: DataResolver[IO] = DataResolver(
@@ -149,7 +148,6 @@ class DAO(
   val checkpointBlockGossipService: CheckpointBlockGossipService[IO] = CheckpointBlockGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient, metrics)
 
   val checkpointService: CheckpointService[IO] = new CheckpointService[IO](
-    this,
     merkleService,
     addressService,
     blacklistedAddresses,
@@ -167,10 +165,14 @@ class DAO(
     processingConfig.numFacilitatorPeers,
     new FacilitatorFilter[IO](
       apiClient,
-      this,
-      Blocker.liftExecutionContext(unboundedExecutionContext)
-    )
-  )
+      Blocker.liftExecutionContext(unboundedExecutionContext),
+      id
+    ),
+    id,
+    metrics,
+    keyPair,
+    recentBlockTracker
+  )(contextShift)
 
   val rewardsManager: RewardsManager[IO] = new RewardsManager[IO](
     eigenTrust,
@@ -199,14 +201,14 @@ class DAO(
     apiClient,
     dataResolver,
     checkpointBlockGossipService,
-    this,
     ConfigUtil.config,
     Blocker.liftExecutionContext(unboundedExecutionContext),
     IO.contextShift(boundedExecutionContext),
-    metrics = metrics
+    metrics = metrics,
+    id: Id
   )
   val consensusWatcher: ConsensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager, unboundedExecutionContext)
-  val consensusScheduler: ConsensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, this, unboundedExecutionContext)
+  val consensusScheduler: ConsensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, unboundedExecutionContext)
 
   val snapshotService: SnapshotService[IO] = SnapshotService[IO](
     cloudStorage,
@@ -222,9 +224,12 @@ class DAO(
     snapshotInfoStorage,
     rewardsStorage,
     eigenTrust,
-    this,
     boundedExecutionContext,
-    unboundedExecutionContext
+    unboundedExecutionContext,
+    metrics,
+    processingConfig,
+    id,
+    cluster
   )
 
   val redownloadService: RedownloadService[IO] = RedownloadService[IO](
@@ -263,20 +268,23 @@ class DAO(
     checkpointService,
     transactionValidator,
     transactionChainService,
-    this
+    metrics,
+    id,
+    transactionService
   )
 
   val healthChecker = new HealthChecker[IO](
-    this,
     checkpointService,
     apiClient,
-    Blocker.liftExecutionContext(unboundedExecutionContext)
+    Blocker.liftExecutionContext(unboundedExecutionContext),
+    id,
+    cluster,
+    processingConfig.numFacilitatorPeers
   )
 
   var snapshotWatcher: SnapshotWatcher = new SnapshotWatcher(healthChecker, unboundedExecutionContext)
 
   val rollbackService: RollbackService[IO] = new RollbackService[IO](
-    this,
     snapshotService,
     snapshotStorage,
     snapshotInfoStorage,
@@ -328,8 +336,9 @@ class DAO(
 
   val redownloadPeriodicCheck: RedownloadPeriodicCheck = new RedownloadPeriodicCheck(
     processingConfig.redownloadPeriodicCheckTimeSeconds,
-    unboundedExecutionContext
-  )(this)
+    unboundedExecutionContext,
+    redownloadService
+  )
 
   var genesisBlock: Option[CheckpointBlock] = None
   var genesisObservation: Option[GenesisObservation] = None
@@ -356,10 +365,7 @@ class DAO(
 
   @volatile var nodeType: NodeType = NodeType.Full
 
-  lazy val messageService: MessageService[IO] = {
-    implicit val daoImpl: DAO = this
-    new MessageService[IO]()
-  }
+  lazy val messageService: MessageService[IO] = new MessageService[IO]()
 
   def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
 

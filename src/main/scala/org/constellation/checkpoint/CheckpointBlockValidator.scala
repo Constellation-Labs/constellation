@@ -8,14 +8,15 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder}
-import org.constellation.domain.transaction.{TransactionChainService, TransactionValidator}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService, TransactionValidator}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.edge.{ObservationEdge, SignedObservationEdge}
 import org.constellation.schema.signature.HashSignature
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import org.constellation.storage.{AddressService, SnapshotService}
 import org.constellation.util.Metrics
-import org.constellation.{ConfigUtil, DAO}
+import org.constellation.ConfigUtil
+import org.constellation.schema.Id
 
 object CheckpointBlockValidator {
 
@@ -122,7 +123,9 @@ class CheckpointBlockValidator[F[_]: Sync](
   checkpointService: CheckpointService[F],
   transactionValidator: TransactionValidator[F],
   txChainService: TransactionChainService[F],
-  dao: DAO
+  metrics: Metrics,
+  id: Id,
+  transactionService: TransactionService[F]
 ) {
 
   import CheckpointBlockValidator._
@@ -132,9 +135,9 @@ class CheckpointBlockValidator[F[_]: Sync](
   def simpleValidation(cb: CheckpointBlock): F[ValidationResult[CheckpointBlock]] =
     for {
       validation <- validateCheckpointBlock(cb)
-      _ <- if (validation.isValid) dao.metrics.incrementMetricAsync("checkpointValidationSuccess")
+      _ <- if (validation.isValid) metrics.incrementMetricAsync("checkpointValidationSuccess")
       else
-        dao.metrics
+        metrics
           .incrementMetricAsync(Metrics.checkpointValidationFailure)
           .flatTap(
             _ =>
@@ -149,7 +152,7 @@ class CheckpointBlockValidator[F[_]: Sync](
       .validateTransaction(t)
       .map(v => if (v.isValid) t.validNel else InvalidTransaction(t, v).invalidNel)
 
-  def validateSourceAddressCache(t: Transaction)(implicit dao: DAO): F[ValidationResult[Transaction]] =
+  def validateSourceAddressCache(t: Transaction): F[ValidationResult[Transaction]] =
     addressService
       .lookup(t.src.address)
       .map(_.fold[ValidationResult[Transaction]](NoAddressCacheFound(t).invalidNel)(_ => t.validNel))
@@ -218,7 +221,7 @@ class CheckpointBlockValidator[F[_]: Sync](
         val amount = t.map(t => t.amount + t.feeValue).map(BigInt(_)).sum
         val diff = balance - amount
 
-        val isNodeAddress = dao.id.address == address
+        val isNodeAddress = id.address == address
         val necessaryAmount = if (isNodeAddress) stakingAmount else 0L
 
         if (diff >= necessaryAmount && amount >= 0) t.toList.validNel
@@ -344,14 +347,14 @@ class CheckpointBlockValidator[F[_]: Sync](
       )
   }
 
-  def containsAlreadyAcceptedTx(cb: CheckpointBlock): IO[List[String]] = {
+  def containsAlreadyAcceptedTx(cb: CheckpointBlock): F[List[String]] = {
     val containsAccepted = cb.transactions.toList.map { t =>
-      dao.transactionService.lookup(t.hash).map {
+      transactionService.lookup(t.hash).map {
         case Some(tx) if tx.cbBaseHash != cb.baseHash.some => (t.hash, true)
         case _                                             => (t.hash, false)
       }
-      dao.transactionService.isAccepted(t.hash).map(b => (t.hash, b))
-    }.sequence[IO, (String, Boolean)]
+      transactionService.isAccepted(t.hash).map(b => (t.hash, b))
+    }.sequence[F, (String, Boolean)]
       .map(l => l.collect { case (h, true) => h })
 
     containsAccepted

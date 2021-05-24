@@ -8,7 +8,7 @@ import org.constellation.gossip.sampling.PartitionerPeerSampling
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
-import org.constellation.util.PeriodicIO
+import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.ExecutionContext
@@ -20,8 +20,8 @@ class TrustDataPollingScheduler(
   cluster: Cluster[IO],
   apiClient: ClientInterpreter[IO],
   partitionerPeerSampling: PartitionerPeerSampling[IO],
-  dao: DAO,
-  unboundedExecutionContext: ExecutionContext
+  unboundedExecutionContext: ExecutionContext,
+  metrics: Metrics
 ) extends PeriodicIO("TrustDataPollingScheduler", unboundedExecutionContext) {
 
   override def trigger(): IO[Unit] =
@@ -47,7 +47,7 @@ class TrustDataPollingScheduler(
           _ <- partitionerPeerSampling.repartition(selfTdi, tdi)
         } yield ()
       }
-      .flatTap(_ => dao.metrics.incrementMetricAsync[IO]("trustDataPollingRound"))
+      .flatTap(_ => metrics.incrementMetricAsync[IO]("trustDataPollingRound"))
 
   schedule(ConfigUtil.getDurationFromConfig("constellation.trust.pull-trust-interval", 60 seconds, config))
 
@@ -61,8 +61,8 @@ object TrustDataPollingScheduler {
     cluster: Cluster[IO],
     apiClient: ClientInterpreter[IO],
     partitionerPeerSampling: PartitionerPeerSampling[IO],
-    dao: DAO,
-    unboundedExecutionContext: ExecutionContext
+    unboundedExecutionContext: ExecutionContext,
+    metrics: Metrics
   ) =
     new TrustDataPollingScheduler(
       config,
@@ -70,7 +70,7 @@ object TrustDataPollingScheduler {
       cluster,
       apiClient,
       partitionerPeerSampling,
-      dao,
-      unboundedExecutionContext
+      unboundedExecutionContext,
+      metrics
     )
 }

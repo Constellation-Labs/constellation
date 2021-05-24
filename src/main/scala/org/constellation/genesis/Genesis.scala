@@ -13,6 +13,7 @@ import org.constellation.schema.transaction.{LastTransactionRef, Transaction, Tr
 import org.constellation.schema.{GenesisObservation, Height, PublicKeyExt}
 import org.constellation.util.AccountBalance
 import org.constellation.DAO
+import org.constellation.checkpoint.CheckpointService
 
 object Genesis extends StrictLogging {
 
@@ -34,7 +35,7 @@ object Genesis extends StrictLogging {
 
   private def createDistributionTransactions[F[_]: Sync: LiftIO](
     allocAccountBalances: Seq[AccountBalance]
-  )(implicit dao: DAO): F[List[Transaction]] = LiftIO[F].liftIO {
+  ): F[List[Transaction]] = LiftIO[F].liftIO {
     allocAccountBalances.toList
       .traverse(
         ab =>
@@ -54,11 +55,11 @@ object Genesis extends StrictLogging {
 
   private def createEmptyBlockFromGenesis[F[_]: Sync: LiftIO](
     genesisSOE: SignedObservationEdge
-  )(implicit dao: DAO): F[CheckpointBlock] = LiftIO[F].liftIO {
+  ): F[CheckpointBlock] = LiftIO[F].liftIO {
     val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.address
     val dummyTransactionDst = KeyUtils.makeKeyPair.getPublic.toId.address
 
-    dao.transactionService.createDummyTransaction(dummyTransactionSrc, dummyTransactionDst, CoinbaseKey).map { tx =>
+    transactionService.createDummyTransaction(dummyTransactionSrc, dummyTransactionDst, CoinbaseKey).map { tx =>
       CheckpointBlock.createCheckpointBlock(
         Seq(tx),
         Seq(
@@ -72,7 +73,7 @@ object Genesis extends StrictLogging {
   // TODO: Make F[Unit]
   def createGenesisObservation(
     allocAccountBalances: Seq[AccountBalance] = Seq.empty
-  )(implicit dao: DAO): GenesisObservation = {
+  ): GenesisObservation = {
     for {
       genesis <- createDistributionTransactions[IO](allocAccountBalances)
         .map(createGenesisBlock)
@@ -81,13 +82,13 @@ object Genesis extends StrictLogging {
     } yield GenesisObservation(genesis, emptyA, emptyB)
   }.unsafeRunSync() // TODO: Get rid of unsafeRunSync and fix all the unit tests
 
-  def start()(implicit dao: DAO): Unit = {
+  def start(): Unit = {
     val startIO = for {
-      _ <- dao.cluster.setParticipatedInGenesisFlow(true)
-      _ <- dao.cluster.setParticipatedInRollbackFlow(false)
-      _ <- dao.cluster.setJoinedAsInitialFacilitator(true)
-      _ <- dao.cluster.setOwnJoinedHeight(0L)
-      genesisObservation = createGenesisObservation(dao.nodeConfig.allocAccountBalances)
+      _ <- cluster.setParticipatedInGenesisFlow(true)
+      _ <- cluster.setParticipatedInRollbackFlow(false)
+      _ <- cluster.setJoinedAsInitialFacilitator(true)
+      _ <- cluster.setOwnJoinedHeight(0L)
+      genesisObservation = createGenesisObservation(nodeConfig.allocAccountBalances)
       _ <- IO.delay {
         acceptGenesis(genesisObservation)
       }
@@ -97,25 +98,25 @@ object Genesis extends StrictLogging {
   }
 
   // TODO: Make F[Unit]
-  def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true)(implicit dao: DAO): Unit = {
+  def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true): Unit = {
     // Store hashes for the edges
 
     val genesisBlock = CheckpointCache(go.genesis, height = Some(Height(0, 0)))
     val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
     val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
 
-    (dao.soeService.putSoe(go.genesis.soeHash, go.genesis.soe) >>
-      dao.soeService
+    (checkpointService.putSoe(go.genesis.soeHash, go.genesis.soe) >>
+      checkpointService
         .putSoe(go.initialDistribution.soeHash, go.initialDistribution.soe) >>
-      dao.soeService
+      checkpointService
         .putSoe(go.initialDistribution2.soeHash, go.initialDistribution2.soe) >>
-      dao.checkpointService.putCheckpoint(genesisBlock) >>
-      dao.checkpointService.putCheckpoint(initialBlock1) >>
-      dao.checkpointService.putCheckpoint(initialBlock2) >>
-      IO(dao.recentBlockTracker.put(genesisBlock)) >>
-      IO(dao.recentBlockTracker.put(initialBlock1)) >>
+      checkpointService.putCheckpoint(genesisBlock) >>
+      checkpointService.putCheckpoint(initialBlock1) >>
+      checkpointService.putCheckpoint(initialBlock2) >>
+      IO(recentBlockTracker.put(genesisBlock)) >>
+      IO(recentBlockTracker.put(initialBlock1)) >>
       IO(
-        dao.recentBlockTracker
+        recentBlockTracker
           .put(initialBlock2)
       ))
     // TODO: Get rid of unsafeRunSync
@@ -123,7 +124,7 @@ object Genesis extends StrictLogging {
 
     go.genesis.transactions.foreach { rtx =>
       val bal = rtx.amount
-      dao.addressService
+      addressService
         .set(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
         // TODO: Get rid of unsafeRunSync
         .unsafeRunSync()
@@ -140,21 +141,21 @@ object Genesis extends StrictLogging {
     checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
      */
 
-    dao.metrics.updateMetric("genesisAccepted", "true")
+    metrics.updateMetric("genesisAccepted", "true")
 
     if (setAsTips) {
       List(go.initialDistribution, go.initialDistribution2)
-        .map(dao.concurrentTipService.updateTips(_, Height(1, 1), isGenesis = true))
+        .map(checkpointService.updateTips(_, Height(1, 1), isGenesis = true))
         .sequence
         .unsafeRunSync() // TODO: Get rid of unsafeRunSync
     }
     storeTransactions(go)
 
-    dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
+    metrics.updateMetric("genesisHash", go.genesis.soeHash)
 
     // TODO: Get rid of unsafeRunSync
 
-    dao.genesisObservationStorage
+    genesisObservationStorage
       .write(go)
       .fold(
         err => logger.error(s"Cannot write genesis observation ${err.getMessage}"),
@@ -162,7 +163,7 @@ object Genesis extends StrictLogging {
       )
       .unsafeRunSync()
 
-    dao.cloudService.enqueueGenesis(go).unsafeRunSync()
+    cloudService.enqueueGenesis(go).unsafeRunSync()
   }
 
   private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =

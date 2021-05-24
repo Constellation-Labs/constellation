@@ -1,7 +1,6 @@
 package org.constellation.domain.transaction
 
 import java.security.KeyPair
-
 import cats.effect._
 import cats.syntax.all._
 import constellation._
@@ -15,11 +14,12 @@ import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData, TransactionEdgeData}
 import org.constellation.storage.RateLimiting
+import org.constellation.util.Metrics
 
 class TransactionService[F[_]: Concurrent](
   val transactionChainService: TransactionChainService[F],
   rateLimiting: RateLimiting[F],
-  dao: DAO
+  metrics: Metrics
 ) extends ConsensusService[F, TransactionCacheData] {
 
   private val logger = Slf4jLogger.getLogger[F]
@@ -33,14 +33,14 @@ class TransactionService[F[_]: Concurrent](
       .accept(tx, cpc)
       .flatMap(_ => transactionChainService.acceptTransaction(tx.transaction))
       .void
-      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
+      .flatTap(_ => metrics.incrementMetricAsync[F]("transactionAccepted"))
       .flatTap(_ => logger.debug(s"Accepting transaction=${tx.hash}"))
 
   def applyAfterRedownload(tx: TransactionCacheData, cpc: Option[CheckpointCache]): F[Unit] =
     super
       .accept(tx, cpc)
-      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAccepted"))
-      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("transactionAcceptedFromRedownload"))
+      .flatTap(_ => metrics.incrementMetricAsync[F]("transactionAccepted"))
+      .flatTap(_ => metrics.incrementMetricAsync[F]("transactionAcceptedFromRedownload"))
       .flatTap(_ => logger.debug(s"Accepting transaction after redownload with hash=${tx.hash}"))
 
   def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
@@ -139,9 +139,9 @@ object TransactionService {
   def apply[F[_]: Concurrent](
     transactionChainService: TransactionChainService[F],
     rateLimiting: RateLimiting[F],
-    dao: DAO
+    metrics: Metrics
   ) =
-    new TransactionService[F](transactionChainService, rateLimiting, dao)
+    new TransactionService[F](transactionChainService, rateLimiting, metrics)
 
   def createTransactionEdge(
     src: String,

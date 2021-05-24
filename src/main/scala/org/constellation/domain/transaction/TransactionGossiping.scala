@@ -6,6 +6,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.log4cats.{Logger, SelfAwareStructuredLogger}
 import org.constellation.DAO
 import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.util.Logging._
@@ -14,8 +15,9 @@ import scala.util.Random
 
 class TransactionGossiping[F[_]: Concurrent: Clock](
   transactionService: TransactionService[F],
+  cluster: Cluster[F],
   fanout: Int,
-  dao: DAO
+  id: Id
 ) {
 
   implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -28,7 +30,7 @@ class TransactionGossiping[F[_]: Concurrent: Clock](
 
   private def getDiffPeers(tx: TransactionCacheData): F[Set[Id]] =
     for {
-      all <- LiftIO[F].liftIO(dao.peerInfo)
+      all <- cluster.getPeerInfo
       used <- getUsedPeers(tx)
     } yield all.keySet.diff(used)
 
@@ -42,7 +44,7 @@ class TransactionGossiping[F[_]: Concurrent: Clock](
         updated <- transactionService.update(
           tx.transaction.hash,
           t => t.copy(path = t.path ++ tx.path),
-          tx.copy(path = tx.path + dao.id),
+          tx.copy(path = tx.path + id),
           ConsensusStatus.Unknown
         )
       } yield updated,
