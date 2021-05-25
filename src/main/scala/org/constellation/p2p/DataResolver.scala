@@ -5,6 +5,8 @@ import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
@@ -25,7 +27,8 @@ import java.security.KeyPair
 class DataResolver[F[_]](
   keyPair: KeyPair,
   apiClient: ClientInterpreter[F],
-  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
   unboundedBlocker: Blocker
@@ -37,12 +40,9 @@ class DataResolver[F[_]](
 
   implicit private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  val checkpointsWaitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set())
-
   private val getPeersForResolving: F[List[PeerClientMetadata]] =
     for {
-      all <- cluster.getPeerInfo
-      notOffline = all.filter { case (_, peer) => NodeState.isNotOffline(peer.peerMetadata.nodeState) }
+      notOffline <- clusterStorage.getNotOfflinePeers
       peers = notOffline.map { case (_, peer)  => peer.peerMetadata.toPeerClientMetadata }
     } yield peers.toList
 
@@ -160,7 +160,7 @@ class DataResolver[F[_]](
     hash: String,
     priorityClient: Option[PeerClientMetadata] = None
   ): F[CheckpointCache] =
-    checkpointsWaitingForResolving.modify(a => (a + hash, ())) >>
+    checkpointStorage.markCheckpointForResolving(hash) >>
       getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
 
   def resolveCheckpoint(
@@ -176,8 +176,8 @@ class DataResolver[F[_]](
         priorityClient
       ).head.flatTap { cb =>
         logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}") >>
-          checkpointsWaitingForResolving.modify(a => (a - hash, ()))
-      }.onError { case _ => checkpointsWaitingForResolving.modify(a => (a - hash, ())) },
+          checkpointStorage.unmarkCheckpointForResolving(hash)
+      }.onError { case _ => checkpointStorage.unmarkCheckpointForResolving(hash) },
       s"dataResolver_resolveCheckpoint [$hash]"
     )
 
@@ -257,7 +257,8 @@ object DataResolver {
   def apply[F[_]: Concurrent: ContextShift: Timer](
     keyPair: KeyPair,
     apiClient: ClientInterpreter[F],
-    cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    checkpointStorage: CheckpointStorageAlgebra[F],
     transactionService: TransactionService[F],
     observationService: ObservationService[F],
     unboundedBlocker: Blocker
@@ -265,7 +266,8 @@ object DataResolver {
     new DataResolver(
       keyPair,
       apiClient,
-      cluster,
+      clusterStorage,
+      checkpointStorage,
       transactionService,
       observationService,
       unboundedBlocker

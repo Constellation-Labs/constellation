@@ -30,10 +30,8 @@ import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
 
 class SnapshotService[F[_]: Concurrent](
-  cloudStorage: CloudStorageOld[F],
   addressService: AddressService[F],
   checkpointService: CheckpointService[F],
-  messageService: MessageService[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
   rateLimiting: RateLimiting[F],

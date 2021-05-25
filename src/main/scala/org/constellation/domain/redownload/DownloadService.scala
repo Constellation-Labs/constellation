@@ -1,29 +1,31 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.serialization.KryoSerializer
-import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 
 import scala.concurrent.ExecutionContext
 
 class DownloadService[F[_]](
-                             redownloadService: RedownloadService[F],
-                             cluster: Cluster[F],
-                             checkpointService: CheckpointService[F],
-                             apiClient: ClientInterpreter[F],
-                             metrics: Metrics,
-                             boundedExecutionContext: ExecutionContext,
-                             unboundedBlocker: Blocker
+  redownloadService: RedownloadService[F],
+  redownloadStorage: RedownloadStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  checkpointService: CheckpointService[F],
+  apiClient: ClientInterpreter[F],
+  metrics: Metrics,
+  boundedExecutionContext: ExecutionContext,
+  unboundedBlocker: Blocker
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F]
@@ -37,19 +39,19 @@ class DownloadService[F[_]](
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals()
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(isDownload = true)
-      majorityState <- redownloadService.lastMajorityState.get
+      majorityState <- redownloadStorage.getLastMajorityState
       _ <- if (majorityState.isEmpty)
         fetchAndPersistBlocks()
       else F.unit
-      _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+      _ <- nodeStorage.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       _ <- metrics.incrementMetricAsync("downloadFinished_total")
     } yield ()
 
-    (cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
+    (nodeStorage.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
       if (state.isNewSet) {
         wrappedDownload.handleErrorWith { error =>
           logger.error(error)(s"Error during download process") >>
-            cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
+            nodeStorage.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
             error.raiseError[F, Unit]
         }
       } else F.unit
@@ -58,7 +60,7 @@ class DownloadService[F[_]](
 
   private[redownload] def fetchAndPersistBlocks(): F[Unit] =
     for {
-      peers <- cluster.getPeerInfo.map(_.values.toList)
+      peers <- clusterStorage.getPeers.map(_.values.toList)
       readyPeers = peers.filter(p => NodeState.canActAsDownloadSource(p.peerMetadata.nodeState))
       clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>
@@ -103,7 +105,7 @@ class DownloadService[F[_]](
               _.traverse { b =>
                 logger.debug(s"Accepting block above majority: ${b.height}") >>
                   C.evalOn(boundedExecutionContext) {
-                    checkpointService.accept(b)
+                      checkpointService.accept(b)
                     }
                     .handleErrorWith { error =>
                       logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
@@ -126,8 +128,7 @@ class DownloadService[F[_]](
   private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] =
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
-      _ <- cluster
-        .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
+      _ <- cluster.broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
         .flatTap { genesis =>
@@ -143,7 +144,8 @@ object DownloadService {
 
   def apply[F[_]: Concurrent: ContextShift](
     redownloadService: RedownloadService[F],
-    cluster: Cluster[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     checkpointService: CheckpointService[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics,
@@ -152,7 +154,8 @@ object DownloadService {
   ): DownloadService[F] =
     new DownloadService[F](
       redownloadService,
-      cluster,
+      nodeStorage,
+      clusterStorage,
       checkpointService,
       apiClient,
       metrics,
