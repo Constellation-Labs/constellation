@@ -1,26 +1,20 @@
 package org.constellation.infrastructure.checkpointBlock
 
-import EDU.oswego.cs.dl.util.concurrent.ConcurrentHashMap
-import cats.effect.{Concurrent, Sync}
-import cats.effect.concurrent.{Ref, Semaphore}
+import cats.effect.Concurrent
+import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.mapref.MapRef
-import org.constellation.{ConstellationExecutionContext, PendingAcceptance}
-import org.constellation.checkpoint.CheckpointMerkleService
 import org.constellation.concurrency.MapRefUtils
+import org.constellation.concurrency.MapRefUtils.MapRefOps
 import org.constellation.concurrency.SetRefUtils.RefOps
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
-import org.constellation.genesis.Genesis
 import org.constellation.schema.Height
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, CheckpointCacheMetadata}
-import org.constellation.schema.edge.SignedObservationEdge
-import org.constellation.storage.algebra.Lookup
-import org.constellation.storage.ConcurrentStorageService
+import org.constellation.schema.checkpoint.CheckpointCache
 
-class CheckpointStorageInterpreter[F[_]](merkleService: CheckpointMerkleService[F])(implicit F: Concurrent[F])
-    extends CheckpointStorageAlgebra[F] {
+class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends CheckpointStorageAlgebra[F] {
 
-  val checkpoints: MapRef[F, String, Option[CheckpointCache]] = MapRefUtils.ofConcurrentHashMap() // Consider cache and time-removal
+  val checkpoints: MapRef[F, String, Option[CheckpointCache]] =
+    MapRefUtils.ofConcurrentHashMap() // Consider cache and time-removal
 
   val waitingForAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
   val inAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
@@ -28,25 +22,23 @@ class CheckpointStorageInterpreter[F[_]](merkleService: CheckpointMerkleService[
 
   val awaiting: Ref[F, Set[String]] = Ref.unsafe(Set())
 
+  val waitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set())
+
+  val tips: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val usages: MapRef[F, String, Option[Set[String]]] = MapRefUtils.ofConcurrentHashMap()
+
   def persistCheckpoint(checkpoint: CheckpointCache): F[Unit] =
     checkpoints(checkpoint.checkpointBlock.soeHash).set(checkpoint.some)
 
-  def getCheckpoint(soeHash: String): F[Option[CheckpointCache]] =
-    checkpoints(soeHash).get
-
-  def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit] =
-    checkpoints(soeHash).update(_.map { cb =>
-      cb.copy(height = height)
-    })
+  def removeCheckpoints(soeHashes: Set[String]): F[Unit] =
+    soeHashes.toList.traverse(removeCheckpoint).void
 
   def removeCheckpoint(soeHash: String): F[Unit] =
-    checkpoints(soeHash).set(none) >> accepted.remove(soeHash)
-
-  def removeCheckpoints(soeHashes: List[String]): F[Unit] =
-    soeHashes.traverse(removeCheckpoint).void
-
-  def isCheckpointAccepted(soeHash: String): F[Boolean] =
-    accepted.exists(soeHash)
+    checkpoints(soeHash).set(none) >>
+      accepted.remove(soeHash) >>
+      waitingForAcceptance.remove(soeHash) >>
+      tips.remove(soeHash) >>
+      usages(soeHash).set(none)
 
   def isCheckpointInAcceptance(soeHash: String): F[Boolean] =
     inAcceptance.exists(soeHash)
@@ -62,8 +54,16 @@ class CheckpointStorageInterpreter[F[_]](merkleService: CheckpointMerkleService[
       inAcceptance.remove(soeHash) >>
       updateCheckpointHeight(soeHash, height)
 
+  def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit] =
+    checkpoints(soeHash).update(_.map { cb =>
+      cb.copy(height = height)
+    })
+
   def existsCheckpoint(soeHash: String): F[Boolean] =
     checkpoints(soeHash).get.map(_.nonEmpty)
+
+  def markWaitingForAcceptance(soeHash: String): F[Unit] =
+    waitingForAcceptance.add(soeHash)
 
   def markForAcceptance(soeHash: String): F[Unit] =
     inAcceptance.add(soeHash) >>
@@ -72,77 +72,106 @@ class CheckpointStorageInterpreter[F[_]](merkleService: CheckpointMerkleService[
   def unmarkFromAcceptance(soeHash: String): F[Unit] =
     inAcceptance.remove(soeHash)
 
+  def getAcceptedCheckpoints: F[Set[String]] =
+    accepted.get
+
   def areParentsAccepted(checkpoint: CheckpointCache): F[Boolean] =
-    checkpoint.checkpointBlock
-      .parentSOEHashes
-      .distinct
-      .toList
-      .traverse { isCheckpointAccepted }
+    checkpoint.checkpointBlock.parentSOEHashes.distinct.toList.traverse { isCheckpointAccepted }
       .map(_.forall(_ == true))
 
+  def isCheckpointAccepted(soeHash: String): F[Boolean] =
+    accepted.exists(soeHash)
 
   def markAsAwaiting(soeHash: String): F[Unit] =
     awaiting.add(soeHash)
 
   def getAwaiting: F[Set[String]] = awaiting.get
 
-  def getParentSoeHashes(soeHash: String): F[Option[List[String]]] =
-    getCheckpoint(soeHash).nested.map(_.checkpointBlock.parentSOEHashes.toList).value
+  def setAwaiting(a: Set[String]): F[Unit] =
+    awaiting.set(a)
+
+  def calculateHeight(soeHash: String): F[Option[Height]] =
+    getParents(soeHash).map {
+      _.flatMap { parents =>
+        val maybeHeight = parents.flatMap(_.height)
+        if (maybeHeight.isEmpty)
+          none[Height]
+        else
+          Height(maybeHeight.map(_.min).min + 1, maybeHeight.map(_.max).max + 1).some
+      }
+    }
 
   def getParents(soeHash: String): F[Option[List[CheckpointCache]]] =
     getParentSoeHashes(soeHash)
       .flatMap(_.traverse(_.traverse(getCheckpoint)))
       .map(_.flatSequence)
 
-  def calculateHeight(soeHash: String): F[Option[Height]] =
-    getParents(soeHash).map { _.flatMap { parents =>
-      val maybeHeight = parents.flatMap(_.height)
-      if (maybeHeight.isEmpty)
-        none[Height]
-      else
-        Height(maybeHeight.map(_.min).min + 1, maybeHeight.map(_.max).max + 1).some
-    }}
-
-  // *** //
-
-
-//  val checkpointSemaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
-//  val checkpointMemPool =
-//    new ConcurrentStorageService[F, CheckpointCacheMetadata](checkpointSemaphore, "CheckpointMemPool".some)
-
-//  val soeSemaphore: Semaphore[F] = ConstellationExecutionContext.createSemaphore()
-//  val soeMemPool = new ConcurrentStorageService[F, SignedObservationEdge](soeSemaphore, "SoeMemPool".some)
-
-  val checkpointsWaitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set())
-
-//
-//  def getParentSoeHashesDirect(checkpoint: CheckpointBlock): List[String] =
-//    checkpoint.parentSOEHashes.toList.traverse { soeHash =>
-//      if (soeHash.equals(Genesis.Coinbase)) {
-//        none[String]
-//      } else {
-//        checkpoint.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap(_.baseHash)
-//      }
-//    }.getOrElse(List.empty)
-
-//
-//  def getParentSOESoeHashes(checkpoint: CheckpointBlock): F[List[String]] =
-//    checkpoint.parentSOEHashes.toList.traverse { soeHash =>
-//      if (soeHash.equals(Genesis.Coinbase)) {
-//        F.pure(none[String])
-//      } else {
-//        lookupSoe(soeHash).map { parent =>
-//          if (parent.isEmpty) {
-//            checkpoint.checkpoint.edge.observationEdge.parents.find(_.hashReference == soeHash).flatMap { _.baseHash }
-//          } else parent.map(_.baseHash)
-//        }
-//      }
-//    }.map(_.flatten)
+  def getParentSoeHashes(soeHash: String): F[Option[List[String]]] =
+    getCheckpoint(soeHash).nested.map(_.checkpointBlock.parentSOEHashes.toList).value
 
   def markCheckpointForResolving(soeHash: String): F[Unit] =
-    checkpointsWaitingForResolving.add(soeHash)
+    waitingForResolving.add(soeHash)
 
   def unmarkCheckpointForResolving(soeHash: String): F[Unit] =
-    checkpointsWaitingForResolving.remove(soeHash)
+    waitingForResolving.remove(soeHash)
 
+  def isWaitingForResolving(soeHash: String): F[Boolean] =
+    waitingForResolving.exists(soeHash)
+
+  def countUsages(soeHash: String): F[Int] =
+    usages(soeHash).get.map(_.map(_.size).getOrElse(0))
+
+  def registerUsage(soeHash: String): F[Unit] =
+    getParentSoeHashes(soeHash).map(_.sequence.flatten).flatMap {
+      _.traverse { parent =>
+        usages(parent).update(_.orElse(Set.empty[String].some).map(_ + soeHash))
+      }
+    }
+
+  def getUsages: F[Map[String, Set[String]]] =
+    usages.toMap
+
+  def setUsages(u: Map[String, Set[String]]): F[Unit] =
+    usages.clear >>
+      u.keySet.toList.traverse { soeHash =>
+        usages(soeHash).set(u(soeHash).some)
+      }.void
+
+  def removeUsages(soeHashes: Set[String]): F[Unit] =
+    soeHashes.toList.traverse(removeUsage).void
+
+  def removeUsage(soeHash: String): F[Unit] =
+    usages(soeHash).set(none)
+
+  def addTip(soeHash: String): F[Unit] =
+    tips.add(soeHash)
+
+  def removeTips(soeHashes: Set[String]): F[Unit] =
+    soeHashes.toList.traverse(removeTip).void
+
+  def removeTip(soeHash: String): F[Unit] =
+    tips.remove(soeHash)
+
+  def setTips(newTips: Set[String]): F[Unit] =
+    tips.modify(_ => (newTips, ()))
+
+  def countTips: F[Int] =
+    tips.get.map(_.size)
+
+  def getMinTipHeight: F[Long] =
+    for {
+      tips <- getTips
+      minHeights = tips.map(_._2.min)
+      minHeight = if (tips.nonEmpty) minHeights.min else 0L
+    } yield minHeight
+
+  def getTips: F[Set[(String, Height)]] =
+    tips.get
+      .flatMap(_.toList.traverse(getCheckpoint))
+      .map(_.flatten.map { checkpoint =>
+        (checkpoint.checkpointBlock.soeHash, checkpoint.height)
+      })
+
+  def getCheckpoint(soeHash: String): F[Option[CheckpointCache]] =
+    checkpoints(soeHash).get
 }

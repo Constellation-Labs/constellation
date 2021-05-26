@@ -7,6 +7,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointService
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.gossip.validation.{
@@ -16,14 +17,14 @@ import org.constellation.gossip.validation.{
   MessageValidator,
   PathDoesNotStartAndEndWithOrigin
 }
-import org.constellation.storage.{ConcurrentTipService, SnapshotService}
+import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
 import org.constellation.schema.signature.SignatureRequest._
 import org.constellation.schema.signature.SignatureResponse._
-import org.constellation.schema.checkpoint.{CheckpointBlockPayload, FinishedCheckpoint}
+import org.constellation.schema.checkpoint.CheckpointBlockPayload
 import org.constellation.schema.{GenesisObservation, Height, Id}
 import org.constellation.schema.observation.ObservationEvent
 import org.constellation.schema.signature.SignatureRequest
@@ -40,18 +41,17 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     snapshotService: SnapshotService[F],
     checkpointBlockGossipService: CheckpointBlockGossipService[F],
     messageValidator: MessageValidator,
-    tipService: ConcurrentTipService[F]
+    checkpointStorage: CheckpointStorageAlgebra[F]
   ) =
     genesisEndpoint(genesisObservation) <+>
-      getCheckpointEndpoint(checkpointService) <+>
-      checkFinishedCheckpointEndpoint(checkpointService) <+>
+      getCheckpointEndpoint(checkpointStorage) <+>
       requestBlockSignatureEndpoint(checkpointService) <+>
       postFinishedCheckpoint(
         checkpointBlockGossipService,
         messageValidator,
         snapshotService,
         checkpointService,
-        tipService
+        checkpointStorage
       )
 
   private def genesisEndpoint(genesisObservation: => Option[GenesisObservation]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -73,7 +73,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     messageValidator: MessageValidator,
     snapshotService: SnapshotService[F],
     checkpointService: CheckpointService[F],
-    tipService: ConcurrentTipService[F]
+    checkpointStorage: CheckpointStorageAlgebra[F]
   ): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case req @ POST -> Root / "peer" / "checkpoint" / "finished" =>
@@ -102,31 +102,22 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
                   checkpointBlockGossipService.spread(message)
               )
 
-              checkpointService.gossipCache.put(
-                payload.block.value.checkpointCacheData.checkpointBlock.soeHash,
-                payload.block.value.checkpointCacheData
-              ) >>
-                tipService.registerUsages(payload.block.value.checkpointCacheData) >>
-                payload.block.validSignature
-                  .pure[F]
-                  .ifM(
+              payload.block.validSignature
+                .pure[F]
+                .ifM(
+                  checkpointStorage.persistCheckpoint(payload.block.value.checkpointCacheData) >>
+                    checkpointStorage.registerUsage(payload.block.value.checkpointCacheData.checkpointBlock.soeHash) >>
                     processFinishedCheckpointAsync >> Ok(),
-                    BadRequest()
-                  )
+                  BadRequest()
+                )
           }
         } yield res
     }
 
-  private def checkFinishedCheckpointEndpoint(checkpointService: CheckpointService[F]): HttpRoutes[F] =
-    HttpRoutes.of[F] {
-      case GET -> Root / "checkpoint" / hash / "check" =>
-        checkpointService.gossipCache.lookup(hash).map(_.asJson).flatMap(Ok(_))
-    }
+  def publicEndpoints(checkpointStorage: CheckpointStorageAlgebra[F]) = getCheckpointEndpoint(checkpointStorage)
 
-  def publicEndpoints(checkpointService: CheckpointService[F]) = getCheckpointEndpoint(checkpointService)
-
-  private def getCheckpointEndpoint(checkpointService: CheckpointService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "checkpoint" / hash => checkpointService.fullDataCheckpoint(hash).map(_.asJson).flatMap(Ok(_))
+  private def getCheckpointEndpoint(checkpointStorage: CheckpointStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "checkpoint" / soeHash => checkpointStorage.getCheckpoint(soeHash).map(_.asJson).flatMap(Ok(_))
   }
 
 }
@@ -134,8 +125,8 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
 object CheckpointEndpoints {
 
   def publicEndpoints[F[_]: Concurrent: ContextShift](
-    checkpointService: CheckpointService[F]
-  ): HttpRoutes[F] = new CheckpointEndpoints[F]().publicEndpoints(checkpointService)
+    checkpointStorage: CheckpointStorageAlgebra[F]
+  ): HttpRoutes[F] = new CheckpointEndpoints[F]().publicEndpoints(checkpointStorage)
 
   def peerEndpoints[F[_]: Concurrent: ContextShift](
     genesisObservation: => Option[GenesisObservation],
@@ -144,7 +135,7 @@ object CheckpointEndpoints {
     snapshotService: SnapshotService[F],
     checkpointBlockGossipService: CheckpointBlockGossipService[F],
     messageValidator: MessageValidator,
-    tipService: ConcurrentTipService[F]
+    checkpointStorage: CheckpointStorageAlgebra[F]
   ): HttpRoutes[F] =
     new CheckpointEndpoints[F]()
       .peerEndpoints(
@@ -154,6 +145,6 @@ object CheckpointEndpoints {
         snapshotService,
         checkpointBlockGossipService,
         messageValidator,
-        tipService
+        checkpointStorage
       )
 }

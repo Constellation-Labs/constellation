@@ -5,6 +5,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -22,6 +23,7 @@ class DownloadService[F[_]](
   nodeStorage: NodeStorageAlgebra[F],
   clusterStorage: ClusterStorageAlgebra[F],
   checkpointService: CheckpointService[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
   apiClient: ClientInterpreter[F],
   metrics: Metrics,
   boundedExecutionContext: ExecutionContext,
@@ -35,7 +37,6 @@ class DownloadService[F[_]](
 
   def download()(implicit dao: DAO): F[Unit] = {
     val wrappedDownload = for {
-      _ <- clearDataBeforeDownload()
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals()
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(isDownload = true)
@@ -90,10 +91,7 @@ class DownloadService[F[_]](
 
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
-          _ <- checkpointService.waitingForResolving.modify { blocks =>
-            val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
-            (updated, ())
-          }
+          _ <- blocksToAccept.map(_.checkpointBlock.soeHash).traverse { checkpointStorage.markWaitingForAcceptance }
 
           _ <- C
             .evalOn(boundedExecutionContext) {
@@ -116,15 +114,6 @@ class DownloadService[F[_]](
       }
     } yield ()
 
-  private[redownload] def clearDataBeforeDownload()(implicit dao: DAO): F[Unit] =
-    for {
-      _ <- logger.debug("Clearing data before download.")
-      _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
-      _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
-      _ <- LiftIO[F].liftIO(dao.addressService.clear)
-      _ <- checkpointService.clearSoe
-    } yield ()
-
   private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] =
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
@@ -144,9 +133,11 @@ object DownloadService {
 
   def apply[F[_]: Concurrent: ContextShift](
     redownloadService: RedownloadService[F],
+    redownloadStorage: RedownloadStorageAlgebra[F],
     nodeStorage: NodeStorageAlgebra[F],
     clusterStorage: ClusterStorageAlgebra[F],
     checkpointService: CheckpointService[F],
+    checkpointStorage: CheckpointStorageAlgebra[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
@@ -154,9 +145,11 @@ object DownloadService {
   ): DownloadService[F] =
     new DownloadService[F](
       redownloadService,
+      redownloadStorage,
       nodeStorage,
       clusterStorage,
       checkpointService,
+      checkpointStorage,
       apiClient,
       metrics,
       boundedExecutionContext,
