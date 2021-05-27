@@ -10,13 +10,10 @@ import org.constellation._
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.checkpointBlock.{
-  AwaitingCheckpointBlock,
-  CheckpointBlockDoubleSpendChecker,
-  CheckpointStorageAlgebra
-}
+import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker, CheckpointStorageAlgebra}
 import org.constellation.domain.cluster.NodeStorageAlgebra
 import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{DataResolver, PeerData}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
@@ -38,7 +35,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   blacklistedAddresses: BlacklistedAddresses[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
-  snapshotService: SnapshotService[F],
+  snapshotStorage: SnapshotStorageAlgebra[F],
   checkpointBlockValidator: CheckpointBlockValidator[F],
   nodeStorage: NodeStorageAlgebra[F],
   checkpointStorage: CheckpointStorageAlgebra[F],
@@ -82,7 +79,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
       case state if NodeState.canAwaitForCheckpointAcceptance(state) =>
         logger.debug(
           s"Node (state=${state}) cannot accept checkpoint, adding hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash} to sync buffer pool"
-        ) >> snapshotService.syncBufferAccept(checkpoint)
+        )
       case state =>
         logger.warn(
           s"Node (state=${state}) cannot accept checkpoint hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash}"
@@ -202,7 +199,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
             .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
         } else Sync[F].pure(maybeHeight.get)
 
-        lastSnapshotHeight <- snapshotService.getLastSnapshotHeight
+        lastSnapshotHeight <- snapshotStorage.getLastSnapshotHeight
         _ <- if (height.min <= lastSnapshotHeight.toLong) {
           metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
             HeightBelow(checkpoint.checkpointBlock, height).raiseError[F, Unit]
@@ -218,7 +215,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         _ <- transactionService.findAndRemoveInvalidPendingTxs()
         _ <- logger.debug(s"[${id.short}] Accept checkpoint=${cb.baseHash}] and height $maybeHeight")
         _ <- updateTips(cb.soeHash)
-        _ <- snapshotService.updateAcceptedCBSinceSnapshot(cb)
+        _ <- snapshotStorage.addAcceptedCheckpointSinceSnapshot(cb.soeHash)
         _ <- metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
         _ <- acceptLock.release
         awaitingBlocks <- checkpointStorage.getAwaiting.flatMap(

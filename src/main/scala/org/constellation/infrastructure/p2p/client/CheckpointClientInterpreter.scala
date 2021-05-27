@@ -32,9 +32,6 @@ class CheckpointClientInterpreter[F[_]: ContextShift](
   def getCheckpoint(hash: String): PeerResponse[F, Option[CheckpointCache]] =
     PeerResponse[F, Option[CheckpointCache]](s"checkpoint/$hash")(client, sessionTokenService)
 
-  def checkFinishedCheckpoint(hash: String): PeerResponse[F, Option[CheckpointCache]] =
-    PeerResponse[F, Option[CheckpointCache]](s"checkpoint/$hash/check")(client, sessionTokenService)
-
   def requestBlockSignature(signatureRequest: SignatureRequest): PeerResponse[F, SignatureResponse] =
     PeerResponse(s"request/signature", POST)(client, sessionTokenService) { (req, c) =>
       c.expect[SignatureResponse](req.withEntity(signatureRequest))

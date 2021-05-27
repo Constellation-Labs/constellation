@@ -1,7 +1,6 @@
 package org.constellation.util
 
 import java.util.concurrent.atomic.AtomicLong
-
 import better.files.File
 import cats.effect.{IO, Sync}
 import cats.syntax.all._
@@ -15,6 +14,7 @@ import io.micrometer.core.instrument.{Clock, Counter, Tag, Timer}
 import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.cache.caffeine.CacheMetricsCollector
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.{BuildInfo, ConstellationExecutionContext, DAO}
 import org.joda.time.DateTime
 
@@ -113,6 +113,7 @@ class TransactionRateTracker()(implicit dao: DAO) {
   */
 class Metrics(
   val collectorRegistry: CollectorRegistry,
+  clusterStorage: ClusterStorageAlgebra[IO],
   periodSeconds: Int = 1,
   unboundedExecutionContext: ExecutionContext
 )(implicit dao: DAO)
@@ -205,7 +206,7 @@ class Metrics(
   // Temporary, for debugging only. Would cause a problem with many peers
   def updateBalanceMetrics(): IO[Unit] =
     for {
-      peers <- dao.peerInfo
+      peers <- clusterStorage.getPeers
       allAddresses = peers.map(_._1.address).toSeq :+ dao.selfAddressStr
 
       balancesBySnapshot <- balancesBySnapshotMetrics(allAddresses)

@@ -7,6 +7,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
@@ -18,6 +19,7 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 class PeerHealthCheck[F[_]](
+  clusterStorage: ClusterStorageAlgebra[F],
   cluster: Cluster[F],
   apiClient: ClientInterpreter[F],
   metrics: Metrics,
@@ -42,7 +44,7 @@ class PeerHealthCheck[F[_]](
   def check(excludePeers: Set[Id], checkThesePeers: Set[Id]): F[List[PeerData]] =
     for {
       _ <- logger.debug("Checking for dead peers")
-      peers <- cluster.getPeerInfo
+      peers <- clusterStorage.getPeers
         .map(_.filter { case (_, pd) => NodeState.canBeCheckedForHealth(pd.peerMetadata.nodeState) })
       peersToCheck <- pickRandomPeers((peers -- excludePeers -- checkThesePeers).values.toList, 3) // avoid duplicate runs for the same id
         .map(
@@ -124,6 +126,7 @@ class PeerHealthCheck[F[_]](
 object PeerHealthCheck {
 
   def apply[F[_]: Concurrent: Timer](
+    clusterStorage: ClusterStorageAlgebra[F],
     cluster: Cluster[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics,
@@ -131,7 +134,7 @@ object PeerHealthCheck {
     healthHttpPort: String
   )(
     implicit C: ContextShift[F]
-  ) = new PeerHealthCheck[F](cluster, apiClient, metrics, unboundedHealthBlocker, healthHttpPort = healthHttpPort)
+  ) = new PeerHealthCheck[F](clusterStorage, cluster, apiClient, metrics, unboundedHealthBlocker, healthHttpPort = healthHttpPort)
 
   sealed trait PeerHealthCheckStatus
 

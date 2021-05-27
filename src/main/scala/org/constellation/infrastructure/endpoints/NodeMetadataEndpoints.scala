@@ -13,28 +13,30 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import NodeStateInfo._
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 
 class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
-  def publicEndpoints(addressService: AddressService[F], cluster: Cluster[F], nodeType: NodeType) =
-    getNodeState(cluster, nodeType) <+>
+  def publicEndpoints(addressService: AddressService[F], nodeStorage: NodeStorageAlgebra[F], clusterStorage: ClusterStorageAlgebra[F], nodeType: NodeType) =
+    getNodeState(nodeStorage, nodeType) <+>
       getAddressBalance(addressService) <+>
-      getNodePeers(cluster) <+>
-      getPeersMajorityHeights(cluster)
+      getNodePeers(clusterStorage) <+>
+      getPeersMajorityHeights(clusterStorage)
 
   def peerEndpoints(
-    cluster: Cluster[F],
-    addressService: AddressService[F],
-    nodeType: NodeType
+                     nodeStorage: NodeStorageAlgebra[F],
+                     clusterStorage: ClusterStorageAlgebra[F],
+                     addressService: AddressService[F],
+                     nodeType: NodeType
   ) =
-    getNodeState(cluster, nodeType) <+>
+    getNodeState(nodeStorage, nodeType) <+>
       getAddressBalance(addressService) <+>
-      getNodePeers(cluster)
+      getNodePeers(clusterStorage)
 
-  private def getNodeState(cluster: Cluster[F], nodeType: NodeType): HttpRoutes[F] =
+  private def getNodeState(nodeStorage: NodeStorageAlgebra[F], nodeType: NodeType): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "state" =>
-        cluster.getNodeState.map(NodeStateInfo(_, Seq(), nodeType)).map(_.asJson).flatMap(Ok(_))
+        nodeStorage.getNodeState.map(NodeStateInfo(_, Seq(), nodeType)).map(_.asJson).flatMap(Ok(_))
     }
 
   private def getAddressBalance(addressService: AddressService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
@@ -42,9 +44,9 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
       addressService.lookup(address).map(_.asJson).flatMap(Ok(_))
   }
 
-  private def getNodePeers(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+  private def getNodePeers(clusterStorage: ClusterStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "peers" =>
-      cluster.getPeerInfo
+      clusterStorage.getPeers
         .map(
           _.map { case (_, pd) => pd }
             .filter(pd => NodeState.canActAsJoiningSource(pd.peerMetadata.nodeState))
@@ -59,46 +61,47 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
   implicit val peersMajorityHeightsEncoder: Encoder[Map[Id, List[MajorityHeight]]] =
     Encoder.encodeMap[Id, List[MajorityHeight]]
 
-  private def getPeersMajorityHeights(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+  private def getPeersMajorityHeights(clusterStorage: ClusterStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "peers" / "majority-height" =>
-      cluster.getPeerInfo
+      clusterStorage.getPeers
         .map(_.mapValues(_.majorityHeight.toList))
         .map(_.asJson)
         .flatMap(Ok(_))
   }
 
   def ownerEndpoints(
-    cluster: Cluster[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     addressService: AddressService[F],
     nodeType: NodeType
   ) =
-    getNodeState(cluster, nodeType) <+>
+    getNodeState(nodeStorage, nodeType) <+>
       getAddressBalance(addressService) <+>
-      getNodePeers(cluster) <+>
-      getPeersMajorityHeights(cluster)
+      getNodePeers(clusterStorage) <+>
+      getPeersMajorityHeights(clusterStorage)
 
 }
 
 object NodeMetadataEndpoints {
 
   def publicEndpoints[F[_]: Concurrent](
-    addressService: AddressService[F],
-    cluster: Cluster[F],
-    nodeType: NodeType
+                                         addressService: AddressService[F], nodeStorage: NodeStorageAlgebra[F], clusterStorage: ClusterStorageAlgebra[F], nodeType: NodeType
   ): HttpRoutes[F] =
-    new NodeMetadataEndpoints[F]().publicEndpoints(addressService, cluster, nodeType)
+    new NodeMetadataEndpoints[F]().publicEndpoints(addressService, nodeStorage, clusterStorage, nodeType)
 
   def peerEndpoints[F[_]: Concurrent](
-    cluster: Cluster[F],
-    addressService: AddressService[F],
-    nodeType: NodeType
+                                       nodeStorage: NodeStorageAlgebra[F],
+                                       clusterStorage: ClusterStorageAlgebra[F],
+                                       addressService: AddressService[F],
+                                       nodeType: NodeType
   ): HttpRoutes[F] =
-    new NodeMetadataEndpoints[F]().peerEndpoints(cluster, addressService, nodeType)
+    new NodeMetadataEndpoints[F]().peerEndpoints(nodeStorage, clusterStorage, addressService, nodeType)
 
   def ownerEndpoints[F[_]: Concurrent](
-    cluster: Cluster[F],
-    addressService: AddressService[F],
-    nodeType: NodeType
+                                        nodeStorage: NodeStorageAlgebra[F],
+                                        clusterStorage: ClusterStorageAlgebra[F],
+                                        addressService: AddressService[F],
+                                        nodeType: NodeType
   ): HttpRoutes[F] =
-    new NodeMetadataEndpoints[F]().ownerEndpoints(cluster, addressService, nodeType)
+    new NodeMetadataEndpoints[F]().ownerEndpoints(nodeStorage, clusterStorage, addressService, nodeType)
 }

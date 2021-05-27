@@ -2,8 +2,9 @@ package org.constellation.snapshot
 
 import cats.effect.IO
 import cats.syntax.all._
+import org.constellation.domain.cluster.NodeStorageAlgebra
 import org.constellation.domain.exception.InvalidNodeState
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
@@ -21,16 +22,17 @@ import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: ExecutionContext)(
   cluster: Cluster[IO],
+  nodeStorage: NodeStorageAlgebra[IO],
   snapshotProposalGossipService: SnapshotProposalGossipService[IO],
   metrics: Metrics,
   keyPair: KeyPair,
-  redownloadService: RedownloadService[IO],
+  redownloadStorage: RedownloadStorageAlgebra[IO],
   snapshotService: SnapshotService[IO]
 ) extends PeriodicIO("SnapshotTrigger", unboundedExecutionContext) {
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  private val preconditions = cluster.getNodeState
+  private val preconditions = nodeStorage.getNodeState
     .map(NodeState.canCreateSnapshot)
     .map {
       _ && executionNumber.get() % snapshotHeightInterval == 0
@@ -39,15 +41,15 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
   private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
-        stateSet <- cluster.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation, skipBroadcast = true)
+        stateSet <- nodeStorage.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation)
         _ <- if (!stateSet.isNewSet)
           IO.raiseError(InvalidNodeState(NodeState.validForSnapshotCreation, stateSet.oldState))
         else IO.unit
         startTime <- IO(System.currentTimeMillis())
-        snapshotResult <- snapshotService.attemptSnapshot()(cluster).value
+        snapshotResult <- snapshotService.attemptSnapshot().value
         elapsed <- IO(System.currentTimeMillis() - startTime)
-        majorityRange <- redownloadService.getMajorityRange
-        majorityGapRanges <- redownloadService.getMajorityGapRanges
+        majorityRange <- redownloadStorage.getMajorityRange
+        majorityGapRanges <- redownloadStorage.getMajorityGapRanges
         _ = logger.debug(s"Attempt snapshot took: $elapsed millis")
         _ <- snapshotResult match {
           case Left(NotEnoughSpace) =>
@@ -62,9 +64,9 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
             handleError(err, stateSet)
           case Right(created) =>
             metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success) >>
-              redownloadService
+              redownloadStorage
                 .persistCreatedSnapshot(created.height, created.hash, SortedMap(created.publicReputation.toSeq: _*)) >>
-              redownloadService
+              redownloadStorage
                 .persistAcceptedSnapshot(created.height, created.hash) >>
               resetNodeState(stateSet) >>
               snapshotProposalGossipService
@@ -92,7 +94,7 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
     )
 
   def resetNodeState(stateSet: SetStateResult): IO[SetStateResult] =
-    cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
+    nodeStorage.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState)
 
   def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] = {
     implicit val cs = contextShift

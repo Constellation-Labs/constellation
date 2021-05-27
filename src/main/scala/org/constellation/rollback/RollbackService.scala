@@ -6,7 +6,8 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.domain.cloud.HeightHashFileStorage
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
@@ -26,14 +27,15 @@ case class RollbackData(
 )
 
 class RollbackService[F[_]](
-  snapshotService: SnapshotService[F],
-  snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
-  snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
-  snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[F, StoredSnapshot]],
-  snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[F, SnapshotInfo]],
-  genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
-  redownloadService: RedownloadService[F],
-  cluster: Cluster[F]
+  genesis: Genesis[F],
+                             snapshotService: SnapshotService[F],
+                             snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
+                             snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
+                             snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[F, StoredSnapshot]],
+                             snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[F, SnapshotInfo]],
+                             genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
+                             redownloadStorage: RedownloadStorageAlgebra[F],
+                             nodeStorage: NodeStorageAlgebra[F]
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
   private val logger = Slf4jLogger.getLogger[F]
   private val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
@@ -86,9 +88,9 @@ class RollbackService[F[_]](
 
   private[rollback] def restore(rollbackData: RollbackData, height: Long): EitherT[F, Throwable, Unit] =
     for {
-      _ <- cluster.setParticipatedInRollbackFlow(true).attemptT
-      _ <- cluster.setParticipatedInGenesisFlow(false).attemptT
-      _ <- cluster.setJoinedAsInitialFacilitator(true).attemptT
+      _ <- nodeStorage.setParticipatedInRollbackFlow(true).attemptT
+      _ <- nodeStorage.setParticipatedInGenesisFlow(false).attemptT
+      _ <- nodeStorage.setJoinedAsInitialFacilitator(true).attemptT
       _ <- logger.debug("Applying the rollback.").attemptT
       _ <- logger.debug(s"Accepting GenesisObservation").attemptT
       _ <- acceptGenesis(rollbackData.genesisObservation)
@@ -110,9 +112,7 @@ class RollbackService[F[_]](
     } yield highest
 
   private def acceptGenesis(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
-    Concurrent[F].delay {
-      Genesis.acceptGenesis(genesisObservation)
-    }.attemptT
+    genesis.acceptGenesis(genesisObservation).attemptT
 
   private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): EitherT[F, Throwable, Unit] =
     for {
@@ -126,18 +126,18 @@ class RollbackService[F[_]](
 
       ownJoinedHeight = height - snapshotHeightInterval
 
-      _ <- cluster.setOwnJoinedHeight(ownJoinedHeight).attemptT
+      _ <- nodeStorage.setOwnJoinedHeight(ownJoinedHeight).attemptT
 
-      _ <- redownloadService
+      _ <- redownloadStorage
         .persistAcceptedSnapshot(height, storedSnapshot.snapshot.hash)
         .attemptT
 
-      _ <- redownloadService
+      _ <- redownloadStorage
         .persistCreatedSnapshot(height, storedSnapshot.snapshot.hash, storedSnapshot.snapshot.publicReputation)
         .attemptT
 
-      _ <- redownloadService.setLastMajorityState(Map(height -> storedSnapshot.snapshot.hash)).attemptT
-      _ <- redownloadService.setLastSentHeight(height).attemptT
+      _ <- redownloadStorage.setLastMajorityState(Map(height -> storedSnapshot.snapshot.hash)).attemptT
+      _ <- redownloadStorage.setLastSentHeight(height).attemptT
     } yield ()
 
   private def validateAccountBalance(accountBalances: AccountBalances): EitherT[F, Throwable, Unit] =

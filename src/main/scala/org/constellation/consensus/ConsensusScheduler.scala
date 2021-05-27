@@ -4,6 +4,7 @@ import cats.effect.IO
 import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
+import org.constellation.domain.cluster.NodeStorageAlgebra
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState
 import org.constellation.util.PeriodicIO
@@ -15,7 +16,7 @@ import scala.concurrent.duration._
 class ConsensusScheduler(
   config: Config,
   consensusManager: ConsensusManager[IO],
-  cluster: Cluster[IO],
+  nodeStorage: NodeStorageAlgebra[IO],
   unboundedExecutionContext: ExecutionContext
 ) extends PeriodicIO("ConsensusScheduler", unboundedExecutionContext) {
 
@@ -27,7 +28,7 @@ class ConsensusScheduler(
   val skip: IO[Unit] = IO(logger.debug("Start consensus skipped"))
 
   override def trigger(): IO[Unit] =
-    cluster.getNodeState
+    nodeStorage.getNodeState
       .map(NodeState.canStartOwnConsensus)
       .ifM(crossTalkConsensus, skip)
 

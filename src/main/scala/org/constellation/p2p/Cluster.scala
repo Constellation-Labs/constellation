@@ -1,5 +1,6 @@
 package org.constellation.p2p
 
+import better.files.File
 import cats.data.NonEmptyList
 import cats.effect.{Blocker, Concurrent, ContextShift, IO, LiftIO, Timer}
 import cats.kernel.Order
@@ -110,16 +111,19 @@ class Cluster[F[_]](
   nodeId: Id,
   alias: String,
   metrics: Metrics,
-  nodeConfig: NodeConfig
+  nodeConfig: NodeConfig,
+  peerHostPort: HostPort,
+  peersInfoPath: File,
+  externalHostString: String,
+  externalPeerHTTPPort: Int,
+  snapshotPath: String
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F],
   T: Timer[F]
 ) {
 
-//  private val initialState: NodeState =
-//    if (nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
-  private val peerDiscovery = PeerDiscovery[F](apiClient, this, nodeId, unboundedBlocker)
+  private val peerDiscovery = PeerDiscovery[F](apiClient, this, clusterStorage, nodeId, unboundedBlocker)
 
   implicit val logger = Slf4jLogger.getLogger[F]
 
@@ -178,7 +182,7 @@ class Cluster[F[_]](
                   _ =>
                     logger.debug(
                       s"Cannot get peer proposals for leaving node (id=${leavingPeerId} host=${leavingPeer.peerMetadata.host}) from peer (id=${pd.peerMetadata.id} host=${pd.peerMetadata.host}). Fallback to empty"
-                    ) >> F.pure(None)
+                    ) >> F.pure(none[SnapshotProposalsAtHeight])
                 ),
               5.seconds,
               F.pure(none[SnapshotProposalsAtHeight])
@@ -219,7 +223,7 @@ class Cluster[F[_]](
       } yield ()
 
       leavingFlow.handleErrorWith { err =>
-        logger.error(s"Error during marking peer as offline: ${err.getMessage}") >> F.raiseError(err)
+        logger.error(s"Error during marking peer as offline: ${err.getMessage}") >> F.raiseError[Unit](err)
       }
     },
     "cluster_markOfflinePeer"
@@ -297,7 +301,7 @@ class Cluster[F[_]](
 //          _ <- clearServicesBeforeJoin()
           _ <- attemptRegisterPeer(hp)
           _ <- T.sleep(15.seconds)
-          _ <- LiftIO[F].liftIO(downloadService.download())
+          _ <- downloadService.download()
           _ <- broadcastOwnJoinedHeight()
         } yield ()
       }.handleErrorWith { error =>
@@ -422,7 +426,7 @@ class Cluster[F[_]](
 
         },
         "addPeerWithRegistrationSymmetric"
-      ),
+      )(metrics),
       "cluster_attemptRegisterPeer"
     )
 
@@ -556,7 +560,7 @@ class Cluster[F[_]](
     } yield ()
 
   private def validWithLoopbackGuard(host: String): Boolean =
-    (host != externalHostString && host != "127.0.0.1" && host != "localhost") || !preventLocalhostAsPeer
+    (host != externalHostString && host != "127.0.0.1" && host != "localhost")
 
   // Someone joins to me
   def pendingRegistrationRequest(isReconciliationJoin: Boolean = false): F[PeerRegistrationRequest] = {
@@ -607,7 +611,7 @@ class Cluster[F[_]](
       for {
         _ <- logger.info("Trying to gracefully leave the cluster")
 
-        majorityHeight <- LiftIO[F].liftIO(redownloadStorage.getLatestMajorityHeight)
+        majorityHeight <- redownloadStorage.getLatestMajorityHeight
         _ <- broadcastLeaveRequest(majorityHeight)
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
@@ -631,7 +635,7 @@ class Cluster[F[_]](
       .compareAndSet(expected, newState)
       .flatTap(
         res =>
-          if (res.isNewSet) LiftIO[F].liftIO(metrics.updateMetricAsync[IO]("nodeState", newState.toString))
+          if (res.isNewSet) metrics.updateMetricAsync[F]("nodeState", newState.toString)
           else F.unit
       )
       .flatTap {
@@ -688,7 +692,12 @@ object Cluster {
     nodeId: Id,
     alias: String,
     metrics: Metrics,
-    nodeConfig: NodeConfig
+    nodeConfig: NodeConfig,
+    peerHostPort: HostPort,
+    peersInfoPath: File,
+    externalHostString: String,
+    externalPeerHTTPPort: Int,
+    snapshotPath: String
   ) =
     new Cluster(
       joiningPeerValidator,
@@ -704,7 +713,12 @@ object Cluster {
       nodeId,
       alias,
       metrics,
-      nodeConfig
+      nodeConfig,
+      peerHostPort,
+      peersInfoPath,
+      externalHostString,
+      externalPeerHTTPPort,
+      snapshotPath,
     )
 
   case class ClusterNode(alias: String, id: Id, ip: HostPort, status: NodeState, reputation: Long)

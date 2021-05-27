@@ -8,15 +8,10 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.syntax._
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.genesis.GenesisStorageAlgebra
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.state.GossipMessage
-import org.constellation.gossip.validation.{
-  EndOfCycle,
-  IncorrectReceiverId,
-  IncorrectSenderId,
-  MessageValidator,
-  PathDoesNotStartAndEndWithOrigin
-}
+import org.constellation.gossip.validation.{EndOfCycle, IncorrectReceiverId, IncorrectSenderId, MessageValidator, PathDoesNotStartAndEndWithOrigin}
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.http4s.circe._
@@ -35,7 +30,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def peerEndpoints(
-    genesisObservation: => Option[GenesisObservation],
+                     genesisStorage: GenesisStorageAlgebra[F],
     checkpointService: CheckpointService[F],
     metrics: Metrics,
     snapshotService: SnapshotService[F],
@@ -43,7 +38,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
     messageValidator: MessageValidator,
     checkpointStorage: CheckpointStorageAlgebra[F]
   ) =
-    genesisEndpoint(genesisObservation) <+>
+    genesisEndpoint(genesisStorage) <+>
       getCheckpointEndpoint(checkpointStorage) <+>
       requestBlockSignatureEndpoint(checkpointService) <+>
       postFinishedCheckpoint(
@@ -54,8 +49,8 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         checkpointStorage
       )
 
-  private def genesisEndpoint(genesisObservation: => Option[GenesisObservation]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "genesis" => Ok(genesisObservation.asJson)
+  private def genesisEndpoint(genesisStorage: GenesisStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "genesis" => genesisStorage.getGenesisObservation >>= { go => Ok(go.asJson) }
   }
 
   private def requestBlockSignatureEndpoint(
@@ -129,7 +124,7 @@ object CheckpointEndpoints {
   ): HttpRoutes[F] = new CheckpointEndpoints[F]().publicEndpoints(checkpointStorage)
 
   def peerEndpoints[F[_]: Concurrent: ContextShift](
-    genesisObservation: => Option[GenesisObservation],
+    genesisStorage: GenesisStorageAlgebra[F],
     checkpointService: CheckpointService[F],
     metrics: Metrics,
     snapshotService: SnapshotService[F],
@@ -139,7 +134,7 @@ object CheckpointEndpoints {
   ): HttpRoutes[F] =
     new CheckpointEndpoints[F]()
       .peerEndpoints(
-        genesisObservation,
+        genesisStorage,
         checkpointService,
         metrics,
         snapshotService,

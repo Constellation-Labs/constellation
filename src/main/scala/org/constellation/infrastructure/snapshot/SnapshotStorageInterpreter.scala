@@ -17,7 +17,7 @@ class SnapshotStorageInterpreter[F[_]](
   val storedSnapshot: Ref[F, StoredSnapshot] = Ref.unsafe(StoredSnapshot(snapshotZero, Seq.empty))
 
   val totalCheckpointsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
-  val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0L)
+  val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
   val nextSnapshotHash: Ref[F, String] = Ref.unsafe("")
 
   def getStoredSnapshot: F[StoredSnapshot] =
@@ -45,6 +45,9 @@ class SnapshotStorageInterpreter[F[_]](
 
   def getAcceptedCheckpointsSinceSnapshot: F[Set[String]] =
     acceptedCheckpointsSinceSnapshot.get
+
+  def isCheckpointInAcceptedSinceSnapshot(soeHash: String): F[Boolean] =
+    acceptedCheckpointsSinceSnapshot.exists(soeHash)
 
   def countAcceptedCheckpointsSinceSnapshot: F[Int] =
     getAcceptedCheckpointsSinceSnapshot.map(_.size)

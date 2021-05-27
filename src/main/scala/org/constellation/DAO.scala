@@ -9,26 +9,33 @@ import org.constellation.ConfigUtil.AWSStorageConfig
 import org.constellation.checkpoint._
 import org.constellation.consensus._
 import org.constellation.domain.blacklist.BlacklistedAddresses
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.genesis.GenesisStorageAlgebra
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, MissingProposalFinder, RedownloadService}
+import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, MissingProposalFinder, RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.domain.rewards.StoredRewards
+import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
-import org.constellation.genesis.{GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.sampling.PartitionerPeerSampling
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.gossip.validation.MessageValidator
+import org.constellation.infrastructure.checkpointBlock.CheckpointStorageInterpreter
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
+import org.constellation.infrastructure.cluster.{ClusterStorageInterpreter, NodeStorageInterpreter}
+import org.constellation.infrastructure.genesis.GenesisStorageInterpreter
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
-import org.constellation.infrastructure.redownload.RedownloadPeriodicCheck
+import org.constellation.infrastructure.redownload.{RedownloadPeriodicCheck, RedownloadStorageInterpreter}
 import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
-import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotInfoS3Storage, SnapshotLocalStorage, SnapshotS3Storage}
+import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotInfoS3Storage, SnapshotLocalStorage, SnapshotS3Storage, SnapshotStorageInterpreter}
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
@@ -88,6 +95,19 @@ class DAO(
     id
   )
 
+  val checkpointStorage: CheckpointStorageAlgebra[IO] = new CheckpointStorageInterpreter[IO]()
+  val snapshotServiceStorage: SnapshotStorageAlgebra[IO] = new SnapshotStorageInterpreter[IO](snapshotStorage)
+  val clusterStorage: ClusterStorageAlgebra[IO] = new ClusterStorageInterpreter[IO]()
+  val initialState = if (nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
+  val nodeStorage: NodeStorageAlgebra[IO] = new NodeStorageInterpreter[IO](initialState)
+  val genesisStorage: GenesisStorageAlgebra[IO] = new GenesisStorageInterpreter[IO]()
+  val redownloadStorage: RedownloadStorageAlgebra[IO] = new RedownloadStorageInterpreter[IO](
+   missingProposalFinder,
+    ConfigUtil.constellation.getInt("snapshot.meaningfulSnapshotsCount"),
+    ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"),
+    keyPair
+  )
+
   val joiningPeerValidator: JoiningPeerValidator[IO] = JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(unboundedExecutionContext))
   val blacklistedAddresses: BlacklistedAddresses[IO] = BlacklistedAddresses[IO]
   val transactionChainService: TransactionChainService[IO] = TransactionChainService[IO]
@@ -101,26 +121,52 @@ class DAO(
   val eigenTrust: EigenTrust[IO] = new EigenTrust[IO](id)
 
   val transactionService: TransactionService[IO] = TransactionService[IO](transactionChainService, rateLimiting, metrics)
-  val transactionGossiping: TransactionGossiping[IO] = new TransactionGossiping[IO](transactionService, cluster, processingConfig.txGossipingFanout, id)
+  val transactionGossiping: TransactionGossiping[IO] = new TransactionGossiping[IO](transactionService, clusterStorage, processingConfig.txGossipingFanout, id)
   val transactionValidator: TransactionValidator[IO] = new TransactionValidator[IO](transactionService)
 
+  val genesis: Genesis[IO] = new Genesis[IO](
+    genesisStorage,
+    transactionService,
+    nodeStorage,
+    nodeConfig,
+    checkpointStorage,
+    addressService,
+    genesisObservationStorage,
+    cloudService,
+    metrics
+  )
+
   val cluster: Cluster[IO] = Cluster[IO](
-    () => metrics,
     joiningPeerValidator,
     apiClient,
     sessionTokenService,
-    Blocker.liftExecutionContext(unboundedExecutionContext)
+    nodeStorage,
+    clusterStorage,
+    redownloadStorage,
+    downloadService,
+    eigenTrust,
+    processingConfig,
+    Blocker.liftExecutionContext(unboundedExecutionContext),
+    id,
+    alias.getOrElse("alias"),
+    metrics,
+    nodeConfig,
+    peerHostPort,
+    peersInfoPath,
+    externalHostString,
+    externalPeerHTTPPort,
+    snapshotPath,
   )
 
-  val trustManager: TrustManager[IO] = TrustManager[IO](id, cluster)
-  val partitionerPeerSampling: PartitionerPeerSampling[IO] = PartitionerPeerSampling[IO](id, cluster, trustManager)
+  val trustManager: TrustManager[IO] = TrustManager[IO](id, clusterStorage)
+  val partitionerPeerSampling: PartitionerPeerSampling[IO] = PartitionerPeerSampling[IO](id, clusterStorage, trustManager)
 
   val observationService: ObservationService[IO] = new ObservationService[IO](trustManager, metrics)
 
   val trustDataPollingScheduler: TrustDataPollingScheduler = TrustDataPollingScheduler(
     ConfigUtil.config,
     trustManager,
-    cluster,
+    clusterStorage,
     apiClient,
     partitionerPeerSampling,
     unboundedExecutionContext,
@@ -130,7 +176,8 @@ class DAO(
   val dataResolver: DataResolver[IO] = DataResolver(
     keyPair,
     apiClient,
-    cluster,
+    clusterStorage,
+    checkpointStorage,
     transactionService,
     observationService,
     Blocker.liftExecutionContext(unboundedExecutionContext)
@@ -144,8 +191,19 @@ class DAO(
     dataResolver
   )
 
-  val snapshotProposalGossipService: SnapshotProposalGossipService[IO] = SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient, metrics)
-  val checkpointBlockGossipService: CheckpointBlockGossipService[IO] = CheckpointBlockGossipService[IO](id, keyPair, partitionerPeerSampling, cluster, apiClient, metrics)
+  val snapshotProposalGossipService: SnapshotProposalGossipService[IO] = SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, clusterStorage, apiClient, metrics)
+  val checkpointBlockGossipService: CheckpointBlockGossipService[IO] = CheckpointBlockGossipService[IO](id, keyPair, partitionerPeerSampling, clusterStorage, apiClient, metrics)
+
+  val checkpointBlockValidator: CheckpointBlockValidator[IO] = new CheckpointBlockValidator[IO](
+    addressService,
+    snapshotServiceStorage,
+    checkpointStorage,
+    transactionValidator,
+    transactionChainService,
+    metrics,
+    id,
+    transactionService
+  )
 
   val checkpointService: CheckpointService[IO] = new CheckpointService[IO](
     merkleService,
@@ -153,13 +211,13 @@ class DAO(
     blacklistedAddresses,
     transactionService,
     observationService,
-    snapshotService,
+    snapshotServiceStorage,
     checkpointBlockValidator,
-    cluster,
+    nodeStorage,
+    checkpointStorage,
     rateLimiting,
     dataResolver,
     boundedExecutionContext,
-    processingConfig.maxActiveTipsAllowedInMemory,
     processingConfig.maxWidth,
     processingConfig.maxTipUsage,
     processingConfig.numFacilitatorPeers,
@@ -170,17 +228,18 @@ class DAO(
     ),
     id,
     metrics,
-    keyPair,
-    recentBlockTracker
+    keyPair
   )(contextShift)
 
   val rewardsManager: RewardsManager[IO] = new RewardsManager[IO](
     eigenTrust,
-    checkpointService,
     addressService,
     id.address,
     metrics,
-    cluster
+    clusterStorage,
+    nodeStorage,
+    checkpointStorage,
+    id
   )
 
   val consensusRemoteSender: ConsensusRemoteSender[IO] = new ConsensusRemoteSender[IO](
@@ -194,10 +253,11 @@ class DAO(
   val consensusManager: ConsensusManager[IO] = new ConsensusManager[IO](
     transactionService,
     checkpointService,
-    messageService,
+    checkpointStorage,
     observationService,
     consensusRemoteSender,
-    cluster,
+    clusterStorage,
+    nodeStorage,
     apiClient,
     dataResolver,
     checkpointBlockGossipService,
@@ -205,16 +265,17 @@ class DAO(
     Blocker.liftExecutionContext(unboundedExecutionContext),
     IO.contextShift(boundedExecutionContext),
     metrics = metrics,
-    id: Id
+    id,
+    keyPair
   )
   val consensusWatcher: ConsensusWatcher = new ConsensusWatcher(ConfigUtil.config, consensusManager, unboundedExecutionContext)
-  val consensusScheduler: ConsensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, cluster, unboundedExecutionContext)
+  val consensusScheduler: ConsensusScheduler = new ConsensusScheduler(ConfigUtil.config, consensusManager, nodeStorage, unboundedExecutionContext)
 
   val snapshotService: SnapshotService[IO] = SnapshotService[IO](
-    cloudStorage,
     addressService,
     checkpointService,
-    messageService,
+    checkpointStorage,
+    snapshotServiceStorage,
     transactionService,
     observationService,
     rateLimiting,
@@ -229,14 +290,15 @@ class DAO(
     metrics,
     processingConfig,
     id,
-    cluster
+    cluster,
+    clusterStorage
   )
 
   val redownloadService: RedownloadService[IO] = RedownloadService[IO](
-    ConfigUtil.constellation.getInt("snapshot.meaningfulSnapshotsCount"),
+    redownloadStorage,
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightRedownloadDelayInterval"),
-    ConfigUtil.isEnabledCloudStorage,
-    cluster,
+    nodeStorage,
+    clusterStorage,
     MajorityStateChooser(id),
     missingProposalFinder,
     snapshotStorage,
@@ -246,7 +308,7 @@ class DAO(
     checkpointService,
     rewardsManager,
     apiClient,
-    keyPair,
+    id,
     metrics,
     boundedExecutionContext,
     Blocker.liftExecutionContext(unboundedExecutionContext)
@@ -255,50 +317,43 @@ class DAO(
   val snapshotTrigger: SnapshotTrigger = new SnapshotTrigger(
     processingConfig.snapshotTriggeringTimeSeconds,
     unboundedExecutionContext
-  )(cluster, snapshotProposalGossipService, metrics, keyPair, redownloadService, snapshotService) // TODO: redownload and snapshot services
+  )(cluster, nodeStorage, snapshotProposalGossipService, metrics, keyPair, redownloadStorage, snapshotService) // TODO: redownload and snapshot services
 
   var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
   var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _
   var snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[IO, SnapshotInfo]] = _
   var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
 
-  val checkpointBlockValidator: CheckpointBlockValidator[IO] = new CheckpointBlockValidator[IO](
-    addressService,
-    snapshotService,
-    checkpointService,
-    transactionValidator,
-    transactionChainService,
-    metrics,
-    id,
-    transactionService
-  )
-
   val healthChecker = new HealthChecker[IO](
     checkpointService,
     apiClient,
     Blocker.liftExecutionContext(unboundedExecutionContext),
     id,
-    cluster,
+    clusterStorage,
     processingConfig.numFacilitatorPeers
   )
 
   var snapshotWatcher: SnapshotWatcher = new SnapshotWatcher(healthChecker, unboundedExecutionContext)
 
   val rollbackService: RollbackService[IO] = new RollbackService[IO](
+    genesis,
     snapshotService,
     snapshotStorage,
     snapshotInfoStorage,
     snapshotCloudStorage,
     snapshotInfoCloudStorage,
     genesisObservationCloudStorage,
-    redownloadService,
-    cluster
+    redownloadStorage,
+    nodeStorage
   )
 
   val downloadService: DownloadService[IO] = DownloadService[IO](
     redownloadService,
-    cluster,
+    redownloadStorage,
+    nodeStorage,
+    clusterStorage,
     checkpointService,
+    checkpointStorage,
     apiClient,
     metrics,
     boundedExecutionContext,
@@ -309,6 +364,7 @@ class DAO(
     val cs = IO.contextShift(unboundedHealthExecutionContext)
 
     PeerHealthCheck[IO](
+      clusterStorage,
       cluster,
       apiClient,
       metrics,
@@ -323,6 +379,8 @@ class DAO(
     HealthCheckConsensusManager[IO](
       id,
       cluster,
+      clusterStorage,
+      nodeStorage,
       peerHealthCheck,
       metrics,
       apiClient,
@@ -339,11 +397,6 @@ class DAO(
     unboundedExecutionContext,
     redownloadService
   )
-
-  var genesisBlock: Option[CheckpointBlock] = None
-  var genesisObservation: Option[GenesisObservation] = None
-
-  def preventLocalhostAsPeer: Boolean = !nodeConfig.allowLocalhostPeers
 
   def idDir = File(s"tmp/${id.medium}")
 
@@ -425,29 +478,4 @@ class DAO(
 
   }
 
-  def peerInfo: IO[Map[Id, PeerData]] = cluster.getPeerInfo
-
-  private def eqNodeType(nodeType: NodeType)(m: (Id, PeerData)) = m._2.peerMetadata.nodeType == nodeType
-  private def eqNodeState(nodeStates: Set[NodeState])(m: (Id, PeerData)) =
-    nodeStates.contains(m._2.peerMetadata.nodeState)
-
-  def readyPeers: IO[Map[Id, PeerData]] =
-    peerInfo.map(_.filter(eqNodeState(NodeState.readyStates)))
-
-  def readyPeers(nodeType: NodeType): IO[Map[Id, PeerData]] =
-    readyPeers.map(_.filter(eqNodeType(nodeType)))
-
-  def leavingPeers: IO[Map[Id, PeerData]] =
-    peerInfo.map(_.filter(eqNodeState(Set(NodeState.Leaving))))
-
-  // TODO: kpudlik ugly temp fix to make registerAgent mockable in real dao (as we can overwrite DAO methods only)
-  def registerAgent(id: Id): IO[Unit] =
-    eigenTrust.registerAgent(id)
-
-  def readyFacilitatorsAsync: IO[Map[Id, PeerData]] =
-    readyPeers(NodeType.Full).map(_.filter {
-      case (_, pd) =>
-        pd.peerMetadata.timeAdded < (System
-          .currentTimeMillis() - processingConfig.minPeerTimeAddedSeconds * 1000)
-    })
 }

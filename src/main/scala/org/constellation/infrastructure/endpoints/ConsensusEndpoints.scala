@@ -6,14 +6,8 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator}
-import org.constellation.consensus.Consensus.{
-  ConsensusDataProposal,
-  ConsensusProposal,
-  RoundData,
-  SelectedUnionBlock,
-  UnionBlockProposal
-}
+import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointService}
+import org.constellation.consensus.Consensus.{ConsensusDataProposal, ConsensusProposal, RoundData, SelectedUnionBlock, UnionBlockProposal}
 import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
 import org.constellation.consensus.{ConsensusManager, RoundDataRemote}
 import org.constellation.domain.transaction.TransactionService
@@ -25,6 +19,7 @@ import RoundDataRemote._
 import ConsensusDataProposal._
 import UnionBlockProposal._
 import SelectedUnionBlock._
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.schema.observation.ObservationEvent
 
 class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
@@ -44,9 +39,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
     )
 
   private def handleProposal(
-    proposal: ConsensusProposal,
-    consensusManager: ConsensusManager[F],
-    checkpointBlockValidator: CheckpointBlockValidator[F]
+                              proposal: ConsensusProposal,
+                              consensusManager: ConsensusManager[F],
+                              checkpointBlockValidator: CheckpointBlockValidator[F]
   ): F[Response[F]] =
     consensusManager.getRound(proposal.roundId).flatMap {
       case None =>
@@ -54,10 +49,7 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
       case Some(consensus) =>
         proposal match {
           case proposal: ConsensusDataProposal =>
-            CheckpointAcceptanceService
-              .areTransactionsAllowedForAcceptance[F](proposal.transactions.toList)(
-                checkpointBlockValidator
-              )
+            checkpointBlockValidator.validateLastTxRefChain(proposal.transactions.toList).map(_.isValid)
               .ifM(F.start(consensus.addConsensusDataProposal(proposal)) >> Accepted(), BadRequest())
           case proposal: UnionBlockProposal =>
             F.start(consensus.addBlockProposal(proposal)) >> Accepted()

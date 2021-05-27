@@ -335,9 +335,6 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       }
     } yield dao
 
-  def getGenesisObservation(dao: DAO): Option[GenesisObservation] =
-    dao.genesisObservation
-
   private def validateInitConditions(nodeConfig: NodeConfig): Stream[IO, Unit] = {
     import constellation.PublicKeyExt
 

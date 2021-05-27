@@ -6,6 +6,7 @@ import cats.implicits._
 import io.chrisdavenport.fuuid.FUUID
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
@@ -13,7 +14,7 @@ import org.constellation.schema.NodeState.isNotOffline
 import org.constellation.trust.TrustManager
 import org.constellation.util.Partitioner._
 
-class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F], trustManager: TrustManager[F])
+class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, clusterStorage: ClusterStorageAlgebra[F], trustManager: TrustManager[F])
     extends PeerSampling[F] {
   type Partition = IndexedSeq[Id]
 
@@ -45,7 +46,7 @@ class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F],
 
   private def cachedPartitionsCoverAllPeers: F[Boolean] =
     for {
-      peerIds <- cluster.getPeerInfo.map(_.filter {
+      peerIds <- clusterStorage.getPeers.map(_.filter {
         case (_, peerData) => isNotOffline(peerData.peerMetadata.nodeState)
       }.keySet)
       cachedTdi <- trustDataInternalCache.get.map(_.map(_.id).toSet)
@@ -54,7 +55,7 @@ class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, cluster: Cluster[F],
   private def repartitionWithDefaults(): F[Unit] =
     for {
       selfTdi <- trustManager.getTrustDataInternalSelf
-      peerIds <- cluster.getPeerInfo.map(_.keySet)
+      peerIds <- clusterStorage.getPeers.map(_.keySet)
       cachedTdi <- trustDataInternalCache.get
       missingTdi = peerIds -- cachedTdi.map(_.id)
       _ <- logger.debug(
@@ -85,7 +86,7 @@ object PartitionerPeerSampling {
 
   def apply[F[_]: Concurrent](
     selfId: Id,
-    cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     trustManager: TrustManager[F]
-  ): PartitionerPeerSampling[F] = new PartitionerPeerSampling(selfId, cluster, trustManager)
+  ): PartitionerPeerSampling[F] = new PartitionerPeerSampling(selfId, clusterStorage, trustManager)
 }

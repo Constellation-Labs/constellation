@@ -7,6 +7,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.healthcheck.HealthCheckConsensus.HealthcheckRoundId
 import org.constellation.domain.healthcheck.HealthCheckLoggingHelper.logId
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -19,7 +20,8 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 class ReconciliationRound[F[_]](
   ownId: Id,
-  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F],
   val startedAtSecond: FiniteDuration,
   val roundId: RoundId,
   apiClient: ClientInterpreter[F],
@@ -93,9 +95,9 @@ class ReconciliationRound[F[_]](
   // Should we filter out (not send) node's observation about itself?
   private def runReconciliation(): F[Either[Set[Id], Map[Id, List[ClusterAlignmentResult]]]] =
     for {
-      allPeers <- cluster.getPeerInfo
-      ownState <- cluster.getNodeState
-      ownJoinedHeight <- cluster.getOwnJoinedHeight()
+      allPeers <- clusterStorage.getPeers
+      ownState <- nodeStorage.getNodeState
+      ownJoinedHeight <- nodeStorage.getOwnJoinedHeight
       peers = allPeers.filter { case (_, peerData) => canActAsJoiningSource(peerData.peerMetadata.nodeState) }
       // assumption and check before starting reconciliation is that there should be no rounds in progress
       // if the round starts and reconciliation is in progress, reconciliation should be canceled and result discarded
@@ -146,7 +148,8 @@ object ReconciliationRound {
 
   def apply[F[_]: Concurrent: ContextShift: Clock: Timer](
     ownId: Id,
-    cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    nodeStorage: NodeStorageAlgebra[F],
     startedAtSecond: FiniteDuration,
     roundId: RoundId,
     apiClient: ClientInterpreter[F],
@@ -155,7 +158,8 @@ object ReconciliationRound {
   ): ReconciliationRound[F] =
     new ReconciliationRound(
       ownId,
-      cluster,
+      clusterStorage,
+      nodeStorage,
       startedAtSecond,
       roundId,
       apiClient,

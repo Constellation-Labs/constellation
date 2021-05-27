@@ -1,56 +1,53 @@
 package org.constellation.consensus
 
 import cats.effect.concurrent.{Ref, Semaphore}
-import cats.effect.{Blocker, Bracket, Concurrent, ContextShift, IO, LiftIO, Sync, Timer}
+import cats.effect.{Bracket, Concurrent, ContextShift, Sync}
 import cats.syntax.all._
-import com.typesafe.config.Config
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
+import io.circe.{Decoder, Encoder}
+import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.Consensus.ConsensusStage.ConsensusStage
 import org.constellation.consensus.Consensus.StageState.StageState
 import org.constellation.consensus.Consensus._
-import org.constellation.consensus.ConsensusManager.{BroadcastConsensusDataProposal, BroadcastSelectedUnionBlock, BroadcastUnionBlockProposal}
+import org.constellation.consensus.ConsensusManager.{
+  BroadcastConsensusDataProposal,
+  BroadcastSelectedUnionBlock,
+  BroadcastUnionBlockProposal
+}
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.ObservationService
-import org.constellation.p2p.PeerData
-import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockPayload, CheckpointCache, FinishedCheckpoint, FinishedCheckpointBlock}
-import org.constellation.schema.consensus.RoundId
-import org.constellation.schema.observation.Observation
-import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
-import org.constellation.schema.{ChannelMessage, Id, NodeState, PeerNotification}
-import org.constellation.storage._
-import org.constellation.{CheckpointAcceptBlockAlreadyStored, ConfigUtil, ContainsInvalidTransactionsException, DAO, MissingParents, MissingTransactionReference, PendingAcceptance}
-import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
+import org.constellation.p2p.PeerData
+import org.constellation.schema.checkpoint._
+import org.constellation.schema.consensus.RoundId
+import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
+import org.constellation.schema.observation.Observation
 import org.constellation.schema.signature.Signed.signed
+import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
+import org.constellation.schema.{ChannelMessage, Id, PeerNotification}
+import org.constellation.storage._
 import org.constellation.util.Metrics
+import org.constellation._
 
 import java.security.KeyPair
-import scala.concurrent.duration._
 
 class Consensus[F[_]: Concurrent: ContextShift](
   roundData: RoundData,
-  arbitraryMessages: Seq[(ChannelMessage, Int)],
   transactionService: TransactionService[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
   checkpointService: CheckpointService[F],
-  messageService: MessageService[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
   consensusManager: ConsensusManager[F],
-  apiClient: ClientInterpreter[F],
   checkpointBlockGossipService: CheckpointBlockGossipService[F],
   nodeId: Id,
   keyPair: KeyPair,
-  metrics: Metrics,
-  config: Config,
-  remoteCall: Blocker,
-  calculationContext: ContextShift[F]
+  metrics: Metrics
 ) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -66,9 +63,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] val stage: Ref[F, ConsensusStage] = Ref.unsafe(ConsensusStage.STARTING)
 
-  private def withLock[R](thunk: => F[R]): F[R] =
-    Bracket[F, Throwable].bracket(updateSemaphore.acquire)(_ => thunk)(_ => updateSemaphore.release)
-
   def startConsensusDataProposal(): F[Unit] =
     for {
       transactions <- transactionService
@@ -76,8 +70,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
         .map(_.map(_.transaction))
       _ <- logger
         .info(s"Pulled for participating consensus: ${transactions.size}")
-      messages <- Sync[F].delay(threadSafeMessageMemPool.pull())
-      notifications <- LiftIO[F].liftIO(dao.peerInfo.map(_.values.flatMap(_.notification).toSeq))
       observations <- observationService.pullForConsensus(
         ConfigUtil.constellation.getInt("consensus.maxObservationThreshold")
       )
@@ -85,12 +77,8 @@ class Consensus[F[_]: Concurrent: ContextShift](
         roundData.roundId,
         FacilitatorId(nodeId),
         transactions,
-        messages
-          .map(_.map(_.signedMessageData.hash))
-          .getOrElse(Seq()) ++ arbitraryMessages
-          .filter(_._2 == 0)
-          .map(_._1.signedMessageData.hash),
-        notifications,
+        Seq.empty,
+        Seq.empty,
         observations
       )
       _ <- remoteSender.broadcastConsensusDataProposal(
@@ -158,6 +146,83 @@ class Consensus[F[_]: Concurrent: ContextShift](
       else Sync[F].unit
     } yield ()
 
+  def unionConsensusDataProposals(stageState: StageState): F[Unit] = {
+    val action = stageState match {
+      case StageState.BEHIND => mergeConsensusDataProposalsAndBroadcastBlock()
+      case _                 => validateAndMergeConsensusDataProposals()
+    }
+    verifyStage(
+      Set(
+        ConsensusStage.RESOLVING_MAJORITY_CB,
+        ConsensusStage.WAITING_FOR_SELECTED_BLOCKS,
+        ConsensusStage.ACCEPTING_MAJORITY_CB
+      )
+    ).flatTap(_ => action)
+  }
+
+  def addSelectedBlockProposal(proposal: SelectedUnionBlock): F[Unit] =
+    for {
+      _ <- verifyStage(Set(ConsensusStage.ACCEPTING_MAJORITY_CB))
+
+      receivedAllSelectedProposals <- withLock(selectedCheckpointBlocks.modify { curr =>
+        val updated = curr + (proposal.facilitatorId -> proposal.checkpointBlock)
+        (updated, receivedAllSelectedUnionBlocks(updated.size))
+      })
+      _ <- logger.debug(
+        s"[${nodeId.short}] ${roundData.roundId} received selected proposal $receivedAllSelectedProposals"
+      )
+      _ <- if (receivedAllSelectedProposals)
+        stage
+          .modify(_ => (ConsensusStage.ACCEPTING_MAJORITY_CB, ()))
+          .flatTap(_ => validateAndAcceptMajorityBlockProposals())
+      else Sync[F].unit
+    } yield ()
+
+  def verifyStage(forbiddenStages: Set[ConsensusStage]): F[Unit] =
+    stage.get
+      .flatMap(
+        stage =>
+          if (forbiddenStages.contains(stage))
+            getOwnTransactionsToReturn
+              .flatMap(
+                txs =>
+                  getOwnObservationsToReturn.flatMap(
+                    exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
+                  )
+              )
+          else Sync[F].unit
+      )
+
+  def validateReceivedProposals(
+    proposals: Map[FacilitatorId, AnyRef],
+    stage: String,
+    minimumPercentage: Int = 51,
+    countSelfAsPeer: Boolean = true
+  ): F[Either[ConsensusException, Unit]] = {
+    val peerSize = roundData.peers.size + (if (countSelfAsPeer) 1 else 0)
+    val proposalPercentage: Float = proposals.size * 100 / peerSize
+    (proposalPercentage, proposals.size) match {
+      case (percentage, size) if percentage == 0 || size == 1 =>
+        getOwnTransactionsToReturn.flatMap(
+          txs => getOwnObservationsToReturn.map(obs => Left(EmptyProposals(roundData.roundId, stage, txs, obs)))
+        )
+      case (p, _) if p < minimumPercentage =>
+        getOwnTransactionsToReturn.flatMap(
+          txs =>
+            getOwnObservationsToReturn.map(
+              obs =>
+                Left(
+                  NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, obs)
+                )
+            )
+        )
+      case _ => Sync[F].pure(Right(()))
+    }
+  }
+
+  private def withLock[R](thunk: => F[R]): F[R] =
+    Bracket[F, Throwable].bracket(updateSemaphore.acquire)(_ => thunk)(_ => updateSemaphore.release)
+
   private def storeProposal(proposal: ConsensusDataProposal): F[Unit] =
     for {
       txs <- (roundData.transactions ++ proposal.transactions).pure[F]
@@ -177,20 +242,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
       // TODO: store messages and notifications
     } yield ()
-
-  def unionConsensusDataProposals(stageState: StageState): F[Unit] = {
-    val action = stageState match {
-      case StageState.BEHIND => mergeConsensusDataProposalsAndBroadcastBlock()
-      case _                 => validateAndMergeConsensusDataProposals()
-    }
-    verifyStage(
-      Set(
-        ConsensusStage.RESOLVING_MAJORITY_CB,
-        ConsensusStage.WAITING_FOR_SELECTED_BLOCKS,
-        ConsensusStage.ACCEPTING_MAJORITY_CB
-      )
-    ).flatTap(_ => action)
-  }
 
   private[consensus] def validateAndMergeBlockProposals(): F[Unit] =
     for {
@@ -213,24 +264,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
       }
     } yield ()
 
-  def addSelectedBlockProposal(proposal: SelectedUnionBlock): F[Unit] =
-    for {
-      _ <- verifyStage(Set(ConsensusStage.ACCEPTING_MAJORITY_CB))
-
-      receivedAllSelectedProposals <- withLock(selectedCheckpointBlocks.modify { curr =>
-        val updated = curr + (proposal.facilitatorId -> proposal.checkpointBlock)
-        (updated, receivedAllSelectedUnionBlocks(updated.size))
-      })
-      _ <- logger.debug(
-        s"[${nodeId.short}] ${roundData.roundId} received selected proposal $receivedAllSelectedProposals"
-      )
-      _ <- if (receivedAllSelectedProposals)
-        stage
-          .modify(_ => (ConsensusStage.ACCEPTING_MAJORITY_CB, ()))
-          .flatTap(_ => validateAndAcceptMajorityBlockProposals())
-      else Sync[F].unit
-    } yield ()
-
   private[consensus] def acceptMajorityCheckpointBlock(proposals: Map[FacilitatorId, CheckpointBlock]): F[Unit] = {
 
     val sameBlocks = proposals
@@ -242,7 +275,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val uniques = proposals.groupBy(_._2.baseHash).size
 
     for {
-      maybeHeight <- checkpointService.calculateHeight(checkpointBlock)
+      maybeHeight <- checkpointStorage.calculateHeight(checkpointBlock.soeHash)
       cache = CheckpointCache(checkpointBlock, height = maybeHeight)
       _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
       _ <- metrics.incrementMetricAsync(
@@ -325,29 +358,20 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def broadcastSignedBlockToNonFacilitators(
     finishedCheckpoint: FinishedCheckpoint
-  ): F[Unit] = {
-    val allFacilitators = roundData.peers.map(p => p.peerMetadata.id -> p).toMap
-    for {
-      nonFacilitators <- cluster.getPeerInfo
-        .map(
-          info =>
-            info.values.toList
-              .filter(pd => NodeState.isNotOffline(pd.peerMetadata.nodeState))
-              .filterNot(pd => allFacilitators.contains(pd.peerMetadata.id))
+  ): F[Unit] =
+    Concurrent[F].start {
+      checkpointBlockGossipService.spread(
+        CheckpointBlockPayload(
+          signed(
+            FinishedCheckpointBlock(
+              finishedCheckpoint.checkpointCacheData,
+              finishedCheckpoint.facilitators
+            ),
+            keyPair
+          )
         )
-      baseHash = finishedCheckpoint.checkpointCacheData.checkpointBlock.baseHash
-      _ <- logger.debug(
-        s"[${nodeId.short}] ${roundData.roundId} Broadcasting checkpoint block with baseHash ${baseHash}"
       )
-
-      payload = CheckpointBlockPayload(
-        signed(FinishedCheckpointBlock(
-          finishedCheckpoint.checkpointCacheData, finishedCheckpoint.facilitators
-        ), keyPair))
-
-      _ <- Concurrent[F].start(checkpointBlockGossipService.spread(payload))
-    } yield ()
-  }
+    }.void
 
   private[consensus] def mergeBlockProposalsToMajorityBlock(
     proposals: Map[FacilitatorId, CheckpointBlock]
@@ -423,21 +447,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
       }
     } yield ()
 
-  def verifyStage(forbiddenStages: Set[ConsensusStage]): F[Unit] =
-    stage.get
-      .flatMap(
-        stage =>
-          if (forbiddenStages.contains(stage))
-            getOwnTransactionsToReturn
-              .flatMap(
-                txs =>
-                  getOwnObservationsToReturn.flatMap(
-                    exs => consensusManager.handleRoundError(PreviousStage(roundData.roundId, stage, txs, exs))
-                  )
-              )
-          else Sync[F].unit
-      )
-
   private[consensus] def getOwnTransactionsToReturn: F[Seq[Transaction]] =
     withLock(consensusDataProposals.get).map(_.get(FacilitatorId(nodeId)).map(_.transactions).getOrElse(Seq.empty))
 
@@ -454,33 +463,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
   private[consensus] def receivedAllConsensusDataProposals(size: Int): Boolean =
     size == roundData.peers.size
-
-  def validateReceivedProposals(
-    proposals: Map[FacilitatorId, AnyRef],
-    stage: String,
-    minimumPercentage: Int = 51,
-    countSelfAsPeer: Boolean = true
-  ): F[Either[ConsensusException, Unit]] = {
-    val peerSize = roundData.peers.size + (if (countSelfAsPeer) 1 else 0)
-    val proposalPercentage: Float = proposals.size * 100 / peerSize
-    (proposalPercentage, proposals.size) match {
-      case (percentage, size) if percentage == 0 || size == 1 =>
-        getOwnTransactionsToReturn.flatMap(
-          txs => getOwnObservationsToReturn.map(obs => Left(EmptyProposals(roundData.roundId, stage, txs, obs)))
-        )
-      case (p, _) if p < minimumPercentage =>
-        getOwnTransactionsToReturn.flatMap(
-          txs =>
-            getOwnObservationsToReturn.map(
-              obs =>
-                Left(
-                  NotEnoughProposals(roundData.roundId, proposals.size, peerSize, stage, txs, obs)
-                )
-            )
-        )
-      case _ => Sync[F].pure(Right(()))
-    }
-  }
 
 }
 
@@ -501,25 +483,7 @@ object Consensus {
     txsToExclude: List[String] = List.empty[String]
   )
 
-  object ConsensusStage extends Enumeration {
-    type ConsensusStage = Value
-
-    val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
-      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
-      Value
-  }
-
-  object StageState extends Enumeration {
-    type StageState = Value
-    val TIMEOUT, BEHIND, FINISHED = Value
-  }
-
   case class FacilitatorId(id: Id) extends AnyVal
-
-  object FacilitatorId {
-    implicit val facilitatorIdEncoder: Encoder[FacilitatorId] = deriveEncoder
-    implicit val facilitatorIdDecoder: Decoder[FacilitatorId] = deriveDecoder
-  }
 
   case class UnionProposals(state: StageState)
 
@@ -538,21 +502,11 @@ object Consensus {
     observations: Seq[Observation] = Seq.empty[Observation]
   ) extends ConsensusProposal
 
-  object ConsensusDataProposal {
-    implicit val consensusDataProposalDecoder: Decoder[ConsensusDataProposal] = deriveDecoder
-    implicit val consensusDataProposalEncoder: Encoder[ConsensusDataProposal] = deriveEncoder
-  }
-
   case class UnionBlockProposal(
     roundId: RoundId,
     facilitatorId: FacilitatorId,
     checkpointBlock: CheckpointBlock
   ) extends ConsensusProposal
-
-  object UnionBlockProposal {
-    implicit val unionBlockProposalDecoder: Decoder[UnionBlockProposal] = deriveDecoder
-    implicit val unionBlockProposalEncoder: Encoder[UnionBlockProposal] = deriveEncoder
-  }
 
   case class RoundData(
     roundId: RoundId,
@@ -602,6 +556,34 @@ object Consensus {
     facilitatorId: FacilitatorId,
     checkpointBlock: CheckpointBlock
   ) extends ConsensusProposal
+
+  object ConsensusStage extends Enumeration {
+    type ConsensusStage = Value
+
+    val STARTING, WAITING_FOR_PROPOSALS, WAITING_FOR_BLOCK_PROPOSALS, RESOLVING_MAJORITY_CB,
+      WAITING_FOR_SELECTED_BLOCKS, ACCEPTING_MAJORITY_CB =
+      Value
+  }
+
+  object StageState extends Enumeration {
+    type StageState = Value
+    val TIMEOUT, BEHIND, FINISHED = Value
+  }
+
+  object FacilitatorId {
+    implicit val facilitatorIdEncoder: Encoder[FacilitatorId] = deriveEncoder
+    implicit val facilitatorIdDecoder: Decoder[FacilitatorId] = deriveDecoder
+  }
+
+  object ConsensusDataProposal {
+    implicit val consensusDataProposalDecoder: Decoder[ConsensusDataProposal] = deriveDecoder
+    implicit val consensusDataProposalEncoder: Encoder[ConsensusDataProposal] = deriveEncoder
+  }
+
+  object UnionBlockProposal {
+    implicit val unionBlockProposalDecoder: Decoder[UnionBlockProposal] = deriveDecoder
+    implicit val unionBlockProposalEncoder: Encoder[UnionBlockProposal] = deriveEncoder
+  }
 
   object SelectedUnionBlock {
     implicit val selectedUnionBlockDecoder: Decoder[SelectedUnionBlock] = deriveDecoder

@@ -15,6 +15,8 @@ import org.constellation.p2p.{Cluster, DataResolver, PeerData}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.concurrency.SingleLock
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.consensus.RoundId
@@ -25,6 +27,7 @@ import org.constellation.storage._
 import org.constellation.util.{Distance, Metrics}
 import org.constellation.{ConfigUtil, DAO}
 
+import java.security.KeyPair
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.Try
@@ -32,10 +35,11 @@ import scala.util.Try
 class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   transactionService: TransactionService[F],
   checkpointService: CheckpointService[F],
-  messageService: MessageService[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
   observationService: ObservationService[F],
   remoteSender: ConsensusRemoteSender[F],
-  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F],
   apiClient: ClientInterpreter[F],
   dataResolver: DataResolver[F],
   checkpointBlockGossipService: CheckpointBlockGossipService[F],
@@ -43,7 +47,8 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   remoteCall: Blocker,
   calculationContext: ContextShift[F],
   metrics: Metrics,
-  nodeId: Id
+  nodeId: Id,
+  keyPair: KeyPair
 ) {
 
   import ConsensusManager._
@@ -93,18 +98,16 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       roundInfo = ConsensusInfo[F](
         new Consensus[F](
           roundData._1,
-          roundData._2,
           transactionService,
+          checkpointStorage,
           checkpointService,
-          messageService,
           observationService,
           remoteSender,
           this,
-          apiClient,
           checkpointBlockGossipService,
-          config,
-          remoteCall,
-          calculationContext
+          nodeId,
+          keyPair,
+          metrics
         ),
         roundData._1.tipsSOE.minHeight,
         System.currentTimeMillis()
@@ -149,7 +152,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   def syncRoundInProgress(): F[RoundId] =
     for {
-      state <- cluster.getNodeState
+      state <- nodeStorage.getNodeState
       _ <- if (NodeState.canStartOwnConsensus(state)) Sync[F].unit
       else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForOwnConsensus, state))
       own <- ownConsensus.get
@@ -165,7 +168,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       transactions <- transactionService.pullForConsensus(maxTransactionThreshold)
       _ <- logger.info(s"Pulled for new consensus: ${transactions.size}")
-      facilitators <- LiftIO[F].liftIO(readyFacilitatorsAsync)
+      facilitators <- clusterStorage.getReadyAndFullPeers
       tips <- checkpointService.pullTips(facilitators)(metrics)
       _ <- if (tips.isEmpty)
         Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
@@ -173,26 +176,20 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- if (tips.get.peers.isEmpty)
         Sync[F].raiseError[Unit](NoPeersForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
       else Sync[F].unit
-      messages <- Seq() // Sync[F].delay(threadSafeMessageMemPool.pull().getOrElse(Seq()))
       observations <- observationService.pullForConsensus(maxObservationThreshold)
-      lightNodes <- readyPeers(NodeType.Light)
-      lightPeers = if (lightNodes.isEmpty) Set.empty[PeerData]
-      else
-        Set(lightNodes.minBy(p => Distance.calculate(transactions.head.transaction.baseHash, p._1))._2) // TODO: Choose more than one tx and light peers
       allFacilitators = tips.get.peers.values.map(_.peerMetadata.id).toSet ++ Set(nodeId)
-      arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators).map(_.filter(t => t._2 == 1))
       roundData = (
         RoundData(
           roundId,
           tips.get.peers.values.toSet,
-          lightPeers,
+          Set.empty,
           FacilitatorId(nodeId),
           transactions.map(_.transaction),
           tips.get.tipSoe,
-          messages,
+          Seq.empty,
           observations
         ),
-        arbitraryMsgs
+        Seq.empty
       )
 
     } yield roundData
@@ -200,27 +197,25 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   def participateInBlockCreationRound(roundData: RoundData): F[(ConsensusInfo[F], RoundData)] =
     (for {
       _ <- metrics.incrementMetricAsync("consensus_participateInRound")
-      state <- cluster.getNodeState
+      state <- nodeStorage.getNodeState
+      state <- nodeStorage.getNodeState
       _ <- if (NodeState.canParticipateConsensus(state)) Sync[F].unit
       else Sync[F].raiseError[Unit](InvalidNodeState(NodeState.validForConsensusParticipation, state))
       allFacilitators = roundData.peers.map(_.peerMetadata.id) ++ Set(nodeId)
-      arbitraryMsgs <- getArbitraryMessagesWithDistance(allFacilitators)
       updatedRoundData <- adjustPeers(roundData)
       roundInfo = ConsensusInfo(
         new Consensus[F](
           updatedRoundData,
-          arbitraryMsgs,
           transactionService,
+          checkpointStorage,
           checkpointService,
-          messageService,
           observationService,
           remoteSender,
           this,
-          apiClient,
           checkpointBlockGossipService,
-          config,
-          remoteCall,
-          calculationContext
+          nodeId,
+          keyPair,
+          metrics
         ),
         roundData.tipsSOE.minHeight,
         System.currentTimeMillis()
@@ -300,7 +295,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- transactionService.clearInConsensus(cmd.transactionsToReturn.map(_.hash))
       _ <- observationService.returnToPending(cmd.observationsToReturn.map(_.hash))
       _ <- observationService.clearInConsensus(cmd.observationsToReturn.map(_.hash))
-      _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
+//      _ <- updateNotifications(cmd.maybeCB.map(_.notifications.toList))
 //      _ = releaseMessages(cmd.maybeCB)
       _ <- proposals.remove(cmd.roundId.toString)
       _ <- logger.debug(s"[${nodeId.short}] Removed from proposals : ${cmd.roundId.toString}")
@@ -315,13 +310,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- logger.info("Force stop - own block creation round")
     } yield ()
 
-  def updateNotifications(notifications: Option[List[PeerNotification]]): F[Unit] =
-    notifications match {
-      case None      => Sync[F].unit
-      case Some(Nil) => Sync[F].unit
-      case Some(nonEmpty) =>
-        cluster.updatePeerNotifications(nonEmpty)
-    }
+//  def updateNotifications(notifications: Option[List[PeerNotification]]): F[Unit] =
+//    notifications match {
+//      case None      => Sync[F].unit
+//      case Some(Nil) => Sync[F].unit
+//      case Some(nonEmpty) =>
+//        cluster.updatePeerNotifications(nonEmpty)
+//    }
 
 //  def releaseMessages(maybeCB: Option[CheckpointBlock]): Unit =
 //    maybeCB.foreach(
@@ -352,7 +347,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     } yield ()
 
   private[consensus] def adjustPeers(roundData: RoundData): F[RoundData] =
-    cluster.getPeerInfo.map { peers =>
+    clusterStorage.getPeers.map { peers =>
       val initiator = peers.get(roundData.facilitatorId.id) match {
         case Some(value) => value
         case None =>
@@ -372,12 +367,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
-      existing <- soes.map(_.hash).traverse(checkpointService.lookupSoe).map(_.flatten)
+      existing <- soes.map(_.hash).traverse(checkpointStorage.getCheckpoint).map(_.flatten)
       missing = soes.diff(existing)
 
       resolved <- missing
         .map(_.baseHash)
-        .filterA(checkpointService.containsCheckpoint(_).map(!_))
+        .filterA(checkpointStorage.existsCheckpoint(_).map(!_))
+        .flatMap { _.filterA(checkpointStorage.isWaitingForResolving(_).map(!_)) }
         .flatTap { hashes =>
           logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
         }
@@ -392,28 +388,18 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- if (missing.nonEmpty && (resolved.size != missing.size))
         logger.error(s"Missing parents: ${missing.map(_.hash)} with base hashes: ${missing.map(_.baseHash)}")
       else Sync[F].unit
+
+      _ <- Concurrent[F].start {
+        resolved.traverse { checkpointService.accept(_).handleErrorWith(_ => Sync[F].unit) }
+      }
+
+      roundId = roundData.roundId
+      transactions = roundData.transactions
+      observations = roundData.observations
+      _ <- Sync[F].raiseError[Unit](MissingParents(roundId, transactions, observations))
     } yield resolved
-
-  def getArbitraryMessagesWithDistance(facilitators: Set[Id]): F[Seq[(ChannelMessage, Int)]] = {
-
-    def measureDistance(id: Id, tx: ChannelMessage): BigInt = Distance.calculate(tx.signedMessageData.hash, id)
-
-    messageService.arbitraryPool
-      .toMap()
-      .map(_.map { m =>
-        (
-          m._2.channelMessage,
-          facilitators
-            .map(f => (f, measureDistance(f, m._2.channelMessage)))
-            .toSeq
-            .sortBy(_._2)
-            .map(_._1)
-            .indexOf(nodeId)
-        )
-      }.toSeq)
-  }
-
 }
+
 case class OwnConsensus[F[_]: Concurrent](
   roundId: RoundId,
   consensusInfo: Option[ConsensusInfo[F]] = None
@@ -453,6 +439,8 @@ object ConsensusManager {
       extends ConsensusError(id, txs, obs, s"No active peers to start consensus $id")
   case class NotAllPeersParticipate(id: RoundId, txs: List[Transaction], obs: List[Observation])
       extends ConsensusError(id, txs, obs, s"Not all of the peers has participated in consensus $id")
+  case class MissingParents(id: RoundId, txs: List[Transaction], obs: List[Observation])
+    extends ConsensusError(id, txs, obs, s"Missing parents for consensus $id")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)

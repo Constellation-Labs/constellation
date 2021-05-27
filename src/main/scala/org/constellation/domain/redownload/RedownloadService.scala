@@ -7,9 +7,11 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.redownload.RedownloadService._
+import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -29,23 +31,25 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 class RedownloadService[F[_]: NonEmptyParallel](
-  redownloadStorage: RedownloadStorageAlgebra[F],
-  redownloadInterval: Int,
-  nodeStorage: NodeStorageAlgebra[F],
-  clusterStorage: ClusterStorageAlgebra[F],
-  majorityStateChooser: MajorityStateChooser,
-  missingProposalFinder: MissingProposalFinder,
-  snapshotStorage: LocalFileStorage[F, StoredSnapshot],
-  snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
-  snapshotService: SnapshotService[F],
-  cloudService: CloudServiceEnqueue[F],
-  checkpointService: CheckpointService[F],
-  rewardsManager: RewardsManager[F],
-  apiClient: ClientInterpreter[F],
-  nodeId: Id,
-  metrics: Metrics,
-  boundedExecutionContext: ExecutionContext,
-  unboundedBlocker: Blocker
+                                                 redownloadStorage: RedownloadStorageAlgebra[F],
+                                                 redownloadInterval: Int,
+                                                 nodeStorage: NodeStorageAlgebra[F],
+                                                 clusterStorage: ClusterStorageAlgebra[F],
+                                                 majorityStateChooser: MajorityStateChooser,
+                                                 missingProposalFinder: MissingProposalFinder,
+                                                 snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+                                                 snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
+                                                 snapshotService: SnapshotService[F],
+                                                 snapshotServiceStorage: SnapshotStorageAlgebra[F],
+                                                 cloudService: CloudServiceEnqueue[F],
+                                                 checkpointService: CheckpointService[F],
+                                                 checkpointStorage: CheckpointStorageAlgebra[F],
+                                                 rewardsManager: RewardsManager[F],
+                                                 apiClient: ClientInterpreter[F],
+                                                 nodeId: Id,
+                                                 metrics: Metrics,
+                                                 boundedExecutionContext: ExecutionContext,
+                                                 unboundedBlocker: Blocker
 )(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
@@ -216,7 +220,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   def removeUnacceptedSnapshotsFromDisk(): EitherT[F, Throwable, Unit] =
     for {
-      nextSnapshotHash <- snapshotService.nextSnapshotHash.get.attemptT
+      nextSnapshotHash <- snapshotServiceStorage.getNextSnapshotHash.attemptT
       stored <- snapshotStorage.list().map(_.toSet)
       accepted <- redownloadStorage.getAcceptedSnapshots.attemptT.map(_.values.toSet)
       created <- redownloadStorage.getCreatedSnapshots.attemptT.map(_.values.map(_.value.hash).toSet)
@@ -382,17 +386,16 @@ class RedownloadService[F[_]: NonEmptyParallel](
             C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
           }
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
-          awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
+          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse { checkpointStorage.getCheckpoint }.map(_.flatten)
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
-          _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
-
-          _ <- checkpointService.waitingForResolving.modify { blocks =>
-            val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
-            (updated, ())
+          _ <- blocksToAccept.traverse { block =>
+            checkpointStorage.markWaitingForAcceptance(block.checkpointBlock.soeHash)
           }
+
+          _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
           sorted <- C.evalOn(boundedExecutionContext)(F.delay {
             TopologicalSort.sortBlocksTopologically(blocksToAccept)

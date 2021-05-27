@@ -3,6 +3,7 @@ package org.constellation.gossip.checkpoint
 import cats.syntax.all._
 import cats.Parallel
 import cats.effect.{Concurrent, ContextShift, Timer}
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.gossip.GossipService
 import org.constellation.gossip.sampling.PeerSampling
 import org.constellation.gossip.state.{GossipMessage, GossipMessagePathTracker}
@@ -16,17 +17,17 @@ import org.constellation.util.Metrics
 import java.security.KeyPair
 
 class CheckpointBlockGossipService[F[_]: Concurrent: Timer: Parallel: ContextShift](
-  selfId: Id,
-  keyPair: KeyPair,
-  peerSampling: PeerSampling[F],
-  cluster: Cluster[F],
-  apiClient: ClientInterpreter[F],
-  metrics: Metrics
+                                                                                     selfId: Id,
+                                                                                     keyPair: KeyPair,
+                                                                                     peerSampling: PeerSampling[F],
+                                                                                     clusterStorage: ClusterStorageAlgebra[F],
+                                                                                     apiClient: ClientInterpreter[F],
+                                                                                     metrics: Metrics
 ) extends GossipService[F, CheckpointBlockPayload](
       selfId,
       keyPair,
       peerSampling,
-      cluster,
+      clusterStorage,
       metrics,
       new GossipMessagePathTracker[F, CheckpointBlockPayload](metrics)
     ) {
@@ -41,7 +42,7 @@ class CheckpointBlockGossipService[F[_]: Concurrent: Timer: Parallel: ContextShi
     message: GossipMessage[CheckpointBlockPayload]
   ): F[Boolean] =
     for {
-      block <- apiClient.checkpoint.checkFinishedCheckpoint(
+      block <- apiClient.checkpoint.getCheckpoint(
         message.payload.block.value.checkpointCacheData.checkpointBlock.soeHash
       )(peerClientMetadata)
       expectedHash = message.payload.block.value.checkpointCacheData.checkpointBlock.soeHash
@@ -55,9 +56,9 @@ object CheckpointBlockGossipService {
     selfId: Id,
     keyPair: KeyPair,
     peerSampling: PeerSampling[F],
-    cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics
   ): CheckpointBlockGossipService[F] =
-    new CheckpointBlockGossipService[F](selfId, keyPair, peerSampling, cluster, apiClient, metrics)
+    new CheckpointBlockGossipService[F](selfId, keyPair, peerSampling, clusterStorage, apiClient, metrics)
 }

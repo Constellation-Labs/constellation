@@ -35,7 +35,7 @@ class DownloadService[F[_]](
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  def download()(implicit dao: DAO): F[Unit] = {
+  def download(): F[Unit] = {
     val wrappedDownload = for {
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals()
@@ -87,7 +87,7 @@ class DownloadService[F[_]](
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
 
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
-          awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
+          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse { checkpointStorage.getCheckpoint }.map(_.flatten)
 
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
@@ -114,7 +114,7 @@ class DownloadService[F[_]](
       }
     } yield ()
 
-  private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] =
+  private[redownload] def downloadAndAcceptGenesis(): F[Unit] =
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
       _ <- cluster.broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))

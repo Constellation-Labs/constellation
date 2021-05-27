@@ -57,12 +57,10 @@ class SnapshotService[F[_]: Concurrent](
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  val syncBuffer: Ref[F, Map[String, FinishedCheckpoint]] = Ref.unsafe(Map.empty)
-
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
-  def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
+  def attemptSnapshot(): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- checkDiskSpace()
 
@@ -254,36 +252,15 @@ class SnapshotService[F[_]: Concurrent](
       _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
-  def syncBufferAccept(cb: FinishedCheckpoint): F[Unit] =
-    for {
-      size <- syncBuffer.modify { curr =>
-        val updated = curr + (cb.checkpointCacheData.checkpointBlock.baseHash -> cb)
-        (updated, updated.size)
-      }
-      _ <- metrics.updateMetricAsync[F]("syncBufferSize", size)
-    } yield ()
-
-  def syncBufferPull(): F[Map[String, FinishedCheckpoint]] =
-    for {
-      pulled <- syncBuffer.modify(curr => (Map.empty, curr))
-      _ <- metrics.updateMetricAsync[F]("syncBufferSize", pulled.size)
-    } yield pulled
-
   def getSnapshotInfoWithFullData: F[SnapshotInfo] =
     getSnapshotInfo().flatMap { info =>
         info.acceptedCBSinceSnapshot.toList.traverse(checkpointStorage.getCheckpoint).map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
     }
 
-  def updateAcceptedCBSinceSnapshot(cb: CheckpointBlock): F[Unit] =
-        snapshotServiceStorage.addAcceptedCheckpointSinceSnapshot(cb.soeHash) >>
-          snapshotServiceStorage.countAcceptedCheckpointsSinceSnapshot
-            .flatTap { size => metrics.updateMetricAsync("acceptedCBSinceSnapshot", size) }
-            .void
-
   def calculateAcceptedTransactionsSinceSnapshot(): F[Unit] =
     for {
       cbHashes <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot.map(_.toList)
-      _ <- rateLimiting.reset(cbHashes)(checkpointService)
+      _ <- rateLimiting.reset(cbHashes)(checkpointStorage)
     } yield ()
 
   private def checkDiskSpace(): EitherT[F, SnapshotError, Unit] = EitherT {

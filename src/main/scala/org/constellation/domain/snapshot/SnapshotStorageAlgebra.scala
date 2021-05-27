@@ -11,6 +11,7 @@ trait SnapshotStorageAlgebra[F[_]] {
   def setLastSnapshotHeight(height: Int): F[Unit]
 
   def getAcceptedCheckpointsSinceSnapshot: F[Set[String]]
+  def isCheckpointInAcceptedSinceSnapshot(soeHash: String): F[Boolean]
   def countAcceptedCheckpointsSinceSnapshot: F[Int]
   def addAcceptedCheckpointSinceSnapshot(soeHash: String): F[Unit]
   def filterOutAcceptedCheckpointsSinceSnapshot(hashes: Set[String]): F[Unit]

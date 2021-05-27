@@ -4,6 +4,7 @@ import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
@@ -55,12 +56,12 @@ object HealthChecker {
 case class RecentSync(hash: String, height: Long)
 
 class HealthChecker[F[_]: Concurrent](
-  checkpointService: CheckpointService[F],
-  apiClient: ClientInterpreter[F],
-  unboundedBlocker: Blocker,
-  id: Id,
-  cluster: Cluster[F],
-  numFacilitatorPeers: Int
+                                       checkpointService: CheckpointService[F],
+                                       apiClient: ClientInterpreter[F],
+                                       unboundedBlocker: Blocker,
+                                       id: Id,
+                                       clusterStorage: ClusterStorageAlgebra[F],
+                                       numFacilitatorPeers: Int
 )(implicit C: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]
@@ -88,7 +89,7 @@ class HealthChecker[F[_]: Concurrent](
 
   private def collectNextSnapshotHeights(): F[Map[Id, Long]] =
     for {
-      peers <- cluster.getPeerInfo
+      peers <- clusterStorage.getPeers
         .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
       nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)
