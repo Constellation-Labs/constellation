@@ -15,7 +15,8 @@ import scala.util.Random
 /**
   * Peer sampling strategy based on uniform random sample selection
   */
-class RandomPeerSampling[F[_]](selfId: Id, clusterStorage: ClusterStorageAlgebra[F])(implicit F: Concurrent[F]) extends PeerSampling[F] {
+class RandomPeerSampling[F[_]](selfId: Id, clusterStorage: ClusterStorageAlgebra[F])(implicit F: Concurrent[F])
+    extends PeerSampling[F] {
 
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   private val fanout: Int = 1

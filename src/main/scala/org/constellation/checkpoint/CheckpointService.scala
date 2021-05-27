@@ -10,7 +10,11 @@ import org.constellation._
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.domain.blacklist.BlacklistedAddresses
-import org.constellation.domain.checkpointBlock.{AwaitingCheckpointBlock, CheckpointBlockDoubleSpendChecker, CheckpointStorageAlgebra}
+import org.constellation.domain.checkpointBlock.{
+  AwaitingCheckpointBlock,
+  CheckpointBlockDoubleSpendChecker,
+  CheckpointStorageAlgebra
+}
 import org.constellation.domain.cluster.NodeStorageAlgebra
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
@@ -55,6 +59,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
 
   import CheckpointService._
+
   /*** concurrent tip service ***/
   private val snapshotHeightInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")

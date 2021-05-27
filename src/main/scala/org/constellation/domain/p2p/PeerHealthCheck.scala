@@ -134,7 +134,15 @@ object PeerHealthCheck {
     healthHttpPort: String
   )(
     implicit C: ContextShift[F]
-  ) = new PeerHealthCheck[F](clusterStorage, cluster, apiClient, metrics, unboundedHealthBlocker, healthHttpPort = healthHttpPort)
+  ) =
+    new PeerHealthCheck[F](
+      clusterStorage,
+      cluster,
+      apiClient,
+      metrics,
+      unboundedHealthBlocker,
+      healthHttpPort = healthHttpPort
+    )
 
   sealed trait PeerHealthCheckStatus
 

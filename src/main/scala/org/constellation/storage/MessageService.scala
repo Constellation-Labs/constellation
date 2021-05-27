@@ -7,8 +7,7 @@ import org.constellation.DAO
 import org.constellation.schema.{ChannelMessageMetadata, ChannelMetadata}
 import org.constellation.storage.algebra.{Lookup, MerkleStorageAlgebra}
 
-class MessageService[F[_]: Concurrent]()
-    extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
+class MessageService[F[_]: Concurrent]() extends MerkleStorageAlgebra[F, String, ChannelMessageMetadata] {
 
   val merklePool = new ConcurrentStorageService[F, Seq[String]](createSemaphore(), "message_merkle_pool".some)
 

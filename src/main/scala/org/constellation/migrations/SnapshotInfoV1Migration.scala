@@ -3,6 +3,7 @@ package org.constellation.migrations
 import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotInfoV1}
 
 object SnapshotInfoV1Migration {
+
   def convert(old: SnapshotInfoV1): SnapshotInfo =
     SnapshotInfo(
       snapshot = old.snapshot,

@@ -42,9 +42,15 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
     withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>
       a.traverse(x => withLock("acceptedUpdate", accepted.remove(x.hash))).void
 
+  def applySnapshotDirect(a: List[A]): F[Unit] =
+    a.traverse(x => withLock("acceptedUpdate", accepted.remove(x.hash))).void
+
   def removeMerkleRoot(merkleRoot: String): F[Unit] =
     findHashesByMerkleRoot(merkleRoot).flatMap(a => withLock("acceptedUpdate", accepted.remove(a.toSet.flatten))) >>
       withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
+
+  def remove(hash: String): F[Unit] =
+    accepted.remove(hash)
 
   def put(a: A): F[A] = put(a, ConsensusStatus.Pending)
 

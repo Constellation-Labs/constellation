@@ -10,7 +10,13 @@ import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
 import org.constellation.schema.signature.Signed.signed
 import org.constellation.schema.snapshot.{MajorityInfo, SnapshotProposal, SnapshotProposalPayload}
-import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState, SnapshotService}
+import org.constellation.storage.{
+  HeightIntervalConditionNotMet,
+  NotEnoughSpace,
+  SnapshotError,
+  SnapshotIllegalState,
+  SnapshotService
+}
 import org.constellation.util.Logging._
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.{ConfigUtil, DAO}

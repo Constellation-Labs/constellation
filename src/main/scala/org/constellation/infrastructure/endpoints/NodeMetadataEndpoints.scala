@@ -17,17 +17,22 @@ import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgeb
 
 class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
-  def publicEndpoints(addressService: AddressService[F], nodeStorage: NodeStorageAlgebra[F], clusterStorage: ClusterStorageAlgebra[F], nodeType: NodeType) =
+  def publicEndpoints(
+    addressService: AddressService[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    nodeType: NodeType
+  ) =
     getNodeState(nodeStorage, nodeType) <+>
       getAddressBalance(addressService) <+>
       getNodePeers(clusterStorage) <+>
       getPeersMajorityHeights(clusterStorage)
 
   def peerEndpoints(
-                     nodeStorage: NodeStorageAlgebra[F],
-                     clusterStorage: ClusterStorageAlgebra[F],
-                     addressService: AddressService[F],
-                     nodeType: NodeType
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    addressService: AddressService[F],
+    nodeType: NodeType
   ) =
     getNodeState(nodeStorage, nodeType) <+>
       getAddressBalance(addressService) <+>
@@ -85,23 +90,26 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
 object NodeMetadataEndpoints {
 
   def publicEndpoints[F[_]: Concurrent](
-                                         addressService: AddressService[F], nodeStorage: NodeStorageAlgebra[F], clusterStorage: ClusterStorageAlgebra[F], nodeType: NodeType
+    addressService: AddressService[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    nodeType: NodeType
   ): HttpRoutes[F] =
     new NodeMetadataEndpoints[F]().publicEndpoints(addressService, nodeStorage, clusterStorage, nodeType)
 
   def peerEndpoints[F[_]: Concurrent](
-                                       nodeStorage: NodeStorageAlgebra[F],
-                                       clusterStorage: ClusterStorageAlgebra[F],
-                                       addressService: AddressService[F],
-                                       nodeType: NodeType
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    addressService: AddressService[F],
+    nodeType: NodeType
   ): HttpRoutes[F] =
     new NodeMetadataEndpoints[F]().peerEndpoints(nodeStorage, clusterStorage, addressService, nodeType)
 
   def ownerEndpoints[F[_]: Concurrent](
-                                        nodeStorage: NodeStorageAlgebra[F],
-                                        clusterStorage: ClusterStorageAlgebra[F],
-                                        addressService: AddressService[F],
-                                        nodeType: NodeType
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    addressService: AddressService[F],
+    nodeType: NodeType
   ): HttpRoutes[F] =
     new NodeMetadataEndpoints[F]().ownerEndpoints(nodeStorage, clusterStorage, addressService, nodeType)
 }

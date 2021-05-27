@@ -31,25 +31,25 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 class RedownloadService[F[_]: NonEmptyParallel](
-                                                 redownloadStorage: RedownloadStorageAlgebra[F],
-                                                 redownloadInterval: Int,
-                                                 nodeStorage: NodeStorageAlgebra[F],
-                                                 clusterStorage: ClusterStorageAlgebra[F],
-                                                 majorityStateChooser: MajorityStateChooser,
-                                                 missingProposalFinder: MissingProposalFinder,
-                                                 snapshotStorage: LocalFileStorage[F, StoredSnapshot],
-                                                 snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
-                                                 snapshotService: SnapshotService[F],
-                                                 snapshotServiceStorage: SnapshotStorageAlgebra[F],
-                                                 cloudService: CloudServiceEnqueue[F],
-                                                 checkpointService: CheckpointService[F],
-                                                 checkpointStorage: CheckpointStorageAlgebra[F],
-                                                 rewardsManager: RewardsManager[F],
-                                                 apiClient: ClientInterpreter[F],
-                                                 nodeId: Id,
-                                                 metrics: Metrics,
-                                                 boundedExecutionContext: ExecutionContext,
-                                                 unboundedBlocker: Blocker
+  redownloadStorage: RedownloadStorageAlgebra[F],
+  redownloadInterval: Int,
+  nodeStorage: NodeStorageAlgebra[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  majorityStateChooser: MajorityStateChooser,
+  missingProposalFinder: MissingProposalFinder,
+  snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+  snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
+  snapshotService: SnapshotService[F],
+  snapshotServiceStorage: SnapshotStorageAlgebra[F],
+  cloudService: CloudServiceEnqueue[F],
+  checkpointService: CheckpointService[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
+  rewardsManager: RewardsManager[F],
+  apiClient: ClientInterpreter[F],
+  nodeId: Id,
+  metrics: Metrics,
+  boundedExecutionContext: ExecutionContext,
+  unboundedBlocker: Blocker
 )(implicit F: Concurrent[F], C: ContextShift[F], T: Timer[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
@@ -210,9 +210,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       if (isDownload) NodeState.validForDownload.contains(current)
       else NodeState.validForRedownload.contains(current)
     }.ifM(
-        wrappedCheck,
-        logger.debug(s"Node state is not valid for redownload, skipping. isDownload=$isDownload") >> F.unit
-      )
+      wrappedCheck,
+      logger.debug(s"Node state is not valid for redownload, skipping. isDownload=$isDownload") >> F.unit
+    )
   }.handleErrorWith { error =>
     logger.error(error)("Error during checking alignment with majority snapshot.") >>
       error.raiseError[F, Unit]
@@ -386,7 +386,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
             C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
           }
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
-          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse { checkpointStorage.getCheckpoint }.map(_.flatten)
+          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
+            checkpointStorage.getCheckpoint
+          }.map(_.flatten)
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct

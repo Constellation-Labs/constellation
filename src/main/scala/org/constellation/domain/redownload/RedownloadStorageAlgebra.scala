@@ -1,6 +1,11 @@
 package org.constellation.domain.redownload
 
-import org.constellation.domain.redownload.RedownloadService.{PeersProposals, Reputation, SnapshotProposalsAtHeight, SnapshotsAtHeight}
+import org.constellation.domain.redownload.RedownloadService.{
+  PeersProposals,
+  Reputation,
+  SnapshotProposalsAtHeight,
+  SnapshotsAtHeight
+}
 import org.constellation.schema.Id
 import org.constellation.schema.signature.Signed
 import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, SnapshotProposal}

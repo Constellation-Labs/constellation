@@ -28,14 +28,14 @@ case class RollbackData(
 
 class RollbackService[F[_]](
   genesis: Genesis[F],
-                             snapshotService: SnapshotService[F],
-                             snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
-                             snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
-                             snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[F, StoredSnapshot]],
-                             snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[F, SnapshotInfo]],
-                             genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
-                             redownloadStorage: RedownloadStorageAlgebra[F],
-                             nodeStorage: NodeStorageAlgebra[F]
+  snapshotService: SnapshotService[F],
+  snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
+  snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
+  snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[F, StoredSnapshot]],
+  snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[F, SnapshotInfo]],
+  genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
+  redownloadStorage: RedownloadStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F]
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
   private val logger = Slf4jLogger.getLogger[F]
   private val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")

@@ -11,7 +11,13 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.schema.Id
 
-class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], clusterStorage: ClusterStorageAlgebra[F], ownId: Id, unboundedBlocker: Blocker)(
+class PeerDiscovery[F[_]](
+  apiClient: ClientInterpreter[F],
+  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  ownId: Id,
+  unboundedBlocker: Blocker
+)(
   implicit F: Concurrent[F],
   C: ContextShift[F]
 ) {

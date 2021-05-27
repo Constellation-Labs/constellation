@@ -16,13 +16,13 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class TrustDataPollingScheduler(
-                                 config: Config,
-                                 trustManager: TrustManager[IO],
-                                 clusterStorage: ClusterStorageAlgebra[IO],
-                                 apiClient: ClientInterpreter[IO],
-                                 partitionerPeerSampling: PartitionerPeerSampling[IO],
-                                 unboundedExecutionContext: ExecutionContext,
-                                 metrics: Metrics
+  config: Config,
+  trustManager: TrustManager[IO],
+  clusterStorage: ClusterStorageAlgebra[IO],
+  apiClient: ClientInterpreter[IO],
+  partitionerPeerSampling: PartitionerPeerSampling[IO],
+  unboundedExecutionContext: ExecutionContext,
+  metrics: Metrics
 ) extends PeriodicIO("TrustDataPollingScheduler", unboundedExecutionContext) {
 
   override def trigger(): IO[Unit] =

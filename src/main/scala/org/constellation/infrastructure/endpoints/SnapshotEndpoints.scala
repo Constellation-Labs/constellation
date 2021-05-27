@@ -51,14 +51,14 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       getTotalSupply(snapshotService)
 
   def peerEndpoints(
-                     nodeId: Id,
-                     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
-                     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
-                     snapshotService: SnapshotService[F],
-                     nodeStorage: NodeStorageAlgebra[F],
-                     redownloadStorage: RedownloadStorageAlgebra[F],
-                     snapshotProposalGossipService: SnapshotProposalGossipService[F],
-                     messageValidator: MessageValidator
+    nodeId: Id,
+    snapshotStorage: LocalFileStorage[F, StoredSnapshot],
+    snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
+    snapshotService: SnapshotService[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    redownloadStorage: RedownloadStorageAlgebra[F],
+    snapshotProposalGossipService: SnapshotProposalGossipService[F],
+    messageValidator: MessageValidator
   ) =
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
       getStoredSnapshotByHash(snapshotStorage) <+>
@@ -176,13 +176,14 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       }
     }
 
-  private def getLatestMajorityHeight(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "latestMajorityHeight" =>
-      redownloadStorage.getMajorityRange
-        .map(LatestMajorityHeight(_))
-        .map(_.asJson)
-        .flatMap(Ok(_))
-  }
+  private def getLatestMajorityHeight(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "latestMajorityHeight" =>
+        redownloadStorage.getMajorityRange
+          .map(LatestMajorityHeight(_))
+          .map(_.asJson)
+          .flatMap(Ok(_))
+    }
 
   private[endpoints] def postSnapshotProposal(
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
@@ -221,8 +222,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
 
   private def getLatestMajorityState(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "majority" / "state" =>
-      redownloadStorage
-        .getLastMajorityState
+      redownloadStorage.getLastMajorityState
         .map(_.asJson)
         .flatMap(Ok(_))
   }

@@ -7,7 +7,13 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
 import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointService}
-import org.constellation.consensus.Consensus.{ConsensusDataProposal, ConsensusProposal, RoundData, SelectedUnionBlock, UnionBlockProposal}
+import org.constellation.consensus.Consensus.{
+  ConsensusDataProposal,
+  ConsensusProposal,
+  RoundData,
+  SelectedUnionBlock,
+  UnionBlockProposal
+}
 import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
 import org.constellation.consensus.{ConsensusManager, RoundDataRemote}
 import org.constellation.domain.transaction.TransactionService
@@ -39,9 +45,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
     )
 
   private def handleProposal(
-                              proposal: ConsensusProposal,
-                              consensusManager: ConsensusManager[F],
-                              checkpointBlockValidator: CheckpointBlockValidator[F]
+    proposal: ConsensusProposal,
+    consensusManager: ConsensusManager[F],
+    checkpointBlockValidator: CheckpointBlockValidator[F]
   ): F[Response[F]] =
     consensusManager.getRound(proposal.roundId).flatMap {
       case None =>
@@ -49,7 +55,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
       case Some(consensus) =>
         proposal match {
           case proposal: ConsensusDataProposal =>
-            checkpointBlockValidator.validateLastTxRefChain(proposal.transactions.toList).map(_.isValid)
+            checkpointBlockValidator
+              .validateLastTxRefChain(proposal.transactions.toList)
+              .map(_.isValid)
               .ifM(F.start(consensus.addConsensusDataProposal(proposal)) >> Accepted(), BadRequest())
           case proposal: UnionBlockProposal =>
             F.start(consensus.addBlockProposal(proposal)) >> Accepted()

@@ -87,7 +87,9 @@ class DownloadService[F[_]](
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
 
           acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
-          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse { checkpointStorage.getCheckpoint }.map(_.flatten)
+          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
+            checkpointStorage.getCheckpoint
+          }.map(_.flatten)
 
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
@@ -117,13 +119,12 @@ class DownloadService[F[_]](
   private[redownload] def downloadAndAcceptGenesis(): F[Unit] =
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
-      _ <- cluster.broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
+      _ <- cluster
+        .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
         .flatTap { genesis =>
-          ContextShift[F].evalOn(boundedExecutionContext)(F.delay {
-            Genesis.acceptGenesis(genesis)
-          })
+          ContextShift[F].evalOn(boundedExecutionContext)(genesis.acceptGenesis(genesis))
         }
         .void
     } yield ()

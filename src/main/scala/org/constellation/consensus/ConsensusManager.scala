@@ -440,7 +440,7 @@ object ConsensusManager {
   case class NotAllPeersParticipate(id: RoundId, txs: List[Transaction], obs: List[Observation])
       extends ConsensusError(id, txs, obs, s"Not all of the peers has participated in consensus $id")
   case class MissingParents(id: RoundId, txs: List[Transaction], obs: List[Observation])
-    extends ConsensusError(id, txs, obs, s"Missing parents for consensus $id")
+      extends ConsensusError(id, txs, obs, s"Missing parents for consensus $id")
 
   case class BroadcastUnionBlockProposal(roundId: RoundId, peers: Set[PeerData], proposal: UnionBlockProposal)
   case class BroadcastSelectedUnionBlock(roundId: RoundId, peers: Set[PeerData], cb: SelectedUnionBlock)

@@ -43,7 +43,7 @@ class DataResolver[F[_]](
   private val getPeersForResolving: F[List[PeerClientMetadata]] =
     for {
       notOffline <- clusterStorage.getNotOfflinePeers
-      peers = notOffline.map { case (_, peer)  => peer.peerMetadata.toPeerClientMetadata }
+      peers = notOffline.map { case (_, peer) => peer.peerMetadata.toPeerClientMetadata }
     } yield peers.toList
 
   def resolveBatchTransactionsDefaults(

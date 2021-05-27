@@ -14,8 +14,11 @@ import org.constellation.schema.NodeState.isNotOffline
 import org.constellation.trust.TrustManager
 import org.constellation.util.Partitioner._
 
-class PartitionerPeerSampling[F[_]: Concurrent](selfId: Id, clusterStorage: ClusterStorageAlgebra[F], trustManager: TrustManager[F])
-    extends PeerSampling[F] {
+class PartitionerPeerSampling[F[_]: Concurrent](
+  selfId: Id,
+  clusterStorage: ClusterStorageAlgebra[F],
+  trustManager: TrustManager[F]
+) extends PeerSampling[F] {
   type Partition = IndexedSeq[Id]
 
   private val partitionCache: Ref[F, List[Partition]] = Ref.unsafe(List.empty[Partition])

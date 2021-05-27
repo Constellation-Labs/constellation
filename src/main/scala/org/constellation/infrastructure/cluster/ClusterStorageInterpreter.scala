@@ -75,7 +75,7 @@ class ClusterStorageInterpreter[F[_]]()(implicit F: Sync[F], C: Clock[F]) extend
 
   def getNotOfflinePeers: F[Map[Id, PeerData]] =
     getPeers.map {
-      _.toList.filter(p => NodeState.isNotOffline(p._2.peerMetadata.nodeState))
+      _.filter(p => NodeState.isNotOffline(p._2.peerMetadata.nodeState))
     }
 
   def clearPeers(): F[Unit] =

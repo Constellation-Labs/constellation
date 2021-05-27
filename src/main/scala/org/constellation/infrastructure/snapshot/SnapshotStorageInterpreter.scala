@@ -10,8 +10,9 @@ import org.constellation.schema.snapshot.StoredSnapshot
 import org.constellation.concurrency.SetRefUtils.RefOps
 
 class SnapshotStorageInterpreter[F[_]](
-                                        snapshotStorage: LocalFileStorage[F, StoredSnapshot]
-                                      )(implicit F: Sync[F]) extends SnapshotStorageAlgebra[F] {
+  snapshotStorage: LocalFileStorage[F, StoredSnapshot]
+)(implicit F: Sync[F])
+    extends SnapshotStorageAlgebra[F] {
 
   val acceptedCheckpointsSinceSnapshot: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
   val storedSnapshot: Ref[F, StoredSnapshot] = Ref.unsafe(StoredSnapshot(snapshotZero, Seq.empty))
@@ -28,10 +29,11 @@ class SnapshotStorageInterpreter[F[_]](
 
   def exists(hash: String): F[Boolean] =
     getStoredSnapshot.flatMap { stored =>
-      F.pure(stored.snapshot.hash == hash).ifM(
-        F.pure(true),
-        isStored(hash)
-      )
+      F.pure(stored.snapshot.hash == hash)
+        .ifM(
+          F.pure(true),
+          isStored(hash)
+        )
     }
 
   def isStored(hash: String): F[Boolean] =

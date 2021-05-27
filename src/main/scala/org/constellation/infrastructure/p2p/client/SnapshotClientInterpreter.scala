@@ -85,7 +85,9 @@ class SnapshotClientInterpreter[F[_]: ContextShift](
         if (a) F.unit
         else
           F.raiseError(
-            new Throwable(s"Cannot post proposal of hash ${message.payload.proposal.value.hash} and height ${message.payload.proposal.value.height}")
+            new Throwable(
+              s"Cannot post proposal of hash ${message.payload.proposal.value.hash} and height ${message.payload.proposal.value.height}"
+            )
           )
     )
 }

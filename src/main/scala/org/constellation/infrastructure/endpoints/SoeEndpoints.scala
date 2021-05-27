@@ -16,7 +16,8 @@ class SoeEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   def peerEndpoints(checkpointStorage: CheckpointStorageAlgebra[F]) = getSoeEndpoint(checkpointStorage)
 
   private def getSoeEndpoint(checkpointStorage: CheckpointStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "soe" / hash => checkpointStorage.getCheckpoint(hash).map(_.map(_.checkpointBlock.soe)).map(_.asJson).flatMap(Ok(_))
+    case GET -> Root / "soe" / hash =>
+      checkpointStorage.getCheckpoint(hash).map(_.map(_.checkpointBlock.soe)).map(_.asJson).flatMap(Ok(_))
   }
 
 }

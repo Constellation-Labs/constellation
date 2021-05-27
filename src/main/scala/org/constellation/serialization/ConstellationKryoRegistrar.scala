@@ -25,6 +25,6 @@ object ConstellationKryoRegistrar
         (classOf[StoredRewards], 185, DefaultSerializer),
         (classOf[BuildInfoJson], 187, DefaultSerializer),
         (classOf[GossipPath], 1032, DefaultSerializer),
-        (classOf[GossipMessage[_]], 1033, DefaultSerializer),
+        (classOf[GossipMessage[_]], 1033, DefaultSerializer)
       )
     ) {}

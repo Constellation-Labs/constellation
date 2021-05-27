@@ -136,5 +136,6 @@ object TrustManager {
         )
     }
 
-  def apply[F[_]: Concurrent](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F]): TrustManager[F] = new TrustManager[F](nodeId, clusterStorage)
+  def apply[F[_]: Concurrent](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F]): TrustManager[F] =
+    new TrustManager[F](nodeId, clusterStorage)
 }

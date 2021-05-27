@@ -21,12 +21,12 @@ import org.constellation.util.Metrics
 import scala.concurrent.duration._
 
 abstract class GossipService[F[_]: Parallel, A](
-                                                 selfId: Id,
-                                                 keyPair: KeyPair,
-                                                 peerSampling: PeerSampling[F],
-                                                 clusterStorage: ClusterStorageAlgebra[F],
-                                                 metrics: Metrics,
-                                                 messageTracker: GossipMessagePathTracker[F, A]
+  selfId: Id,
+  keyPair: KeyPair,
+  peerSampling: PeerSampling[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  metrics: Metrics,
+  messageTracker: GossipMessagePathTracker[F, A]
 )(
   implicit F: Concurrent[F],
   C: ContextShift[F],

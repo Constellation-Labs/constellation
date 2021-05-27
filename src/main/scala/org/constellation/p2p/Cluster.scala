@@ -718,7 +718,7 @@ object Cluster {
       peersInfoPath,
       externalHostString,
       externalPeerHTTPPort,
-      snapshotPath,
+      snapshotPath
     )
 
   case class ClusterNode(alias: String, id: Id, ip: HostPort, status: NodeState, reputation: Long)

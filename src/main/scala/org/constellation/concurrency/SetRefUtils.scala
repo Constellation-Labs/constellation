@@ -6,6 +6,7 @@ import cats.effect.concurrent.Ref
 
 object SetRefUtils {
   implicit class RefOps[F[_]: Sync, K, V](val ref: Ref[F, Set[K]]) {
+
     def add(k: K): F[Unit] =
       ref.modify(a => (a + k, ()))
 

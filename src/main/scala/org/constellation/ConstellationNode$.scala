@@ -119,32 +119,32 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       )
 
       publicEndpoints = MetricsEndpoints.publicEndpoints[IO](dao.metrics) <+>
-        NodeMetadataEndpoints.publicEndpoints[IO](dao.addressService, dao.cluster, dao.nodeType) <+>
+        NodeMetadataEndpoints.publicEndpoints[IO](dao.addressService, dao.nodeStorage, dao.clusterStorage, dao.nodeType) <+>
         TransactionEndpoints.publicEndpoints[IO](dao.transactionService, dao.checkpointBlockValidator) <+>
         ClusterEndpoints.publicEndpoints[IO](dao.cluster, dao.trustManager) <+>
-        CheckpointEndpoints.publicEndpoints[IO](dao.checkpointService) <+>
+        CheckpointEndpoints.publicEndpoints[IO](dao.checkpointStorage) <+>
         ObservationEndpoints.publicEndpoints[IO](dao.observationService) <+>
         SnapshotEndpoints.publicEndpoints[IO](
           dao.id,
           dao.snapshotStorage,
           dao.snapshotService,
-          dao.redownloadService
+          dao.redownloadStorage
         ) <+>
-        TipsEndpoints.publicEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
-        SoeEndpoints.publicEndpoints[IO](dao.checkpointService)
+        TipsEndpoints.publicEndpoints[IO](dao.id, dao.checkpointStorage) <+>
+        SoeEndpoints.publicEndpoints[IO](dao.checkpointStorage)
 
       peerPublicEndpoints = SignEndpoints.publicPeerEndpoints[IO](dao.keyPair, dao.cluster) <+>
         BuildInfoEndpoints.peerEndpoints[IO]() <+> MetricsEndpoints.peerEndpoints[IO](dao.metrics) <+>
-        NodeMetadataEndpoints.peerEndpoints[IO](dao.cluster, dao.addressService, dao.nodeType)
+        NodeMetadataEndpoints.peerEndpoints[IO](dao.nodeStorage, dao.clusterStorage, dao.addressService, dao.nodeType)
 
       peerWhitelistedEndpoints = CheckpointEndpoints.peerEndpoints[IO](
-        getGenesisObservation(dao),
+        dao.genesisStorage,
         dao.checkpointService,
         dao.metrics,
         dao.snapshotService,
         dao.checkpointBlockGossipService,
         dao.messageValidator,
-        dao.concurrentTipService
+        dao.checkpointStorage
       ) <+>
         ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
         ConsensusEndpoints
@@ -155,26 +155,26 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.snapshotStorage,
           dao.snapshotInfoStorage,
           dao.snapshotService,
-          dao.cluster,
-          dao.redownloadService,
+          dao.nodeStorage,
+          dao.redownloadStorage,
           dao.snapshotProposalGossipService,
           dao.messageValidator
         ) <+>
-        SoeEndpoints.peerEndpoints[IO](dao.checkpointService) <+>
-        TipsEndpoints.peerEndpoints[IO](dao.id, dao.concurrentTipService, dao.checkpointService) <+>
+        SoeEndpoints.peerEndpoints[IO](dao.checkpointStorage) <+>
+        TipsEndpoints.peerEndpoints[IO](dao.id, dao.checkpointStorage) <+>
         TransactionEndpoints.peerEndpoints[IO](dao.transactionService, dao.metrics)
 
       ownerEndpoints = BuildInfoEndpoints.ownerEndpoints[IO]() <+>
         MetricsEndpoints.ownerEndpoints[IO](dao.metrics) <+>
         UIEndpoints.ownerEndpoints[IO](dao.messageService, unbounded) <+>
         StatisticsEndpoints.ownerEndpoints[IO](dao.recentBlockTracker, dao.transactionService, dao.cluster) <+>
-        NodeMetadataEndpoints.ownerEndpoints[IO](dao.cluster, dao.addressService, dao.nodeType) <+>
+        NodeMetadataEndpoints.ownerEndpoints[IO](dao.nodeStorage, dao.clusterStorage, dao.addressService, dao.nodeType) <+>
         SignEndpoints.ownerEndpoints[IO](dao.cluster) <+>
-        SnapshotEndpoints.ownerEndpoints[IO](dao.id, dao.snapshotStorage, dao.redownloadService)
+        SnapshotEndpoints.ownerEndpoints[IO](dao.id, dao.snapshotStorage, dao.redownloadStorage)
 
       getKnownPeerId = { (ip: String) =>
-        dao.cluster
-          .getPeerData(ip)
+        dao.clusterStorage
+          .getPeer(ip)
           .map(_.filter(pd => NodeState.canUseAPI(pd.peerMetadata.nodeState)).map(_.peerMetadata.id))
       }
 
@@ -297,6 +297,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       _ <- Stream.eval(IO {
         dao.metrics = new Metrics(
           registry,
+          dao.clusterStorage,
           periodSeconds = nodeConfig.processingConfig.metricCheckInterval,
           unboundedExecutionContext
         )(dao)
@@ -319,8 +320,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       _ <- Stream.eval {
         if (nodeConfig.isGenesisNode) {
           logger.info("Creating genesis block") >>
-            IO(Genesis.start()(dao)) >>
-            logger.info(s"Genesis block ${dao.genesisBlock.map(CheckpointBlock.checkpointToJsonString).getOrElse("")}") >>
+            dao.genesis.start() >>
             dao.sessionTokenService.createAndSetNewOwnToken() >>
             dao.cluster.compareAndSet(NodeState.initial, NodeState.Ready)
         } else if (nodeConfig.isRollbackNode) {

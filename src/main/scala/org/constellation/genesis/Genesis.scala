@@ -52,11 +52,6 @@ class Genesis[F[_]: Concurrent](
 
     // FLOW: !!!!!!!!!!!!!!
     for {
-      _ <- nodeStorage.setParticipatedInGenesisFlow(true)
-      _ <- nodeStorage.setParticipatedInRollbackFlow(false)
-      _ <- nodeStorage.setJoinedAsInitialFacilitator(true)
-      _ <- nodeStorage.setOwnJoinedHeight(0L)
-      genesisObservation <- createGenesisObservation(nodeConfig.allocAccountBalances)
       _ <- putBlocks
       _ <- setBalances
       _ <- metrics.updateMetricAsync[F]("genesisAccepted", "true")
@@ -77,6 +72,16 @@ class Genesis[F[_]: Concurrent](
       _ <- cloudService.enqueueGenesis(go)
     } yield ()
   }
+
+  def start(): F[Unit] =
+    for {
+      _ <- nodeStorage.setParticipatedInGenesisFlow(true)
+      _ <- nodeStorage.setParticipatedInRollbackFlow(false)
+      _ <- nodeStorage.setJoinedAsInitialFacilitator(true)
+      _ <- nodeStorage.setOwnJoinedHeight(0L)
+      genesisObservation <- createGenesisObservation(nodeConfig.allocAccountBalances)
+      _ <- acceptGenesis(genesisObservation)
+    } yield ()
 
   private def createGenesisObservation(
     allocAccountBalances: Seq[AccountBalance] = Seq.empty

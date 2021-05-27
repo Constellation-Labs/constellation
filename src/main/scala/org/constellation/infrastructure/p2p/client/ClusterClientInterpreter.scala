@@ -16,8 +16,9 @@ import org.http4s.circe.CirceEntityEncoder._
 import org.http4s.Method._
 import scala.language.reflectiveCalls
 
-class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])(implicit F: Concurrent[F])
-    extends ClusterClientAlgebra[F] {
+class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F])(
+  implicit F: Concurrent[F]
+) extends ClusterClientAlgebra[F] {
 
   import Id._
   import ClusterNode._
@@ -49,6 +50,9 @@ class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTok
 
 object ClusterClientInterpreter {
 
-  def apply[F[_]: Concurrent: ContextShift](client: Client[F], sessionTokenService: SessionTokenService[F]): ClusterClientInterpreter[F] =
+  def apply[F[_]: Concurrent: ContextShift](
+    client: Client[F],
+    sessionTokenService: SessionTokenService[F]
+  ): ClusterClientInterpreter[F] =
     new ClusterClientInterpreter[F](client, sessionTokenService)
 }

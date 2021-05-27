@@ -17,12 +17,12 @@ import org.constellation.util.Metrics
 import java.security.KeyPair
 
 class CheckpointBlockGossipService[F[_]: Concurrent: Timer: Parallel: ContextShift](
-                                                                                     selfId: Id,
-                                                                                     keyPair: KeyPair,
-                                                                                     peerSampling: PeerSampling[F],
-                                                                                     clusterStorage: ClusterStorageAlgebra[F],
-                                                                                     apiClient: ClientInterpreter[F],
-                                                                                     metrics: Metrics
+  selfId: Id,
+  keyPair: KeyPair,
+  peerSampling: PeerSampling[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  apiClient: ClientInterpreter[F],
+  metrics: Metrics
 ) extends GossipService[F, CheckpointBlockPayload](
       selfId,
       keyPair,

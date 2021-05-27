@@ -122,11 +122,14 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
     usages(soeHash).get.map(_.map(_.size).getOrElse(0))
 
   def registerUsage(soeHash: String): F[Unit] =
-    getParentSoeHashes(soeHash).map(_.sequence.flatten).flatMap {
-      _.traverse { parent =>
-        usages(parent).update(_.orElse(Set.empty[String].some).map(_ + soeHash))
+    getParentSoeHashes(soeHash)
+      .map(_.sequence.flatten)
+      .flatMap {
+        _.traverse { parent =>
+          usages(parent).update(_.orElse(Set.empty[String].some).map(_ + soeHash))
+        }
       }
-    }.void
+      .void
 
   def getUsages: F[Map[String, Set[String]]] =
     usages.toMap
@@ -168,9 +171,13 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   def getTips: F[Set[(String, Height)]] =
     tips.get
       .flatMap(_.toList.traverse(getCheckpoint))
-      .map(a => a.flatten.map { checkpoint =>
-        (checkpoint.checkpointBlock.soeHash, checkpoint.height.getOrElse(Height(0L, 0L)))
-      }).map(_.toSet)
+      .map(
+        a =>
+          a.flatten.map { checkpoint =>
+            (checkpoint.checkpointBlock.soeHash, checkpoint.height.getOrElse(Height(0L, 0L)))
+          }
+      )
+      .map(_.toSet)
 
   def getCheckpoint(soeHash: String): F[Option[CheckpointCache]] =
     checkpoints(soeHash).get

@@ -19,7 +19,12 @@ import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.Cluster
-import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockMetadata, CheckpointCache, FinishedCheckpoint}
+import org.constellation.schema.checkpoint.{
+  CheckpointBlock,
+  CheckpointBlockMetadata,
+  CheckpointCache,
+  FinishedCheckpoint
+}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
@@ -68,13 +73,11 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
-      minActiveTipHeight <- consensusManager.getActiveMinHeight
-        .attemptT
+      minActiveTipHeight <- consensusManager.getActiveMinHeight.attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
 //      minTipHeight <- checkpointStorage.getMinTipHeight(minActiveTipHeight)
-      minTipHeight <- checkpointStorage.getMinTipHeight
-        .attemptT
+      minTipHeight <- checkpointStorage.getMinTipHeight.attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
@@ -82,7 +85,7 @@ class SnapshotService[F[_]: Concurrent](
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
-      allBlocks = blocksWithinHeightInterval.map(_.get).sortBy(_.checkpointBlock.baseHash)
+      allBlocks = blocksWithinHeightInterval.sortBy(_.checkpointBlock.baseHash)
 
       hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash)
       publicReputation <- trustManager.getPredictedReputation.attemptT
@@ -129,7 +132,11 @@ class SnapshotService[F[_]: Concurrent](
       _ <- updateMetricsAfterSnapshot().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       snapshot = StoredSnapshot(nextSnapshot, allBlocks)
-      _ <- snapshotServiceStorage.setStoredSnapshot(snapshot).attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
+      _ <- snapshotServiceStorage
+        .setStoredSnapshot(snapshot)
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
       // TODO: pass stored snapshot to writeSnapshotToDisk
       _ <- writeSnapshotToDisk(snapshot.snapshot)
       _ <- writeSnapshotInfoToDisk()
@@ -213,9 +220,9 @@ class SnapshotService[F[_]: Concurrent](
       _ <- C.evalOn(boundedExecutionContext)(addressService.setAll(snapshotInfo.addressCacheData))
       _ <- C.evalOn(boundedExecutionContext) {
         (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-            checkpointStorage.persistCheckpoint(h) >>
-              checkpointStorage.acceptCheckpoint(h.checkpointBlock.soeHash, h.height)
-            metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
+          checkpointStorage.persistCheckpoint(h) >>
+            checkpointStorage.acceptCheckpoint(h.checkpointBlock.soeHash, h.height)
+          metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
             h.checkpointBlock.transactions.toList.traverse { tx =>
               transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
             } >>
@@ -246,15 +253,17 @@ class SnapshotService[F[_]: Concurrent](
       accepted <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot
       soeHashes = (snap.snapshot.checkpointBlocks ++ accepted).toList
       fetched <- getCheckpointBlocksFromSnapshot(soeHashes)
-      _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.removeMerkleRoot))
-      _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.removeMerkleRoot))
+//      _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.removeMerkleRoot))
+//      _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.removeMerkleRoot))
       _ <- checkpointStorage.removeCheckpoints(soeHashes.toSet)
       _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
   def getSnapshotInfoWithFullData: F[SnapshotInfo] =
     getSnapshotInfo().flatMap { info =>
-        info.acceptedCBSinceSnapshot.toList.traverse(checkpointStorage.getCheckpoint).map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
+      info.acceptedCBSinceSnapshot.toList
+        .traverse(checkpointStorage.getCheckpoint)
+        .map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
     }
 
   def calculateAcceptedTransactionsSinceSnapshot(): F[Unit] =
@@ -317,7 +326,7 @@ class SnapshotService[F[_]: Concurrent](
     snapshotServiceStorage.getLastSnapshotHeight
       .map(_ + snapshotHeightInterval)
 
-  private def getBlocksWithinHeightInterval(nextHeightInterval: Long): F[List[Option[CheckpointCache]]] =
+  private def getBlocksWithinHeightInterval(nextHeightInterval: Long): F[List[CheckpointCache]] =
     for {
       height <- snapshotServiceStorage.getLastSnapshotHeight
       soeHashes <- checkpointStorage.getAcceptedCheckpoints.map(_.toList)
@@ -334,7 +343,7 @@ class SnapshotService[F[_]: Concurrent](
     } yield blocksWithinInterval
 
   private def validateBlocksWithinHeightInterval(
-    blocks: List[Option[CheckpointCache]]
+    blocks: List[CheckpointCache]
   ): EitherT[F, SnapshotError, Unit] = EitherT {
     Sync[F].pure {
       if (blocks.isEmpty) {
@@ -494,7 +503,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- applySnapshotObservations(cbs)
     } yield ()
 
-  private def getCheckpointBlocksFromSnapshot(blocks: List[String]): F[List[CheckpointBlockMetadata]] =
+  private def getCheckpointBlocksFromSnapshot(blocks: List[String]): F[List[CheckpointBlock]] =
     for {
       cbData <- blocks.map(checkpointStorage.getCheckpoint).sequence
 
@@ -505,24 +514,20 @@ class SnapshotService[F[_]: Concurrent](
       cbs = cbData.flatten.map(_.checkpointBlock)
     } yield cbs
 
-  private def applySnapshotObservations(cbs: List[CheckpointBlockMetadata]): F[Unit] =
+  private def applySnapshotObservations(cbs: List[CheckpointBlock]): F[Unit] =
     for {
-      _ <- cbs.traverse(c => c.observationsMerkleRoot.traverse(observationService.removeMerkleRoot)).void
+      _ <- cbs.traverse(c => c.observations.toList.traverse(o => observationService.remove(o.hash)))
     } yield ()
 
-  private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlockMetadata]): F[Unit] =
+  private def applySnapshotTransactions(s: Snapshot, cbs: List[CheckpointBlock]): F[Unit] =
     for {
-      txs <- cbs
-        .traverse(_.transactionsMerkleRoot.traverse(checkpointService.fetchBatchTransactions).map(_.getOrElse(List())))
-        .map(_.flatten)
-
+      txs <- cbs.flatMap(_.transactions.toList).pure[F]
       _ <- txs
         .filterNot(_.isDummy)
         .traverse(t => addressService.transferSnapshotTransaction(t))
 
-      _ <- cbs.traverse(
-        _.transactionsMerkleRoot.traverse(transactionService.applySnapshot(txs.map(TransactionCacheData(_)), _))
-      )
+
+      _ <- transactionService.applySnapshotDirect(txs.map(TransactionCacheData(_)))
     } yield ()
 
   private def markLeavingPeersAsOffline(): F[Unit] =
@@ -532,7 +537,8 @@ class SnapshotService[F[_]: Concurrent](
       })
       .flatMap {
         _.values.toList.map(_.peerMetadata.id).traverse { p =>
-          cluster.markOfflinePeer(p)
+          cluster
+            .markOfflinePeer(p)
             .handleErrorWith(err => logger.warn(err)(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
         }
       }
@@ -545,7 +551,8 @@ class SnapshotService[F[_]: Concurrent](
       })
       .flatMap {
         _.values.toList.traverse { p =>
-          cluster.removePeer(p)
+          cluster
+            .removePeer(p)
             .handleErrorWith(err => logger.warn(err)(s"Cannot remove offline peer: ${err.getMessage}"))
         }
       }

@@ -56,12 +56,12 @@ object HealthChecker {
 case class RecentSync(hash: String, height: Long)
 
 class HealthChecker[F[_]: Concurrent](
-                                       checkpointService: CheckpointService[F],
-                                       apiClient: ClientInterpreter[F],
-                                       unboundedBlocker: Blocker,
-                                       id: Id,
-                                       clusterStorage: ClusterStorageAlgebra[F],
-                                       numFacilitatorPeers: Int
+  checkpointService: CheckpointService[F],
+  apiClient: ClientInterpreter[F],
+  unboundedBlocker: Blocker,
+  id: Id,
+  clusterStorage: ClusterStorageAlgebra[F],
+  numFacilitatorPeers: Int
 )(implicit C: ContextShift[F]) {
 
   val logger = Slf4jLogger.getLogger[F]

@@ -77,7 +77,9 @@ class TransactionService[F[_]: Concurrent](
                 None
             }
       }
-      _ <- logger.debug(s"Removing pending txs with ordinal less or equal to ordinal of last accepted tx, hashes=$invalidTxHashes")
+      _ <- logger.debug(
+        s"Removing pending txs with ordinal less or equal to ordinal of last accepted tx, hashes=$invalidTxHashes"
+      )
       _ <- pending.remove(invalidTxHashes.toSet)
     } yield ()
 

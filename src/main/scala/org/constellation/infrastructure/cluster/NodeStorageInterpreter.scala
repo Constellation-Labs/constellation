@@ -56,7 +56,9 @@ class NodeStorageInterpreter[F[_]](nodeInitialState: NodeState)(implicit F: Sync
     nodeState.get
 
   def setNodeState(state: NodeState): F[Unit] =
-    nodeState.modify { _ => (state, ()) }
+    nodeState.modify { _ =>
+      (state, ())
+    }
 
   def compareAndSet(expected: Set[NodeState], newState: NodeState): F[SetStateResult] =
     nodeState.modify { current =>
