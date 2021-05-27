@@ -2,7 +2,7 @@ package org.constellation.snapshot
 
 import cats.effect.IO
 import cats.syntax.all._
-import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.exception.InvalidNodeState
 import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
@@ -10,13 +10,7 @@ import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
 import org.constellation.schema.signature.Signed.signed
 import org.constellation.schema.snapshot.{MajorityInfo, SnapshotProposal, SnapshotProposalPayload}
-import org.constellation.storage.{
-  HeightIntervalConditionNotMet,
-  NotEnoughSpace,
-  SnapshotError,
-  SnapshotIllegalState,
-  SnapshotService
-}
+import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState, SnapshotService}
 import org.constellation.util.Logging._
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.{ConfigUtil, DAO}
@@ -34,7 +28,8 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
   metrics: Metrics,
   keyPair: KeyPair,
   redownloadStorage: RedownloadStorageAlgebra[IO],
-  snapshotService: SnapshotService[IO]
+  snapshotService: SnapshotService[IO],
+  broadcastService: BroadcastService[IO]
 ) extends PeriodicIO("SnapshotTrigger", unboundedExecutionContext) {
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
@@ -48,7 +43,7 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
   private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
-        stateSet <- nodeStorage.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation)
+        stateSet <- broadcastService.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation)
         _ <- if (!stateSet.isNewSet)
           IO.raiseError(InvalidNodeState(NodeState.validForSnapshotCreation, stateSet.oldState))
         else IO.unit
@@ -103,7 +98,7 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
     )
 
   def resetNodeState(stateSet: SetStateResult): IO[SetStateResult] =
-    nodeStorage.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState)
+    broadcastService.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState)
 
   def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] = {
     implicit val cs = contextShift

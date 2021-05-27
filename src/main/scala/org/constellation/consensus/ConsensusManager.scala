@@ -94,7 +94,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       roundId <- withLock("startOwnRound", syncRoundInProgress())
       _ <- logger.debug(s"[${nodeId.short}] Starting own consensus $roundId")
       roundData <- createRoundData(roundId)
-      missing <- resolveMissingParents(roundData._1)
+      _ <- resolveMissingParents(roundData._1)
       roundInfo = ConsensusInfo[F](
         new Consensus[F](
           roundData._1,
@@ -363,17 +363,16 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   private[consensus] def resolveMissingParents(
     roundData: RoundData
-  ): F[List[CheckpointCache]] =
+  ): F[Unit] =
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
-      existing <- soes.map(_.hash).traverse(checkpointStorage.getCheckpoint).map(_.flatten)
-      missing = soes.diff(existing)
+      existing <- soes.map(_.baseHash).filterA(checkpointStorage.existsCheckpoint)
+      missing = soes.filterNot(soe => existing.contains(soe.baseHash))
 
       resolved <- missing
         .map(_.baseHash)
-        .filterA(checkpointStorage.existsCheckpoint(_).map(!_))
-        .flatMap { _.filterA(checkpointStorage.isWaitingForResolving(_).map(!_)) }
+        .filterA(checkpointStorage.isWaitingForResolving(_).map(!_))
         .flatTap { hashes =>
           logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
         }
@@ -393,11 +392,13 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         resolved.traverse { checkpointService.accept(_).handleErrorWith(_ => Sync[F].unit) }
       }
 
-      roundId = roundData.roundId
-      transactions = roundData.transactions
-      observations = roundData.observations
-      _ <- Sync[F].raiseError[Unit](MissingParents(roundId, transactions, observations))
-    } yield resolved
+      _ <- if (missing.nonEmpty) {
+        val roundId = roundData.roundId
+        val transactions = roundData.transactions
+        val observations = roundData.observations
+        Sync[F].raiseError[Unit](MissingParents(roundId, transactions, observations))
+      } else Sync[F].unit
+    } yield ()
 }
 
 case class OwnConsensus[F[_]: Concurrent](

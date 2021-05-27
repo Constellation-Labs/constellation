@@ -275,9 +275,14 @@ class Consensus[F[_]: Concurrent: ContextShift](
     val uniques = proposals.groupBy(_._2.baseHash).size
 
     for {
-      maybeHeight <- checkpointStorage.calculateHeight(checkpointBlock.soeHash)
+      maybeHeight <- checkpointStorage.calculateHeight(checkpointBlock)
       cache = CheckpointCache(checkpointBlock, height = maybeHeight)
       _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
+      parents <- checkpointStorage.getParents(checkpointBlock.soeHash)
+      parentsoehashes <- checkpointStorage.getParentSoeHashes(checkpointBlock.soeHash)
+      _ <- logger.debug(s"P: ${parents}")
+      _ <- logger.debug(s"psoe: ${parentsoehashes}")
+      _ <- logger.debug(s"h: ${maybeHeight}")
       _ <- metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )
@@ -285,11 +290,13 @@ class Consensus[F[_]: Concurrent: ContextShift](
         "acceptMajorityCheckpointBlockUniquesCount_" + uniques
       )
       _ <- logger.debug(
-        s"[${nodeId.short}] accepting majority checkpoint block ${checkpointBlock.baseHash}  " +
+        s"[${nodeId.short}] accepting majority checkpoint block ${checkpointBlock.soeHash}  " +
           s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
           s" with obs ${checkpointBlock.observations.map(_.hash)} " +
-          s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
+          s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height} and parents: ${parents}"
       )
+
+      _ <- checkpointStorage.persistCheckpoint(cache)
 
       finalResult <- checkpointService
         .accept(cache)

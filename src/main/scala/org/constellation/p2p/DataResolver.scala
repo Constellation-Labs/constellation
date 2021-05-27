@@ -177,6 +177,7 @@ class DataResolver[F[_]](
       ).head.flatTap { cb =>
         logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}") >>
           checkpointStorage.persistCheckpoint(cb) >>
+          checkpointStorage.registerUsage(cb.checkpointBlock.soeHash) >>
           checkpointStorage.unmarkCheckpointForResolving(hash)
       }.onError { case _ => checkpointStorage.unmarkCheckpointForResolving(hash) },
       s"dataResolver_resolveCheckpoint [$hash]"

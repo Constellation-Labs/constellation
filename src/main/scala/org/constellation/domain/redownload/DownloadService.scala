@@ -46,15 +46,15 @@ class DownloadService[F[_]](
       _ <- if (majorityState.isEmpty)
         fetchAndPersistBlocks()
       else F.unit
-      _ <- nodeStorage.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+      _ <- broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       _ <- metrics.incrementMetricAsync("downloadFinished_total")
     } yield ()
 
-    (nodeStorage.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
+    (broadcastService.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
       if (state.isNewSet) {
         wrappedDownload.handleErrorWith { error =>
           logger.error(error)(s"Error during download process") >>
-            nodeStorage.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
+            broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
             error.raiseError[F, Unit]
         }
       } else F.unit
@@ -125,10 +125,9 @@ class DownloadService[F[_]](
         .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
-        .flatTap { go =>
+        .flatMap { go =>
           ContextShift[F].evalOn(boundedExecutionContext)(genesis.acceptGenesis(go))
         }
-        .void
     } yield ()
 }
 

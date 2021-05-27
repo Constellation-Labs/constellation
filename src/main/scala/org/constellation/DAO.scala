@@ -186,7 +186,7 @@ class DAO(
     keyPair
   )
 
-  val broadcastService: BroadcastService[IO] = new BroadcastService[IO](clusterStorage)
+  val broadcastService: BroadcastService[IO] = new BroadcastService[IO](clusterStorage, nodeStorage, apiClient, metrics, id, Blocker.liftExecutionContext(unboundedExecutionContext))
 
   val joiningPeerValidator: JoiningPeerValidator[IO] =
     JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(unboundedExecutionContext))
@@ -371,6 +371,7 @@ class DAO(
     checkpointStorage,
     rewardsManager,
     apiClient,
+    broadcastService,
     id,
     metrics,
     boundedExecutionContext,
@@ -432,8 +433,9 @@ class DAO(
     metrics,
     keyPair,
     redownloadStorage,
-    snapshotService
-  ) // TODO: redownload and snapshot services
+    snapshotService,
+    broadcastService
+  )
 
   val healthChecker = new HealthChecker[IO](
     checkpointService,

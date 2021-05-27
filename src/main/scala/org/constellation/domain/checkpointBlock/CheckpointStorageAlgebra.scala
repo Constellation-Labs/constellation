@@ -1,7 +1,7 @@
 package org.constellation.domain.checkpointBlock
 
 import org.constellation.schema.Height
-import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 
 trait CheckpointStorageAlgebra[F[_]] {
 
@@ -32,6 +32,7 @@ trait CheckpointStorageAlgebra[F[_]] {
   def getParents(soeHash: String): F[Option[List[CheckpointCache]]]
   def areParentsAccepted(checkpoint: CheckpointCache): F[Boolean]
   def calculateHeight(soeHash: String): F[Option[Height]]
+  def calculateHeight(checkpointBlock: CheckpointBlock): F[Option[Height]]
 
   def markAsAwaiting(soeHash: String): F[Unit]
   def getAwaiting: F[Set[String]]

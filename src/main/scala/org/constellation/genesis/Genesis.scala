@@ -34,8 +34,6 @@ class Genesis[F[_]: Concurrent](
   implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true): F[Unit] = {
-    // Store hashes for the edges
-
     val genesisBlock = CheckpointCache(go.genesis, height = Some(Height(0, 0)))
     val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
     val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
@@ -44,15 +42,19 @@ class Genesis[F[_]: Concurrent](
       checkpointStorage.persistCheckpoint(initialBlock1) >>
       checkpointStorage.persistCheckpoint(initialBlock2)
 
+    val acceptBlocks = checkpointStorage.acceptCheckpoint(genesisBlock.checkpointBlock.soeHash, genesisBlock.height) >>
+      checkpointStorage.acceptCheckpoint(initialBlock1.checkpointBlock.soeHash, initialBlock1.height) >>
+      checkpointStorage.acceptCheckpoint(initialBlock2.checkpointBlock.soeHash, initialBlock2.height)
+
     val setBalances = go.genesis.transactions.toList.traverse { rtx =>
       val bal = rtx.amount
       addressService
         .set(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
     }
 
-    // FLOW: !!!!!!!!!!!!!!
     for {
       _ <- putBlocks
+      _ <- acceptBlocks
       _ <- setBalances
       _ <- metrics.updateMetricAsync[F]("genesisAccepted", "true")
       _ <- if (setAsTips) {

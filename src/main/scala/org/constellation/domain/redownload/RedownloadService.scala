@@ -9,7 +9,7 @@ import io.circe.{Decoder, Encoder}
 import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
-import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.redownload.RedownloadService._
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
@@ -46,6 +46,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   checkpointStorage: CheckpointStorageAlgebra[F],
   rewardsManager: RewardsManager[F],
   apiClient: ClientInterpreter[F],
+  broadcastService: BroadcastService[F],
   nodeId: Id,
   metrics: Metrics,
   boundedExecutionContext: ExecutionContext,
@@ -163,9 +164,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- if (shouldPerformRedownload) {
         {
           if (isDownload)
-            nodeStorage.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress)
+            broadcastService.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress)
           else
-            nodeStorage.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress)
+            broadcastService.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress)
         }.flatMap { state =>
           if (state.isNewSet) {
             wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajorityState).handleErrorWith {
@@ -174,7 +175,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
                   if (isDownload)
                     error.raiseError[F, Unit]
                   else
-                    nodeStorage
+                    broadcastService
                       .compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
                       .void
                 }
@@ -196,7 +197,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
 
       _ <- if (shouldPerformRedownload && !isDownload) { // I think we should only set it to Ready when we are not joining
-        nodeStorage.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+        broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       } else F.unit
 
       _ <- logger.debug("Accepting all the checkpoint blocks received during the redownload.")
@@ -678,6 +679,7 @@ object RedownloadService {
     checkpointStorage: CheckpointStorageAlgebra[F],
     rewardsManager: RewardsManager[F],
     apiClient: ClientInterpreter[F],
+    broadcastService: BroadcastService[F],
     nodeId: Id,
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
@@ -699,6 +701,7 @@ object RedownloadService {
       checkpointStorage,
       rewardsManager,
       apiClient,
+      broadcastService,
       nodeId,
       metrics,
       boundedExecutionContext,

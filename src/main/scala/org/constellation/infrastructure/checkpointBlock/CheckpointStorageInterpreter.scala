@@ -8,8 +8,9 @@ import org.constellation.concurrency.MapRefUtils
 import org.constellation.concurrency.MapRefUtils.MapRefOps
 import org.constellation.concurrency.SetRefUtils.RefOps
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.genesis.Genesis
 import org.constellation.schema.Height
-import org.constellation.schema.checkpoint.CheckpointCache
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 
 class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends CheckpointStorageAlgebra[F] {
 
@@ -84,7 +85,12 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
     accepted.get
 
   def areParentsAccepted(checkpoint: CheckpointCache): F[Boolean] =
-    checkpoint.checkpointBlock.parentSOEHashes.distinct.toList.traverse { isCheckpointAccepted }
+    checkpoint.checkpointBlock
+      .parentSOEHashes
+      .distinct
+      .toList
+      .filterNot(_.equals(Genesis.Coinbase))
+      .traverse { isCheckpointAccepted }
       .map(_.forall(_ == true))
 
   def isCheckpointAccepted(soeHash: String): F[Boolean] =
@@ -98,21 +104,35 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   def setAwaiting(a: Set[String]): F[Unit] =
     awaiting.set(a)
 
-  def calculateHeight(soeHash: String): F[Option[Height]] =
-    getParents(soeHash).map {
-      _.flatMap { parents =>
+  def calculateHeight(soeHash: String): F[Option[Height]] = {
+    for {
+      checkpointHeight <- getCheckpoint(soeHash).map(_.flatMap(_.height))
+      calculatedHeight <- getParents(soeHash).map {
+        _.flatMap { parents =>
+          val maybeHeight = parents.flatMap(_.height)
+          if (maybeHeight.isEmpty)
+            none[Height]
+          else
+            Height(maybeHeight.map(_.min).min + 1, maybeHeight.map(_.max).max + 1).some
+        }
+      }
+    } yield checkpointHeight.orElse(calculatedHeight)
+  }
+
+  def calculateHeight(checkpoint: CheckpointBlock): F[Option[Height]] =
+    checkpoint.parentSOEHashes.toList.traverse { getCheckpoint }
+      .map(a => a.flatten).map { parents =>
         val maybeHeight = parents.flatMap(_.height)
         if (maybeHeight.isEmpty)
           none[Height]
         else
           Height(maybeHeight.map(_.min).min + 1, maybeHeight.map(_.max).max + 1).some
-      }
     }
 
   def getParents(soeHash: String): F[Option[List[CheckpointCache]]] =
     getParentSoeHashes(soeHash)
       .flatMap(_.traverse(_.traverse(getCheckpoint)))
-      .map(_.sequence.map(_.flatten).sequence)
+      .map(_.map(_.flatten))
 
   def getParentSoeHashes(soeHash: String): F[Option[List[String]]] =
     getCheckpoint(soeHash).nested.map(_.checkpointBlock.parentSOEHashes.toList).value
