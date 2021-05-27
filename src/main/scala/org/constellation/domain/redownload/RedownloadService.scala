@@ -576,11 +576,10 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
   private[redownload] def acceptCheckpointBlocks(): EitherT[F, Throwable, Unit] =
     (for {
-      blocksToAccept <- snapshotService.syncBufferPull().map(_.values.toSeq.map(_.checkpointCacheData).distinct)
-      _ <- checkpointService.waitingForResolving.modify { blocks =>
-        val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
-        (updated, ())
-      }
+      blocksToAccept <- checkpointStorage.getCheckpointsForAcceptanceAfterDownload
+
+      _ <- blocksToAccept.map(_.checkpointBlock.soeHash).traverse(checkpointStorage.markWaitingForAcceptance)
+
       _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
         logger.debug(s"Accepting sync buffer block: ${b.height}") >>
           checkpointService.accept(b).handleErrorWith { error =>
@@ -674,8 +673,10 @@ object RedownloadService {
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
+    snapshotServiceStorage: SnapshotStorageAlgebra[F],
     cloudService: CloudServiceEnqueue[F],
     checkpointService: CheckpointService[F],
+    checkpointStorage: CheckpointStorageAlgebra[F],
     rewardsManager: RewardsManager[F],
     apiClient: ClientInterpreter[F],
     nodeId: Id,
@@ -693,8 +694,10 @@ object RedownloadService {
       snapshotStorage,
       snapshotInfoStorage,
       snapshotService,
+      snapshotServiceStorage,
       cloudService,
       checkpointService,
+      checkpointStorage,
       rewardsManager,
       apiClient,
       nodeId,

@@ -24,6 +24,8 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
 
   val waitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set())
 
+  val waitingForAcceptanceAfterDownload: Ref[F, Set[String]] = Ref.unsafe(Set())
+
   val tips: Ref[F, Set[String]] = Ref.unsafe(Set())
   val usages: MapRef[F, String, Option[Set[String]]] = MapRefUtils.ofConcurrentHashMap()
 
@@ -71,6 +73,12 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
 
   def unmarkFromAcceptance(soeHash: String): F[Unit] =
     inAcceptance.remove(soeHash)
+
+  def markForAcceptanceAfterDownload(soeHash: String): F[Unit] =
+    waitingForAcceptanceAfterDownload.add(soeHash)
+
+  def getCheckpointsForAcceptanceAfterDownload: F[List[CheckpointCache]] =
+    waitingForAcceptanceAfterDownload.get.flatMap(_.toList.traverse { getCheckpoint }).map(_.flatten)
 
   def getAcceptedCheckpoints: F[Set[String]] =
     accepted.get

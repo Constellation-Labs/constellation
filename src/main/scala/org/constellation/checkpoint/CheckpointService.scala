@@ -84,7 +84,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
       case state if NodeState.canAwaitForCheckpointAcceptance(state) =>
         logger.debug(
           s"Node (state=${state}) cannot accept checkpoint, adding hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash} to sync buffer pool"
-        )
+        ) >> checkpointStorage.markForAcceptanceAfterDownload(checkpoint.checkpointCacheData.checkpointBlock.soeHash)
       case state =>
         logger.warn(
           s"Node (state=${state}) cannot accept checkpoint hash=${checkpoint.checkpointCacheData.checkpointBlock.baseHash}"

@@ -12,7 +12,7 @@ import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cloud.{CloudStorageOld, HeightHashFileStorage}
-import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.genesis.GenesisStorageAlgebra
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager
@@ -126,6 +126,8 @@ class DAO(
     keyPair
   )
 
+  val broadcastService: BroadcastService[IO] = new BroadcastService[IO](clusterStorage)
+
   val joiningPeerValidator: JoiningPeerValidator[IO] =
     JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(unboundedExecutionContext))
   val blacklistedAddresses: BlacklistedAddresses[IO] = BlacklistedAddresses[IO]
@@ -156,28 +158,6 @@ class DAO(
     genesisObservationStorage,
     cloudService,
     metrics
-  )
-
-  val cluster: Cluster[IO] = Cluster[IO](
-    joiningPeerValidator,
-    apiClient,
-    sessionTokenService,
-    nodeStorage,
-    clusterStorage,
-    redownloadStorage,
-    downloadService,
-    eigenTrust,
-    processingConfig,
-    Blocker.liftExecutionContext(unboundedExecutionContext),
-    id,
-    alias.getOrElse("alias"),
-    metrics,
-    nodeConfig,
-    peerHostPort,
-    peersInfoPath,
-    externalHostString,
-    externalPeerHTTPPort,
-    snapshotPath
   )
 
   val trustManager: TrustManager[IO] = TrustManager[IO](id, clusterStorage)
@@ -294,9 +274,9 @@ class DAO(
     id,
     keyPair
   )
+
   val snapshotService: SnapshotService[IO] = SnapshotService[IO](
     addressService,
-    checkpointService,
     checkpointStorage,
     snapshotServiceStorage,
     transactionService,
@@ -312,9 +292,7 @@ class DAO(
     unboundedExecutionContext,
     metrics,
     processingConfig,
-    id,
-    cluster,
-    clusterStorage
+    id
   )
 
   val redownloadService: RedownloadService[IO] = RedownloadService[IO](
@@ -327,8 +305,10 @@ class DAO(
     snapshotStorage,
     snapshotInfoStorage,
     snapshotService,
+    snapshotServiceStorage,
     cloudService,
     checkpointService,
+    checkpointStorage,
     rewardsManager,
     apiClient,
     id,
@@ -345,9 +325,34 @@ class DAO(
     checkpointService,
     checkpointStorage,
     apiClient,
+    broadcastService,
+    genesis,
     metrics,
     boundedExecutionContext,
     Blocker.liftExecutionContext(unboundedExecutionContext)
+  )
+
+  val cluster: Cluster[IO] = Cluster[IO](
+    joiningPeerValidator,
+    apiClient,
+    sessionTokenService,
+    nodeStorage,
+    clusterStorage,
+    redownloadStorage,
+    downloadService,
+    eigenTrust,
+    broadcastService,
+    processingConfig,
+    Blocker.liftExecutionContext(unboundedExecutionContext),
+    id,
+    alias.getOrElse("alias"),
+    metrics,
+    nodeConfig,
+    peerHostPort,
+    peersInfoPath,
+    externalHostString,
+    externalPeerHTTPPort,
+    snapshotPath
   )
 
   val consensusWatcher: ConsensusWatcher =
@@ -356,11 +361,19 @@ class DAO(
   val consensusScheduler: ConsensusScheduler =
     new ConsensusScheduler(ConfigUtil.config, consensusManager, nodeStorage, unboundedExecutionContext)
 
-
   val snapshotTrigger: SnapshotTrigger = new SnapshotTrigger(
     processingConfig.snapshotTriggeringTimeSeconds,
     unboundedExecutionContext
-  )(cluster, nodeStorage, snapshotProposalGossipService, metrics, keyPair, redownloadStorage, snapshotService) // TODO: redownload and snapshot services
+  )(
+    cluster,
+    clusterStorage,
+    nodeStorage,
+    snapshotProposalGossipService,
+    metrics,
+    keyPair,
+    redownloadStorage,
+    snapshotService
+  ) // TODO: redownload and snapshot services
 
   var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
   var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _

@@ -2,7 +2,7 @@ package org.constellation.snapshot
 
 import cats.effect.IO
 import cats.syntax.all._
-import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.exception.InvalidNodeState
 import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
@@ -28,6 +28,7 @@ import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: ExecutionContext)(
   cluster: Cluster[IO],
+  clusterStorage: ClusterStorageAlgebra[IO],
   nodeStorage: NodeStorageAlgebra[IO],
   snapshotProposalGossipService: SnapshotProposalGossipService[IO],
   metrics: Metrics,
@@ -75,6 +76,8 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
               redownloadStorage
                 .persistAcceptedSnapshot(created.height, created.hash) >>
               resetNodeState(stateSet) >>
+              markLeavingPeersAsOffline() >>
+              removeOfflinePeers() >>
               snapshotProposalGossipService
                 .spread(
                   SnapshotProposalPayload(
@@ -109,6 +112,34 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
       IO(logger.warn(s"Snapshot attempt error: ${err.message}")) >>
       metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure)
   }
+
+  private def markLeavingPeersAsOffline(): IO[Unit] =
+    clusterStorage.getPeers
+      .map(_.filter {
+        case (id, pd) => Set[NodeState](NodeState.Leaving).contains(pd.peerMetadata.nodeState)
+      })
+      .flatMap {
+        _.values.toList.map(_.peerMetadata.id).traverse { p =>
+          cluster
+            .markOfflinePeer(p)
+            .handleErrorWith(err => IO.delay { logger.warn(s"Cannot mark leaving peer as offline: ${err.getMessage}") })
+        }
+      }
+      .void
+
+  private def removeOfflinePeers(): IO[Unit] =
+    clusterStorage.getPeers
+      .map(_.filter {
+        case (id, pd) => NodeState.offlineStates.contains(pd.peerMetadata.nodeState)
+      })
+      .flatMap {
+        _.values.toList.traverse { p =>
+          cluster
+            .removePeer(p)
+            .handleErrorWith(err => IO.delay { logger.warn(s"Cannot remove offline peer: ${err.getMessage}") })
+        }
+      }
+      .void
 
   override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)
 

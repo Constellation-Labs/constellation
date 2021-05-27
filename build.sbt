@@ -55,7 +55,7 @@ lazy val coreSettings = Seq(
   resolvers += "Typesafe Releases".at("https://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io"),
   resolvers += Resolver.sonatypeRepo("releases"),
-  resolvers += "Artifactory" at "https://abankowski.jfrog.io/artifactory/scala/"
+  resolvers += "Artifactory".at("https://abankowski.jfrog.io/artifactory/scala/")
 )
 
 // -----------------

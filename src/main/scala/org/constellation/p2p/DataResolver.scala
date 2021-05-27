@@ -171,7 +171,7 @@ class DataResolver[F[_]](
     logThread(
       resolveDataByDistance[CheckpointCache](
         List(hash),
-        apiClient.checkpoint.checkFinishedCheckpoint, // TODO: @mwadon rename endpoint
+        apiClient.checkpoint.getCheckpoint,
         pool,
         priorityClient
       ).head.flatTap { cb =>

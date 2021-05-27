@@ -119,7 +119,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       )
 
       publicEndpoints = MetricsEndpoints.publicEndpoints[IO](dao.metrics) <+>
-        NodeMetadataEndpoints.publicEndpoints[IO](dao.addressService, dao.nodeStorage, dao.clusterStorage, dao.nodeType) <+>
+        NodeMetadataEndpoints
+          .publicEndpoints[IO](dao.addressService, dao.nodeStorage, dao.clusterStorage, dao.nodeType) <+>
         TransactionEndpoints.publicEndpoints[IO](dao.transactionService, dao.checkpointBlockValidator) <+>
         ClusterEndpoints.publicEndpoints[IO](dao.cluster, dao.trustManager) <+>
         CheckpointEndpoints.publicEndpoints[IO](dao.checkpointStorage) <+>
@@ -146,7 +147,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         dao.messageValidator,
         dao.checkpointStorage
       ) <+>
-        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.trustManager) <+>
+        ClusterEndpoints.peerEndpoints[IO](dao.cluster, dao.clusterStorage, dao.trustManager) <+>
         ConsensusEndpoints
           .peerEndpoints[IO](dao.consensusManager, dao.snapshotService, dao.checkpointBlockValidator) <+>
         ObservationEndpoints.peerEndpoints[IO](dao.observationService, dao.metrics) <+>
@@ -168,7 +169,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         MetricsEndpoints.ownerEndpoints[IO](dao.metrics) <+>
         UIEndpoints.ownerEndpoints[IO](dao.messageService, unbounded) <+>
         StatisticsEndpoints.ownerEndpoints[IO](dao.recentBlockTracker, dao.transactionService, dao.cluster) <+>
-        NodeMetadataEndpoints.ownerEndpoints[IO](dao.nodeStorage, dao.clusterStorage, dao.addressService, dao.nodeType) <+>
+        NodeMetadataEndpoints
+          .ownerEndpoints[IO](dao.nodeStorage, dao.clusterStorage, dao.addressService, dao.nodeType) <+>
         SignEndpoints.ownerEndpoints[IO](dao.cluster) <+>
         SnapshotEndpoints.ownerEndpoints[IO](dao.id, dao.snapshotStorage, dao.redownloadStorage)
 

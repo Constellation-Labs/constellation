@@ -11,8 +11,6 @@ trait CheckpointClientAlgebra[F[_]] {
 
   def getCheckpoint(hash: String): PeerResponse[F, Option[CheckpointCache]]
 
-  def checkFinishedCheckpoint(hash: String): PeerResponse[F, Option[CheckpointCache]]
-
   def requestBlockSignature(signatureRequest: SignatureRequest): PeerResponse[F, SignatureResponse]
 
   def postFinishedCheckpoint(message: GossipMessage[CheckpointBlockPayload]): PeerResponse[F, Unit]

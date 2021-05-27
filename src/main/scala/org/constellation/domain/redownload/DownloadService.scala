@@ -6,7 +6,7 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
 import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
-import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
@@ -25,6 +25,8 @@ class DownloadService[F[_]](
   checkpointService: CheckpointService[F],
   checkpointStorage: CheckpointStorageAlgebra[F],
   apiClient: ClientInterpreter[F],
+  broadcastService: BroadcastService[F],
+  genesis: Genesis[F],
   metrics: Metrics,
   boundedExecutionContext: ExecutionContext,
   unboundedBlocker: Blocker
@@ -119,12 +121,12 @@ class DownloadService[F[_]](
   private[redownload] def downloadAndAcceptGenesis(): F[Unit] =
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
-      _ <- cluster
+      _ <- broadcastService
         .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
-        .flatTap { genesis =>
-          ContextShift[F].evalOn(boundedExecutionContext)(genesis.acceptGenesis(genesis))
+        .flatTap { go =>
+          ContextShift[F].evalOn(boundedExecutionContext)(genesis.acceptGenesis(go))
         }
         .void
     } yield ()
@@ -140,6 +142,8 @@ object DownloadService {
     checkpointService: CheckpointService[F],
     checkpointStorage: CheckpointStorageAlgebra[F],
     apiClient: ClientInterpreter[F],
+    broadcastService: BroadcastService[F],
+    genesis: Genesis[F],
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
     unboundedBlocker: Blocker
@@ -152,6 +156,8 @@ object DownloadService {
       checkpointService,
       checkpointStorage,
       apiClient,
+      broadcastService,
+      genesis,
       metrics,
       boundedExecutionContext,
       unboundedBlocker

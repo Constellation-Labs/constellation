@@ -11,7 +11,7 @@ import io.circe.generic.semiauto._
 import io.circe.parser._
 import io.circe.{Decoder, Encoder}
 import org.constellation._
-import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 import org.constellation.domain.redownload.{DownloadService, RedownloadStorageAlgebra}
@@ -106,6 +106,7 @@ class Cluster[F[_]](
   redownloadStorage: RedownloadStorageAlgebra[F],
   downloadService: DownloadService[F],
   eigenTrust: EigenTrust[F],
+  broadcastService: BroadcastService[F],
   processingConfig: ProcessingConfig,
   unboundedBlocker: Blocker,
   nodeId: Id,
@@ -349,46 +350,21 @@ class Cluster[F[_]](
       _ <- logger.debug(s"Broadcasting own joined height - step1: height=$height")
       ownHeight <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
-      _ <- broadcast(
+      _ <- broadcastService.broadcast(
         PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker)
       )
       _ <- F.start(
-        T.sleep(10.seconds) >> broadcast(
+        T.sleep(10.seconds) >> broadcastService.broadcast(
           PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker)
         )
       )
       _ <- F.start(
-        T.sleep(30.seconds) >> broadcast(
+        T.sleep(30.seconds) >> broadcastService.broadcast(
           PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker)
         )
       )
     } yield ()
   }
-
-  def broadcast[T](
-    f: PeerClientMetadata => F[T],
-    skip: Set[Id] = Set.empty,
-    subset: Set[Id] = Set.empty
-  ): F[Map[Id, Either[Throwable, T]]] =
-    logThread(
-      for {
-        peerInfo <- clusterStorage.getNotOfflinePeers
-        selected = if (subset.nonEmpty) {
-          peerInfo.filterKeys(subset.contains)
-        } else {
-          peerInfo.filterKeys(id => !skip.contains(id))
-        }
-        (keys, values) = selected.toList.unzip
-        res <- values
-          .map(_.peerMetadata.toPeerClientMetadata)
-          .map(f)
-          .traverse { fa =>
-            fa.map(_.asRight[Throwable]).handleErrorWith(_.asLeft[T].pure[F])
-          }
-          .map(v => keys.zip(v).toMap)
-      } yield res,
-      "cluster_broadcast"
-    )
 
   // I join to someone
   def attemptRegisterPeer(peerClientMetadata: PeerClientMetadata, isReconciliationJoin: Boolean = false): F[Unit] =
@@ -646,21 +622,26 @@ class Cluster[F[_]](
 
   private def broadcastNodeState(nodeState: NodeState, nodeId: Id = nodeId): F[Unit] =
     logThread(
-      broadcast(
-        PeerResponse.run(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)), unboundedBlocker),
-        Set(nodeId)
-      ).flatTap {
-        _.filter(_._2.isLeft).toList.traverse {
-          case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
+      broadcastService
+        .broadcast(
+          PeerResponse.run(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)), unboundedBlocker),
+          Set(nodeId)
+        )
+        .flatTap {
+          _.filter(_._2.isLeft).toList.traverse {
+            case (id, e) => logger.warn(s"Unable to propagate status to node ID: $id")
+          }
         }
-      }.void,
+        .void,
       "cluster_broadcastNodeState"
     )
 
   private def broadcastLeaveRequest(majorityHeight: Long): F[Unit] = {
     def peerUnregister(c: PeerClientMetadata) =
       PeerUnregister(peerHostPort.host, peerHostPort.port, nodeId, majorityHeight)
-    broadcast(c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)), unboundedBlocker)(c)).void
+    broadcastService
+      .broadcast(c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)), unboundedBlocker)(c))
+      .void
   }
 
   def broadcastOfflineNodeState(nodeId: Id = nodeId): F[Unit] =
@@ -687,6 +668,7 @@ object Cluster {
     redownloadStorage: RedownloadStorageAlgebra[F],
     downloadService: DownloadService[F],
     eigenTrust: EigenTrust[F],
+    broadcastService: BroadcastService[F],
     processingConfig: ProcessingConfig,
     unboundedBlocker: Blocker,
     nodeId: Id,
@@ -708,6 +690,7 @@ object Cluster {
       redownloadStorage,
       downloadService,
       eigenTrust,
+      broadcastService,
       processingConfig,
       unboundedBlocker,
       nodeId,

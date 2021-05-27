@@ -39,7 +39,6 @@ import scala.concurrent.ExecutionContext
 
 class SnapshotService[F[_]: Concurrent](
   addressService: AddressService[F],
-  checkpointService: CheckpointService[F],
   checkpointStorage: CheckpointStorageAlgebra[F],
   snapshotServiceStorage: SnapshotStorageAlgebra[F],
   transactionService: TransactionService[F],
@@ -55,9 +54,7 @@ class SnapshotService[F[_]: Concurrent](
   unboundedExecutionContext: ExecutionContext,
   metrics: Metrics,
   processingConfig: ProcessingConfig,
-  nodeId: Id,
-  cluster: Cluster[F],
-  clusterStorage: ClusterStorageAlgebra[F]
+  nodeId: Id
 )(implicit C: ContextShift[F], P: Parallel[F]) {
 
   val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -139,12 +136,9 @@ class SnapshotService[F[_]: Concurrent](
         .leftWiden[SnapshotError]
       // TODO: pass stored snapshot to writeSnapshotToDisk
       _ <- writeSnapshotToDisk(snapshot.snapshot)
-      _ <- writeSnapshotInfoToDisk()
+      _ <- writeSnapshotInfoToDisk().leftWiden[SnapshotError]
       // For now we do not restore EigenTrust model
       //      _ <- writeEigenTrustToDisk(snapshot.snapshot)
-
-      _ <- markLeavingPeersAsOffline().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
-      _ <- removeOfflinePeers().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       created = SnapshotCreated(
         nextSnapshot.hash,
@@ -526,44 +520,14 @@ class SnapshotService[F[_]: Concurrent](
         .filterNot(_.isDummy)
         .traverse(t => addressService.transferSnapshotTransaction(t))
 
-
       _ <- transactionService.applySnapshotDirect(txs.map(TransactionCacheData(_)))
     } yield ()
-
-  private def markLeavingPeersAsOffline(): F[Unit] =
-    clusterStorage.getPeers
-      .map(_.filter {
-        case (id, pd) => Set[NodeState](NodeState.Leaving).contains(pd.peerMetadata.nodeState)
-      })
-      .flatMap {
-        _.values.toList.map(_.peerMetadata.id).traverse { p =>
-          cluster
-            .markOfflinePeer(p)
-            .handleErrorWith(err => logger.warn(err)(s"Cannot mark leaving peer as offline: ${err.getMessage}"))
-        }
-      }
-      .void
-
-  private def removeOfflinePeers(): F[Unit] =
-    clusterStorage.getPeers
-      .map(_.filter {
-        case (id, pd) => NodeState.offlineStates.contains(pd.peerMetadata.nodeState)
-      })
-      .flatMap {
-        _.values.toList.traverse { p =>
-          cluster
-            .removePeer(p)
-            .handleErrorWith(err => logger.warn(err)(s"Cannot remove offline peer: ${err.getMessage}"))
-        }
-      }
-      .void
 }
 
 object SnapshotService {
 
   def apply[F[_]: Concurrent](
     addressService: AddressService[F],
-    checkpointService: CheckpointService[F],
     checkpointStorage: CheckpointStorageAlgebra[F],
     snapshotServiceStorage: SnapshotStorageAlgebra[F],
     transactionService: TransactionService[F],
@@ -579,13 +543,10 @@ object SnapshotService {
     unboundedExecutionContext: ExecutionContext,
     metrics: Metrics,
     processingConfig: ProcessingConfig,
-    nodeId: Id,
-    cluster: Cluster[F],
-    clusterStorage: ClusterStorageAlgebra[F]
+    nodeId: Id
   )(implicit C: ContextShift[F], P: Parallel[F]) =
     new SnapshotService[F](
       addressService,
-      checkpointService,
       checkpointStorage,
       snapshotServiceStorage,
       transactionService,
@@ -601,9 +562,7 @@ object SnapshotService {
       unboundedExecutionContext,
       metrics,
       processingConfig,
-      nodeId,
-      cluster,
-      clusterStorage
+      nodeId
     )
 }
 
