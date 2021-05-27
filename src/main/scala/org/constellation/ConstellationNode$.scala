@@ -1,11 +1,11 @@
 package org.constellation
 
 import java.security.KeyPair
-
 import better.files.File
 import cats.effect.{ExitCode, IO, IOApp, Resource, Sync, SyncIO}
 import cats.syntax.all._
 import com.typesafe.config.{Config, ConfigFactory}
+import constellation.PublicKeyExt
 import fs2.Stream
 import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -17,6 +17,7 @@ import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToS
 import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
 import org.constellation.genesis.Genesis
+import org.constellation.infrastructure.cluster.ClusterStorageInterpreter
 import org.constellation.infrastructure.configuration.CliConfigParser
 import org.constellation.infrastructure.endpoints._
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
@@ -281,31 +282,39 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
   ): Stream[IO, DAO] =
     for {
       _ <- Stream.eval(logger.info(s"Run node flow"))
-      dao <- Stream.eval(IO {
-        new DAO(boundedExecutionContext, unboundedExecutionContext, unboundedHealthExecutionContext)
-      })
-      _ <- Stream.eval(IO { dao.sessionTokenService = sessionTokenService })
-      _ <- Stream.eval(IO {
-        dao.apiClient = {
-          val cs = IO.contextShift(unboundedExecutionContext)
-          val ce = IO.ioConcurrentEffect(cs)
+      apiClient = {
+        val cs = IO.contextShift(unboundedExecutionContext)
+        val ce = IO.ioConcurrentEffect(cs)
 
-          ClientInterpreter[IO](client, dao.sessionTokenService)(ce, cs)
-        }
-      })
-      _ <- Stream.eval(IO {
-        dao.nodeConfig = nodeConfig
-      })
-      _ <- Stream.eval(IO {
-        dao.metrics = new Metrics(
-          registry,
-          dao.clusterStorage,
-          periodSeconds = nodeConfig.processingConfig.metricCheckInterval,
-          unboundedExecutionContext
-        )(dao)
-      })
-      _ <- Stream.eval(IO {
-        dao.initialize(nodeConfig, cloudService)
+        ClientInterpreter[IO](client, sessionTokenService)(ce, cs)
+      }
+      clusterStorage = new ClusterStorageInterpreter[IO]()
+      keyPair = nodeConfig.primaryKeyPair
+      id = keyPair.getPublic.toId
+      metrics = new Metrics(
+        registry,
+        clusterStorage,
+        periodSeconds = nodeConfig.processingConfig.metricCheckInterval,
+        unboundedExecutionContext,
+        keyPair,
+        id,
+        nodeConfig.whitelisting.get(id).flatten,
+        id.address,
+        nodeConfig.hostName
+      )
+
+      dao <- Stream.eval(IO {
+        new DAO(
+          boundedExecutionContext,
+          unboundedExecutionContext,
+          unboundedHealthExecutionContext,
+          nodeConfig,
+          cloudService,
+          sessionTokenService,
+          apiClient,
+          clusterStorage,
+          metrics
+        )
       })
       _ <- Stream.eval(IO {
         MDC.put("node_id", dao.id.short)

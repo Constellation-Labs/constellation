@@ -3,6 +3,7 @@ package org.constellation
 import better.files.File
 import cats.data.NonEmptyList
 import cats.effect.{Blocker, ConcurrentEffect, ContextShift, IO, Timer}
+import constellation.PublicKeyExt
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil.AWSStorageConfig
@@ -53,6 +54,7 @@ import org.constellation.infrastructure.snapshot.{
   SnapshotS3Storage,
   SnapshotStorageInterpreter
 }
+import org.constellation.keytool.KeyUtils
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
@@ -63,36 +65,95 @@ import org.constellation.session.SessionTokenService
 import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{HealthChecker, HostPort}
+import org.constellation.util.{HealthChecker, HostPort, Metrics}
 
+import java.security.KeyPair
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 
 class DAO(
   boundedExecutionContext: ExecutionContext,
   unboundedExecutionContext: ExecutionContext,
-  unboundedHealthExecutionContext: ExecutionContext
-) extends NodeData {
+  unboundedHealthExecutionContext: ExecutionContext,
+  val nodeConfig: NodeConfig,
+  val cloudService: CloudServiceEnqueue[IO],
+  val sessionTokenService: SessionTokenService[IO],
+  val apiClient: ClientInterpreter[IO],
+  val clusterStorage: ClusterStorageAlgebra[IO],
+  val metrics: Metrics
+) {
+
+  val keyPair: KeyPair = nodeConfig.primaryKeyPair
+  val publicKeyHash: Int = keyPair.getPublic.hashCode()
+  val id: Id = keyPair.getPublic.toId
+  val alias: Option[String] = nodeConfig.whitelisting.get(id).flatten
+  val selfAddressStr: String = id.address
+  val externalHostString: String = nodeConfig.hostName
+  val dummyAddress: String = KeyUtils.makeKeyPair().getPublic.toId.address
+
+  def externalPeerHTTPPort: Int = nodeConfig.peerHttpPort
+
+  def snapshotPath: String =
+    s"tmp/${id.medium}/snapshots"
+
+  def snapshotInfoPath: String =
+    s"tmp/${id.medium}/snapshot_infos"
+
+  def genesisObservationPath: String =
+    s"tmp/${id.medium}/genesis"
+
+  def rewardsPath: String =
+    s"tmp/${id.medium}/eigen_trust"
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(unboundedExecutionContext)
-
-  var sessionTokenService: SessionTokenService[IO] = _
-
-  var apiClient: ClientInterpreter[IO] = _
-
-  var initialNodeConfig: NodeConfig = _
-  @volatile var nodeConfig: NodeConfig = _
 
   var transactionAcceptedAfterDownload: Long = 0L
   var downloadFinishedTime: Long = System.currentTimeMillis()
 
-  var cloudService: CloudServiceEnqueue[IO] = _
   var cloudStorage: CloudStorageOld[IO] = _
-
-  def processingConfig: ProcessingConfig = nodeConfig.processingConfig
+  var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
+  var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _
+  var snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[IO, SnapshotInfo]] = _
+  var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
 
   implicit val ioTimer: Timer[IO] = IO.timer(unboundedExecutionContext)
   implicit val ioConcurrentEffect: ConcurrentEffect[IO] = IO.ioConcurrentEffect(contextShift)
+
+  if (ConfigUtil.isEnabledAWSStorage) {
+    val awsStorageConfigs = ConfigUtil.loadAWSStorageConfigs()
+
+    snapshotCloudStorage = awsStorageConfigs.map {
+      case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
+        SnapshotS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
+    }
+    snapshotInfoCloudStorage = awsStorageConfigs.map {
+      case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
+        SnapshotInfoS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
+    }
+    rewardsCloudStorage = RewardsS3Storage(
+      ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+      ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+      ConfigUtil.constellation.getString("storage.aws.region"),
+      ConfigUtil.constellation.getString("storage.aws.bucket-name")
+    )
+    genesisObservationCloudStorage = awsStorageConfigs.map {
+      case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
+        GenesisObservationS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
+    }
+    cloudStorage = new AWSStorageOld[IO](
+      ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
+      ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
+      ConfigUtil.constellation.getString("storage.aws.region"),
+      ConfigUtil.constellation.getString("storage.aws.bucket-name")
+    )
+  } else if (ConfigUtil.isEnabledGCPStorage) {
+    cloudStorage = new GCPStorageOld[IO](
+      ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
+      ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
+    )
+  }
+
+  def processingConfig: ProcessingConfig = nodeConfig.processingConfig
 
   val genesisObservationStorage: GenesisObservationLocalStorage[IO] =
     GenesisObservationLocalStorage[IO](genesisObservationPath)
@@ -114,7 +175,6 @@ class DAO(
 
   val checkpointStorage: CheckpointStorageAlgebra[IO] = new CheckpointStorageInterpreter[IO]()
   val snapshotServiceStorage: SnapshotStorageAlgebra[IO] = new SnapshotStorageInterpreter[IO](snapshotStorage)
-  val clusterStorage: ClusterStorageAlgebra[IO] = new ClusterStorageInterpreter[IO]()
   val initialState = if (nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   val nodeStorage: NodeStorageAlgebra[IO] = new NodeStorageInterpreter[IO](initialState)
   val genesisStorage: GenesisStorageAlgebra[IO] = new GenesisStorageInterpreter[IO]()
@@ -348,7 +408,7 @@ class DAO(
     alias.getOrElse("alias"),
     metrics,
     nodeConfig,
-    peerHostPort,
+    HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort),
     peersInfoPath,
     externalHostString,
     externalPeerHTTPPort,
@@ -374,11 +434,6 @@ class DAO(
     redownloadStorage,
     snapshotService
   ) // TODO: redownload and snapshot services
-
-  var genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[IO]] = _
-  var snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[IO, StoredSnapshot]] = _
-  var snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[IO, SnapshotInfo]] = _
-  var rewardsCloudStorage: HeightHashFileStorage[IO, StoredRewards] = _
 
   val healthChecker = new HealthChecker[IO](
     checkpointService,
@@ -442,7 +497,7 @@ class DAO(
     redownloadService
   )
 
-  def idDir = File(s"tmp/${id.medium}")
+  def idDir: File = File(s"tmp/${id.medium}")
 
   def dbPath: File = {
     val f = File(s"tmp/${id.medium}/db")
@@ -460,66 +515,9 @@ class DAO(
     f
   }
 
-  @volatile var nodeType: NodeType = NodeType.Full
+  val nodeType: NodeType = NodeType.Full
 
   lazy val messageService: MessageService[IO] = new MessageService[IO]()
 
-  def peerHostPort = HostPort(nodeConfig.hostName, nodeConfig.peerHttpPort)
-
-  def initialize(
-    nodeConfigInit: NodeConfig = NodeConfig(),
-    cloudService: CloudServiceEnqueue[IO]
-  ): Unit = {
-    implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
-
-    initialNodeConfig = nodeConfigInit
-    nodeConfig = nodeConfigInit
-
-    if (nodeConfig.isLightNode) {
-      nodeType = NodeType.Light
-    }
-
-    idDir.createDirectoryIfNotExists(createParents = true)
-
-    implicit val ioTimer: Timer[IO] = IO.timer(unboundedExecutionContext)
-    implicit val ioConcurrentEffect = IO.ioConcurrentEffect(contextShift)
-
-    this.cloudService = cloudService
-
-    if (ConfigUtil.isEnabledAWSStorage) {
-      val awsStorageConfigs = ConfigUtil.loadAWSStorageConfigs()
-
-      snapshotCloudStorage = awsStorageConfigs.map {
-        case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
-          SnapshotS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
-      }
-      snapshotInfoCloudStorage = awsStorageConfigs.map {
-        case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
-          SnapshotInfoS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
-      }
-      rewardsCloudStorage = RewardsS3Storage(
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
-      genesisObservationCloudStorage = awsStorageConfigs.map {
-        case AWSStorageConfig(accessKey, secretKey, region, bucket) =>
-          GenesisObservationS3Storage(accessKey = accessKey, secretKey = secretKey, region = region, bucket = bucket)
-      }
-      cloudStorage = new AWSStorageOld[IO](
-        ConfigUtil.constellation.getString("storage.aws.aws-access-key"),
-        ConfigUtil.constellation.getString("storage.aws.aws-secret-key"),
-        ConfigUtil.constellation.getString("storage.aws.region"),
-        ConfigUtil.constellation.getString("storage.aws.bucket-name")
-      )
-    } else if (ConfigUtil.isEnabledGCPStorage) {
-      cloudStorage = new GCPStorageOld[IO](
-        ConfigUtil.constellation.getString("storage.gcp.bucket-name"),
-        ConfigUtil.constellation.getString("storage.gcp.path-to-permission-file")
-      )
-    }
-
-  }
-
+  idDir.createDirectoryIfNotExists(createParents = true)
 }

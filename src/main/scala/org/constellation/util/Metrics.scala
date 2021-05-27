@@ -15,9 +15,11 @@ import io.micrometer.prometheus.{PrometheusConfig, PrometheusMeterRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.cache.caffeine.CacheMetricsCollector
 import org.constellation.domain.cluster.ClusterStorageAlgebra
+import org.constellation.schema.Id
 import org.constellation.{BuildInfo, ConstellationExecutionContext, DAO}
 import org.joda.time.DateTime
 
+import java.security.KeyPair
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -115,30 +117,34 @@ class Metrics(
   val collectorRegistry: CollectorRegistry,
   clusterStorage: ClusterStorageAlgebra[IO],
   periodSeconds: Int = 1,
-  unboundedExecutionContext: ExecutionContext
-)(implicit dao: DAO)
-    extends PeriodicIO("Metrics", unboundedExecutionContext) {
+  unboundedExecutionContext: ExecutionContext,
+  keyPair: KeyPair,
+  nodeId: Id,
+  alias: Option[String],
+  selfAddressStr: String,
+  externalHostString: String
+) extends PeriodicIO("Metrics", unboundedExecutionContext) {
 
   private val stringMetrics: TrieMap[String, String] = TrieMap()
   private val countMetrics: TrieMap[String, AtomicLong] = TrieMap()
   private val doubleMetrics: TrieMap[String, AtomicDouble] = TrieMap()
 
-  val rateCounter = new TransactionRateTracker()
+//  val rateCounter = new TransactionRateTracker()
   val micrometerCounter = new TrieMap[String, Counter]
 //  val micrometerTimer = new TrieMap[String, Timer]
 
   // Init
 
-  val registry = Metrics.prometheusSetup(dao.keyPair.getPublic.hash, collectorRegistry)
+  val registry = Metrics.prometheusSetup(keyPair.getPublic.hash, collectorRegistry)
 
   val init = for {
     currentTime <- cats.effect.Clock[IO].realTime(MILLISECONDS)
-    _ <- updateMetricAsync[IO]("id", dao.id.hex)
-    _ <- updateMetricAsync[IO]("alias", dao.alias.getOrElse(dao.id.short))
-    _ <- updateMetricAsync[IO]("address", dao.selfAddressStr)
+    _ <- updateMetricAsync[IO]("id", nodeId.hex)
+    _ <- updateMetricAsync[IO]("alias", alias.getOrElse(nodeId.short))
+    _ <- updateMetricAsync[IO]("address", selfAddressStr)
     _ <- updateMetricAsync[IO]("nodeStartTimeMS", currentTime.toString)
     _ <- updateMetricAsync[IO]("nodeStartDate", new DateTime(currentTime).toString)
-    _ <- updateMetricAsync[IO]("externalHost", dao.externalHostString)
+    _ <- updateMetricAsync[IO]("externalHost", externalHostString)
     _ <- updateMetricAsync[IO]("version", BuildInfo.version)
   } yield ()
 
@@ -203,68 +209,39 @@ class Metrics(
   def getCountMetric(key: String): Option[Long] =
     countMetrics.get(key).map(_.get())
 
-  // Temporary, for debugging only. Would cause a problem with many peers
-  def updateBalanceMetrics(): IO[Unit] =
-    for {
-      peers <- clusterStorage.getPeers
-      allAddresses = peers.map(_._1.address).toSeq :+ dao.selfAddressStr
+//  private def updateTransactionAcceptedMetrics(): IO[Unit] =
+//    IO { rateCounter.calculate(countMetrics.get("transactionAccepted").map { _.get() }.getOrElse(0L)) }
+//      .map(_.toList)
+//      .map(_.map { case (k, v) => updateMetricAsync[IO](k, v) })
+//      .flatMap(_.sequence)
+//      .void
 
-      balancesBySnapshot <- balancesBySnapshotMetrics(allAddresses)
-      balances <- balancesMetrics(allAddresses)
+//  private def updateTransactionServiceMetrics(): IO[Unit] =
+//    dao.transactionService.getMetricsMap
+//      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"transactionService_${k}_size", v) })
+//      .flatMap(_.sequence)
+//      .void
 
-      _ <- updateMetricAsync[IO]("balancesBySnapshot", balancesBySnapshot.sorted.mkString(", "))
-      _ <- updateMetricAsync[IO]("balancesBySnapshot", balances.sorted.mkString(", "))
-    } yield ()
+//  private def updateObservationServiceMetrics(): IO[Unit] =
+//    dao.observationService.getMetricsMap
+//      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"observationService_${k}_size", v) })
+//      .flatMap(_.sequence)
+//      .void
 
-  private def balancesBySnapshotMetrics(allAddresses: Seq[String]) =
-    allAddresses.toList.traverse { address =>
-      dao.addressService
-        .lookup(address)
-        .map(_.map(_.balanceByLatestSnapshot).getOrElse(0L))
-        .map(address.slice(0, 8) + " " + _)
-    }
-
-  private def balancesMetrics(allAddresses: Seq[String]) =
-    allAddresses.toList.traverse { address =>
-      dao.addressService
-        .lookup(address)
-        .map(_.map(_.balance).getOrElse(0L))
-        .map(address.slice(0, 8) + " " + _)
-    }
-
-  private def updateTransactionAcceptedMetrics(): IO[Unit] =
-    IO { rateCounter.calculate(countMetrics.get("transactionAccepted").map { _.get() }.getOrElse(0L)) }
-      .map(_.toList)
-      .map(_.map { case (k, v) => updateMetricAsync[IO](k, v) })
-      .flatMap(_.sequence)
-      .void
-
-  private def updateTransactionServiceMetrics(): IO[Unit] =
-    dao.transactionService.getMetricsMap
-      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"transactionService_${k}_size", v) })
-      .flatMap(_.sequence)
-      .void
-
-  private def updateObservationServiceMetrics(): IO[Unit] =
-    dao.observationService.getMetricsMap
-      .map(_.toList.map { case (k, v) => updateMetricAsync[IO](s"observationService_${k}_size", v) })
-      .flatMap(_.sequence)
-      .void
-
-  private def updateBlacklistedAddressesMetrics(): IO[Unit] =
-    dao.blacklistedAddresses.get.flatMap(b => updateMetricAsync[IO](Metrics.blacklistedAddressesSize, b.size))
+//  private def updateBlacklistedAddressesMetrics(): IO[Unit] =
+//    dao.blacklistedAddresses.get.flatMap(b => updateMetricAsync[IO](Metrics.blacklistedAddressesSize, b.size))
 
   private def updatePeriodicMetrics(): IO[Unit] =
-    updateBalanceMetrics >>
-      updateBlacklistedAddressesMetrics() >>
-      updateTransactionAcceptedMetrics() >>
-      updateObservationServiceMetrics() >>
+//    updateBalanceMetrics >>
+//      updateBlacklistedAddressesMetrics() >>
+//      updateTransactionAcceptedMetrics() >>
+//      updateObservationServiceMetrics() >>
       updateMetricAsync[IO]("nodeCurrentTimeMS", System.currentTimeMillis().toString) >>
       updateMetricAsync[IO]("nodeCurrentDate", new DateTime().toString()) >>
-      updateMetricAsync[IO]("metricsRound", executionNumber.get()) >>
-      dao.addressService.size.flatMap(size => updateMetricAsync[IO]("addressCount", size)) >>
-      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) >>
-      updateTransactionServiceMetrics()
+      updateMetricAsync[IO]("metricsRound", executionNumber.get())
+//      dao.addressService.size.flatMap(size => updateMetricAsync[IO]("addressCount", size)) >>
+//      updateMetricAsync[IO]("channelCount", dao.threadSafeMessageMemPool.activeChannels.size) >>
+//      updateTransactionServiceMetrics()
 
   /**
     * Recalculates window based / periodic metrics
