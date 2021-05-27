@@ -60,7 +60,6 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- rewardsManager.clearLastRewardedHeight()
     } yield ()
 
-  @deprecated("Proposals are now pushed via gossip instead of pulling")
   def fetchAndUpdatePeersProposals(): F[Unit] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
