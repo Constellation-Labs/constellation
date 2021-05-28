@@ -582,6 +582,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
       _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
         logger.debug(s"Accepting sync buffer block: ${b.height}") >>
+          checkpointStorage.unmarkForAcceptanceAfterDownload(b.checkpointBlock.soeHash) >>
           checkpointService.accept(b).handleErrorWith { error =>
             logger.warn(error)(s"Error during buffer pool blocks acceptance after redownload") >> F.unit
           }

@@ -82,9 +82,9 @@ class SnapshotService[F[_]: Concurrent](
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
-      allBlocks = blocksWithinHeightInterval.sortBy(_.checkpointBlock.baseHash)
+      allBlocks = blocksWithinHeightInterval.sortBy(_.checkpointBlock.soeHash)
 
-      hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.baseHash)
+      hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.soeHash)
       publicReputation <- trustManager.getPredictedReputation.attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
@@ -449,7 +449,7 @@ class SnapshotService[F[_]: Concurrent](
           }
 
         case maybeBlocks =>
-          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.baseHash)
+          val flatten = maybeBlocks.flatMap(_._2).sortBy(_.checkpointBlock.soeHash)
           addSnapshotToDisk(StoredSnapshot(currentSnapshot, flatten))
             .biSemiflatMap(
               t =>

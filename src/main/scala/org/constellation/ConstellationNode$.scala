@@ -124,7 +124,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           .publicEndpoints[IO](dao.addressService, dao.nodeStorage, dao.clusterStorage, dao.nodeType) <+>
         TransactionEndpoints.publicEndpoints[IO](dao.transactionService, dao.checkpointBlockValidator) <+>
         ClusterEndpoints.publicEndpoints[IO](dao.cluster, dao.trustManager) <+>
-        CheckpointEndpoints.publicEndpoints[IO](dao.checkpointStorage) <+>
+        CheckpointEndpoints.publicEndpoints[IO](dao.checkpointStorage, dao.genesisStorage) <+>
         ObservationEndpoints.publicEndpoints[IO](dao.observationService) <+>
         SnapshotEndpoints.publicEndpoints[IO](
           dao.id,

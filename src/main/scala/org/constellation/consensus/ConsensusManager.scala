@@ -300,7 +300,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
       _ <- proposals.remove(cmd.roundId.toString)
       _ <- logger.debug(s"[${nodeId.short}] Removed from proposals : ${cmd.roundId.toString}")
       _ <- logger.debug(
-        s"[${nodeId.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.baseHash).getOrElse("empty")}"
+        s"[${nodeId.short}] Consensus stopped ${cmd.roundId} with block: ${cmd.maybeCB.map(_.soeHash).getOrElse("empty")}"
       )
     } yield ()
 
@@ -367,12 +367,21 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
-      existing <- soes.map(_.baseHash).filterA(checkpointStorage.existsCheckpoint)
-      missing = soes.filterNot(soe => existing.contains(soe.baseHash))
+      existing <- soes.map(_.hash).filterA(checkpointStorage.existsCheckpoint)
+      missing = soes.filterNot(soe => existing.contains(soe.hash))
 
       resolved <- missing
-        .map(_.baseHash)
+        .map(_.hash)
         .filterA(checkpointStorage.isWaitingForResolving(_).map(!_))
+        .flatMap {
+          _.filterA(checkpointStorage.isCheckpointInAcceptance(_).map(!_))
+        }
+        .flatMap {
+          _.filterA(checkpointStorage.isCheckpointWaitingForAcceptance(_).map(!_))
+        }
+        .flatMap {
+          _.filterA(checkpointStorage.isCheckpointAwaiting(_).map(!_))
+        }
         .flatTap { hashes =>
           logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
         }
@@ -385,7 +394,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         s"[${nodeId.short}] Missing parents size=${missing.size}, existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
       )
       _ <- if (missing.nonEmpty && (resolved.size != missing.size))
-        logger.error(s"Missing parents: ${missing.map(_.hash)} with base hashes: ${missing.map(_.baseHash)}")
+        logger.error(s"Missing parents: ${missing.map(_.hash)} with soe hashes: ${missing.map(_.hash)}")
       else Sync[F].unit
 
       _ <- Concurrent[F].start {

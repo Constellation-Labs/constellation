@@ -27,7 +27,7 @@ case class SignedObservationEdge(signatureBatch: SignatureBatch) extends Signabl
 
   def baseHash: String = signatureBatch.hash
 
-  override def hash = signatureBatch.hash
+//  override def hash = signatureBatch.hash
 
 }
 

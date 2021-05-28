@@ -277,6 +277,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
     for {
       maybeHeight <- checkpointStorage.calculateHeight(checkpointBlock)
       cache = CheckpointCache(checkpointBlock, height = maybeHeight)
+      _ <- checkpointStorage.persistCheckpoint(cache)
       _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
       parents <- checkpointStorage.getParents(checkpointBlock.soeHash)
       parentsoehashes <- checkpointStorage.getParentSoeHashes(checkpointBlock.soeHash)
@@ -295,8 +296,6 @@ class Consensus[F[_]: Concurrent: ContextShift](
           s" with obs ${checkpointBlock.observations.map(_.hash)} " +
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height} and parents: ${parents}"
       )
-
-      _ <- checkpointStorage.persistCheckpoint(cache)
 
       finalResult <- checkpointService
         .accept(cache)

@@ -93,9 +93,17 @@ class DownloadService[F[_]](
             checkpointStorage.getCheckpoint
           }.map(_.flatten)
 
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
+          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo)
+            .distinct
+            .filterA { c =>
+                checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_)
+              }
+
+          _ <- blocksToAccept.traverse { checkpointStorage.persistCheckpoint }
 
           _ <- blocksToAccept.map(_.checkpointBlock.soeHash).traverse { checkpointStorage.markWaitingForAcceptance }
+
+          _ <- awaitingBlocksFromSnapshotInfo.traverse { cb => checkpointStorage.markAsAwaiting(cb.checkpointBlock.soeHash) }
 
           _ <- C
             .evalOn(boundedExecutionContext) {

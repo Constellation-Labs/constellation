@@ -11,25 +11,18 @@ import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.genesis.GenesisStorageAlgebra
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.state.GossipMessage
-import org.constellation.gossip.validation.{
-  EndOfCycle,
-  IncorrectReceiverId,
-  IncorrectSenderId,
-  MessageValidator,
-  PathDoesNotStartAndEndWithOrigin
-}
+import org.constellation.gossip.validation._
+import org.constellation.schema.checkpoint.CheckpointBlockPayload
+import org.constellation.schema.signature.SignatureRequest
+import org.constellation.schema.signature.SignatureRequest._
+import org.constellation.schema.signature.SignatureResponse._
+import org.constellation.schema.{Height, Id}
+import org.constellation.session.Registration.`X-Id`
 import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
-import org.constellation.schema.signature.SignatureRequest._
-import org.constellation.schema.signature.SignatureResponse._
-import org.constellation.schema.checkpoint.CheckpointBlockPayload
-import org.constellation.schema.{GenesisObservation, Height, Id}
-import org.constellation.schema.observation.ObservationEvent
-import org.constellation.schema.signature.SignatureRequest
-import org.constellation.session.Registration.`X-Id`
 
 class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
 
@@ -54,13 +47,6 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         checkpointService,
         checkpointStorage
       )
-
-  private def genesisEndpoint(genesisStorage: GenesisStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "genesis" =>
-      genesisStorage.getGenesisObservation >>= { go =>
-        Ok(go.asJson)
-      }
-  }
 
   private def requestBlockSignatureEndpoint(
     checkpointService: CheckpointService[F]
@@ -118,7 +104,15 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         } yield res
     }
 
-  def publicEndpoints(checkpointStorage: CheckpointStorageAlgebra[F]) = getCheckpointEndpoint(checkpointStorage)
+  def publicEndpoints(checkpointStorage: CheckpointStorageAlgebra[F], genesisStorage: GenesisStorageAlgebra[F]) =
+    genesisEndpoint(genesisStorage) <+> getCheckpointEndpoint(checkpointStorage)
+
+  private def genesisEndpoint(genesisStorage: GenesisStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "genesis" =>
+      genesisStorage.getGenesisObservation >>= { go =>
+        Ok(go.asJson)
+      }
+  }
 
   private def getCheckpointEndpoint(checkpointStorage: CheckpointStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "checkpoint" / soeHash => checkpointStorage.getCheckpoint(soeHash).map(_.asJson).flatMap(Ok(_))
@@ -129,8 +123,9 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
 object CheckpointEndpoints {
 
   def publicEndpoints[F[_]: Concurrent: ContextShift](
-    checkpointStorage: CheckpointStorageAlgebra[F]
-  ): HttpRoutes[F] = new CheckpointEndpoints[F]().publicEndpoints(checkpointStorage)
+    checkpointStorage: CheckpointStorageAlgebra[F],
+    genesisStorage: GenesisStorageAlgebra[F]
+  ): HttpRoutes[F] = new CheckpointEndpoints[F]().publicEndpoints(checkpointStorage, genesisStorage)
 
   def peerEndpoints[F[_]: Concurrent: ContextShift](
     genesisStorage: GenesisStorageAlgebra[F],

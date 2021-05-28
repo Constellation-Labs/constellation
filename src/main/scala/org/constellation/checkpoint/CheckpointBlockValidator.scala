@@ -99,18 +99,18 @@ object CheckpointBlockValidator {
           Some(
             selectBlockToPreserve(
               Seq(CheckpointCache(cb, children, height)) ++ inputTips
-                .filter(ccd => ccd.checkpointBlock.baseHash == conflictingCBBaseHash)
+                .filter(ccd => ccd.checkpointBlock.soeHash == conflictingCBBaseHash)
             )
           )
         case CheckpointCache(cb, _, _) :: tail =>
-          detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.baseHash)))
+          detect(tail, ancestryTransactions ++ cb.transactions.map(i => (i, cb.soeHash)))
       }
     detect(inputTips)
   }
 
   def selectBlockToPreserve(blocks: Iterable[CheckpointCache]): CheckpointCache =
     blocks.maxBy(
-      cb => (cb.children, (cb.checkpointBlock.signatures.size, cb.checkpointBlock.baseHash))
+      cb => (cb.children, (cb.checkpointBlock.signatures.size, cb.checkpointBlock.soeHash))
     )
 
   def hasTransactionInCommon(cbLeft: CheckpointBlock, cbRight: CheckpointBlock): Boolean =
@@ -143,7 +143,7 @@ class CheckpointBlockValidator[F[_]: Sync](
           .flatTap(
             _ =>
               logger.warn(
-                s"Checkpoint block with baseHash: ${cb.baseHash} is invalid ${validation.leftMap(_.map(_.errorMessage))}"
+                s"Checkpoint block with soeHash: ${cb.soeHash} is invalid ${validation.leftMap(_.map(_.errorMessage))}"
               )
           )
     } yield validation
@@ -352,7 +352,7 @@ class CheckpointBlockValidator[F[_]: Sync](
   def containsAlreadyAcceptedTx(cb: CheckpointBlock): F[List[String]] = {
     val containsAccepted = cb.transactions.toList.map { t =>
       transactionService.lookup(t.hash).map {
-        case Some(tx) if tx.cbBaseHash != cb.baseHash.some => (t.hash, true)
+        case Some(tx) if tx.cbBaseHash != cb.soeHash.some => (t.hash, true)
         case _                                             => (t.hash, false)
       }
       transactionService.isAccepted(t.hash).map(b => (t.hash, b))

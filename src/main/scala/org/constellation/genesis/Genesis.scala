@@ -132,7 +132,7 @@ class Genesis[F[_]: Concurrent](
       .flatMap(
         cb =>
           cb.transactions
-            .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
+            .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.soeHash)))
       )
       .traverse(transactionService.accept(_))
       .void

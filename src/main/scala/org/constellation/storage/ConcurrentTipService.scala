@@ -18,9 +18,9 @@ object TipSoe {
 case class PulledTips(tipSoe: TipSoe, peers: Map[Id, PeerData])
 case class TipConflictException(cb: CheckpointBlock, conflictingTxs: List[String])
     extends Exception(
-      s"CB with baseHash: ${cb.baseHash} is conflicting with other tip or its ancestor. With following txs: $conflictingTxs"
+      s"CB with baseHash: ${cb.soeHash} is conflicting with other tip or its ancestor. With following txs: $conflictingTxs"
     )
 case class TipThresholdException(cb: CheckpointBlock, limit: Int)
     extends Exception(
-      s"Unable to add CB with baseHash: ${cb.baseHash} as tip. Current tips limit met: $limit"
+      s"Unable to add CB with baseHash: ${cb.soeHash} as tip. Current tips limit met: $limit"
     )
