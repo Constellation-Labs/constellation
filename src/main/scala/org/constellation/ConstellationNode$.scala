@@ -223,7 +223,10 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
             MetricsEndpoints.peerHealthCheckEndpoints[IO]() <+>
               PeerAuthMiddleware.requestTokenVerifierMiddleware(dao.sessionTokenService)(
                 PeerAuthMiddleware.enforceKnownPeersMiddleware(getKnownPeerId, isIdWhitelisted)(
-                  HealthCheckEndpoints.peerHealthCheckEndpoints[IO](dao.healthCheckConsensusManager)
+                  HealthCheckEndpoints.peerHealthCheckEndpoints[IO](
+                    dao.pingHealthCheckConsensusManager,
+                    dao.missingProposalHealthCheckConsensusManager
+                  )
                 )
               )
           )

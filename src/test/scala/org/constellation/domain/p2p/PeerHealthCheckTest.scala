@@ -4,7 +4,7 @@
 //import cats.effect.{Blocker, ContextShift, IO, Timer}
 //import cats.syntax.all._
 //import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-//import org.constellation.domain.p2p.PeerHealthCheck.{PeerAvailable, PeerHealthCheckStatus, PeerUnresponsive}
+//import org.constellation.domain.healthcheck.ping.PeerHealthCheck
 //import org.constellation.{PeerMetadata, ResourceInfo}
 //import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 //import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
@@ -56,7 +56,6 @@
 //    peerHealthCheck = PeerHealthCheck(
 //      cluster,
 //      apiClient,
-//      metrics,
 //      Blocker.liftExecutionContext(ExecutionContext.global),
 //      "9003"
 //    )

@@ -1,12 +1,12 @@
 package org.constellation.infrastructure.p2p.client
 
 import cats.effect.{Concurrent, ContextShift}
-import org.constellation.domain.healthcheck.HealthCheckConsensus
-import org.constellation.domain.healthcheck.HealthCheckConsensus.{FetchPeerHealthStatus, SendPerceivedHealthStatus}
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager.{FetchProposalError, SendProposalError}
-import org.constellation.domain.healthcheck.ReconciliationRound.ClusterState
+import io.circe.{Decoder, Encoder}
+import org.constellation.domain.healthcheck.HealthCheckConsensus.{FetchPeerHealthStatus, SendConsensusHealthStatus}
+import org.constellation.domain.healthcheck.HealthCheckConsensusManagerBase.{FetchProposalError, SendProposalError}
+import org.constellation.domain.healthcheck.ping.ReconciliationRound.ClusterState
 import org.constellation.domain.p2p.client.HealthCheckClientAlgebra
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager.EitherCodec._
+import org.constellation.domain.healthcheck.HealthCheckConsensusManagerBase.EitherCodec._
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.session.SessionTokenService
@@ -23,23 +23,18 @@ class HealthCheckClientInterpreter[F[_]](
 )(implicit F: Concurrent[F], CS: ContextShift[F])
     extends HealthCheckClientAlgebra[F] {
 
-  def sendPeerHealthStatus(healthStatus: SendPerceivedHealthStatus): PeerResponse[F, Either[SendProposalError, Unit]] =
+  def sendPeerHealthStatus[A <: SendConsensusHealthStatus[_, _, _]: Encoder](
+    healthStatus: A
+  ): PeerResponse[F, Either[SendProposalError, Unit]] =
     PeerResponse("health-check/consensus", POST)(client, sessionTokenService) { (req, c) =>
       c.expect[Either[SendProposalError, Unit]](req.withEntity(healthStatus))
     }
 
-  def notifyAboutMissedConsensus(notification: HealthCheckConsensus.NotifyAboutMissedConsensus): PeerResponse[F, Unit] =
-    PeerResponse("health-check/consensus", POST)(client, sessionTokenService) { (req, c) =>
-      c.successful(req.withEntity(notification))
-    }.flatMapF(
-      a => if (a) F.unit else F.raiseError(new Throwable(s"Failed to send notification about missed consensus."))
-    )
-
-  def fetchPeerHealthStatus(
+  def fetchPeerHealthStatus[A <: SendConsensusHealthStatus[_, _, _]: Decoder](
     fetchPeerHealthStatus: FetchPeerHealthStatus
-  ): PeerResponse[F, Either[FetchProposalError, SendPerceivedHealthStatus]] =
+  ): PeerResponse[F, Either[FetchProposalError, A]] =
     PeerResponse("health-check/consensus", GET)(client, sessionTokenService) { (req, c) =>
-      c.expect[Either[FetchProposalError, SendPerceivedHealthStatus]](req.withEntity(fetchPeerHealthStatus))
+      c.expect[Either[FetchProposalError, A]](req.withEntity(fetchPeerHealthStatus))
     }
 
   def getClusterState(): PeerResponse[F, ClusterState] =

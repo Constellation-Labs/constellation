@@ -6,118 +6,125 @@ import cats.effect.{Blocker, Clock, Concurrent, ContextShift, Fiber}
 import cats.effect.Concurrent.parTraverseN
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
-import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.{Codec, Decoder, Encoder}
-import io.circe.generic.semiauto.deriveCodec
+import io.circe.generic.semiauto.{deriveCodec, deriveDecoder, deriveEncoder}
 import io.circe.syntax.EncoderOps
 import org.constellation.ConstellationExecutionContext.createSemaphore
-import org.constellation.domain.healthcheck.HealthCheckConsensus.{CheckedPeer, HealthcheckRoundId}
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager._
+import org.constellation.domain.healthcheck.HealthCheckConsensus.{
+  CheckedPeer,
+  ConsensusHealthStatus,
+  HealthcheckRoundId,
+  SendConsensusHealthStatus
+}
+import org.constellation.domain.healthcheck.HealthCheckConsensus.SendConsensusHealthStatus._
+import org.constellation.domain.healthcheck.HealthCheckConsensusManagerBase._
+import org.constellation.domain.healthcheck.HealthCheckKey.{MissingProposalHealthCheckKey, PingHealthCheckKey}
 import org.constellation.domain.healthcheck.HealthCheckLoggingHelper._
-import org.constellation.domain.p2p.PeerHealthCheck.{
-  PeerAvailable,
-  PeerHealthCheckStatus,
-  PeerUnresponsive,
-  UnknownPeer
+import org.constellation.domain.healthcheck.HealthCheckStatus.{
+  MissingProposalHealthCheckStatus,
+  PeerPingHealthCheckStatus
 }
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.PeerData
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.schema.consensus.RoundId
-import org.constellation.util.Metrics
 
 import scala.collection.immutable.SortedSet
 import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration, SECONDS}
-import scala.util.{Random, Try}
+import scala.util.Random
 
-class HealthCheckConsensus[F[_]](
+class HealthCheckConsensus[
+  F[_],
+  K <: HealthCheckKey: Encoder: Decoder,
+  A <: HealthCheckStatus: Encoder: Decoder,
+  B <: ConsensusHealthStatus[K, A]: Encoder: Decoder,
+  C <: SendConsensusHealthStatus[K, A, B]: Encoder: Decoder
+](
+  key: K,
   checkedPeer: CheckedPeer,
   ownId: Id,
   roundId: HealthcheckRoundId,
-  additionalRoundIds: Option[Set[HealthcheckRoundId]],
   initialRoundPeers: Map[Id, PeerData],
-  delayedHealthCheckStatus: Fiber[F, PeerHealthCheckStatus],
+  delayedHealthCheckStatus: Fiber[F, A],
   startedAtSecond: FiniteDuration,
   val roundType: HealthcheckActiveRoundType,
-  metrics: Metrics,
+  metrics: PrefixedHealthCheckMetrics[F],
   apiClient: ClientInterpreter[F],
   unboundedHealthBlocker: Blocker,
-  healthHttpPort: String
+  healthHttpPort: String,
+  driver: HealthCheckConsensusTypeDriver[K, A, B],
+  healthCheckType: HealthCheckType
 )(implicit F: Concurrent[F], CS: ContextShift[F], P: Parallel[F], C: Clock[F]) {
   import HealthCheckConsensus._
 
-  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  val logger: PrefixedHealthCheckLogger[F] = new PrefixedHealthCheckLogger[F](healthCheckType)
   val fetchProposalAfter: FiniteDuration = 60.seconds
   val removeUnresponsivePeersWithParallelRoundAfter: FiniteDuration = 120.seconds
 
-  private val roundIds: Ref[F, NonEmptySet[HealthcheckRoundId]] =
-    Ref.unsafe(NonEmptySet(roundId, SortedSet(additionalRoundIds.getOrElse(Set.empty).toList: _*)))
-  private val roundPeers: Ref[F, Map[Id, RoundData]] =
+  private val roundIds: Ref[F, NonEmptySet[HealthcheckRoundId]] = Ref.unsafe(NonEmptySet.one(roundId))
+  private val roundPeers: Ref[F, Map[Id, RoundData[K, A]]] =
     Ref.unsafe(
       initialRoundPeers.mapValues(pd => RoundData(pd.asRight[ProxyPeers]))
     )
   private val removedPeers: Ref[F, Map[Id, NonEmptyList[PeerRemovalReason]]] = Ref.unsafe(Map.empty)
-  private val parallelRounds: Ref[F, Map[Id, Set[HealthcheckRoundId]]] = Ref.unsafe(Map.empty)
+  private val parallelRounds: Ref[F, Map[K, Set[HealthcheckRoundId]]] = Ref.unsafe(Map.empty)
 
   private val sendingProposalLock = createSemaphore()
   private val fetchingProposalLock = createSemaphore()
-
-  lazy val isKeepUpRound: Boolean = roundType == KeepUpRound
 
   def getTimeInSeconds(): F[FiniteDuration] = C.monotonic(SECONDS).map(_.seconds)
 
   def start(): F[Fiber[F, Unit]] = F.start {
     roundType match {
       case OwnRound | PeerRound => sendProposal()
-      case KeepUpRound          => runManagementTasks()
     }
   }
 
-  def getOwnPerceivedHealthStatus(): F[ConsensusHealthStatus] =
+  private def getOwnHealthCheckStatus(): F[A] = delayedHealthCheckStatus.join
+
+  def getOwnConsensusHealthStatus(): F[B] =
     for {
-      healthCheckStatus <- delayedHealthCheckStatus.join
-      consensusHealthStatus = ConsensusHealthStatus(
+      healthCheckStatus <- getOwnHealthCheckStatus()
+      consensusHealthStatus = driver.getOwnConsensusHealthStatus(
+        key,
+        healthCheckStatus,
         checkedPeer,
         ownId,
         roundId,
-        healthCheckStatus,
         initialRoundPeers.mapValues(_.peerMetadata.nodeState)
       )
     } yield consensusHealthStatus
 
-  def getOwnProposalAndMarkAsSent(originId: Id): F[ConsensusHealthStatus] =
+  // TODO: consider if this shouldn't only send the proposal after all, if we mark it as sent and request doesn't arrive
+  //       and there is next healthcheck after that we may send the proposal to the asking node and mix two healthchecks
+  //       into one
+  def getOwnProposalAndMarkAsSent(originId: Id): F[B] =
     for {
-      proposal <- getOwnPerceivedHealthStatus()
+      proposal <- getOwnConsensusHealthStatus()
       _ <- markProposalAsSent(Set(originId))
     } yield proposal
 
   def getRemovedPeers(): F[Map[Id, NonEmptyList[PeerRemovalReason]]] =
     removedPeers.get
 
-  def getRemovedUnresponsivePeersWithParallelRound(): F[Set[Id]] =
-    removedPeers.get.map(_.filter {
-      case (_, removalReasons) => removalReasons.toList.contains(UnresponsiveWithParallelRound)
-    }.keySet)
-
   def addRoundIds(ids: Set[HealthcheckRoundId]): F[Unit] =
     roundIds.modify(rounds => (NonEmptySet(rounds.head, rounds.tail ++ ids), ()))
 
   def getRoundIds(): F[NonEmptySet[HealthcheckRoundId]] = roundIds.get
 
-  def getParallelRounds(): F[Map[Id, Set[HealthcheckRoundId]]] = parallelRounds.get
+  def getParallelRounds(): F[Map[K, Set[HealthcheckRoundId]]] = parallelRounds.get
 
-  def addParallelRounds(id: Id, roundIds: Set[HealthcheckRoundId]): F[Unit] = parallelRounds.modify { rounds =>
-    val updatedIdRounds = rounds.get(id).map(r => r ++ roundIds).getOrElse(roundIds)
+  def addParallelRounds(key: K, roundIds: Set[HealthcheckRoundId]): F[Unit] = parallelRounds.modify { rounds =>
+    val updatedIdRounds = rounds.get(key).map(r => r ++ roundIds).getOrElse(roundIds)
 
-    (rounds + (id -> updatedIdRounds), ())
+    (rounds + (key -> updatedIdRounds), ())
   }
 
-  def getRoundPeers(): F[Map[Id, RoundData]] = roundPeers.get
+  def getRoundPeers(): F[Map[Id, RoundData[K, A]]] = roundPeers.get
 
   private def addPeerToRemoved(id: Id, removalReason: PeerRemovalReason): F[Unit] =
     for {
-      _ <- metrics.incrementMetricAsync[F](s"healthcheck_peerRemovedFromConsensus_$removalReason")
+      _ <- metrics.incrementMetricAsync(s"peerRemovedFromConsensus_$removalReason")
       _ <- removedPeers.modify { alreadyRemoved =>
         val updatedRemovalReasons =
           alreadyRemoved
@@ -204,7 +211,7 @@ class HealthCheckConsensus[F[_]](
   def removeUnresponsivePeersWithParallelRound(unresponsivePeers: Set[Id]): F[Unit] =
     for {
       parallelRounds <- getParallelRounds()
-      toRemove = parallelRounds.keySet.intersect(unresponsivePeers)
+      toRemove = parallelRounds.keySet.map(_.id).intersect(unresponsivePeers)
       _ <- logger.debug(s"Unresponsive peers to be removed ${logIds(toRemove)}.")
       _ <- toRemove.toList.traverse(removeRoundPeer(_, UnresponsiveWithParallelRound))
     } yield ()
@@ -213,7 +220,9 @@ class HealthCheckConsensus[F[_]](
     for {
       ips <- getRoundPeers().map(
         _.values.collect {
-          case RoundData(_, Some(ConsensusHealthStatus(CheckedPeer(_, Some(ip)), _, _, _, _)), _) => ip
+          case RoundData(_, Some(healthStatus), _) => healthStatus.checkedPeer.ip
+        }.collect {
+          case Some(ip) => ip
         }.filter(_.nonEmpty)
           .toList
           .groupBy(identity)
@@ -233,25 +242,28 @@ class HealthCheckConsensus[F[_]](
       })
       roundIds <- getRoundIds()
       _ <- logger.debug(
-        s"Missing peers data while checking id=${logId(checkedPeer)} for roundIds=${logRoundIds(roundIds)}: ${logMissingRoundDataForId(missingPeersData)}"
+        s"Missing peers data while checking key=${logHealthCheckKey(key)} for roundIds=${logRoundIds(roundIds)}: ${logMissingRoundDataForId(missingPeersData)}"
       )
-      _ <- if (currentTime - startedAtSecond > removeUnresponsivePeersWithParallelRoundAfter && missingPeersData.keySet.nonEmpty)
+      _ <- if (driver.removePeersWithParallelRound && currentTime - startedAtSecond > removeUnresponsivePeersWithParallelRoundAfter && missingPeersData.keySet.nonEmpty)
         removeUnresponsivePeersWithParallelRound(missingPeersData.keySet)
       else
         F.unit
-      _ <- if (!isKeepUpRound) sendProposal() else F.unit // F.start(...)???
-      _ <- if (currentTime - startedAtSecond > fetchProposalAfter || isKeepUpRound) fetchProposals() else F.unit // F.start(...)???
+      _ <- sendProposal() // F.start(...)???
+      _ <- if (currentTime - startedAtSecond > fetchProposalAfter) fetchProposals() else F.unit // F.start(...)???
     } yield ()
 
-  def generateHistoricalRoundData(healthcheckDecision: Option[HealthcheckConsensusDecision]): F[HistoricalRoundData] =
+  def generateHistoricalRoundData(
+    healthcheckDecision: HealthcheckConsensusDecision[K]
+  ): F[HistoricalRoundData[K, A, B]] =
     for {
       finishedAtSecond <- getTimeInSeconds()
       roundIds <- getRoundIds()
       roundPeers <- getRoundPeers()
       parallelRounds <- getParallelRounds()
       removedPeers <- getRemovedPeers()
-      ownConsensusHealthStatus <- getOwnPerceivedHealthStatus()
-      historicalRound = HistoricalRoundData(
+      ownConsensusHealthStatus <- getOwnConsensusHealthStatus()
+      historicalRound = HistoricalRoundData[K, A, B](
+        key = key,
         checkedPeer = checkedPeer,
         startedAtSecond = startedAtSecond,
         finishedAtSecond = finishedAtSecond,
@@ -265,7 +277,7 @@ class HealthCheckConsensus[F[_]](
       )
     } yield historicalRound
 
-  def processProposal(healthProposal: ConsensusHealthStatus): F[Either[SendProposalError, Unit]] =
+  def processProposal(healthProposal: ConsensusHealthStatus[K, A]): F[Either[SendProposalError, Unit]] =
     for {
       rIds <- getRoundIds()
       result <- roundPeers.modify(processProposalOrFailWithAnError(healthProposal, rIds.toSortedSet, _))
@@ -281,10 +293,10 @@ class HealthCheckConsensus[F[_]](
     } yield result
 
   private def processProposalOrFailWithAnError(
-    healthProposal: ConsensusHealthStatus,
+    healthProposal: ConsensusHealthStatus[K, A],
     roundIds: Set[HealthcheckRoundId],
-    roundPeers: Map[Id, RoundData]
-  ): (Map[Id, RoundData], Either[SendProposalError, Unit]) = {
+    roundPeers: Map[Id, RoundData[K, A]]
+  ): (Map[Id, RoundData[K, A]], Either[SendProposalError, Unit]) = {
     lazy val initiallyUnknownPeers = healthProposal.clusterState.keySet
       .diff(initialRoundPeers.keySet)
       .filterNot(_ == ownId)
@@ -292,14 +304,14 @@ class HealthCheckConsensus[F[_]](
     val result = roundPeers.get(healthProposal.checkingPeerId) match {
       case None =>
         IdNotPartOfTheConsensus(healthProposal.checkingPeerId, Set(healthProposal.roundId), roundType)
-          .asLeft[Map[Id, RoundData]]
+          .asLeft[Map[Id, RoundData[K, A]]]
 
       case Some(RoundData(_, Some(consensusHealthStatus), _)) if consensusHealthStatus == healthProposal =>
-        ProposalAlreadyProcessed(healthProposal.roundId, roundType).asLeft[Map[Id, RoundData]]
+        ProposalAlreadyProcessed(healthProposal.roundId, roundType).asLeft[Map[Id, RoundData[K, A]]]
 
       case Some(RoundData(_, Some(_), _)) if roundIds.contains(healthProposal.roundId) =>
         DifferentProposalForRoundIdAlreadyProcessed(healthProposal.checkingPeerId, roundIds, roundType)
-          .asLeft[Map[Id, RoundData]]
+          .asLeft[Map[Id, RoundData[K, A]]]
 
       case Some(RoundData(_, Some(_), _)) =>
         DifferentProposalAlreadyProcessedForCheckedId(
@@ -307,7 +319,7 @@ class HealthCheckConsensus[F[_]](
           healthProposal.checkingPeerId,
           roundIds,
           roundType
-        ).asLeft[Map[Id, RoundData]]
+        ).asLeft[Map[Id, RoundData[K, A]]]
 
       case Some(rd @ RoundData(_, None, _)) =>
         val updatedPeers = rd.peerData match {
@@ -315,7 +327,7 @@ class HealthCheckConsensus[F[_]](
             roundPeers //for now we don't allow proxying through more than one node - so we don't add unknown peers from this peer
           case Right(peerData) =>
             val addedPeers = (initiallyUnknownPeers -- roundPeers.keySet)
-              .map(_ -> RoundData(ProxyPeers(NonEmptySet.one(peerData)).asLeft[PeerData]))
+              .map(_ -> RoundData[K, A](ProxyPeers(NonEmptySet.one(peerData)).asLeft[PeerData]))
             val updatedProxyPeers = roundPeers
               .filterKeys(initiallyUnknownPeers.contains)
               .mapValues(
@@ -340,7 +352,7 @@ class HealthCheckConsensus[F[_]](
     }
   }
 
-  private def findPossibleProxyPeers(proxyForId: Id, peers: Map[Id, RoundData]): Option[NonEmptySet[PeerData]] = {
+  private def findPossibleProxyPeers(proxyForId: Id, peers: Map[Id, RoundData[K, A]]): Option[NonEmptySet[PeerData]] = {
     val proxyPeers = (peers - proxyForId).values
       .filter(_.healthStatus.exists(_.clusterState.contains(proxyForId)))
       .map(_.peerData)
@@ -365,15 +377,15 @@ class HealthCheckConsensus[F[_]](
     targetId: Id,
     roundIds: NonEmptySet[HealthcheckRoundId],
     proxyPeers: ProxyPeers
-  ): F[Either[FetchProposalError, SendPerceivedHealthStatus]] =
+  ): F[Either[FetchProposalError, C]] =
     for {
       proxyPeer <- randomlyPickProxyPeer(proxyPeers.peersData)
       _ <- logger.debug(
         s"Fetching ${logId(targetId)}'s proposal by proxying through ${logId(proxyPeer)} for consensus with roundIds=${logRoundIds(roundIds)}"
       )
       response <- PeerResponse.run(
-        apiClient.healthcheck.fetchPeerHealthStatus(
-          FetchPeerHealthStatus(roundIds.toSortedSet, ownId, targetId.some)
+        apiClient.healthcheck.fetchPeerHealthStatus[C](
+          FetchPeerHealthStatus(healthCheckType, roundIds.toSortedSet, ownId, targetId.some)
         ),
         unboundedHealthBlocker
       )(proxyPeer.peerMetadata.toPeerClientMetadata.copy(port = healthHttpPort))
@@ -383,13 +395,14 @@ class HealthCheckConsensus[F[_]](
     id: Id,
     roundIds: NonEmptySet[HealthcheckRoundId],
     peerData: PeerData
-  ): F[Either[FetchProposalError, SendPerceivedHealthStatus]] =
+  ): F[Either[FetchProposalError, C]] =
     for {
       _ <- logger.debug(
         s"Fetching ${logId(id)}'s proposal directly for consensus with roundIds=${logRoundIds(roundIds)}"
       )
       response <- PeerResponse.run(
-        apiClient.healthcheck.fetchPeerHealthStatus(FetchPeerHealthStatus(roundIds.toSortedSet, ownId)),
+        apiClient.healthcheck
+          .fetchPeerHealthStatus[C](FetchPeerHealthStatus(healthCheckType, roundIds.toSortedSet, ownId)),
         unboundedHealthBlocker
       )(peerData.peerMetadata.toPeerClientMetadata.copy(port = healthHttpPort))
     } yield response
@@ -398,7 +411,7 @@ class HealthCheckConsensus[F[_]](
     id: Id,
     roundIds: NonEmptySet[HealthcheckRoundId],
     peerData: Either[ProxyPeers, PeerData]
-  ): F[Either[(Id, FetchProposalError), (Id, SendPerceivedHealthStatus)]] = {
+  ): F[Either[(Id, FetchProposalError), (Id, C)]] = {
     peerData match {
       case Left(proxyPeers) =>
         fetchProposalThroughProxy(id, roundIds, proxyPeers)
@@ -420,7 +433,7 @@ class HealthCheckConsensus[F[_]](
                   fetchProposalThroughProxy(id, roundIds, ProxyPeers(proxyPeers))
               case None =>
                 logger.debug(s"Proxy peer for id=${logId(id)} not found! roundIds=${logRoundIds(roundIds)}") >>
-                  FetchingFailed(id).asInstanceOf[FetchProposalError].asLeft[SendPerceivedHealthStatus].pure[F]
+                  FetchingFailed(id).asInstanceOf[FetchProposalError].asLeft[C].pure[F]
             }
           } yield response
         }
@@ -428,7 +441,7 @@ class HealthCheckConsensus[F[_]](
   }.handleErrorWith(
       e =>
         logger.debug(e)("Error fetching proposal.") >>
-          FetchingFailed(id).asInstanceOf[FetchProposalError].asLeft[SendPerceivedHealthStatus].pure[F]
+          FetchingFailed(id).asInstanceOf[FetchProposalError].asLeft[C].pure[F]
     )
     .map(_.bimap(id -> _, id -> _))
 
@@ -481,7 +494,7 @@ class HealthCheckConsensus[F[_]](
               case NoConsensusForGivenRounds(_) =>
                 for {
                   maybePeerRoundData <- getRoundPeers().map(_.get(id))
-                  healthStatus <- getOwnPerceivedHealthStatus()
+                  healthStatus <- getOwnConsensusHealthStatus()
                   _ <- maybePeerRoundData match {
                     case Some(roundData) if roundData.receivedProposal =>
                       logger.warn(
@@ -532,7 +545,7 @@ class HealthCheckConsensus[F[_]](
     } yield ()
 
   private def sendProposalThroughProxy(
-    healthStatus: ConsensusHealthStatus,
+    healthStatus: B,
     targetId: Id,
     roundIds: NonEmptySet[HealthcheckRoundId],
     proxyPeers: ProxyPeers
@@ -543,23 +556,23 @@ class HealthCheckConsensus[F[_]](
         s"Sending own health proposal to ${logId(targetId)} by proxying through ${logId(proxyPeer)} for consensus with roundIds=${logRoundIds(roundIds)}"
       )
       response <- PeerResponse.run(
-        apiClient.healthcheck.sendPeerHealthStatus(SendPerceivedHealthStatus(healthStatus, targetId.some)),
+        apiClient.healthcheck.sendPeerHealthStatus(SendConsensusHealthStatus[K, A, B](healthStatus, targetId.some)),
         unboundedHealthBlocker
       )(proxyPeer.peerMetadata.toPeerClientMetadata.copy(port = healthHttpPort))
     } yield response
 
   private def sendProposalDirectly(
-    healthStatus: ConsensusHealthStatus,
+    healthStatus: B,
     peerData: PeerData
   ): F[Either[SendProposalError, Unit]] =
     PeerResponse.run(
-      apiClient.healthcheck.sendPeerHealthStatus(SendPerceivedHealthStatus(healthStatus)),
+      apiClient.healthcheck.sendPeerHealthStatus(SendConsensusHealthStatus[K, A, B](healthStatus)),
       unboundedHealthBlocker
     )(peerData.peerMetadata.toPeerClientMetadata.copy(port = healthHttpPort))
 
   private def sendProposalToPeer(
     id: Id,
-    healthStatus: ConsensusHealthStatus,
+    healthStatus: B,
     roundIds: NonEmptySet[HealthcheckRoundId],
     peerData: Either[ProxyPeers, PeerData]
   ): F[Either[(Id, SendProposalError), Id]] = {
@@ -601,7 +614,7 @@ class HealthCheckConsensus[F[_]](
       allPeers <- roundPeers.get
       peers = allPeers.filterNot { case (_, rd) => rd.receivedProposal }
       roundIds <- roundIds.get
-      healthStatus <- getOwnPerceivedHealthStatus()
+      healthStatus <- getOwnConsensusHealthStatus()
       responses <- parTraverseN(2)(peers.toList) {
         // TODO: consider marking as sent inside sendProposalToPeer to not wait until all calls are executed
         case (id, roundData) =>
@@ -631,106 +644,57 @@ class HealthCheckConsensus[F[_]](
       }
     } yield ()
 
-  def isStatusOnline(status: PeerHealthCheckStatus): Boolean =
-    status match {
-      case PeerAvailable(_) => true
-      case _                => false
-    }
-
-  def calculateConsensusOutcome(): F[Option[HealthcheckConsensusDecision]] =
+  def calculateConsensusOutcome(): F[HealthcheckConsensusDecision[K]] =
     for {
       peersData <- getRoundPeers()
       roundIds <- getRoundIds()
       parallelRounds <- getParallelRounds()
-      ownHealthStatus <- getOwnPerceivedHealthStatus().map(_.status)
+      ownHealthStatus <- getOwnHealthCheckStatus()
       removedPeers <- getRemovedPeers()
-      peersRemaining = peersData.keySet ++ (if (isKeepUpRound) Set.empty else Set(ownId))
-      allPeers = peersRemaining ++ parallelRounds.keySet ++ removedPeers.keySet
-      allReceivedStatuses = peersData.values.toList.flatMap(_.healthStatus.map(_.status)) ++
-        (if (isKeepUpRound) Nil else List(ownHealthStatus))
-      available = allReceivedStatuses.collect { case a @ PeerAvailable(_)       => a }
-      unresponsive = allReceivedStatuses.collect { case a @ PeerUnresponsive(_) => a }
-      unknown = allReceivedStatuses.collect { case a @ UnknownPeer(_)           => a }
-      availableSize = BigDecimal(available.size)
-      unresponsiveSize = BigDecimal(unresponsive.size)
-      unknownSize = BigDecimal(unknown.size)
-      remainingPeersSize = BigDecimal(peersRemaining.size)
-      // should we divide by all known peers, or only the ones that remain in the consensus round?
-      onlinePercentage = Try(availableSize / remainingPeersSize).toOption
-        .getOrElse(if (isStatusOnline(ownHealthStatus)) BigDecimal(1) else BigDecimal(0))
-      offlinePercentage = Try((unresponsiveSize + unknownSize) / remainingPeersSize).toOption
-        .getOrElse(if (isStatusOnline(ownHealthStatus)) BigDecimal(0) else BigDecimal(1))
-      _ <- logger.debug(
-        s"Calculate consensus outcome details: onlinePercentage=$onlinePercentage offlinePercentange=$offlinePercentage availableSize=$availableSize unresponsiveSize=$unresponsiveSize unknownSize=$unknownSize peersRemaining=${logIds(peersRemaining)} allPeers=${logIds(allPeers)}"
-      )
-      result = {
-        if (allPeers.isEmpty)
-          None
-        else if (onlinePercentage >= BigDecimal(0.5d))
-          PeerOnline(
-            checkedPeer.id,
-            allPeers,
-            peersRemaining,
-            removedPeers,
-            onlinePercentage,
-            parallelRounds,
-            roundIds,
-            isKeepUpRound
-          ).asInstanceOf[HealthcheckConsensusDecision].some
-        else if (offlinePercentage > BigDecimal(0.5d))
-          PeerOffline(
-            checkedPeer.id,
-            allPeers,
-            peersRemaining,
-            removedPeers,
-            offlinePercentage,
-            parallelRounds,
-            roundIds,
-            isKeepUpRound
-          ).asInstanceOf[HealthcheckConsensusDecision].some
-        else None
-      }
+      result = driver
+        .calculateConsensusOutcome(ownId, key, ownHealthStatus, peersData, roundIds, parallelRounds, removedPeers)
     } yield result
 
-  def generateMissedConsensusNotification(): F[NotifyAboutMissedConsensus] =
-    for {
-      roundIds <- getRoundIds()
-      ownHealthStatus <- getOwnPerceivedHealthStatus()
-      notification = NotifyAboutMissedConsensus(checkedPeer.id, roundIds.toSortedSet, ownHealthStatus)
-    } yield notification
-
-  def isProposalSent(rd: List[RoundData]): Boolean = rd.forall(_.receivedProposal)
-  def areProposalsReceived(rd: List[RoundData]): Boolean = rd.forall(_.healthStatus.nonEmpty)
+  def isProposalSent(rd: List[RoundData[K, A]]): Boolean = rd.forall(_.receivedProposal)
+  def areProposalsReceived(rd: List[RoundData[K, A]]): Boolean = rd.forall(_.healthStatus.nonEmpty)
 
   def isReadyToCalculateOutcome(): F[Boolean] =
     for {
       peers <- roundPeers.get
       peersData = peers.values.toList
-      result = (isProposalSent(peersData) || isKeepUpRound) && areProposalsReceived(peersData)
+      result = isProposalSent(peersData) && areProposalsReceived(peersData)
     } yield result
 }
 
 object HealthCheckConsensus {
 
-  def apply[F[_]: Concurrent: ContextShift: Parallel: Clock](
+  def apply[
+    F[_]: Concurrent: ContextShift: Parallel: Clock,
+    K <: HealthCheckKey: Encoder: Decoder,
+    A <: HealthCheckStatus: Encoder: Decoder,
+    B <: ConsensusHealthStatus[K, A]: Encoder: Decoder,
+    C <: SendConsensusHealthStatus[K, A, B]: Encoder: Decoder
+  ](
+    key: K,
     checkedPeer: CheckedPeer,
     ownId: Id,
     roundId: HealthcheckRoundId,
-    additionalRoundIds: Option[Set[HealthcheckRoundId]],
     initialRoundPeers: Map[Id, PeerData],
-    delayedHealthCheckStatus: Fiber[F, PeerHealthCheckStatus],
+    delayedHealthCheckStatus: Fiber[F, A],
     startedAtSecond: FiniteDuration,
     roundType: HealthcheckActiveRoundType,
-    metrics: Metrics,
+    metrics: PrefixedHealthCheckMetrics[F],
     apiClient: ClientInterpreter[F],
     unboundedHealthBlocker: Blocker,
-    healthHttpPort: Int
-  ): HealthCheckConsensus[F] =
+    healthHttpPort: Int,
+    driver: HealthCheckConsensusTypeDriver[K, A, B],
+    healthCheckType: HealthCheckType
+  ): HealthCheckConsensus[F, K, A, B, C] =
     new HealthCheckConsensus(
+      key,
       checkedPeer,
       ownId,
       roundId,
-      additionalRoundIds: Option[Set[HealthcheckRoundId]],
       initialRoundPeers,
       delayedHealthCheckStatus,
       startedAtSecond,
@@ -738,7 +702,9 @@ object HealthCheckConsensus {
       metrics,
       apiClient,
       unboundedHealthBlocker,
-      healthHttpPort = healthHttpPort.toString
+      healthHttpPort = healthHttpPort.toString,
+      driver = driver,
+      healthCheckType = healthCheckType
     )
 
   implicit val roundIdOrdering: Ordering[HealthcheckRoundId] = Ordering.by[HealthcheckRoundId, String](_.roundId.id)
@@ -752,53 +718,105 @@ object HealthCheckConsensus {
     implicit val checkedPeerCodec: Codec[CheckedPeer] = deriveCodec
   }
 
-  case class ConsensusHealthStatus(
+  sealed trait ConsensusHealthStatus[+K <: HealthCheckKey, +A <: HealthCheckStatus] {
+    val key: K
+    val checkedPeer: CheckedPeer
+    val checkingPeerId: Id
+    val roundId: HealthcheckRoundId
+    val status: A
+    val clusterState: Map[Id, NodeState]
+  }
+
+  object ConsensusHealthStatus {
+    implicit val consensusHealthStatusEncoder: Encoder[ConsensusHealthStatus[HealthCheckKey, HealthCheckStatus]] =
+      Encoder.instance {
+        case a: MissingProposalHealthStatus => a.asJson
+        case a: PingHealthStatus            => a.asJson
+      }
+
+    implicit val consensusHealthStatusDecoder: Decoder[ConsensusHealthStatus[HealthCheckKey, HealthCheckStatus]] =
+      List[Decoder[ConsensusHealthStatus[HealthCheckKey, HealthCheckStatus]]](
+        Decoder[MissingProposalHealthStatus].widen,
+        Decoder[PingHealthStatus].widen
+      ).reduceLeft(_.or(_))
+  }
+
+  case class PingHealthStatus(
+    key: PingHealthCheckKey,
     checkedPeer: CheckedPeer,
     checkingPeerId: Id,
     roundId: HealthcheckRoundId,
-    status: PeerHealthCheckStatus,
+    status: PeerPingHealthCheckStatus,
     clusterState: Map[Id, NodeState]
-  )
+  ) extends ConsensusHealthStatus[PingHealthCheckKey, PeerPingHealthCheckStatus]
 
-  object ConsensusHealthStatus {
-    implicit val consensusHealthStatusCodec: Codec[ConsensusHealthStatus] = deriveCodec
+  object PingHealthStatus {
+    implicit val pingHealthStatusEncoder: Encoder[PingHealthStatus] = deriveEncoder
+    implicit val pingHealthStatusDecoder: Decoder[PingHealthStatus] = deriveDecoder
+  }
+
+  case class MissingProposalHealthStatus(
+    key: MissingProposalHealthCheckKey,
+    checkedPeer: CheckedPeer,
+    checkingPeerId: Id,
+    roundId: HealthcheckRoundId,
+    status: MissingProposalHealthCheckStatus,
+    clusterState: Map[Id, NodeState]
+  ) extends ConsensusHealthStatus[MissingProposalHealthCheckKey, MissingProposalHealthCheckStatus]
+
+  object MissingProposalHealthStatus {
+    implicit val missingSnapshotHealthStatusEncoder: Encoder[MissingProposalHealthStatus] = deriveEncoder
+    implicit val missingSnapshotHealthStatusDecoder: Decoder[MissingProposalHealthStatus] = deriveDecoder
   }
 
   sealed trait HealthConsensusCommand
 
   object HealthConsensusCommand {
-    implicit val encodeHealthConsensusCommand: Encoder[HealthConsensusCommand] = Encoder.instance {
-      case a @ SendPerceivedHealthStatus(_, _)     => a.asJson
-      case a @ NotifyAboutMissedConsensus(_, _, _) => a.asJson
+    implicit def encodeHealthConsensusCommand: Encoder[HealthConsensusCommand] = Encoder.instance {
+      case a @ SendConsensusHealthStatus(_, _) =>
+        a.asJson(
+          Encoder[SendConsensusHealthStatus[
+            HealthCheckKey,
+            HealthCheckStatus,
+            ConsensusHealthStatus[HealthCheckKey, HealthCheckStatus]
+          ]]
+        )
     }
 
     implicit val decodeHealthConsensusCommand: Decoder[HealthConsensusCommand] =
       List[Decoder[HealthConsensusCommand]](
-        Decoder[SendPerceivedHealthStatus].widen,
-        Decoder[NotifyAboutMissedConsensus].widen
+        Decoder[SendConsensusHealthStatus[
+          HealthCheckKey,
+          HealthCheckStatus,
+          ConsensusHealthStatus[HealthCheckKey, HealthCheckStatus]
+        ]].widen
       ).reduceLeft(_.or(_))
   }
 
-  case class SendPerceivedHealthStatus(
-    consensusHealthStatus: ConsensusHealthStatus,
+  case class SendConsensusHealthStatus[K <: HealthCheckKey, A <: HealthCheckStatus, B <: ConsensusHealthStatus[K, A]](
+    consensusHealthStatus: B,
     asProxyForId: Option[Id] = None
   ) extends HealthConsensusCommand
 
-  object SendPerceivedHealthStatus {
-    implicit val sendPerceivedHealthStatusCodec: Codec[SendPerceivedHealthStatus] = deriveCodec
+  object SendConsensusHealthStatus {
+    implicit def sendConsensusHealthStatusDecoder[
+      K <: HealthCheckKey: Decoder,
+      A <: HealthCheckStatus: Decoder,
+      B <: ConsensusHealthStatus[K, A]: Decoder
+    ]: Decoder[SendConsensusHealthStatus[K, A, B]] = deriveDecoder
+    implicit def sendConsensusHealthStatusEncoder[
+      K <: HealthCheckKey: Encoder,
+      A <: HealthCheckStatus: Encoder,
+      B <: ConsensusHealthStatus[K, A]: Encoder
+    ]: Encoder[SendConsensusHealthStatus[K, A, B]] = deriveEncoder
   }
 
-  case class NotifyAboutMissedConsensus(
-    checkedId: Id,
+  case class FetchPeerHealthStatus(
+    healthCheckType: HealthCheckType,
     roundIds: Set[HealthcheckRoundId],
-    consensusHealthStatus: ConsensusHealthStatus
-  ) extends HealthConsensusCommand
-
-  object NotifyAboutMissedConsensus {
-    implicit val notifyAboutMissedConsensusCodec: Codec[NotifyAboutMissedConsensus] = deriveCodec
-  }
-
-  case class FetchPeerHealthStatus(roundIds: Set[HealthcheckRoundId], originId: Id, asProxyForId: Option[Id] = None)
+    originId: Id,
+    asProxyForId: Option[Id] = None
+  )
 
   object FetchPeerHealthStatus {
     implicit val fetchPeerHealthStatusCodec: Codec[FetchPeerHealthStatus] = deriveCodec
@@ -812,52 +830,52 @@ object HealthCheckConsensus {
 
   case class ProxyPeers(peersData: NonEmptySet[PeerData])
 
-  case class PeerConsensusData(
-    status: PeerHealthCheckStatus,
-    clusterState: Map[Id, NodeState],
-    roundId: HealthcheckRoundId
-  )
-
-  case class RoundData(
+  case class RoundData[K <: HealthCheckKey, A <: HealthCheckStatus](
     peerData: Either[ProxyPeers, PeerData],
-    healthStatus: Option[ConsensusHealthStatus] = None,
+    healthStatus: Option[ConsensusHealthStatus[K, A]] = None,
     receivedProposal: Boolean = false
   )
 
-  case class RoundOutcome(roundIds: Set[RoundId], outcome: HealthcheckConsensusDecision)
+  case class RoundOutcome[K <: HealthCheckKey](roundIds: Set[RoundId], outcome: HealthcheckConsensusDecision[K])
 
-  sealed trait HealthcheckConsensusDecision {
-    val id: Id
+  sealed trait HealthcheckConsensusDecision[K <: HealthCheckKey] {
+    val key: K
     val allPeers: Set[Id]
     val remainingPeers: Set[Id]
     val removedPeers: Map[Id, NonEmptyList[PeerRemovalReason]]
-    val percentage: BigDecimal
-    val parallelRounds: Map[Id, Set[HealthcheckRoundId]]
+    val positiveOutcomePercentage: BigDecimal
+    val positiveOutcomeSize: BigDecimal
+    val negativeOutcomePercentage: BigDecimal
+    val negativeOutcomeSize: BigDecimal
+    val parallelRounds: Map[K, Set[HealthcheckRoundId]]
     val roundIds: NonEmptySet[HealthcheckRoundId]
-    val isKeepUpRound: Boolean
   }
 
-  case class PeerOffline(
-    id: Id,
+  case class NegativeOutcome[K <: HealthCheckKey](
+    key: K,
     allPeers: Set[Id],
     remainingPeers: Set[Id],
     removedPeers: Map[Id, NonEmptyList[PeerRemovalReason]],
-    percentage: BigDecimal,
-    parallelRounds: Map[Id, Set[HealthcheckRoundId]],
-    roundIds: NonEmptySet[HealthcheckRoundId],
-    isKeepUpRound: Boolean
-  ) extends HealthcheckConsensusDecision
+    positiveOutcomePercentage: BigDecimal,
+    positiveOutcomeSize: BigDecimal,
+    negativeOutcomePercentage: BigDecimal,
+    negativeOutcomeSize: BigDecimal,
+    parallelRounds: Map[K, Set[HealthcheckRoundId]],
+    roundIds: NonEmptySet[HealthcheckRoundId]
+  ) extends HealthcheckConsensusDecision[K]
 
-  case class PeerOnline(
-    id: Id,
+  case class PositiveOutcome[K <: HealthCheckKey](
+    key: K,
     allPeers: Set[Id],
     remainingPeers: Set[Id],
     removedPeers: Map[Id, NonEmptyList[PeerRemovalReason]],
-    percentage: BigDecimal,
-    parallelRounds: Map[Id, Set[HealthcheckRoundId]],
-    roundIds: NonEmptySet[HealthcheckRoundId],
-    isKeepUpRound: Boolean
-  ) extends HealthcheckConsensusDecision
+    positiveOutcomePercentage: BigDecimal,
+    positiveOutcomeSize: BigDecimal,
+    negativeOutcomePercentage: BigDecimal,
+    negativeOutcomeSize: BigDecimal,
+    parallelRounds: Map[K, Set[HealthcheckRoundId]],
+    roundIds: NonEmptySet[HealthcheckRoundId]
+  ) extends HealthcheckConsensusDecision[K]
 
   // Maybe we could introduce the one below to handle abnormal cases if any exist, for the case where node is processing a round that the node wasn't a part of - e.g. a parallel round -
   // the node shouldn't make it's own observation and it should rely only on the observations from other peers, there is a slight possibility remainingPeers will be empty
