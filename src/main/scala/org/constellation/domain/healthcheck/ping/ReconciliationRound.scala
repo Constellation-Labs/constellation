@@ -1,15 +1,15 @@
-package org.constellation.domain.healthcheck
+package org.constellation.domain.healthcheck.ping
 
 import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Clock, Concurrent, ContextShift, Fiber, Timer}
 import cats.syntax.all._
-import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
-import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.healthcheck.HealthCheckConsensus.HealthcheckRoundId
 import org.constellation.domain.healthcheck.HealthCheckLoggingHelper.logId
+import org.constellation.domain.healthcheck.HealthCheckType.PingHealthCheck
+import org.constellation.domain.healthcheck.PrefixedHealthCheckLogger
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState.{canActAsJoiningSource, isInitiallyJoining, isInvalidForJoining}
@@ -30,7 +30,7 @@ class ReconciliationRound[F[_]](
 )(implicit F: Concurrent[F], CS: ContextShift[F], C: Clock[F], T: Timer[F]) {
   import ReconciliationRound._
 
-  val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+  val logger: PrefixedHealthCheckLogger[F] = new PrefixedHealthCheckLogger[F](PingHealthCheck)
 
   val retryAttempts = 2
   val retryAfter: FiniteDuration = 60.seconds

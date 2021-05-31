@@ -3,37 +3,22 @@ package org.constellation.domain.healthcheck
 import cats.data.{NonEmptyList, NonEmptySet}
 import cats.effect.Sync
 import cats.syntax.all._
-import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
-import org.constellation.domain.healthcheck.HealthCheckConsensus.{
-  CheckedPeer,
-  ConsensusHealthStatus,
-  HealthcheckConsensusDecision,
-  HealthcheckRoundId,
-  PeerOffline,
-  PeerOnline,
-  PeerRemovalReason,
-  RoundData
+import org.constellation.domain.healthcheck.HealthCheckConsensus._
+import org.constellation.domain.healthcheck.HealthCheckConsensusManagerBase._
+import org.constellation.domain.healthcheck.HealthCheckKey.{MissingProposalHealthCheckKey, PingHealthCheckKey}
+import org.constellation.domain.healthcheck.HealthCheckStatus.{
+  GotPeerProposalAtHeight,
+  MissingOwnProposalAtHeight,
+  MissingPeerProposalAtHeight,
+  MissingProposalHealthCheckStatus,
+  PeerAvailable,
+  PeerPingHealthCheckStatus,
+  PeerUnresponsive,
+  UnknownPeer
 }
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager.{
-  DifferentProposalAlreadyProcessedForCheckedId,
-  DifferentProposalForRoundIdAlreadyProcessed,
-  IdNotPartOfTheConsensus,
-  InternalErrorStartingRound,
-  ProposalNotProcessedForHistoricalRound,
-  SendProposalError
-}
-import org.constellation.domain.healthcheck.ReconciliationRound.{
-  ClusterAlignmentResult,
-  NodeAligned,
-  NodeInconsistentlySeenAsOnlineOrOffline,
-  NodeNotPresentOnAllNodes,
-  ReconciliationResult
-}
-import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.p2p.PeerHealthCheck.PeerHealthCheckStatus
+import org.constellation.domain.healthcheck.ping.ReconciliationRound._
 import org.constellation.p2p.PeerData
 import org.constellation.schema.{Id, NodeState}
-import org.constellation.util.Metrics
 
 object HealthCheckLoggingHelper {
   // Simple value to string conversions
@@ -48,12 +33,20 @@ object HealthCheckLoggingHelper {
   def logRoundOwner(roundId: HealthcheckRoundId): String = logId(roundId.owner)
   def logRoundId(roundId: HealthcheckRoundId): String = roundId.roundId.id
 
+  def logHealthCheckKey(key: HealthCheckKey): String = key match {
+    case PingHealthCheckKey(id)                    => id.short
+    case MissingProposalHealthCheckKey(id, height) => s"(${id.short}, $height)"
+  }
+
+  def logHealthCheckKeys[K <: HealthCheckKey](keys: Set[K]): String =
+    keys.map(logHealthCheckKey).toString
+
   def logRoundIdWithOwner(roundId: HealthcheckRoundId): String =
     s"roundId=${logRoundId(roundId)} owner=${logRoundOwner(roundId)}"
   def logRoundIdShort(roundId: HealthcheckRoundId): String = roundId.roundId.id.take(8)
 
-  def logIdToRoundIdsMapping(idToRoundsIds: Map[Id, Set[HealthcheckRoundId]]): String =
-    idToRoundsIds.map { case (id, roundIds) => logId(id) -> logRoundIds(roundIds) }.toString()
+  def logKeyToRoundIdsMapping[K <: HealthCheckKey](idToRoundsIds: Map[K, Set[HealthcheckRoundId]]): String =
+    idToRoundsIds.map { case (key, roundIds) => logHealthCheckKey(key) -> logRoundIds(roundIds) }.toString()
 
   def logClusterState(clusterState: Map[Id, NodeState]): String =
     clusterState.map { case (id, state) => logIdShort(id) -> state }.toString()
@@ -68,18 +61,35 @@ object HealthCheckLoggingHelper {
         s"NodeInconsistentlySeenAsOnlineOrOffline: onlineOn=${logIds(onlineOn)} offlineOn=${logIds(offlineOn)}"
     }
 
-  def logPeerHealthCheckStatus(status: PeerHealthCheckStatus): String =
+  def logPeerPingHealthCheckStatus(status: PeerPingHealthCheckStatus): String =
     status match {
-      case PeerHealthCheck.PeerAvailable(id)    => s"PeerAvailable(${logId(id)})"
-      case PeerHealthCheck.PeerUnresponsive(id) => s"PeerUnresponsive(${logId(id)})"
-      case PeerHealthCheck.UnknownPeer(id)      => s"UnknownPeer(${logId(id)})"
+      case PeerAvailable(id)    => s"PeerAvailable(${logId(id)})"
+      case PeerUnresponsive(id) => s"PeerUnresponsive(${logId(id)})"
+      case UnknownPeer(id)      => s"UnknownPeer(${logId(id)})"
     }
 
-  def logConsensusHealthStatus(healthStatus: ConsensusHealthStatus): String = {
-    val ConsensusHealthStatus(checkedId, checkingPeerId, roundId, status, clusterState) = healthStatus
+  def logMissingProposalHealthCheckStatus(status: MissingProposalHealthCheckStatus): String =
+    status match {
+      case GotPeerProposalAtHeight(id, height)     => s"GotPeerProposalAtHeight(${logId(id)}, $height)"
+      case MissingPeerProposalAtHeight(id, height) => s"MissingPeerProposalAtHeight(${logId(id)}, $height)"
+      case MissingOwnProposalAtHeight(id, height)  => s"MissingOwnProposalAtHeight(${logId(id)}, $height)"
+    }
 
-    s"checkedId=${logId(checkedId)} checkingId=${logId(checkingPeerId)} ${logRoundIdWithOwner(roundId)} status=${logPeerHealthCheckStatus(status)} clusterState=${logClusterState(clusterState)}"
-  }
+  def logPeerHealthCheckStatus(status: HealthCheckStatus): String =
+    status match {
+      case status: PeerPingHealthCheckStatus        => logPeerPingHealthCheckStatus(status)
+      case status: MissingProposalHealthCheckStatus => logMissingProposalHealthCheckStatus(status)
+    }
+
+  def logConsensusHealthStatus[K <: HealthCheckKey, A <: HealthCheckStatus](
+    healthStatus: ConsensusHealthStatus[K, A]
+  ): String =
+    healthStatus match {
+      case PingHealthStatus(key, _, checkingPeerId, roundId, status, clusterState) =>
+        s"key=${logHealthCheckKey(key)} checkingId=${logId(checkingPeerId)} ${logRoundIdWithOwner(roundId)} status=${logPeerHealthCheckStatus(status)} clusterState=${logClusterState(clusterState)}"
+      case MissingProposalHealthStatus(key, _, checkingPeerId, roundId, status, clusterState) =>
+        s"key=${logHealthCheckKey(key)} checkingId=${logId(checkingPeerId)} ${logRoundIdWithOwner(roundId)} status=${logPeerHealthCheckStatus(status)} clusterState=${logClusterState(clusterState)}"
+    }
 
   def logClusterAlignmentResults(clusterAlignmentResults: List[ClusterAlignmentResult]): String =
     clusterAlignmentResults.map(logClusterAlignmentResult).toString()
@@ -109,63 +119,69 @@ object HealthCheckLoggingHelper {
     s"peersToRunHealthcheckFor: ${logIds(peersToRunHealthCheckFor)} misalignedPeers: ${logIds(misalignedPeers)}, clusterAlignment: ${logIdToClusterAlignmentResultsMapping(clusterAlignment)}"
   }
 
-  def logMissingRoundDataForId(idToRoundData: Map[Id, RoundData]): String =
+  def logMissingRoundDataForId[K <: HealthCheckKey, A <: HealthCheckStatus](
+    idToRoundData: Map[Id, RoundData[K, A]]
+  ): String =
     idToRoundData.map {
-      case (id, RoundData(peerData, healthStatus, receivedProposal)) =>
+      case (id, RoundData(_, healthStatus, receivedProposal)) =>
         logId(id) -> s"peerReceivedMyProposal=$receivedProposal, IReceivedPeersProposal=${healthStatus.nonEmpty}"
     }.toString()
 
   // Logging and metrics
-  def logHealthcheckConsensusDecicion[F[_]: Sync](decision: HealthcheckConsensusDecision)(
-    metrics: Metrics,
-    logger: SelfAwareStructuredLogger[F]
+  def logHealthcheckConsensusDecision[F[_]: Sync, K <: HealthCheckKey](decision: HealthcheckConsensusDecision[K])(
+    metrics: PrefixedHealthCheckMetrics[F],
+    logger: PrefixedHealthCheckLogger[F]
   ): F[Unit] =
     decision match {
-      case PeerOffline(
-          id,
+      case NegativeOutcome(
+          key,
           allPeers,
           remainingPeers,
           removedPeers,
-          percentage,
+          positiveOutcomePercentage,
+          positiveOutcomeSize,
+          negativeOutcomePercentage,
+          negativeOutcomeSize,
           parallelRounds,
-          roundIds,
-          isKeepUpRound
+          roundIds
           ) =>
         logger.debug(
-          s"HealthcheckConsensus decision for id=${logId(id)} is: PeerOffline remainingPeers(${remainingPeers.size})=${logIds(
+          s"HealthcheckConsensus decision for id=${logHealthCheckKey(key)} is: NegativeOutcome remainingPeers(${remainingPeers.size})=${logIds(
             remainingPeers
-          )} removedPeers(${removedPeers.size})=${logIdToPeerRemovalReasonsMapping(removedPeers)} allPeers(${allPeers.size})=${logIds(
-            allPeers
-          )} percentage=$percentage parallelRounds=${logIdToRoundIdsMapping(parallelRounds)} roundIds=${logRoundIds(roundIds)} isKeepUpRound=$isKeepUpRound"
-        ) >> metrics.incrementMetricAsync("healthcheck_decision_PeerOffline")
-      case PeerOnline(
-          id,
+          )} removedPeers(${removedPeers.size})=${logIdToPeerRemovalReasonsMapping(
+            removedPeers
+          )} allPeers(${allPeers.size})=${logIds(allPeers)} positiveOutcomePercentage=$positiveOutcomePercentage positiveOutcomeSize=$positiveOutcomeSize negativeOutcomePercentage=$negativeOutcomePercentage negativeOutcomeSize=$negativeOutcomeSize parallelRounds=${logKeyToRoundIdsMapping(parallelRounds)} roundIds=${logRoundIds(roundIds)}"
+        ) >> metrics.incrementMetricAsync("decision_NegativeOutcome")
+      case PositiveOutcome(
+          key,
           allPeers,
           remainingPeers,
           removedPeers,
-          percentage,
+          positiveOutcomePercentage,
+          positiveOutcomeSize,
+          negativeOutcomePercentage,
+          negativeOutcomeSize,
           parallelRounds,
-          roundIds,
-          isKeepUpRound
+          roundIds
           ) =>
         logger.debug(
-          s"HealthcheckConsensus decision for id=${logId(id)} is: PeerOnline remainingPeers(${remainingPeers.size})=${logIds(
+          s"HealthcheckConsensus decision for id=${logHealthCheckKey(key)} is: PositiveOutcome remainingPeers(${remainingPeers.size})=${logIds(
             remainingPeers
-          )} removedPeers(${removedPeers.size})=${logIdToPeerRemovalReasonsMapping(removedPeers)} allPeers(${allPeers.size})=${logIds(
-            allPeers
-          )} percentage=$percentage parallelRounds=${logIdToRoundIdsMapping(parallelRounds)} roundIds=${logRoundIds(roundIds)} isKeepUpRound=$isKeepUpRound"
-        ) >> metrics.incrementMetricAsync("healthcheck_decision_PeerOnline")
+          )} removedPeers(${removedPeers.size})=${logIdToPeerRemovalReasonsMapping(
+            removedPeers
+          )} allPeers(${allPeers.size})=${logIds(allPeers)} positiveOutcomePercentage=$positiveOutcomePercentage positiveOutcomeSize=$positiveOutcomeSize negativeOutcomePercentage=$negativeOutcomePercentage negativeOutcomeSize=$negativeOutcomeSize parallelRounds=${logKeyToRoundIdsMapping(parallelRounds)} roundIds=${logRoundIds(roundIds)}"
+        ) >> metrics.incrementMetricAsync("decision_PositiveOutcome")
     }
 
-  def incrementFatalIntegrityHealthcheckError[F[_]: Sync](metrics: Metrics): F[Unit] =
-    metrics.incrementMetricAsync[F]("healthcheck_fatalIntegrityErrorOccurred_total")
+  def incrementFatalIntegrityHealthcheckError[F[_]: Sync](metrics: PrefixedHealthCheckMetrics[F]): F[Unit] =
+    metrics.incrementMetricAsync("fatalIntegrityErrorOccurred_total")
 
-  def incrementSuspiciousHealthcheckWarning[F[_]: Sync](metrics: Metrics): F[Unit] =
-    metrics.incrementMetricAsync[F]("healthcheck_suspiciousWarningOccurred_total")
+  def incrementSuspiciousHealthcheckWarning[F[_]: Sync](metrics: PrefixedHealthCheckMetrics[F]): F[Unit] =
+    metrics.incrementMetricAsync("suspiciousWarningOccurred_total")
 
   def logSendProposalError[F[_]: Sync](
     error: SendProposalError
-  )(metrics: Metrics, logger: SelfAwareStructuredLogger[F]): F[Unit] =
+  )(metrics: PrefixedHealthCheckMetrics[F], logger: PrefixedHealthCheckLogger[F]): F[Unit] =
     error match {
       case DifferentProposalForRoundIdAlreadyProcessed(checkingPeerId, roundIds, roundType) =>
         logger.error(

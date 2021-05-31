@@ -2,7 +2,7 @@ package org.constellation.domain.healthcheck
 
 import cats.syntax.all._
 import org.constellation.domain.healthcheck.HealthCheckConsensus.HealthcheckRoundId
-import org.constellation.domain.healthcheck.ReconciliationRound.{
+import org.constellation.domain.healthcheck.ping.ReconciliationRound.{
   NodeAligned,
   NodeInconsistentlySeenAsOnlineOrOffline,
   NodeNotPresentOnAllNodes,

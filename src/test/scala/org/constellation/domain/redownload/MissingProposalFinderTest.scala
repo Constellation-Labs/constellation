@@ -131,6 +131,27 @@ class MissingProposalFinderTest
       val result = finder.findMissingPeerProposals(majorityRange, peerProposals, peersCache)
       result shouldBe empty
     }
+
+//    "should find missing proposals when checking single height" in {
+//      val peerProposals = Map(
+//        Id("a") -> List(2, 4, 6),
+//        Id("b") -> List(2, 4),
+//        Id("c") -> List(4)
+//      ).map(toPeerProposals)
+//      val peersCache = Map(
+//        Id("a") -> nel(joinedAt(2)),
+//        Id("b") -> nel(joinedAt(2)),
+//        Id("c") -> nel(joinedAt(2))
+//      )
+//      val majorityRange = HeightRange(6, 6)
+//
+//      val result = finder.findMissingPeerProposals(majorityRange, peerProposals, peersCache)
+//
+//      println(result)
+//      result should (contain.key(Id("b")).and(contain).key(Id("c")))
+//      result.get(Id("b")).value should contain only (6L)
+//      result.get(Id("c")).value should contain only (6L)
+//    }
   }
 
 }

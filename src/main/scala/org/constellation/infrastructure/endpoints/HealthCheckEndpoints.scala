@@ -7,12 +7,15 @@ import io.circe.syntax._
 import org.constellation.domain.healthcheck.HealthCheckConsensus.{
   FetchPeerHealthStatus,
   HealthConsensusCommand,
-  NotifyAboutMissedConsensus,
-  SendPerceivedHealthStatus
+  MissingProposalHealthStatus,
+  PingHealthStatus,
+  SendConsensusHealthStatus
 }
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager.SendProposalError
-import org.constellation.domain.healthcheck.HealthCheckConsensusManager.EitherCodec._
+import org.constellation.domain.healthcheck.HealthCheckConsensus.SendConsensusHealthStatus._
+import org.constellation.domain.healthcheck.HealthCheckConsensusManagerBase.EitherCodec._
+import org.constellation.domain.healthcheck.HealthCheckType.{MissingProposalHealthCheck, PingHealthCheck}
+import org.constellation.domain.healthcheck.ping.PingHealthCheckConsensusManager
+import org.constellation.domain.healthcheck.proposal.MissingProposalHealthCheckConsensusManager
 import org.http4s.dsl.Http4sDsl
 import org.http4s.HttpRoutes
 import org.http4s.circe._
@@ -20,56 +23,91 @@ import org.http4s.circe._
 class HealthCheckEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   Slf4jLogger.getLogger[F]
 
-  def peerHealthCheckEndpoints(healthCheckConsensusManager: HealthCheckConsensusManager[F]) =
-    processConsensusCommand(healthCheckConsensusManager) <+>
-      getRoundProposal(healthCheckConsensusManager) <+>
-      getClusterState(healthCheckConsensusManager)
+  def peerHealthCheckEndpoints(
+    pingHealthCheckConsensusManager: PingHealthCheckConsensusManager[F],
+    missingProposalHealthCheckConsensusManager: MissingProposalHealthCheckConsensusManager[F]
+  ) =
+    processConsensusCommand(pingHealthCheckConsensusManager, missingProposalHealthCheckConsensusManager) <+>
+      getRoundProposal(pingHealthCheckConsensusManager, missingProposalHealthCheckConsensusManager) <+>
+      getClusterState(pingHealthCheckConsensusManager)
 
   private def processConsensusCommand(
-    healthCheckConsensusManager: HealthCheckConsensusManager[F]
+    pingHealthCheckConsensusManager: PingHealthCheckConsensusManager[F],
+    missingProposalHealthCheckConsensusManager: MissingProposalHealthCheckConsensusManager[F]
   ): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "health-check" / "consensus" =>
       for {
         cmd <- req.decodeJson[HealthConsensusCommand]
         response <- cmd match {
-          case SendPerceivedHealthStatus(consensusHealthStatus, asProxyForId) => {
+          case SendConsensusHealthStatus(consensusHealthStatus, asProxyForId) => {
             asProxyForId match {
               case Some(proxyToPeer) =>
-                healthCheckConsensusManager.proxySendHealthProposal(consensusHealthStatus, proxyToPeer)
+                consensusHealthStatus match {
+                  case a: PingHealthStatus =>
+                    pingHealthCheckConsensusManager.proxySendHealthProposal(a, proxyToPeer)
+                  case a: MissingProposalHealthStatus =>
+                    missingProposalHealthCheckConsensusManager.proxySendHealthProposal(a, proxyToPeer)
+                }
               case None =>
-                healthCheckConsensusManager.handleConsensusHealthProposal(consensusHealthStatus)
+                consensusHealthStatus match {
+                  case a: PingHealthStatus =>
+                    pingHealthCheckConsensusManager.handleConsensusHealthProposal(a)
+                  case a: MissingProposalHealthStatus =>
+                    missingProposalHealthCheckConsensusManager.handleConsensusHealthProposal(a)
+                }
             }
           }.flatMap(result => Ok(result.asJson))
-
-          case a @ NotifyAboutMissedConsensus(_, _, _) =>
-            F.start(healthCheckConsensusManager.handleNotificationAboutMissedConsensus(a))
-              .map(_ => ()) >>=
-              (result => Ok(result.asJson)) // I think we may need a separate endpoint here, as we are responding with different type, Unit here, Either above
         }
       } yield response
   }
 
-  private def getRoundProposal(healthCheckConsensusManager: HealthCheckConsensusManager[F]): HttpRoutes[F] =
+  private def getRoundProposal(
+    pingHealthCheckConsensusManager: PingHealthCheckConsensusManager[F],
+    missingProposalHealthCheckConsensusManager: MissingProposalHealthCheckConsensusManager[F]
+  ): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case req @ GET -> Root / "health-check" / "consensus" =>
         for {
-          fetchPeerHealtStatus <- req.decodeJson[FetchPeerHealthStatus]
-          result <- fetchPeerHealtStatus.asProxyForId match {
+          fetchPeerHealthStatus <- req.decodeJson[FetchPeerHealthStatus]
+          response <- fetchPeerHealthStatus.asProxyForId match {
             case Some(proxyToPeer) =>
-              healthCheckConsensusManager
-                .proxyGetHealthStatusForRound(fetchPeerHealtStatus.roundIds, proxyToPeer, fetchPeerHealtStatus.originId)
+              fetchPeerHealthStatus.healthCheckType match {
+                case PingHealthCheck =>
+                  pingHealthCheckConsensusManager
+                    .proxyGetHealthStatusForRound(
+                      fetchPeerHealthStatus.roundIds,
+                      proxyToPeer,
+                      fetchPeerHealthStatus.originId
+                    )
+                    .flatMap(result => Ok(result.asJson))
+                case MissingProposalHealthCheck =>
+                  missingProposalHealthCheckConsensusManager
+                    .proxyGetHealthStatusForRound(
+                      fetchPeerHealthStatus.roundIds,
+                      proxyToPeer,
+                      fetchPeerHealthStatus.originId
+                    )
+                    .flatMap(result => Ok(result.asJson))
+              }
             case None =>
-              healthCheckConsensusManager
-                .getHealthStatusForRound(fetchPeerHealtStatus.roundIds, fetchPeerHealtStatus.originId)
+              fetchPeerHealthStatus.healthCheckType match {
+                case PingHealthCheck =>
+                  pingHealthCheckConsensusManager
+                    .getHealthStatusForRound(fetchPeerHealthStatus.roundIds, fetchPeerHealthStatus.originId)
+                    .flatMap(result => Ok(result.asJson))
+                case MissingProposalHealthCheck =>
+                  missingProposalHealthCheckConsensusManager
+                    .getHealthStatusForRound(fetchPeerHealthStatus.roundIds, fetchPeerHealthStatus.originId)
+                    .flatMap(result => Ok(result.asJson))
+              }
           }
-          response <- Ok(result.asJson)
         } yield response
     }
 
-  private def getClusterState(healthCheckConsensusManager: HealthCheckConsensusManager[F]): HttpRoutes[F] =
+  private def getClusterState(pingHealthCheckConsensusManager: PingHealthCheckConsensusManager[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "health-check" / "cluster-state" =>
-        healthCheckConsensusManager
+        pingHealthCheckConsensusManager
           .getClusterState()
           .map(_.asJson)
           .flatMap(Ok(_))
@@ -79,7 +117,9 @@ class HealthCheckEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F]
 object HealthCheckEndpoints {
 
   def peerHealthCheckEndpoints[F[_]: Concurrent](
-    healthCheckConsensusManager: HealthCheckConsensusManager[F]
+    pingHealthCheckConsensusManager: PingHealthCheckConsensusManager[F],
+    missingProposalHealthCheckConsensusManager: MissingProposalHealthCheckConsensusManager[F]
   ): HttpRoutes[F] =
-    new HealthCheckEndpoints[F].peerHealthCheckEndpoints(healthCheckConsensusManager)
+    new HealthCheckEndpoints[F]
+      .peerHealthCheckEndpoints(pingHealthCheckConsensusManager, missingProposalHealthCheckConsensusManager)
 }
