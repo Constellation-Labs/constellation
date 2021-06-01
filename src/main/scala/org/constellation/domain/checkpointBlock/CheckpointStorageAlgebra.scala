@@ -22,6 +22,7 @@ trait CheckpointStorageAlgebra[F[_]] {
   def markWaitingForAcceptance(soeHash: String): F[Unit]
   def markForAcceptance(soeHash: String): F[Unit]
   def unmarkFromAcceptance(soeHash: String): F[Unit]
+  def getWaitingForAcceptance: F[Set[CheckpointCache]]
 
   def markForAcceptanceAfterDownload(soeHash: String): F[Unit]
   def getCheckpointsForAcceptanceAfterDownload: F[List[CheckpointCache]]

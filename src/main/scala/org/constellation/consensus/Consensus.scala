@@ -297,29 +297,32 @@ class Consensus[F[_]: Concurrent: ContextShift](
           s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height} and parents: ${parents}"
       )
 
-      finalResult <- checkpointService
-        .accept(cache)
-        .map(_ => ConsensusFinalResult(Option(checkpointBlock)))
-        .handleErrorWith {
-          case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
-            logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
-          case error @ MissingTransactionReference(cb) =>
-            logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
-          case error @ MissingParents(cb) =>
-            logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
-          case tipConflict: TipConflictException =>
-            logger.error(tipConflict)(
-              s"[${nodeId.short}] Failed to accept majority checkpoint block due: ${tipConflict.getMessage}"
-            ) >> ConsensusFinalResult(None, true, tipConflict.conflictingTxs).pure[F]
-          case containsInvalidTransactions: ContainsInvalidTransactionsException =>
-            logger.error(containsInvalidTransactions)(
-              s"[${nodeId.short}] Failed to accept majority checkpoint block due: ${containsInvalidTransactions.getMessage}"
-            ) >> ConsensusFinalResult(None, shouldReturnData = true, containsInvalidTransactions.txsToExclude).pure[F]
-          case unknownError =>
-            logger.error(unknownError)(
-              s"[${nodeId.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
-            ) >> ConsensusFinalResult(None, shouldReturnData = true).pure[F]
-        }
+      finalResult <- checkpointService.acceptLock.withPermit {
+        checkpointStorage.registerUsage(cache.checkpointBlock.soeHash) >>
+        checkpointService
+          .accept(cache)
+          .map(_ => ConsensusFinalResult(Option(checkpointBlock)))
+          .handleErrorWith {
+            case error @ (CheckpointAcceptBlockAlreadyStored(_) | PendingAcceptance(_)) =>
+              logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
+            case error @ MissingTransactionReference(cb) =>
+              logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
+            case error @ MissingParents(cb) =>
+              logger.warn(error.getMessage) >> ConsensusFinalResult(None).pure[F]
+            case tipConflict: TipConflictException =>
+              logger.error(tipConflict)(
+                s"[${nodeId.short}] Failed to accept majority checkpoint block due: ${tipConflict.getMessage}"
+              ) >> ConsensusFinalResult(None, true, tipConflict.conflictingTxs).pure[F]
+            case containsInvalidTransactions: ContainsInvalidTransactionsException =>
+              logger.error(containsInvalidTransactions)(
+                s"[${nodeId.short}] Failed to accept majority checkpoint block due: ${containsInvalidTransactions.getMessage}"
+              ) >> ConsensusFinalResult(None, shouldReturnData = true, containsInvalidTransactions.txsToExclude).pure[F]
+            case unknownError =>
+              logger.error(unknownError)(
+                s"[${nodeId.short}] Failed to accept majority checkpoint block due: ${unknownError.getMessage}"
+              ) >> ConsensusFinalResult(None, shouldReturnData = true).pure[F]
+          }
+      }
 
       _ <- if (finalResult.cb.isEmpty) {
         Concurrent[F].unit

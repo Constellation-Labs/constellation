@@ -78,15 +78,15 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
             case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
             case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
-              val accept = checkpointService.acceptWithNodeCheck(payload.block.value)
+              val accept = checkpointService.addToAcceptance(payload.block.value)
               val processFinishedCheckpointAsync = F.start(
                 C.shift >>
                   snapshotService.getNextHeightInterval.flatMap { nextHeight =>
                     (nextHeight, payload.block.value.checkpointCacheData.height) match {
                       case (_, None)                                              => F.unit
-                      case (2, _)                                                 => F.start(accept) >> F.unit
+                      case (2, _)                                                 => accept
                       case (nextHeight, Some(Height(min, _))) if nextHeight > min => F.unit
-                      case (_, _)                                                 => F.start(accept) >> F.unit
+                      case (_, _)                                                 => accept
                     }
                   } >>
                   checkpointBlockGossipService.spread(message)
@@ -95,9 +95,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
               payload.block.validSignature
                 .pure[F]
                 .ifM(
-                  checkpointStorage.persistCheckpoint(payload.block.value.checkpointCacheData) >>
-                    checkpointStorage.registerUsage(payload.block.value.checkpointCacheData.checkpointBlock.soeHash) >>
-                    processFinishedCheckpointAsync >> Ok(),
+                  processFinishedCheckpointAsync >> Ok(),
                   BadRequest()
                 )
           }

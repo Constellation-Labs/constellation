@@ -54,6 +54,7 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
 
   def acceptCheckpoint(soeHash: String, height: Option[Height]): F[Unit] =
     accepted.add(soeHash) >>
+      waitingForAcceptance.remove(soeHash) >>
       inAcceptance.remove(soeHash) >>
       awaiting.remove(soeHash) >>
       waitingForResolving.remove(soeHash) >>
@@ -77,6 +78,11 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
 
   def unmarkFromAcceptance(soeHash: String): F[Unit] =
     inAcceptance.remove(soeHash)
+
+  def getWaitingForAcceptance: F[Set[CheckpointCache]] =
+    waitingForAcceptance.get.flatMap { _.toList.traverse {
+      getCheckpoint
+    }}.map(_.flatten).map(_.toSet)
 
   def markForAcceptanceAfterDownload(soeHash: String): F[Unit] =
     waitingForAcceptanceAfterDownload.add(soeHash)

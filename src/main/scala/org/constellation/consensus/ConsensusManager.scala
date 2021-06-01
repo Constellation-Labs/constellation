@@ -397,15 +397,14 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         logger.error(s"Missing parents: ${missing.map(_.hash)} with soe hashes: ${missing.map(_.hash)}")
       else Sync[F].unit
 
-      _ <- Concurrent[F].start {
-        resolved.traverse { checkpointService.accept(_).handleErrorWith(_ => Sync[F].unit) }
-      }
+      _ <- resolved.traverse { checkpointService.addToAcceptance }
 
       _ <- if (missing.nonEmpty) {
         val roundId = roundData.roundId
         val transactions = roundData.transactions
         val observations = roundData.observations
-        Sync[F].raiseError[Unit](MissingParents(roundId, transactions, observations))
+        metrics.incrementMetricAsync(s"consensus_missingParents") >>
+          Sync[F].raiseError[Unit](MissingParents(roundId, transactions, observations))
       } else Sync[F].unit
     } yield ()
 }

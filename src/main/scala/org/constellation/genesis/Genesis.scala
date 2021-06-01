@@ -8,6 +8,7 @@ import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
 import org.constellation.domain.cluster.NodeStorageAlgebra
 import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.genesis.GenesisStorageAlgebra
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.genesis.Genesis.{CoinbaseKey, GenesisTips}
@@ -53,6 +54,7 @@ class Genesis[F[_]: Concurrent](
     }
 
     for {
+      _ <- storeTransactions(go)
       _ <- putBlocks
       _ <- acceptBlocks
       _ <- setBalances
@@ -62,7 +64,6 @@ class Genesis[F[_]: Concurrent](
           .map(_.soeHash)
           .traverse(checkpointStorage.addTip)
       } else Sync[F].unit
-      _ <- storeTransactions(go)
       _ <- metrics.updateMetricAsync[F]("genesisHash", go.genesis.soeHash)
       _ <- genesisStorage.setGenesisObservation(go)
       _ <- genesisObservationStorage
@@ -134,7 +135,7 @@ class Genesis[F[_]: Concurrent](
           cb.transactions
             .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.soeHash)))
       )
-      .traverse(transactionService.accept(_))
+      .traverse(transactionService.put(_, ConsensusStatus.Accepted))
       .void
 }
 

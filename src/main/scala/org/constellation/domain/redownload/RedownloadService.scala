@@ -393,25 +393,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
           blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
-          _ <- blocksToAccept.traverse { block =>
-            checkpointStorage.markWaitingForAcceptance(block.checkpointBlock.soeHash)
-          }
-
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
-          sorted <- C.evalOn(boundedExecutionContext)(F.delay {
-            TopologicalSort.sortBlocksTopologically(blocksToAccept)
-          })
-          _ <- sorted.toList.traverse { b =>
-            logger.debug(s"Accepting block above majority: ${b.height}") >>
-              C.evalOn(boundedExecutionContext) {
-                  checkpointService
-                    .accept(b)
-                }
-                .handleErrorWith(
-                  error => logger.warn(error)(s"Error during blocks acceptance after redownload") >> F.unit
-                )
-          }
+          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
         } yield ()
       }.attemptT
     } yield ()
@@ -578,14 +562,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
     (for {
       blocksToAccept <- checkpointStorage.getCheckpointsForAcceptanceAfterDownload
 
-      _ <- blocksToAccept.map(_.checkpointBlock.soeHash).traverse(checkpointStorage.markWaitingForAcceptance)
-
-      _ <- TopologicalSort.sortBlocksTopologically(blocksToAccept).toList.traverse { b =>
-        logger.debug(s"Accepting sync buffer block: ${b.height}") >>
+      _ <- blocksToAccept.traverse { b =>
           checkpointStorage.unmarkForAcceptanceAfterDownload(b.checkpointBlock.soeHash) >>
-          checkpointService.accept(b).handleErrorWith { error =>
-            logger.warn(error)(s"Error during buffer pool blocks acceptance after redownload") >> F.unit
-          }
+          checkpointService.addToAcceptance(b)
       }
     } yield ()).attemptT
 

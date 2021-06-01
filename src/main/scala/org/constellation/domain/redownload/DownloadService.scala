@@ -93,35 +93,13 @@ class DownloadService[F[_]](
             checkpointStorage.getCheckpoint
           }.map(_.flatten)
 
-          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo)
+          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
             .distinct
             .filterA { c =>
                 checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_)
               }
 
-          _ <- blocksToAccept.traverse { checkpointStorage.persistCheckpoint }
-
-          _ <- blocksToAccept.map(_.checkpointBlock.soeHash).traverse { checkpointStorage.markWaitingForAcceptance }
-
-          _ <- awaitingBlocksFromSnapshotInfo.traverse { cb => checkpointStorage.markAsAwaiting(cb.checkpointBlock.soeHash) }
-
-          _ <- C
-            .evalOn(boundedExecutionContext) {
-              F.delay {
-                TopologicalSort.sortBlocksTopologically(blocksToAccept).toList
-              }
-            }
-            .flatMap {
-              _.traverse { b =>
-                logger.debug(s"Accepting block above majority: ${b.height}") >>
-                  C.evalOn(boundedExecutionContext) {
-                      checkpointService.accept(b)
-                    }
-                    .handleErrorWith { error =>
-                      logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
-                    }
-              }
-            }
+          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
         } yield ()
       }
     } yield ()

@@ -422,6 +422,11 @@ class DAO(
   val consensusScheduler: ConsensusScheduler =
     new ConsensusScheduler(ConfigUtil.config, consensusManager, nodeStorage, unboundedExecutionContext)
 
+  val checkpointAcceptanceTrigger: CheckpointAcceptanceTrigger = new CheckpointAcceptanceTrigger(
+    checkpointService,
+    boundedExecutionContext
+  )
+
   val snapshotTrigger: SnapshotTrigger = new SnapshotTrigger(
     processingConfig.snapshotTriggeringTimeSeconds,
     unboundedExecutionContext
