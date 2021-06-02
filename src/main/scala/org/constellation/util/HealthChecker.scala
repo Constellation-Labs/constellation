@@ -107,9 +107,10 @@ class HealthChecker[F[_]: Concurrent](
 
   def clearStaleTips(): F[Unit] =
     for {
+    // TODO: heavy broadcast, happens atmost every 5 seconds, should be optimized
       nextSnasphotHeights <- collectNextSnapshotHeights()
       heights = nextSnasphotHeights.values.toList
-      nodesWithHeights = heights.filter(_ > 0)
+      nodesWithHeights = heights.filter(_ > 0) // TODO: it's already filtered to >= 0 in collectNextSnapshotHeights
 
       _ <- if (nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
 

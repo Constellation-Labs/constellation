@@ -19,7 +19,7 @@ import org.constellation.util.Logging._
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, DAO}
 
-import scala.util.Random
+import scala.util.{Random, Try}
 
 case class TipSoe(soe: Seq[SignedObservationEdge], minHeight: Option[Long])
 
@@ -46,7 +46,8 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
   minPeerTimeAddedSeconds: Int,
   checkpointParentService: CheckpointParentService[F],
   dao: DAO,
-  facilitatorFilter: FacilitatorFilter[F]
+  facilitatorFilter: FacilitatorFilter[F],
+  metrics: Metrics
 ) {
 
   implicit val logger = Slf4jLogger.getLogger[F]
@@ -120,10 +121,10 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
               tipData <- get(h)
               size <- size
               reuseTips = size < maxWidth
-              aboveMinimumTip = size >= numFacilitatorPeers
+              areEnoughTipsForConsensus = size >= numFacilitatorPeers
               _ <- tipData match {
                 case None => Sync[F].unit
-                case Some(TipData(block, numUses, _)) if aboveMinimumTip && (numUses >= maxTipUsage || !reuseTips) =>
+                case Some(TipData(block, numUses, _)) if areEnoughTipsForConsensus && (numUses >= maxTipUsage || !reuseTips) =>
                   remove(block.baseHash)(dao.metrics)
                 case Some(TipData(block, numUses, tipHeight)) =>
                   putUnsafe(block.baseHash, checkpoint.TipData(block, numUses + 1, tipHeight))(dao.metrics)
@@ -138,9 +139,9 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         .flatMap(_ => getMinTipHeight(None))
         .flatMap(
           min =>
-            if (isGenesis || min < height.min || usages < maxTipUsage)
-              putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, usages, height))(dao.metrics)
-            else logger.debug(s"Block height: ${height.min} with usages=${usages} above the limit or below min tip: $min | update skipped")
+            if (isGenesis || (min < height.min && usages < maxTipUsage))
+              putUnsafe(checkpointBlock.baseHash, TipData(checkpointBlock, usages, height), true)(dao.metrics)
+            else logger.debug(s"Block height: ${height.min} with usages=${usages} above the limit or below min tip: $min or both | update skipped")
         )
         .recoverWith {
           case err: TipThresholdException =>
@@ -165,12 +166,25 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
     logThread(withLock("conflictingPut", unsafePut), "concurrentTipService_putConflicting")
   }
 
-  private def putUnsafe(k: String, v: TipData)(implicit metrics: Metrics): F[Unit] =
+  case class MinTipChecker(minTip: Long, inserted: Long)
+
+  private def putUnsafe(k: String, v: TipData, isInsert: Boolean = false)(implicit metrics: Metrics): F[Unit] =
     size.flatMap(
       size =>
-        if (size < sizeLimit) tipsRef.modify(curr => (curr + (k -> v), ()))
-        else Sync[F].raiseError[Unit](TipThresholdException(v.checkpointBlock, sizeLimit))
-    )
+        if (size < sizeLimit)
+          tipsRef.modify { curr =>
+            val minTip: Long = Try(curr.values.map(_.height.min).min).toOption.getOrElse(0L)
+            (curr + (k -> v), MinTipChecker(minTip, v.height.min))
+          }
+        else
+          Sync[F].raiseError[MinTipChecker](TipThresholdException(v.checkpointBlock, sizeLimit))
+    ).flatMap {
+      case MinTipChecker(minTip, inserted) if minTip >= inserted && isInsert =>
+        logger.error(s"putUnsafeMinTip: Wrong update[isInsert=$isInsert]! $minTip >= $inserted") >>
+          metrics.incrementMetricAsync("wrongTipUpdate")
+      case MinTipChecker(minTip, inserted) =>
+        logger.debug(s"putUnsafeMinTip: Correct update[isInsert=$isInsert]! $minTip < $inserted")
+    }
 
   def getMinTipHeight(minActiveTipHeight: Option[Long]): F[Long] =
     logThread(
@@ -178,19 +192,26 @@ class ConcurrentTipService[F[_]: Concurrent: Clock](
         _ <- logger.debug(s"Active tip height: $minActiveTipHeight")
         keys <- tipsRef.get.map(_.keys.toList)
         maybeData <- keys.traverse(checkpointParentService.lookupCheckpoint)
-        waitingHeights <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get).map(_.flatMap(_.height.map(_.min)).toList)
+        //waitingHeights <- LiftIO[F].liftIO(dao.checkpointAcceptanceService.awaiting.get).map(_.flatMap(_.height.map(_.min)).toList)
 
         diff = keys.diff(maybeData.flatMap(_.map(_.checkpointBlock.baseHash)))
         _ <- if (diff.nonEmpty) logger.debug(s"wkoszycki not_mapped ${diff}") else Sync[F].unit
 
-        heights = maybeData.flatMap {
+        ourHeights = maybeData.flatMap {
           _.flatMap {
             _.height.map {
               _.min
             }
           }
-        } ++ minActiveTipHeight.toList ++ waitingHeights
+        }// ++ waitingHeights
+        ourMax = ourHeights.minimumOption.getOrElse(0L)
+        heights = ourHeights ++ minActiveTipHeight.toList
         minHeight = if (heights.isEmpty) 0 else heights.min
+        _ <- if (ourMax > minHeight)
+          logger.warn(s"Our max tip height greater then selected min tip! ourMax=$ourMax > minHeight=$minHeight consensusesMinTip=$minActiveTipHeight") >>
+            metrics.incrementMetricAsync("localMaxTipGreater")
+        else
+          Sync[F].unit
       } yield minHeight,
       "concurrentTipService_getMinTipHeight"
     )

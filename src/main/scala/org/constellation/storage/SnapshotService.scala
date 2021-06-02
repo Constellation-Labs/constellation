@@ -65,9 +65,12 @@ class SnapshotService[F[_]: Concurrent](
 
   val totalNumCBsInSnapshots: Ref[F, Long] = Ref.unsafe(0L)
   val lastSnapshotHeight: Ref[F, Int] = Ref.unsafe(0)
+  val maxSnapshotToCreate: Ref[F, Long] = Ref.unsafe(0L)
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
   val nextSnapshotHash: Ref[F, String] = Ref.unsafe("")
+
+  def setMaxSnapshotToCreate(max: Long): F[Unit] = maxSnapshotToCreate.modify(_ => (max, ()))
 
   def exists(hash: String): F[Boolean] =
     for {
@@ -85,6 +88,17 @@ class SnapshotService[F[_]: Concurrent](
       hashes <- acceptedCBSinceSnapshot.get
     } yield hashes
 
+  def validateMaxSnapshotHeightAllowed(nextInterval: Long): F[Unit] =
+    for {
+      max <- maxSnapshotToCreate.get
+      _ <- if (nextInterval <= max)
+        Sync[F].unit
+      else
+        Sync[F].raiseError(
+          new Throwable(s"Attempted to create snapshot above allowed max height! Need to wait. nextInterval=$nextInterval max=$max")
+        )
+    } yield ()
+
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- checkDiskSpace()
@@ -93,6 +107,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
+      _ <- validateMaxSnapshotHeightAllowed(nextHeightInterval).attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
       minActiveTipHeight <- LiftIO[F]
         .liftIO(dao.getActiveMinHeight)
         .attemptT

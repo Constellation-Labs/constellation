@@ -244,7 +244,8 @@ class DAO(
         apiClient,
         this,
         Blocker.liftExecutionContext(unboundedExecutionContext)
-      )
+      ),
+      metrics
     )
     addressService = new AddressService[IO]()
 

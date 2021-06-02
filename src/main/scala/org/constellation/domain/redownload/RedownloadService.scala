@@ -375,6 +375,25 @@ class RedownloadService[F[_]: NonEmptyParallel](
       }.attemptT
     } yield ()
 
+  def setMaxSnapshotHeightToCreate(
+                                    acceptedSnapshots: SnapshotsAtHeight,
+                                    majorityState: SnapshotsAtHeight,
+                                    redownloadInterval: Int
+                                  ): F[Unit] = {
+    val highestAcceptedHeight = maxHeight(acceptedSnapshots)
+    val highestMajorityHeight = maxHeight(majorityState)
+
+    val isAbove = highestAcceptedHeight > highestMajorityHeight
+    val heightDiff = Math.abs(highestAcceptedHeight - highestMajorityHeight)
+    val reachedRedownloadInterval = heightDiff >= redownloadInterval
+
+    if (isAbove && reachedRedownloadInterval)
+      snapshotService.setMaxSnapshotToCreate(highestAcceptedHeight)
+    else
+      snapshotService.setMaxSnapshotToCreate(highestMajorityHeight + redownloadInterval)
+
+  }
+
   def checkForAlignmentWithMajoritySnapshot(isDownload: Boolean = false): F[Unit] = {
     def wrappedRedownload(
       shouldRedownload: Boolean,
@@ -441,6 +460,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- setLastMajorityState(meaningfulMajorityState)
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
+
+      _ <- setMaxSnapshotHeightToCreate(meaningfulAcceptedSnapshots, meaningfulMajorityState, redownloadInterval)
 
       shouldPerformRedownload = shouldRedownload(
         meaningfulAcceptedSnapshots,
@@ -761,9 +782,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
     if (heightDiff == 0 && !majorityState.equals(acceptedSnapshots)) {
       MisalignedAtSameHeight
-    } else if (isAbove && reachedRedownloadInterval) {
+    } /*else if (isAbove && reachedRedownloadInterval) {
       AbovePastRedownloadInterval
-    } else if (isAbove && !majorityState.toSet.subsetOf(acceptedSnapshots.toSet)) {
+    }*/ else if (isAbove && !majorityState.toSet.subsetOf(acceptedSnapshots.toSet)) {
       AboveButMisalignedBeforeRedownloadIntervalAnyway
     } else if (isBelow && reachedRedownloadInterval) {
       BelowPastRedownloadInterval

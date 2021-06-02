@@ -82,6 +82,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         consensuses.get.map(consensuses => consensuses.get(roundId).map(_.consensus))
     } yield maybe
 
+  // TODO: why are we checking only peer consensuses and omitting our own consensus
   def getActiveMinHeight: F[Option[Long]] =
     consensuses.get.map(_.flatMap(_._2.tipMinHeight).toList match {
       case Nil  => None
