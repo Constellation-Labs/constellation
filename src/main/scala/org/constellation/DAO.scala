@@ -387,6 +387,7 @@ class DAO(
     checkpointStorage,
     apiClient,
     broadcastService,
+    snapshotService,
     genesis,
     metrics,
     boundedExecutionContext,

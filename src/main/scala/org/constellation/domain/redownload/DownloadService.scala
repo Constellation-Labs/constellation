@@ -13,6 +13,7 @@ import org.constellation.p2p.Cluster
 import org.constellation.schema.NodeState
 import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
 import org.constellation.serialization.KryoSerializer
+import org.constellation.storage.SnapshotService
 import org.constellation.util.Metrics
 
 import scala.concurrent.ExecutionContext
@@ -26,6 +27,7 @@ class DownloadService[F[_]](
   checkpointStorage: CheckpointStorageAlgebra[F],
   apiClient: ClientInterpreter[F],
   broadcastService: BroadcastService[F],
+  snapshotService: SnapshotService[F],
   genesis: Genesis[F],
   metrics: Metrics,
   boundedExecutionContext: ExecutionContext,
@@ -88,18 +90,20 @@ class DownloadService[F[_]](
 
           blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
 
-          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
-          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
-            checkpointStorage.getCheckpoint
-          }.map(_.flatten)
+//          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
+//          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
+//            checkpointStorage.getCheckpoint
+//          }.map(_.flatten)
 
-          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
-            .distinct
-            .filterA { c =>
-                checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_)
-              }
+//          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
+//            .distinct
+//            .filterA { c =>
+//                checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_)
+//              }
 
-          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
+//          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
+
+          _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool)
         } yield ()
       }
     } yield ()
@@ -128,6 +132,7 @@ object DownloadService {
     checkpointStorage: CheckpointStorageAlgebra[F],
     apiClient: ClientInterpreter[F],
     broadcastService: BroadcastService[F],
+    snapshotService: SnapshotService[F],
     genesis: Genesis[F],
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
@@ -142,6 +147,7 @@ object DownloadService {
       checkpointStorage,
       apiClient,
       broadcastService,
+      snapshotService,
       genesis,
       metrics,
       boundedExecutionContext,

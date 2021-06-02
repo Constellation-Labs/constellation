@@ -21,13 +21,15 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   val inAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
   val accepted: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
-  val awaiting: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val awaiting: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
-  val waitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val waitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
-  val waitingForAcceptanceAfterDownload: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val waitingForAcceptanceAfterDownload: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
-  val tips: Ref[F, Set[String]] = Ref.unsafe(Set())
+  val inSnapshot: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
+
+  val tips: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
   val usages: MapRef[F, String, Option[Set[String]]] = MapRefUtils.ofConcurrentHashMap()
 
   def persistCheckpoint(checkpoint: CheckpointCache): F[Unit] =
@@ -59,7 +61,7 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
       awaiting.remove(soeHash) >>
       waitingForResolving.remove(soeHash) >>
       waitingForAcceptanceAfterDownload.remove(soeHash) >>
-      updateCheckpointHeight(soeHash, height)
+      updateCheckpointHeight(soeHash, height) // TODO: check if needed
 
   def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit] =
     checkpoints(soeHash).update(_.map { cb =>
@@ -84,6 +86,9 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
       getCheckpoint
     }}.map(_.flatten).map(_.toSet)
 
+  def setWaitingForAcceptance(soeHashes: Set[String]): F[Unit] =
+    waitingForAcceptance.set(soeHashes)
+
   def markForAcceptanceAfterDownload(soeHash: String): F[Unit] =
     waitingForAcceptanceAfterDownload.add(soeHash)
 
@@ -93,8 +98,28 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   def unmarkForAcceptanceAfterDownload(soeHash: String): F[Unit] =
     waitingForAcceptanceAfterDownload.remove(soeHash)
 
-  def getAcceptedCheckpoints: F[Set[String]] =
+  def getAccepted: F[Set[String]] =
     accepted.get
+
+  def setAccepted(soeHashes: Set[String]): F[Unit] =
+    accepted.set(soeHashes)
+
+  def isInSnapshot(soeHash: String): F[Boolean] =
+    inSnapshot.exists(soeHash)
+
+  def markInSnapshot(soeHash: String): F[Unit] =
+    inSnapshot.add(soeHash)
+
+  def markInSnapshot(soeHashes: Set[String]): F[Unit] =
+    inSnapshot.modify { s =>
+      (s ++ soeHashes, ())
+    }
+
+  def setInSnapshot(soeHashes: Set[String]): F[Unit] =
+    inSnapshot.set(soeHashes)
+
+  def getInSnapshot: F[Set[String]] =
+    inSnapshot.get
 
   def areParentsAccepted(checkpoint: CheckpointCache): F[Boolean] =
     checkpoint.checkpointBlock
@@ -221,4 +246,12 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
 
   def getCheckpoint(soeHash: String): F[Option[CheckpointCache]] =
     checkpoints(soeHash).get
+
+  def getCheckpoints: F[Map[String, CheckpointCache]] =
+    checkpoints.toMap
+
+  def setCheckpoints(map: Map[String, CheckpointCache]): F[Unit] =
+    checkpoints.clear >> map.toList.traverse {
+      case (soeHash, checkpoint) => checkpoints(soeHash).set(checkpoint.some)
+    }.void
 }

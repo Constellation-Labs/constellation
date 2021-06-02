@@ -141,7 +141,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
   private def getSnapshotInfo(snapshotService: SnapshotService[F], nodeStorage: NodeStorageAlgebra[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "info" => {
-        val getSnapshotInfo = snapshotService.getSnapshotInfoWithFullData.flatMap { si =>
+        val getSnapshotInfo = snapshotService.getSnapshotInfo().flatMap { si =>
           F.delay(KryoSerializer.serializeAnyRef(si))
         }
 

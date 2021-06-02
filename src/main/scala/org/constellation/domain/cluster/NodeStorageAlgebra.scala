@@ -18,7 +18,6 @@ trait NodeStorageAlgebra[F[_]] {
   def setJoinedAsInitialFacilitator(joined: Boolean): F[Unit]
 
   def getNodeState: F[NodeState]
-  def setNodeState(state: NodeState): F[Unit] // TODO: consider compareAndSet
+  def setNodeState(state: NodeState): F[Unit]
   def compareAndSet(expected: Set[NodeState], newState: NodeState): F[SetStateResult]
-
 }

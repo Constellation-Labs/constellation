@@ -65,22 +65,21 @@ class SnapshotService[F[_]: Concurrent](
   def attemptSnapshot(): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- checkDiskSpace()
-
       _ <- validateMaxAcceptedCBHashesInMemory()
-      _ <- validateAcceptedCBsSinceSnapshot()
 
       nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
-      minActiveTipHeight <- consensusManager.getActiveMinHeight.attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
-//      minTipHeight <- checkpointStorage.getMinTipHeight(minActiveTipHeight)
       minTipHeight <- checkpointStorage.getMinTipHeight.attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
+
       _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
+
       blocksWithinHeightInterval <- getBlocksWithinHeightInterval(nextHeightInterval).attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
+
+      _ <- validateAcceptedCBsSinceSnapshot(blocksWithinHeightInterval.size)
+
       _ <- validateBlocksWithinHeightInterval(blocksWithinHeightInterval)
       allBlocks = blocksWithinHeightInterval.sortBy(_.checkpointBlock.soeHash)
 
@@ -118,14 +117,19 @@ class SnapshotService[F[_]: Concurrent](
         .attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
-      _ <- snapshotServiceStorage
-        .filterOutAcceptedCheckpointsSinceSnapshot(hashesForNextSnapshot.toSet)
+      _ <- checkpointStorage
+        .markInSnapshot(hashesForNextSnapshot.toSet)
         .attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
-      _ <- calculateAcceptedTransactionsSinceSnapshot().attemptT
-        .leftMap(SnapshotUnexpectedError)
-        .leftWiden[SnapshotError]
+//      _ <- snapshotServiceStorage
+//        .filterOutAcceptedCheckpointsSinceSnapshot(hashesForNextSnapshot.toSet)
+//        .attemptT
+//        .leftMap(SnapshotUnexpectedError)
+//        .leftWiden[SnapshotError]
+//      _ <- calculateAcceptedTransactionsSinceSnapshot().attemptT
+//        .leftMap(SnapshotUnexpectedError)
+//        .leftWiden[SnapshotError]
       _ <- updateMetricsAfterSnapshot().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       snapshot = StoredSnapshot(nextSnapshot, allBlocks)
@@ -151,7 +155,7 @@ class SnapshotService[F[_]: Concurrent](
   //_ <- if (ConfigUtil.isEnabledCloudStorage) cloudStorage.upload(Seq(File(path))).void else Sync[F].unit
 
   def writeSnapshotInfoToDisk(): EitherT[F, SnapshotInfoIOError, Unit] =
-    getSnapshotInfoWithFullData.attemptT.flatMap { info =>
+    getSnapshotInfo().attemptT.flatMap { info =>
       val hash = info.snapshot.snapshot.hash
 
       if (info.snapshot.snapshot == Snapshot.snapshotZero) {
@@ -173,25 +177,32 @@ class SnapshotService[F[_]: Concurrent](
 
   def getSnapshotInfo(): F[SnapshotInfo] =
     for {
-      s <- snapshotServiceStorage.getStoredSnapshot
-      accepted <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot
-      lastHeight <- snapshotServiceStorage.getLastSnapshotHeight
-      hashes <- snapshotStorage.list().rethrowT
+      snapshot <- snapshotServiceStorage.getStoredSnapshot
+      lastSnapshotHeight <- snapshotServiceStorage.getLastSnapshotHeight
+      nextSnapshotHash <- snapshotServiceStorage.getNextSnapshotHash
+      checkpoints <- checkpointStorage.getCheckpoints
+      waitingForAcceptance <- checkpointStorage.getWaitingForAcceptance.map(_.map(_.checkpointBlock.soeHash))
+      accepted <- checkpointStorage.getAccepted
+      awaiting <- checkpointStorage.getAwaiting
+      inSnapshot <- checkpointStorage.getInSnapshot
       addressCacheData <- addressService.getAll
-      tips <- checkpointStorage.getTips
       lastAcceptedTransactionRef <- transactionService.transactionChainService.getLastAcceptedTransactionMap()
-      tipUsages <- checkpointStorage.getUsages
+      tips <- checkpointStorage.getTips
+      usages <- checkpointStorage.getUsages
     } yield
       SnapshotInfo(
-        s,
+        snapshot,
+        lastSnapshotHeight,
+        nextSnapshotHash,
+        checkpoints,
+        waitingForAcceptance,
         accepted,
-        lastSnapshotHeight = lastHeight,
-        snapshotHashes = hashes.toList,
-        addressCacheData = addressCacheData,
-        tips = tips.map(_._1),
-        snapshotCache = s.checkpointCache.toList,
-        lastAcceptedTransactionRef = lastAcceptedTransactionRef,
-        tipUsages = tipUsages
+        awaiting,
+        inSnapshot,
+        addressCacheData,
+        lastAcceptedTransactionRef,
+        tips.map(_._1),
+        usages
       )
 
   def getTotalSupply(): F[TotalSupply] =
@@ -203,38 +214,44 @@ class SnapshotService[F[_]: Concurrent](
 
   def setSnapshot(snapshotInfo: SnapshotInfo): F[Unit] =
     for {
-      _ <- C.evalOn(boundedExecutionContext)(removeStoredSnapshotDataFromMempool())
+//      _ <- C.evalOn(boundedExecutionContext)(removeStoredSnapshotDataFromMempool())
+
       _ <- snapshotServiceStorage.setStoredSnapshot(snapshotInfo.snapshot)
       _ <- snapshotServiceStorage.setLastSnapshotHeight(snapshotInfo.lastSnapshotHeight)
-      _ <- checkpointStorage.setAwaiting(snapshotInfo.awaitingCheckpoints)
-      _ <- checkpointStorage.setTips(snapshotInfo.tips)
-      _ <- checkpointStorage.setUsages(snapshotInfo.tipUsages)
-      _ <- snapshotServiceStorage.setAcceptedCheckpointsSinceSnapshot(snapshotInfo.acceptedCBSinceSnapshot)
+      _ <- snapshotServiceStorage.setNextSnapshotHash(snapshotInfo.nextSnapshotHash)
+      _ <- checkpointStorage.setCheckpoints(snapshotInfo.checkpoints)
+      _ <- checkpointStorage.setWaitingForAcceptance(snapshotInfo.waitingForAcceptance)
+      _ <- checkpointStorage.setAccepted(snapshotInfo.accepted)
+      _ <- checkpointStorage.setAwaiting(snapshotInfo.awaiting)
+      _ <- checkpointStorage.setInSnapshot(snapshotInfo.inSnapshot)
+      _ <- addressService.setAll(snapshotInfo.addressCacheData)
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
-      _ <- C.evalOn(boundedExecutionContext)(addressService.setAll(snapshotInfo.addressCacheData))
-      _ <- C.evalOn(boundedExecutionContext) {
-        (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
-          checkpointStorage.persistCheckpoint(h) >>
-            checkpointStorage.acceptCheckpoint(h.checkpointBlock.soeHash, h.height)
-          metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
-            h.checkpointBlock.transactions.toList.traverse { tx =>
-              transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
-            } >>
-            h.checkpointBlock.observations.toList.traverse { obs =>
-              observationService.applyAfterRedownload(obs, Some(h))
-            }
-        }
-      }
-      _ <- metrics.updateMetricAsync[F](
-        "acceptedCBCacheMatchesAcceptedSize",
-        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
-      )
-      _ <- logger.info(
-        s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}"
-      )
-      _ <- logger.info(
-        s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}"
-      )
+      _ <- checkpointStorage.setTips(snapshotInfo.tips)
+      _ <- checkpointStorage.setUsages(snapshotInfo.usages)
+
+//      _ <- C.evalOn(boundedExecutionContext) {
+//        (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
+//          checkpointStorage.persistCheckpoint(h) >>
+//            checkpointStorage.acceptCheckpoint(h.checkpointBlock.soeHash, h.height)
+//          metrics.incrementMetricAsync(Metrics.checkpointAccepted) >>
+//            h.checkpointBlock.transactions.toList.traverse { tx =>
+//              transactionService.applyAfterRedownload(TransactionCacheData(tx), Some(h))
+//            } >>
+//            h.checkpointBlock.observations.toList.traverse { obs =>
+//              observationService.applyAfterRedownload(obs, Some(h))
+//            }
+//        }
+//      }
+//      _ <- metrics.updateMetricAsync[F](
+//        "acceptedCBCacheMatchesAcceptedSize",
+//        (snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString
+//      )
+//      _ <- logger.info(
+//        s"acceptedCBCacheMatchesAcceptedSize size: ${(snapshotInfo.acceptedCBSinceSnapshot.size == snapshotInfo.acceptedCBSinceSnapshotCache.size).toString}"
+//      )
+//      _ <- logger.info(
+//        s"acceptedCBCacheMatchesAcceptedSize diff: ${snapshotInfo.acceptedCBSinceSnapshot.toList.diff(snapshotInfo.acceptedCBSinceSnapshotCache)}"
+//      )
       _ <- updateMetricsAfterSnapshot()
     } yield ()
 
@@ -244,26 +261,27 @@ class SnapshotService[F[_]: Concurrent](
   def removeStoredSnapshotDataFromMempool(): F[Unit] =
     for {
       snap <- snapshotServiceStorage.getStoredSnapshot
-      accepted <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot
-      soeHashes = (snap.snapshot.checkpointBlocks ++ accepted).toList
-      fetched <- getCheckpointBlocksFromSnapshot(soeHashes)
+//      accepted <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot
+//      soeHashes = (snap.snapshot.checkpointBlocks ++ accepted).toList
+//      fetched <- getCheckpointBlocksFromSnapshot(soeHashes)
 //      _ <- fetched.traverse(_.transactionsMerkleRoot.traverse(transactionService.removeMerkleRoot))
 //      _ <- fetched.traverse(_.observationsMerkleRoot.traverse(observationService.removeMerkleRoot))
-      _ <- checkpointStorage.removeCheckpoints(soeHashes.toSet)
-      _ <- logger.info(s"Removed soeHashes : $soeHashes")
+//      _ <- checkpointStorage.removeCheckpoints(soeHashes.toSet)
+//      _ <- logger.info(s"Removed soeHashes : $soeHashes")
     } yield ()
 
-  def getSnapshotInfoWithFullData: F[SnapshotInfo] =
-    getSnapshotInfo().flatMap { info =>
-      info.acceptedCBSinceSnapshot.toList
-        .traverse(checkpointStorage.getCheckpoint)
-        .map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
-    }
+//  def getSnapshotInfoWithFullData: F[SnapshotInfo] =
+//    getSnapshotInfo().flatMap { info =>
+//      info.acceptedCBSinceSnapshot.toList
+//        .traverse(checkpointStorage.getCheckpoint)
+//        .map(cbs => info.copy(acceptedCBSinceSnapshotCache = cbs.flatten))
+//    }
 
   def calculateAcceptedTransactionsSinceSnapshot(): F[Unit] =
     for {
-      cbHashes <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot.map(_.toList)
-      _ <- rateLimiting.reset(cbHashes)(checkpointStorage)
+      _ <- Sync[F].unit
+//      cbHashes <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot.map(_.toList)
+//      _ <- rateLimiting.reset(cbHashes)(checkpointStorage)
     } yield ()
 
   private def checkDiskSpace(): EitherT[F, SnapshotError, Unit] = EitherT {
@@ -277,7 +295,7 @@ class SnapshotService[F[_]: Concurrent](
   }
 
   private def validateMaxAcceptedCBHashesInMemory(): EitherT[F, SnapshotError, Unit] = EitherT {
-    snapshotServiceStorage.countAcceptedCheckpointsSinceSnapshot.map { size =>
+    checkpointStorage.getAccepted.map(_.size).map { size =>
       if (size > processingConfig.maxAcceptedCBHashesInMemory)
         Left(MaxCBHashesInMemory)
       else
@@ -285,10 +303,11 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
-  private def validateAcceptedCBsSinceSnapshot(): EitherT[F, SnapshotError, Unit] = EitherT {
-    snapshotServiceStorage.countAcceptedCheckpointsSinceSnapshot.map {
-      case 0 => Left(NoAcceptedCBsSinceSnapshot)
-      case _ => Right(())
+  private def validateAcceptedCBsSinceSnapshot(blocks: Int): EitherT[F, SnapshotError, Unit] = EitherT {
+    Sync[F].delay {
+      if (blocks == 0) {
+        NoAcceptedCBsSinceSnapshot.asLeft[Unit]
+      } else ().asRight[SnapshotError]
     }
   }
 
@@ -323,7 +342,7 @@ class SnapshotService[F[_]: Concurrent](
   private def getBlocksWithinHeightInterval(nextHeightInterval: Long): F[List[CheckpointCache]] =
     for {
       height <- snapshotServiceStorage.getLastSnapshotHeight
-      soeHashes <- checkpointStorage.getAcceptedCheckpoints.map(_.toList)
+      soeHashes <- checkpointStorage.getAccepted.map(_.toList)
       blocks <- soeHashes.traverse(checkpointStorage.getCheckpoint).map(_.flatten)
       blocksWithinInterval = blocks.filter { block =>
         block.height.exists { h =>
@@ -469,8 +488,8 @@ class SnapshotService[F[_]: Concurrent](
       _ <- C.evalOn(boundedExecutionContext)(acceptSnapshot(currentSnapshot))
 
       soeHashes = currentSnapshot.checkpointBlocks.toSet
-      _ <- checkpointStorage.removeCheckpoints(soeHashes)
-      _ <- logger.info(s"Removed soeHashes : $soeHashes")
+//      _ <- checkpointStorage.removeCheckpoints(soeHashes)
+//      _ <- logger.info(s"Removed soeHashes : $soeHashes")
       _ <- metrics.updateMetricAsync(Metrics.lastSnapshotHash, currentSnapshot.hash)
       _ <- metrics.incrementMetricAsync(Metrics.snapshotCount)
     } yield ()
@@ -481,11 +500,15 @@ class SnapshotService[F[_]: Concurrent](
 
   private def updateMetricsAfterSnapshot(): F[Unit] =
     for {
-      accepted <- snapshotServiceStorage.getAcceptedCheckpointsSinceSnapshot
+      accepted <- checkpointStorage.getAccepted
+      awaiting <- checkpointStorage.getAwaiting
+      waitingForAcceptance <- checkpointStorage.getWaitingForAcceptance
       height <- snapshotServiceStorage.getLastSnapshotHeight
       nextHeight = height + snapshotHeightInterval
 
-      _ <- metrics.updateMetricAsync("acceptedCBSinceSnapshot", accepted.size)
+      _ <- metrics.updateMetricAsync("accepted", accepted.size)
+      _ <- metrics.updateMetricAsync("awaiting", awaiting.size)
+      _ <- metrics.updateMetricAsync("waitingForAcceptance", waitingForAcceptance.size)
       _ <- metrics.updateMetricAsync("lastSnapshotHeight", height)
       _ <- metrics.updateMetricAsync("nextSnapshotHeight", nextHeight)
     } yield ()

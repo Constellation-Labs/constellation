@@ -347,7 +347,7 @@ class CheckpointBlockValidator[F[_]: Sync](
   }
 
   def isInSnapshot(c: CheckpointBlock): F[Boolean] =
-    snapshotStorage.isCheckpointInAcceptedSinceSnapshot(c.soeHash).map(!_)
+    checkpointStorage.isInSnapshot(c.soeHash)
 
   def containsAlreadyAcceptedTx(cb: CheckpointBlock): F[List[String]] = {
     val containsAccepted = cb.transactions.toList.map { t =>

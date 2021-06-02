@@ -97,7 +97,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
 
       waitingForResolving <- blocksForAcceptance.toList.filterA { c => checkpointStorage.isWaitingForResolving(c.checkpointBlock.soeHash) }
 
-      allowedToAccept = notAlreadyAccepted.take(1).headOption
+      allowedToAccept = notAlreadyAccepted.headOption
 
       notAllowedToAccept = blocksForAcceptance.diff(notAlreadyAccepted.toSet)
 
@@ -203,7 +203,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         _ <- transactionService.findAndRemoveInvalidPendingTxs()
         _ <- logger.debug(s"Accept checkpoint=${cb.soeHash}] with height $maybeHeight")
         _ <- updateTips(cb.soeHash)
-        _ <- snapshotStorage.addAcceptedCheckpointSinceSnapshot(cb.soeHash)
+//        _ <- snapshotStorage.addAcceptedCheckpointSinceSnapshot(cb.soeHash)
         _ <- metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
       } yield ()
   }
@@ -337,7 +337,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
 
   private def calculateTipsSOE(tips: Set[(String, Height)]): F[TipSoe] =
     Random
-      .shuffle(tips.toSeq.sortBy(_._2.min).take(10))
+      .shuffle(tips.toSeq.sortBy(_._2.min).take(numFacilitatorPeers + 2)) // TODO: @mwadon
       .take(numFacilitatorPeers)
       .toList
       .traverse {

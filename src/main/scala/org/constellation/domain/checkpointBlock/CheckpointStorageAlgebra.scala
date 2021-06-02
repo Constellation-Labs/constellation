@@ -7,6 +7,8 @@ trait CheckpointStorageAlgebra[F[_]] {
 
   def persistCheckpoint(checkpoint: CheckpointCache): F[Unit]
   def getCheckpoint(soeHash: String): F[Option[CheckpointCache]]
+  def setCheckpoints(checkpoints: Map[String, CheckpointCache]): F[Unit]
+  def getCheckpoints: F[Map[String, CheckpointCache]]
   def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit]
 
   def removeCheckpoint(soeHash: String): F[Unit]
@@ -23,12 +25,20 @@ trait CheckpointStorageAlgebra[F[_]] {
   def markForAcceptance(soeHash: String): F[Unit]
   def unmarkFromAcceptance(soeHash: String): F[Unit]
   def getWaitingForAcceptance: F[Set[CheckpointCache]]
+  def setWaitingForAcceptance(soeHashes: Set[String]): F[Unit]
 
   def markForAcceptanceAfterDownload(soeHash: String): F[Unit]
   def getCheckpointsForAcceptanceAfterDownload: F[List[CheckpointCache]]
   def unmarkForAcceptanceAfterDownload(soeHash: String): F[Unit]
 
-  def getAcceptedCheckpoints: F[Set[String]]
+  def getAccepted: F[Set[String]]
+  def setAccepted(soeHashes: Set[String]): F[Unit]
+
+  def isInSnapshot(soeHash: String): F[Boolean]
+  def markInSnapshot(soeHash: String): F[Unit]
+  def markInSnapshot(soeHashes: Set[String]): F[Unit]
+  def setInSnapshot(soeHashes: Set[String]): F[Unit]
+  def getInSnapshot: F[Set[String]]
 
   def getParentSoeHashes(soeHash: String): F[Option[List[String]]]
   def getParents(soeHash: String): F[Option[List[CheckpointCache]]]

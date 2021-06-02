@@ -8,16 +8,17 @@ import org.constellation.schema.transaction.LastTransactionRef
 
 case class SnapshotInfo(
   snapshot: StoredSnapshot,
-  acceptedCBSinceSnapshot: Set[String] = Set.empty,
-  acceptedCBSinceSnapshotCache: Seq[CheckpointCache] = Seq(),
-  awaitingCheckpoints: Set[String] = Set(),
   lastSnapshotHeight: Int = 0,
-  snapshotHashes: Seq[String] = Seq(),
+  nextSnapshotHash: String = "",
+  checkpoints: Map[String, CheckpointCache] = Map.empty,
+  waitingForAcceptance: Set[String] = Set.empty,
+  accepted: Set[String] = Set.empty,
+  awaiting: Set[String] = Set.empty,
+  inSnapshot: Set[String] = Set.empty,
   addressCacheData: Map[String, AddressCacheData] = Map(),
-  tips: Set[String] = Set.empty,
-  snapshotCache: Seq[CheckpointCache] = Seq(),
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map(),
-  tipUsages: Map[String, Set[String]] = Map()
+  tips: Set[String] = Set.empty,
+  usages: Map[String, Set[String]] = Map()
 )
 
 case class SnapshotInfoV1(

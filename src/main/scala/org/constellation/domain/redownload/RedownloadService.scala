@@ -385,17 +385,17 @@ class RedownloadService[F[_]: NonEmptyParallel](
           snapshotInfoFromMemPool <- fetchSnapshotInfo(client).flatMap { s =>
             C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
           }
-          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
-          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
-            checkpointStorage.getCheckpoint
-          }.map(_.flatten)
+//          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
+//          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
+//            checkpointStorage.getCheckpoint
+//          }.map(_.flatten)
 
-          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
+//          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
+//          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
-          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
+//          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
         } yield ()
       }.attemptT
     } yield ()
