@@ -343,6 +343,7 @@ class Cluster[F[_]](
       else maxMajorityHeight + delay
 
       _ <- nodeStorage.setOwnJoinedHeight(ownHeight)
+      _ <- metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", ownHeight)
     } yield ownHeight
 
     for {

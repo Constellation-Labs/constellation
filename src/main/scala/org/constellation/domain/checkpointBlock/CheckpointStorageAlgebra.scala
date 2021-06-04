@@ -1,9 +1,26 @@
 package org.constellation.domain.checkpointBlock
 
+import org.apache.commons.collections.set.ListOrderedSet
 import org.constellation.schema.Height
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 
+import scala.collection.SortedSet
+import scala.collection.immutable.Queue
+
 trait CheckpointStorageAlgebra[F[_]] {
+
+  def countCheckpoints: F[Int]
+  def countAccepted: F[Int]
+  def countAwaiting: F[Int]
+  def countWaitingForAcceptance: F[Int]
+  def countWaitingForResolving: F[Int]
+  def countWaitingForAcceptanceAfterDownload: F[Int]
+  def countInAcceptance: F[Int]
+  def countInSnapshot: F[Int]
+
+  def getAcceptanceQueue: F[Set[String]]
+  def setAcceptanceQueue(q: Set[String]): F[Unit]
+  def pullForAcceptance(): F[Option[String]]
 
   def persistCheckpoint(checkpoint: CheckpointCache): F[Unit]
   def getCheckpoint(soeHash: String): F[Option[CheckpointCache]]
@@ -19,7 +36,7 @@ trait CheckpointStorageAlgebra[F[_]] {
   def isCheckpointWaitingForAcceptance(soeHash: String): F[Boolean]
   def isCheckpointAwaiting(soeHash: String): F[Boolean]
 
-  def acceptCheckpoint(soeHash: String, height: Option[Height]): F[Unit]
+  def acceptCheckpoint(soeHash: String): F[Unit]
   def existsCheckpoint(soeHash: String): F[Boolean]
   def markWaitingForAcceptance(soeHash: String): F[Unit]
   def markForAcceptance(soeHash: String): F[Unit]
@@ -27,18 +44,18 @@ trait CheckpointStorageAlgebra[F[_]] {
   def getWaitingForAcceptance: F[Set[CheckpointCache]]
   def setWaitingForAcceptance(soeHashes: Set[String]): F[Unit]
 
-  def markForAcceptanceAfterDownload(soeHash: String): F[Unit]
-  def getCheckpointsForAcceptanceAfterDownload: F[List[CheckpointCache]]
+  def markForAcceptanceAfterDownload(cb: CheckpointCache): F[Unit]
+  def getCheckpointsForAcceptanceAfterDownload: F[Set[CheckpointCache]]
   def unmarkForAcceptanceAfterDownload(soeHash: String): F[Unit]
 
   def getAccepted: F[Set[String]]
   def setAccepted(soeHashes: Set[String]): F[Unit]
 
   def isInSnapshot(soeHash: String): F[Boolean]
-  def markInSnapshot(soeHash: String): F[Unit]
-  def markInSnapshot(soeHashes: Set[String]): F[Unit]
-  def setInSnapshot(soeHashes: Set[String]): F[Unit]
-  def getInSnapshot: F[Set[String]]
+  def markInSnapshot(soeHash: String, height: Long): F[Unit]
+  def markInSnapshot(soeHashes: Set[(String, Long)]): F[Unit]
+  def setInSnapshot(soeHashes: Set[(String, Long)]): F[Unit]
+  def getInSnapshot: F[Set[(String, Long)]]
 
   def getParentSoeHashes(soeHash: String): F[Option[List[String]]]
   def getParents(soeHash: String): F[Option[List[CheckpointCache]]]

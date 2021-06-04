@@ -151,6 +151,13 @@ class RedownloadService[F[_]: NonEmptyParallel](
       meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint).filterKeys(_ >= majorityStateCutoff)
 
       _ <- redownloadStorage.setLastMajorityState(meaningfulMajorityState)
+      lowestMajorityHeight <- redownloadStorage.getLowestMajorityHeight
+
+      checkpointsToRemove <- checkpointStorage.getInSnapshot.map(_.filter {
+        case (_, height) => height < (lowestMajorityHeight - 2)
+      }).map(_.map(_._1))
+
+      _ <- checkpointStorage.removeCheckpoints(checkpointsToRemove)
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
 
@@ -382,20 +389,23 @@ class RedownloadService[F[_]: NonEmptyParallel](
                 }
             )
 
-          snapshotInfoFromMemPool <- fetchSnapshotInfo(client).flatMap { s =>
-            C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
-          }
-//          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache.toSet
-//          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
-//            checkpointStorage.getCheckpoint
-//          }.map(_.flatten)
-
-//          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
-//          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
+//          snapshotInfoFromMemPool <- fetchSnapshotInfo(client).flatMap { s =>
+//            C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
+//          }
 
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
-//          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
+          blocksToAccept = acceptedSnapshots.flatMap(_.checkpointCache)
+
+          sorted <- C
+            .evalOn(boundedExecutionContext)(F.delay {
+              TopologicalSort.sortBlocksTopologically(blocksToAccept)
+            })
+            .map(_.toList)
+
+          _ <- sorted.traverse { block =>
+            checkpointService.addToAcceptance(block)
+          }
         } yield ()
       }.attemptT
     } yield ()
@@ -562,10 +572,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
     (for {
       blocksToAccept <- checkpointStorage.getCheckpointsForAcceptanceAfterDownload
 
-      _ <- blocksToAccept.traverse { b =>
-          checkpointStorage.unmarkForAcceptanceAfterDownload(b.checkpointBlock.soeHash) >>
-          checkpointService.addToAcceptance(b)
-      }
+      _ <- blocksToAccept.toList.traverse { checkpointService.addToAcceptance }
     } yield ()).attemptT
 
   private[redownload] def updateHighestSnapshotInfo(): EitherT[F, Throwable, Unit] =
@@ -585,8 +592,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
     if (majorityState.isEmpty) false
     else
       isDownload || (getAlignmentResult(acceptedSnapshots, majorityState, redownloadInterval) match {
-        case AlignedWithMajority => false
-        case _                   => true
+        case AlignedWithMajority         => false
+        case AbovePastRedownloadInterval => false
+        case _                           => true
       })
 
   private[redownload] def calculateRedownloadPlan(

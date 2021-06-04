@@ -65,7 +65,7 @@ class SnapshotService[F[_]: Concurrent](
   def attemptSnapshot(): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       _ <- checkDiskSpace()
-      _ <- validateMaxAcceptedCBHashesInMemory()
+//      _ <- validateMaxAcceptedCBHashesInMemory()
 
       nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
       minTipHeight <- checkpointStorage.getMinTipHeight.attemptT
@@ -84,6 +84,7 @@ class SnapshotService[F[_]: Concurrent](
       allBlocks = blocksWithinHeightInterval.sortBy(_.checkpointBlock.soeHash)
 
       hashesForNextSnapshot = allBlocks.map(_.checkpointBlock.soeHash)
+      hashesWithHeightForNextSnapshot = hashesForNextSnapshot.map((_, nextHeightInterval))
       publicReputation <- trustManager.getPredictedReputation.attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
@@ -118,18 +119,10 @@ class SnapshotService[F[_]: Concurrent](
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
       _ <- checkpointStorage
-        .markInSnapshot(hashesForNextSnapshot.toSet)
+        .markInSnapshot(hashesWithHeightForNextSnapshot.toSet)
         .attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
-//      _ <- snapshotServiceStorage
-//        .filterOutAcceptedCheckpointsSinceSnapshot(hashesForNextSnapshot.toSet)
-//        .attemptT
-//        .leftMap(SnapshotUnexpectedError)
-//        .leftWiden[SnapshotError]
-//      _ <- calculateAcceptedTransactionsSinceSnapshot().attemptT
-//        .leftMap(SnapshotUnexpectedError)
-//        .leftWiden[SnapshotError]
       _ <- updateMetricsAfterSnapshot().attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
 
       snapshot = StoredSnapshot(nextSnapshot, allBlocks)

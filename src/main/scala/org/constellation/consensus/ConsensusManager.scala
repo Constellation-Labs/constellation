@@ -367,7 +367,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
-      existing <- soes.map(_.hash).filterA(checkpointStorage.existsCheckpoint)  // TODO: check if cb should be already accepted
+      existing <- soes.map(_.hash).filterA(checkpointStorage.isCheckpointAccepted)
       missing = soes.filterNot(soe => existing.contains(soe.hash))
 
       resolved <- missing

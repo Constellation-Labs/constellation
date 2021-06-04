@@ -32,5 +32,5 @@ class ConsensusScheduler(
       .map(NodeState.canStartOwnConsensus)
       .ifM(crossTalkConsensus, skip)
 
-  schedule(ConfigUtil.getDurationFromConfig("constellation.consensus.start-own-interval", 1 seconds, config))
+  schedule(ConfigUtil.getDurationFromConfig("constellation.consensus.start-own-interval", 10 seconds, config))
 }

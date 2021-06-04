@@ -1,18 +1,19 @@
 package org.constellation.infrastructure.checkpointBlock
 
 import cats.effect.Concurrent
-import cats.effect.concurrent.Ref
+import cats.effect.concurrent.{Ref, Semaphore}
 import cats.syntax.all._
 import io.chrisdavenport.mapref.MapRef
 import org.constellation.concurrency.MapRefUtils
 import org.constellation.concurrency.MapRefUtils.MapRefOps
 import org.constellation.concurrency.SetRefUtils.RefOps
+import org.constellation.ConstellationExecutionContext.createSemaphore
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.genesis.Genesis
 import org.constellation.schema.Height
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 
-class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends CheckpointStorageAlgebra[F] {
+class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends CheckpointStorageAlgebra[F] {
 
   val checkpoints: MapRef[F, String, Option[CheckpointCache]] =
     MapRefUtils.ofConcurrentHashMap() // Consider cache and time-removal
@@ -21,16 +22,64 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   val inAcceptance: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
   val accepted: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
+  val queueSemaphore: Semaphore[F] = createSemaphore[F](1)
+  val acceptanceQueue: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
+
   val awaiting: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
   val waitingForResolving: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
 
-  val waitingForAcceptanceAfterDownload: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
+  val waitingForAcceptanceAfterDownload: Ref[F, Set[CheckpointCache]] = Ref.unsafe(Set.empty)
 
-  val inSnapshot: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
+  val inSnapshot: Ref[F, Set[(String, Long)]] = Ref.unsafe(Set.empty)
 
   val tips: Ref[F, Set[String]] = Ref.unsafe(Set.empty)
   val usages: MapRef[F, String, Option[Set[String]]] = MapRefUtils.ofConcurrentHashMap()
+
+  def countCheckpoints: F[Int] =
+    checkpoints.toMap.map(_.size)
+
+  def countAccepted: F[Int] =
+    accepted.get.map(_.size)
+
+  def countAwaiting: F[Int] =
+    awaiting.get.map(_.size)
+
+  def countWaitingForAcceptance: F[Int] =
+    waitingForAcceptance.get.map(_.size)
+
+  def countWaitingForResolving: F[Int] =
+    waitingForResolving.get.map(_.size)
+
+  def countWaitingForAcceptanceAfterDownload: F[Int] =
+    waitingForAcceptanceAfterDownload.get.map(_.size)
+
+  def countInAcceptance: F[Int] =
+    inAcceptance.get.map(_.size)
+
+  def countInSnapshot: F[Int] =
+    inSnapshot.get.map(_.size)
+
+  def getAcceptanceQueue: F[Set[String]] =
+    queueSemaphore.withPermit {
+      acceptanceQueue.get
+    }
+
+  def setAcceptanceQueue(q: Set[String]): F[Unit] =
+    queueSemaphore.withPermit {
+      acceptanceQueue.set(q)
+    }
+
+  def pullForAcceptance(): F[Option[String]] =
+    queueSemaphore.withPermit {
+      acceptanceQueue.modify { q =>
+        if (q.nonEmpty) {
+          (q.tail, q.headOption)
+        } else {
+          (Set.empty, none[String])
+        }
+      }
+    }
 
   def persistCheckpoint(checkpoint: CheckpointCache): F[Unit] =
     checkpoints(checkpoint.checkpointBlock.soeHash).set(checkpoint.some)
@@ -39,11 +88,12 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
     soeHashes.toList.traverse(removeCheckpoint).void
 
   def removeCheckpoint(soeHash: String): F[Unit] =
-    checkpoints(soeHash).set(none) >>
       accepted.remove(soeHash) >>
       waitingForAcceptance.remove(soeHash) >>
       tips.remove(soeHash) >>
-      usages(soeHash).set(none)
+      usages(soeHash).set(none) >>
+      checkpoints(soeHash).set(none) >>
+      removeInSnapshot(soeHash)
 
   def isCheckpointInAcceptance(soeHash: String): F[Boolean] =
     inAcceptance.exists(soeHash)
@@ -54,14 +104,13 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   def isCheckpointAwaiting(soeHash: String): F[Boolean] =
     awaiting.exists(soeHash)
 
-  def acceptCheckpoint(soeHash: String, height: Option[Height]): F[Unit] =
+  def acceptCheckpoint(soeHash: String): F[Unit] =
     accepted.add(soeHash) >>
       waitingForAcceptance.remove(soeHash) >>
       inAcceptance.remove(soeHash) >>
       awaiting.remove(soeHash) >>
       waitingForResolving.remove(soeHash) >>
-      waitingForAcceptanceAfterDownload.remove(soeHash) >>
-      updateCheckpointHeight(soeHash, height) // TODO: check if needed
+      unmarkForAcceptanceAfterDownload(soeHash)
 
   def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit] =
     checkpoints(soeHash).update(_.map { cb =>
@@ -89,14 +138,18 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
   def setWaitingForAcceptance(soeHashes: Set[String]): F[Unit] =
     waitingForAcceptance.set(soeHashes)
 
-  def markForAcceptanceAfterDownload(soeHash: String): F[Unit] =
-    waitingForAcceptanceAfterDownload.add(soeHash)
+  def markForAcceptanceAfterDownload(cb: CheckpointCache): F[Unit] =
+    waitingForAcceptanceAfterDownload.add(cb)
 
-  def getCheckpointsForAcceptanceAfterDownload: F[List[CheckpointCache]] =
-    waitingForAcceptanceAfterDownload.get.flatMap(_.toList.traverse { getCheckpoint }).map(_.flatten)
+  def getCheckpointsForAcceptanceAfterDownload: F[Set[CheckpointCache]] =
+    waitingForAcceptanceAfterDownload.modify { cbs =>
+      (Set.empty, cbs)
+    }
 
   def unmarkForAcceptanceAfterDownload(soeHash: String): F[Unit] =
-    waitingForAcceptanceAfterDownload.remove(soeHash)
+    waitingForAcceptanceAfterDownload.modify { cbs =>
+      (cbs.filterNot(_.checkpointBlock.soeHash == soeHash), ())
+    }
 
   def getAccepted: F[Set[String]] =
     accepted.get
@@ -105,20 +158,25 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
     accepted.set(soeHashes)
 
   def isInSnapshot(soeHash: String): F[Boolean] =
-    inSnapshot.exists(soeHash)
+    inSnapshot.get.map(_.map(_._1).contains(soeHash))
 
-  def markInSnapshot(soeHash: String): F[Unit] =
-    inSnapshot.add(soeHash)
+  def markInSnapshot(soeHash: String, height: Long): F[Unit] =
+    inSnapshot.add((soeHash, height))
 
-  def markInSnapshot(soeHashes: Set[String]): F[Unit] =
+  def markInSnapshot(soeHashes: Set[(String, Long)]): F[Unit] =
     inSnapshot.modify { s =>
       (s ++ soeHashes, ())
     }
 
-  def setInSnapshot(soeHashes: Set[String]): F[Unit] =
+  def removeInSnapshot(soeHash: String): F[Unit] =
+    inSnapshot.modify { s =>
+      (s.filterNot(_._1 == soeHash), ())
+    }
+
+  def setInSnapshot(soeHashes: Set[(String, Long)]): F[Unit] =
     inSnapshot.set(soeHashes)
 
-  def getInSnapshot: F[Set[String]] =
+  def getInSnapshot: F[Set[(String, Long)]] =
     inSnapshot.get
 
   def areParentsAccepted(checkpoint: CheckpointCache): F[Boolean] =
@@ -131,7 +189,10 @@ class CheckpointStorageInterpreter[F[_]]()(implicit F: Concurrent[F]) extends Ch
       .map(_.forall(_ == true))
 
   def isCheckpointAccepted(soeHash: String): F[Boolean] =
-    accepted.exists(soeHash)
+    accepted.exists(soeHash).ifM(
+      F.pure(true),
+      isInSnapshot(soeHash)
+    )
 
   def markAsAwaiting(soeHash: String): F[Unit] =
     awaiting.add(soeHash)

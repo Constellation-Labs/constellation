@@ -14,7 +14,7 @@ case class SnapshotInfo(
   waitingForAcceptance: Set[String] = Set.empty,
   accepted: Set[String] = Set.empty,
   awaiting: Set[String] = Set.empty,
-  inSnapshot: Set[String] = Set.empty,
+  inSnapshot: Set[(String, Long)] = Set.empty,
   addressCacheData: Map[String, AddressCacheData] = Map(),
   lastAcceptedTransactionRef: Map[String, LastTransactionRef] = Map(),
   tips: Set[String] = Set.empty,

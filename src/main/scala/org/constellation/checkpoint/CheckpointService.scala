@@ -6,7 +6,7 @@ import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.{checkpoint, _}
+import org.constellation._
 import org.constellation.checkpoint.CheckpointBlockValidator.ValidationResult
 import org.constellation.consensus.FacilitatorFilter
 import org.constellation.domain.blacklist.BlacklistedAddresses
@@ -17,7 +17,6 @@ import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.p2p.{DataResolver, PeerData}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
-import org.constellation.schema.observation.{CheckpointBlockInvalid, Observation}
 import org.constellation.schema.signature.{HashSignature, SignatureRequest, SignatureResponse}
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.schema.{Height, Id, NodeState}
@@ -29,7 +28,7 @@ import java.security.KeyPair
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 
-class CheckpointService[F[_]: Concurrent: Timer: Clock](
+class CheckpointService[F[_]: Timer: Clock](
   merkleService: CheckpointMerkleService[F],
   addressService: AddressService[F],
   blacklistedAddresses: BlacklistedAddresses[F],
@@ -41,7 +40,6 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   checkpointStorage: CheckpointStorageAlgebra[F],
   rateLimiting: RateLimiting[F],
   dataResolver: DataResolver[F],
-  boundedExecutionContext: ExecutionContext,
   maxWidth: Int,
   maxTipUsage: Int,
   numFacilitatorPeers: Int,
@@ -49,7 +47,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   id: Id,
   metrics: Metrics,
   keyPair: KeyPair
-)(C: ContextShift[F]) {
+)(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   val acceptLock: Semaphore[F] = ConstellationExecutionContext.createSemaphore[F](1)
@@ -71,22 +69,29 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
 
   def addToAcceptance(checkpoint: FinishedCheckpoint): F[Unit] = addToAcceptance(checkpoint.checkpointCacheData)
 
-  def addToAcceptance(checkpoint: CheckpointCache): F[Unit] =
-    for {
-      isWaitingForAcceptance <- checkpointStorage.isCheckpointWaitingForAcceptance(checkpoint.checkpointBlock.soeHash)
-      isBeingAccepted <- checkpointStorage.isCheckpointInAcceptance(checkpoint.checkpointBlock.soeHash)
-      isCheckpointAccepted <- checkpointStorage.isCheckpointAccepted(checkpoint.checkpointBlock.soeHash)
-      isWaitingForResolving <- checkpointStorage.isWaitingForResolving(checkpoint.checkpointBlock.soeHash)
+  def addToAcceptance(checkpoint: CheckpointCache): F[Unit] = {
+    nodeStorage.getNodeState.map(NodeState.canAcceptCheckpoint).ifM(
+      for {
+        isWaitingForAcceptance <- checkpointStorage.isCheckpointWaitingForAcceptance(checkpoint.checkpointBlock.soeHash)
+        isBeingAccepted <- checkpointStorage.isCheckpointInAcceptance(checkpoint.checkpointBlock.soeHash)
+        isCheckpointAccepted <- checkpointStorage.isCheckpointAccepted(checkpoint.checkpointBlock.soeHash)
+        isWaitingForResolving <- checkpointStorage.isWaitingForResolving(checkpoint.checkpointBlock.soeHash)
 
-      _ <- if (isWaitingForAcceptance || isBeingAccepted || isCheckpointAccepted || isWaitingForResolving)
-        Sync[F].unit
-      else
-        checkpointStorage.persistCheckpoint(checkpoint) >>
-          checkpointStorage.registerUsage(checkpoint.checkpointBlock.soeHash) >>
-          checkpointStorage.markWaitingForAcceptance(checkpoint.checkpointBlock.soeHash)
-    } yield ()
+        _ <- if (isWaitingForAcceptance || isBeingAccepted || isCheckpointAccepted || isWaitingForResolving)
+          F.unit
+        else
+          checkpointStorage.persistCheckpoint(checkpoint) >>
+            checkpointStorage.registerUsage(checkpoint.checkpointBlock.soeHash) >>
+            checkpointStorage.markWaitingForAcceptance(checkpoint.checkpointBlock.soeHash)
+      } yield (),
+      nodeStorage.getNodeState.map(NodeState.canAwaitForCheckpointAcceptance).ifM(
+        checkpointStorage.markForAcceptanceAfterDownload(checkpoint),
+        F.unit
+      )
+    )
+  }
 
-  def acceptNextCheckpoint(): F[Unit] =
+  def recalculateQueue(): F[Unit] =
     for {
       blocksForAcceptance <- checkpointStorage.getWaitingForAcceptance
       sorted = TopologicalSort.sortBlocksTopologically(blocksForAcceptance.toSeq).toList
@@ -97,11 +102,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
 
       waitingForResolving <- blocksForAcceptance.toList.filterA { c => checkpointStorage.isWaitingForResolving(c.checkpointBlock.soeHash) }
 
-      allowedToAccept = notAlreadyAccepted.headOption
-
-      notAllowedToAccept = blocksForAcceptance.diff(notAlreadyAccepted.toSet)
-
-      _ <- notAllowedToAccept.toList.map(_.checkpointBlock.soeHash).traverse { checkpointStorage.markAsAwaiting }
+      allowedToAccept = notAlreadyAccepted
 
       withNoParentsAccepted = blocksForAcceptance.diff(withParentsAccepted.toSet)
       withNoReferencesAccepted = blocksForAcceptance.diff(withReferencesAccepted.toSet)
@@ -109,7 +110,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
       _ <- withNoParentsAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingParents }
       _ <- withNoReferencesAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingReferences }
 
-      _ <- allowedToAccept.fold {
+      _ <-
         logger.debug {
           s"Blocks for acceptance: ${blocksForAcceptance.size} |" +
             s"With parents accepted: ${withParentsAccepted.size} |" +
@@ -123,6 +124,16 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
           metrics.updateMetricAsync("accept_withNoBlacklistedTxs", withNoBlacklistedTxs.size) >>
           metrics.updateMetricAsync("accept_withReferencesAccepted", withReferencesAccepted.size) >>
           metrics.updateMetricAsync("accept_notAlreadyAccepted", notAlreadyAccepted.size)
+
+      _ <- checkpointStorage.setAcceptanceQueue(allowedToAccept.map((cbc: CheckpointCache) => cbc.checkpointBlock.soeHash).toSet)
+    } yield ()
+
+  def acceptNextCheckpoint(): F[Unit] =
+    for {
+      allowedToAccept <- checkpointStorage.pullForAcceptance().flatMap { _.fold(none[CheckpointCache].pure[F])(checkpointStorage.getCheckpoint) }
+
+      _ <- allowedToAccept.fold {
+        F.unit
       } { cb =>
       acceptLock.withPermit {
         checkpointStorage.markForAcceptance(cb.checkpointBlock.soeHash) >>
@@ -146,12 +157,12 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
         conflicts <- checkpointBlockValidator.containsAlreadyAcceptedTx(cb)
 
         _ <- conflicts match {
-          case Nil => Sync[F].unit
+          case Nil => F.unit
           case xs  =>
 //            putConflictingTips(cb.baseHash, cb)
             transactionService
               .removeConflicting(xs)
-              .flatMap(_ => Sync[F].raiseError[Unit](TipConflictException(cb, conflicts)))
+              .flatMap(_ => F.raiseError[Unit](TipConflictException(cb, conflicts)))
         }
 
         validation <- checkpointBlockValidator.simpleValidation(cb)
@@ -175,33 +186,33 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
                       .map(_.hash)
                       .toList
                   ).raiseError[F, Unit]
-                else Sync[F].raiseError[Unit](new Exception(s"CB to accept not valid: $validation"))
+                else F.raiseError[Unit](new Exception(s"CB to accept not valid: $validation"))
 //            )
-        else Sync[F].unit
+        else F.unit
 
-        maybeHeight <- checkpointStorage.calculateHeight(cb.soeHash).map(h => if (h.isEmpty) checkpoint.height else h)
+        maybeHeight = checkpoint.height
         _ <- logger.debug(s"[${cb.soeHash}] Height is empty: ${maybeHeight.isEmpty}")
         height <- if (maybeHeight.isEmpty) {
           metrics
             .incrementMetricAsync[F](Metrics.heightEmpty)
             .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
-        } else Sync[F].pure(maybeHeight.get)
+        } else F.pure(maybeHeight.get)
 
         lastSnapshotHeight <- snapshotStorage.getLastSnapshotHeight
         _ <- if (height.min <= lastSnapshotHeight.toLong) {
           metrics.incrementMetricAsync[F](Metrics.heightBelow) >>
             HeightBelow(checkpoint.checkpointBlock, height).raiseError[F, Unit]
-        } else Sync[F].unit
+        } else F.unit
 
         _ <- logger.debug(s"[${cb.soeHash}] Accept data")
 
-        _ <- checkpointStorage.acceptCheckpoint(cb.soeHash, maybeHeight)
+        _ <- checkpointStorage.acceptCheckpoint(cb.soeHash)
         doubleSpendTxs <- checkDoubleSpendTransaction(cb)
         _ <- acceptTransactions(cb, Some(checkpoint), doubleSpendTxs.map(_.hash))
         _ <- acceptObservations(cb, Some(checkpoint))
         _ <- updateRateLimiting(cb)
         _ <- transactionService.findAndRemoveInvalidPendingTxs()
-        _ <- logger.debug(s"Accept checkpoint=${cb.soeHash}] with height $maybeHeight")
+        _ <- logger.debug(s"Accept checkpoint=${cb.soeHash}] with height $height")
         _ <- updateTips(cb.soeHash)
 //        _ <- snapshotStorage.addAcceptedCheckpointSinceSnapshot(cb.soeHash)
         _ <- metrics.incrementMetricAsync[F](Metrics.checkpointAccepted)
@@ -226,7 +237,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
             .flatMap(_.traverse(hash => dataResolver.resolveCheckpointDefaults(hash)))
           _ <- cbs.traverse(addToAcceptance)
         } yield ()
-      } else Sync[F].unit
+      } else F.unit
     }
 
   def resolveMissingParents(cb: CheckpointBlock): F[List[CheckpointCache]] =
@@ -295,7 +306,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
           _ <- logger.debug(s"update_tips | Total: ${totalSize} | Usages: ${usages}")
           _ <- if ((usages >= maxTipUsage || !canReuseTip) && areEnoughTipsForConsensus) {
             checkpointStorage.removeTip(parent)
-          } else Sync[F].unit
+          } else F.unit
         } yield ()
       }
       minTipHeight <- checkpointStorage.getMinTipHeight
@@ -337,7 +348,7 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
 
   private def calculateTipsSOE(tips: Set[(String, Height)]): F[TipSoe] =
     Random
-      .shuffle(tips.toSeq.sortBy(_._2.min).take(numFacilitatorPeers + 2)) // TODO: @mwadon
+      .shuffle(tips.toSeq.sortBy(_._2.min).take(numFacilitatorPeers)) // TODO: @mwadon
       .take(numFacilitatorPeers)
       .toList
       .traverse {
@@ -380,8 +391,8 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
           s"[${id.short}] CheckpointBlock with hash=${cb.soeHash} : contains double spend transactions=${doubleSpendTxs
             .map(_.hash)} : from address : ${doubleSpendTxs.map(_.src.address)}"
         ) >> metrics.updateMetricAsync[F]("doubleSpendTransactions", doubleSpendTxs.size)
-      else Sync[F].unit
-      _ <- if (doubleSpendTxs.nonEmpty) blacklistedAddresses.addAll(doubleSpendTxs.map(_.src.address)) else Sync[F].unit
+      else F.unit
+      _ <- if (doubleSpendTxs.nonEmpty) blacklistedAddresses.addAll(doubleSpendTxs.map(_.src.address)) else F.unit
     } yield doubleSpendTxs
 
   private def transfer(tx: Transaction): F[Unit] =
@@ -393,10 +404,10 @@ class CheckpointService[F[_]: Concurrent: Timer: Clock](
   private def shouldTransfer(tx: Transaction): F[Boolean] =
     for {
       isBlacklisted <- isBlacklistedAddress(tx)
-      _ <- if (isBlacklisted) metrics.incrementMetricAsync[F]("blockedBlacklistedTxs") else Sync[F].unit
+      _ <- if (isBlacklisted) metrics.incrementMetricAsync[F]("blockedBlacklistedTxs") else F.unit
       _ <- if (isBlacklisted)
         logger.info(s"[$id.short] Transaction with hash=${tx.hash} : is from blacklisted address=${tx.src.address}")
-      else Sync[F].unit
+      else F.unit
       isDummy = tx.isDummy
     } yield !(isBlacklisted || isDummy)
 

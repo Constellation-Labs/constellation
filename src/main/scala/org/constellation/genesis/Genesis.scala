@@ -43,9 +43,9 @@ class Genesis[F[_]: Concurrent](
       checkpointStorage.persistCheckpoint(initialBlock1) >>
       checkpointStorage.persistCheckpoint(initialBlock2)
 
-    val acceptBlocks = checkpointStorage.acceptCheckpoint(genesisBlock.checkpointBlock.soeHash, genesisBlock.height) >>
-      checkpointStorage.acceptCheckpoint(initialBlock1.checkpointBlock.soeHash, initialBlock1.height) >>
-      checkpointStorage.acceptCheckpoint(initialBlock2.checkpointBlock.soeHash, initialBlock2.height)
+    val acceptBlocks = checkpointStorage.acceptCheckpoint(genesisBlock.checkpointBlock.soeHash) >>
+      checkpointStorage.acceptCheckpoint(initialBlock1.checkpointBlock.soeHash) >>
+      checkpointStorage.acceptCheckpoint(initialBlock2.checkpointBlock.soeHash)
 
     val setBalances = go.genesis.transactions.toList.traverse { rtx =>
       val bal = rtx.amount

@@ -88,7 +88,7 @@ class DownloadService[F[_]](
               })
             }
 
-          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
+          _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool)
 
 //          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
 //          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
@@ -102,8 +102,6 @@ class DownloadService[F[_]](
 //              }
 
 //          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
-
-          _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool)
         } yield ()
       }
     } yield ()

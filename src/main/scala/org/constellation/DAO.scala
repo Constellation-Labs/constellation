@@ -19,22 +19,11 @@ import org.constellation.domain.genesis.GenesisStorageAlgebra
 import org.constellation.domain.healthcheck.HealthCheckConsensusManager
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.p2p.PeerHealthCheck
-import org.constellation.domain.redownload.{
-  DownloadService,
-  MajorityStateChooser,
-  MissingProposalFinder,
-  RedownloadService,
-  RedownloadStorageAlgebra
-}
+import org.constellation.domain.redownload.{DownloadService, MajorityStateChooser, MissingProposalFinder, RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
-import org.constellation.domain.transaction.{
-  TransactionChainService,
-  TransactionGossiping,
-  TransactionService,
-  TransactionValidator
-}
+import org.constellation.domain.transaction.{TransactionChainService, TransactionGossiping, TransactionService, TransactionValidator}
 import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
 import org.constellation.gossip.sampling.PartitionerPeerSampling
@@ -47,13 +36,7 @@ import org.constellation.infrastructure.genesis.GenesisStorageInterpreter
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.{RedownloadPeriodicCheck, RedownloadStorageInterpreter}
 import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
-import org.constellation.infrastructure.snapshot.{
-  SnapshotInfoLocalStorage,
-  SnapshotInfoS3Storage,
-  SnapshotLocalStorage,
-  SnapshotS3Storage,
-  SnapshotStorageInterpreter
-}
+import org.constellation.infrastructure.snapshot.{SnapshotInfoLocalStorage, SnapshotInfoS3Storage, SnapshotLocalStorage, SnapshotS3Storage, SnapshotStorageInterpreter}
 import org.constellation.keytool.KeyUtils
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
@@ -65,7 +48,7 @@ import org.constellation.session.SessionTokenService
 import org.constellation.snapshot.{SnapshotTrigger, SnapshotWatcher}
 import org.constellation.storage._
 import org.constellation.trust.{TrustDataPollingScheduler, TrustManager}
-import org.constellation.util.{HealthChecker, HostPort, Metrics}
+import org.constellation.util.{HealthChecker, HostPort, Metrics, MetricsUpdater}
 
 import java.security.KeyPair
 import scala.collection.concurrent.TrieMap
@@ -186,6 +169,14 @@ class DAO(
     keyPair
   )
 
+  val metricsUpdater = new MetricsUpdater(
+    metrics,
+    checkpointStorage,
+    snapshotServiceStorage,
+    redownloadStorage,
+    unboundedExecutionContext
+  )
+
   val broadcastService: BroadcastService[IO] = new BroadcastService[IO](clusterStorage, nodeStorage, apiClient, metrics, id, Blocker.liftExecutionContext(unboundedExecutionContext))
 
   val joiningPeerValidator: JoiningPeerValidator[IO] =
@@ -283,7 +274,6 @@ class DAO(
     checkpointStorage,
     rateLimiting,
     dataResolver,
-    boundedExecutionContext,
     processingConfig.maxWidth,
     processingConfig.maxTipUsage,
     processingConfig.numFacilitatorPeers,
@@ -295,7 +285,7 @@ class DAO(
     id,
     metrics,
     keyPair
-  )(contextShift)
+  )
 
   val rewardsManager: RewardsManager[IO] = new RewardsManager[IO](
     eigenTrust,
@@ -423,9 +413,15 @@ class DAO(
   val consensusScheduler: ConsensusScheduler =
     new ConsensusScheduler(ConfigUtil.config, consensusManager, nodeStorage, unboundedExecutionContext)
 
-  val checkpointAcceptanceTrigger: CheckpointAcceptanceTrigger = new CheckpointAcceptanceTrigger(
+  val checkpointAcceptanceRecalculationTrigger: CheckpointAcceptanceRecalculationTrigger = new CheckpointAcceptanceRecalculationTrigger(
     checkpointService,
     boundedExecutionContext
+  )
+
+  val checkpointAcceptanceTrigger: CheckpointAcceptanceTrigger = new CheckpointAcceptanceTrigger(
+    nodeStorage,
+    checkpointService,
+    unboundedExecutionContext
   )
 
   val snapshotTrigger: SnapshotTrigger = new SnapshotTrigger(
