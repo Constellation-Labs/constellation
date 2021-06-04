@@ -5,7 +5,7 @@ import org.constellation.schema.checkpoint.TipData
 import org.constellation.schema.{Height, Id}
 
 trait TipsClientAlgebra[F[_]] {
-  def getTips(): PeerResponse[F, Map[String, TipData]]
+  def getTips(): PeerResponse[F, Set[(String, Height)]]
 
   def getHeights(): PeerResponse[F, List[Height]]
 

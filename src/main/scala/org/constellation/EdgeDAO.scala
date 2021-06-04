@@ -27,7 +27,6 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 
     }
 
-  // TODO: Fix
   def pull(minCount: Int = 1): Option[Seq[ChannelMessage]] = this.synchronized {
     /*if (messages.size >= minCount) {
       val (left, right) = messages.splitAt(minCount)

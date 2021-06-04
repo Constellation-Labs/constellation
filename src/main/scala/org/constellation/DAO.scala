@@ -187,7 +187,7 @@ class DAO(
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
-  val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
+//  val threadSafeMessageMemPool = new ThreadSafeMessageMemPool()
   val addressService: AddressService[IO] = new AddressService[IO]()
   val messageValidator: MessageValidator = MessageValidator(id)
   val eigenTrust: EigenTrust[IO] = new EigenTrust[IO](id)

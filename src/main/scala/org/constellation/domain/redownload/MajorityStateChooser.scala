@@ -13,7 +13,6 @@ import org.constellation.schema.Id
 
 class MajorityStateChooser(id: Id) {
 
-  // TODO: Use RedownloadService type definitions
   def chooseMajorityState(
     createdSnapshots: SnapshotProposalsAtHeight,
     peersProposals: PeersProposals,

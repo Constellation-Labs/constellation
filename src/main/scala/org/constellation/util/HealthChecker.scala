@@ -22,26 +22,6 @@ case class InconsistentSnapshotHash(nodeId: String, hashes: Set[String])
 object HealthChecker {
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
 
-  // TODO: unused, consider removing
-  /*
-  def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
-    var hashes: Set[String] = Set.empty
-    val it = apis.iterator
-    var lastCheck: Either[MetricFailure, Unit] = Right(())
-    while (it.hasNext && lastCheck.isRight) {
-      val a = it.next()
-      val metrics = IO
-        .fromFuture(IO { a.metricsAsync })(IO.contextShift(ConstellationExecutionContext.bounded))
-        .unsafeRunSync() // TODO: wkoszycki revisit
-      lastCheck = checkLocalMetrics(metrics, a.baseURI).orElse {
-        hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
-        Either.cond(hashes.size == 1, (), InconsistentSnapshotHash(a.baseURI, hashes))
-      }
-    }
-    lastCheck
-  }
-   */
-
   def checkLocalMetrics(metrics: Map[String, String], nodeId: String): Either[MetricFailure, Unit] =
     hasEmptyHeight(metrics, nodeId)
       .orElse(hasCheckpointValidationFailures(metrics, nodeId))

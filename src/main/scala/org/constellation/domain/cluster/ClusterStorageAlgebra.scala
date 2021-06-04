@@ -6,9 +6,9 @@ import org.constellation.schema.{Id, NodeState}
 trait ClusterStorageAlgebra[F[_]] {
 
   def getPeer(id: Id): F[Option[PeerData]]
-  def getPeer(host: String): F[Option[PeerData]] // TODO: consider using nominal type
+  def getPeer(host: String): F[Option[PeerData]]
   def registerPeer(peerData: PeerData): F[Unit]
-  def updatePeer(peerData: PeerData): F[Unit] // TODO: see registerPeer
+  def updatePeer(peerData: PeerData): F[Unit]
   def removePeer(id: Id): F[Unit]
   def removePeer(peerData: PeerData): F[Unit]
 

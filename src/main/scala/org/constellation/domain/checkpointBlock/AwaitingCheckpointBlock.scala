@@ -18,18 +18,6 @@ object AwaitingCheckpointBlock {
     areTransactionsAllowedForAcceptance(txs)(checkpointBlockValidator)
   }
 
-  def areParentsSOEAccepted[F[_]: Concurrent](
-    lookupSoe: String => F[Option[SignedObservationEdge]]
-  )(cb: CheckpointBlock): F[Boolean] = {
-    val soeHashes = cb.parentSOEHashes.toList.filterNot(_.equals(Genesis.Coinbase))
-    // TODO: should parent's amount be hardcoded?
-
-    soeHashes
-      .traverse(lookupSoe)
-      .map(_.flatten)
-      .map(_.size == soeHashes.size)
-  }
-
   def hasNoBlacklistedTxs[F[_]: Concurrent](
     cb: CheckpointBlock
   )(blacklistedAddresses: BlacklistedAddresses[F]): F[Boolean] =

@@ -102,8 +102,4 @@ object CliConfigParser {
       case Some(c) => c.pure[F]
       case _       => new RuntimeException("Invalid set of cli options").raiseError[F, CliConfig]
     }
-
-  // TODO: Remove because of the whitelisting
-  def loadSeedsFromConfig[F[_]: Sync](config: Config): F[Seq[HostPort]] =
-    Sync[F].pure { Seq.empty[HostPort] }
 }
