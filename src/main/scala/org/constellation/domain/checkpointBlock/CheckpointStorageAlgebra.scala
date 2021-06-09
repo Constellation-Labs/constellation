@@ -26,7 +26,6 @@ trait CheckpointStorageAlgebra[F[_]] {
   def getCheckpoint(soeHash: String): F[Option[CheckpointCache]]
   def setCheckpoints(checkpoints: Map[String, CheckpointCache]): F[Unit]
   def getCheckpoints: F[Map[String, CheckpointCache]]
-  def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit]
 
   def removeCheckpoint(soeHash: String): F[Unit]
   def removeCheckpoints(soeHashes: Set[String]): F[Unit]
@@ -43,10 +42,12 @@ trait CheckpointStorageAlgebra[F[_]] {
   def unmarkFromAcceptance(soeHash: String): F[Unit]
   def getWaitingForAcceptance: F[Set[CheckpointCache]]
   def setWaitingForAcceptance(soeHashes: Set[String]): F[Unit]
+  def unmarkWaitingForAcceptance(soeHash: String): F[Unit]
 
   def markForAcceptanceAfterDownload(cb: CheckpointCache): F[Unit]
   def getCheckpointsForAcceptanceAfterDownload: F[Set[CheckpointCache]]
   def unmarkForAcceptanceAfterDownload(soeHash: String): F[Unit]
+  def isCheckpointWaitingForAcceptanceAfterDownload(soeHash: String): F[Boolean]
 
   def getAccepted: F[Set[String]]
   def setAccepted(soeHashes: Set[String]): F[Unit]
@@ -86,5 +87,6 @@ trait CheckpointStorageAlgebra[F[_]] {
   def countTips: F[Int]
 
   def getMinTipHeight: F[Long]
+  def getMinWaitingHeight: F[Option[Long]]
 
 }

@@ -21,7 +21,7 @@ class FacilitatorFilter[F[_]: Concurrent](
 
   def filterPeers(peers: Map[Id, PeerData], numFacilitatorPeers: Int, tipSoe: TipSoe): F[Map[Id, PeerData]] =
     for {
-      minTipHeight <- tipSoe.minHeight.getOrElse(0L).pure[F]
+      minTipHeight <- tipSoe.minHeight.pure[F]
       _ <- logger.debug(s"[${id.short}] : [Facilitator Filter] : selected minTipHeight = $minTipHeight")
 
       filteredPeers <- filterByHeight(Random.shuffle(peers.toList), minTipHeight, numFacilitatorPeers)

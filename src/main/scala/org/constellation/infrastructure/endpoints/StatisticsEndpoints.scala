@@ -34,7 +34,7 @@ class StatisticsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] 
 
             BlockUIOutput(
               cb.soeHash,
-              ccd.height.get.min,
+              ccd.height.min,
               cb.parentSOEHashes,
               cb.messages.map {
                 _.signedMessageData.data.channelId

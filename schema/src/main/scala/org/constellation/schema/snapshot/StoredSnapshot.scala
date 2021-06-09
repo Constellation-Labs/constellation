@@ -7,10 +7,9 @@ case class StoredSnapshot(snapshot: Snapshot, checkpointCache: Seq[CheckpointCac
   def height: Long =
     if (checkpointCache.toList.nonEmpty) {
       checkpointCache.toList
-        .maxBy(_.height.map(_.min).getOrElse(0L))
+        .maxBy(_.height.min)
         .height
-        .map(_.min)
-        .getOrElse(0L)
+        .min
     } else {
       0L
     }

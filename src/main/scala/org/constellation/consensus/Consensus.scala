@@ -276,14 +276,14 @@ class Consensus[F[_]: Concurrent: ContextShift](
 
     for {
       maybeHeight <- checkpointStorage.calculateHeight(checkpointBlock)
-      cache = CheckpointCache(checkpointBlock, height = maybeHeight)
+
+      _ <- if (maybeHeight.isEmpty) {
+        Sync[F].raiseError[Unit](HeightMissing(roundData.roundId, roundData.transactions, roundData.observations))
+      } else Sync[F].unit
+
+      cache = CheckpointCache(checkpointBlock, height = maybeHeight.get)
       _ <- checkpointStorage.persistCheckpoint(cache)
       _ <- logger.debug(s"Unique to accept: ${proposals.groupBy(_._2.baseHash).keys}")
-      parents <- checkpointStorage.getParents(checkpointBlock.soeHash)
-      parentsoehashes <- checkpointStorage.getParentSoeHashes(checkpointBlock.soeHash)
-      _ <- logger.debug(s"P: ${parents}")
-      _ <- logger.debug(s"psoe: ${parentsoehashes}")
-      _ <- logger.debug(s"h: ${maybeHeight}")
       _ <- metrics.incrementMetricAsync(
         "acceptMajorityCheckpointBlockSelectedCount_" + proposals.size
       )
@@ -294,7 +294,7 @@ class Consensus[F[_]: Concurrent: ContextShift](
         s"[${nodeId.short}] accepting majority checkpoint block ${checkpointBlock.soeHash}  " +
           s" with txs ${checkpointBlock.transactions.map(_.hash)} " +
           s" with obs ${checkpointBlock.observations.map(_.hash)} " +
-          s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height} and parents: ${parents}"
+          s"proposed by ${sameBlocks.head._1.id.short} other blocks ${sameBlocks.size} in round ${roundData.roundId} with soeHash ${checkpointBlock.soeHash} and parent ${checkpointBlock.parentSOEHashes} and height ${cache.height}"
       )
 
       finalResult <- checkpointService.acceptLock.withPermit {
@@ -559,6 +559,12 @@ object Consensus {
   ) extends ConsensusException(
         s"Proposals number: $proposals for stage: $stage and round: $roundId are below given percentage. Number of facilitators: $facilitators"
       )
+
+  case class HeightMissing(
+    roundId: RoundId,
+    transactionsToReturn: Seq[Transaction],
+    observationsToReturn: Seq[Observation]
+  ) extends ConsensusException(s"Height is missing")
 
   case class SelectedUnionBlock(
     roundId: RoundId,

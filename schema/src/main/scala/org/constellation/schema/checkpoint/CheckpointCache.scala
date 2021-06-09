@@ -7,12 +7,12 @@ import org.constellation.schema.Height
 case class CheckpointCache(
   checkpointBlock: CheckpointBlock,
   children: Int = 0,
-  height: Option[Height] = None // TODO: Check if Option if needed
+  height: Height = Height(0L, 0L)
 )
 
 object CheckpointCache {
   implicit val checkpointCacheOrdering: Ordering[CheckpointCache] =
-    Ordering.by[CheckpointCache, Long](_.height.fold(0L)(_.min))
+    Ordering.by[CheckpointCache, Long](_.height.min)
 
   implicit val checkpointCacheEncoder: Encoder[CheckpointCache] = deriveEncoder
   implicit val checkpointCacheDecoder: Decoder[CheckpointCache] = deriveDecoder

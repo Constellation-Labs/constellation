@@ -29,7 +29,6 @@ import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class CheckpointService[F[_]: Timer: Clock](
-  merkleService: CheckpointMerkleService[F],
   addressService: AddressService[F],
   blacklistedAddresses: BlacklistedAddresses[F],
   transactionService: TransactionService[F],
@@ -57,9 +56,6 @@ class CheckpointService[F[_]: Timer: Clock](
   private val snapshotHeightInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  def fetchBatchTransactions(merkleRoot: String): F[List[Transaction]] =
-    merkleService.fetchBatchTransactions(merkleRoot)
-
   def handleSignatureRequest(sr: SignatureRequest): F[SignatureResponse] =
     checkpointBlockValidator
       .simpleValidation(sr.checkpointBlock)
@@ -76,8 +72,9 @@ class CheckpointService[F[_]: Timer: Clock](
         isBeingAccepted <- checkpointStorage.isCheckpointInAcceptance(checkpoint.checkpointBlock.soeHash)
         isCheckpointAccepted <- checkpointStorage.isCheckpointAccepted(checkpoint.checkpointBlock.soeHash)
         isWaitingForResolving <- checkpointStorage.isWaitingForResolving(checkpoint.checkpointBlock.soeHash)
+        isWaitingForAcceptanceAfterRedownload <- checkpointStorage.isCheckpointWaitingForAcceptanceAfterDownload(checkpoint.checkpointBlock.soeHash)
 
-        _ <- if (isWaitingForAcceptance || isBeingAccepted || isCheckpointAccepted || isWaitingForResolving)
+        _ <- if (isWaitingForAcceptance || isBeingAccepted || isCheckpointAccepted || isWaitingForResolving || isWaitingForAcceptanceAfterRedownload)
           F.unit
         else
           checkpointStorage.persistCheckpoint(checkpoint) >>
@@ -94,36 +91,49 @@ class CheckpointService[F[_]: Timer: Clock](
   def recalculateQueue(): F[Unit] =
     for {
       blocksForAcceptance <- checkpointStorage.getWaitingForAcceptance
-      sorted = TopologicalSort.sortBlocksTopologically(blocksForAcceptance.toSeq).toList
-      withParentsAccepted <- sorted.filterA(checkpointStorage.areParentsAccepted)
-      withNoBlacklistedTxs <- withParentsAccepted.filterA { c => AwaitingCheckpointBlock.hasNoBlacklistedTxs(c.checkpointBlock)(blacklistedAddresses) }
-      withReferencesAccepted <- withNoBlacklistedTxs.filterA { c => AwaitingCheckpointBlock.areReferencesAccepted(checkpointBlockValidator)(c.checkpointBlock) }
-      notAlreadyAccepted <- withReferencesAccepted.filterA { c => checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_) }
+      notAlreadyAccepted <- blocksForAcceptance.toList.filterA { c => checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_) }
+      lastSnapshotHeight <- snapshotStorage.getLastSnapshotHeight
+      aboveLastSnapshotHeight = notAlreadyAccepted.filter { _.height.min > lastSnapshotHeight }
 
-      waitingForResolving <- blocksForAcceptance.toList.filterA { c => checkpointStorage.isWaitingForResolving(c.checkpointBlock.soeHash) }
+      withNoBlacklistedTxs <- aboveLastSnapshotHeight.filterA { c => AwaitingCheckpointBlock.hasNoBlacklistedTxs(c.checkpointBlock)(blacklistedAddresses) }
+      withParentsAccepted <- withNoBlacklistedTxs.filterA(checkpointStorage.areParentsAccepted)
+      withReferencesAccepted <- withParentsAccepted.filterA { c => AwaitingCheckpointBlock.areReferencesAccepted(checkpointBlockValidator)(c.checkpointBlock) }
 
-      allowedToAccept = notAlreadyAccepted
+      waitingForResolving <- withReferencesAccepted.toList.filterA { c => checkpointStorage.isWaitingForResolving(c.checkpointBlock.soeHash) }
 
-      withNoParentsAccepted = blocksForAcceptance.diff(withParentsAccepted.toSet)
-      withNoReferencesAccepted = blocksForAcceptance.diff(withReferencesAccepted.toSet)
+      alreadyAccepted = blocksForAcceptance.diff(notAlreadyAccepted.toSet)
+      _ <- alreadyAccepted.toList.map(_.checkpointBlock.soeHash).traverse { checkpointStorage.unmarkWaitingForAcceptance }
+
+      belowLastSnapshotHeight = notAlreadyAccepted.diff(aboveLastSnapshotHeight)
+      _ <- belowLastSnapshotHeight.map(_.checkpointBlock.soeHash).traverse { checkpointStorage.unmarkWaitingForAcceptance }
+
+//      sorted = TopologicalSort.sortBlocksTopologically(withNoBlacklistedTxs).toList
+      allowedToAccept = withReferencesAccepted
+
+      withNoParentsAccepted = notAlreadyAccepted.toSet.diff(withParentsAccepted.toSet)
+      withNoReferencesAccepted = notAlreadyAccepted.toSet.diff(withReferencesAccepted.toSet)
 
       _ <- withNoParentsAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingParents }
       _ <- withNoReferencesAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingReferences }
 
       _ <-
         logger.debug {
-          s"Blocks for acceptance: ${blocksForAcceptance.size} |" +
-            s"With parents accepted: ${withParentsAccepted.size} |" +
-            s"With no blacklisted txs: ${withNoBlacklistedTxs.size} |" +
-            s"With references accepted: ${withReferencesAccepted.size} |" +
-            s"Not already accepted: ${notAlreadyAccepted.size} |" +
-            s"Waiting for resolving: ${waitingForResolving.size}"
+          s"All: ${blocksForAcceptance.size} |" +
+            s"NotAcc: ${notAlreadyAccepted.size} |" +
+            s"ParAcc: ${withParentsAccepted.size} |" +
+            s"NoBlack: ${withNoBlacklistedTxs.size} |" +
+            s"RefAcc: ${withReferencesAccepted.size} |" +
+            s"Resolv: ${waitingForResolving.size} |" +
+            s"AlrAcc: ${alreadyAccepted.size} |" +
+            s"Below: ${belowLastSnapshotHeight.size}"
         } >>
           metrics.updateMetricAsync("accept_blocksForAcceptance", blocksForAcceptance.size) >>
+          metrics.updateMetricAsync("accept_notAlreadyAccepted", notAlreadyAccepted.size) >>
           metrics.updateMetricAsync("accept_withParentsAccepted", withParentsAccepted.size) >>
           metrics.updateMetricAsync("accept_withNoBlacklistedTxs", withNoBlacklistedTxs.size) >>
           metrics.updateMetricAsync("accept_withReferencesAccepted", withReferencesAccepted.size) >>
-          metrics.updateMetricAsync("accept_notAlreadyAccepted", notAlreadyAccepted.size)
+          metrics.updateMetricAsync("accept_alreadyAccepted", alreadyAccepted.size) >>
+          metrics.updateMetricAsync("accept_belowLastSnapshotHeight", belowLastSnapshotHeight.size)
 
       _ <- checkpointStorage.setAcceptanceQueue(allowedToAccept.map((cbc: CheckpointCache) => cbc.checkpointBlock.soeHash).toSet)
     } yield ()
@@ -142,7 +152,7 @@ class CheckpointService[F[_]: Timer: Clock](
              _ => checkpointStorage.unmarkFromAcceptance(cb.checkpointBlock.soeHash)
             }
             .recoverWith {
-              case error => logger.error(error)(s"Checkpoint acceptance error") >>
+              case error => logger.error(error)(s"Checkpoint acceptance error ${cb.checkpointBlock.soeHash}: ${error.getMessage}") >>
                 checkpointStorage.unmarkFromAcceptance(cb.checkpointBlock.soeHash)
             }
         }
@@ -153,6 +163,7 @@ class CheckpointService[F[_]: Timer: Clock](
     val cb = checkpoint.checkpointBlock
     for {
         _ <- logger.debug(s"[${cb.soeHash}] Acceptance started")
+
         _ <- logger.debug(s"[${cb.soeHash}] Checking conflicts")
         conflicts <- checkpointBlockValidator.containsAlreadyAcceptedTx(cb)
 
@@ -190,13 +201,7 @@ class CheckpointService[F[_]: Timer: Clock](
 //            )
         else F.unit
 
-        maybeHeight = checkpoint.height
-        _ <- logger.debug(s"[${cb.soeHash}] Height is empty: ${maybeHeight.isEmpty}")
-        height <- if (maybeHeight.isEmpty) {
-          metrics
-            .incrementMetricAsync[F](Metrics.heightEmpty)
-            .flatMap(_ => MissingHeightException(cb).raiseError[F, Height])
-        } else F.pure(maybeHeight.get)
+        height = checkpoint.height
 
         lastSnapshotHeight <- snapshotStorage.getLastSnapshotHeight
         _ <- if (height.min <= lastSnapshotHeight.toLong) {
@@ -244,7 +249,14 @@ class CheckpointService[F[_]: Timer: Clock](
     for {
       soeHashes <- cb.parentSOEHashes.toList.pure[F]
       existing <- soeHashes.filterA(checkpointStorage.existsCheckpoint)
+      existingButNotWaitingForAcceptance <- existing.filterA(c => checkpointStorage.isCheckpointWaitingForAcceptance(c).map(!_))
       waitingForResolving <- soeHashes.filterA(checkpointStorage.isWaitingForResolving)
+
+      _ <- existingButNotWaitingForAcceptance
+        .traverse { checkpointStorage.getCheckpoint }
+        .map(_.flatten)
+        .flatMap { _.traverse { addToAcceptance } }
+
       missingSoeHashes = soeHashes.diff(waitingForResolving).diff(existing)
       cbs <- missingSoeHashes.traverse(dataResolver.resolveCheckpointDefaults(_))
       _ <- cbs.traverse(addToAcceptance)
@@ -314,12 +326,15 @@ class CheckpointService[F[_]: Timer: Clock](
       checkpointBlock <- checkpointStorage.getCheckpoint(soeHash)
       totalSize <- checkpointStorage.countTips
       canUseTip = totalSize < maxWidth
-      height = checkpointBlock.flatMap(_.height.map(_.min)).getOrElse(0L)
-      _ <- if (canUseTip && height > minTipHeight && usages < maxTipUsage) {
+      height = checkpointBlock.map(_.height.min).getOrElse(0L)
+      _ <- if (height < minTipHeight) {
+        logger.warn(s"Block ${soeHash} with height ${height} and usages=${usages} is below the min tip height ${minTipHeight}")
+      } else F.unit
+      _ <- if (canUseTip && height >= minTipHeight && usages < maxTipUsage) {
         checkpointStorage.addTip(soeHash)
       } else {
         logger.debug(
-          s"Block height: ${height} with usages=${usages} above the limit or below min tip: $minTipHeight | update skipped"
+          s"Block height: ${height} with usages=${usages} above the limit or below min tip: $minTipHeight | update skipped | ($totalSize < $maxWidth && $height >= $minTipHeight && $usages < $maxTipUsage)"
         )
       }
 
@@ -357,7 +372,7 @@ class CheckpointService[F[_]: Timer: Clock](
       }
       .map(_.flatten)
       .map(_.map(cb => (cb.checkpointBlock.soe, cb.height)))
-      .map(r => TipSoe(r.map(_._1), r.map(_._2.map(_.min)).min))
+      .map(r => TipSoe(r.map(_._1), r.map(_._2.min).min))
 
   private def calculateFinalFacilitators(facilitators: Map[Id, PeerData], mergedTipHash: String): Map[Id, PeerData] = {
     // TODO: Use XOR distance instead as it handles peer data mismatch cases better

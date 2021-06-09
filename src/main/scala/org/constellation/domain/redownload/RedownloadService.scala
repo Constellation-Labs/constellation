@@ -151,13 +151,6 @@ class RedownloadService[F[_]: NonEmptyParallel](
       meaningfulMajorityState = takeHighestUntilKey(majorityState, ignorePoint).filterKeys(_ >= majorityStateCutoff)
 
       _ <- redownloadStorage.setLastMajorityState(meaningfulMajorityState)
-      lowestMajorityHeight <- redownloadStorage.getLowestMajorityHeight
-
-      checkpointsToRemove <- checkpointStorage.getInSnapshot.map(_.filter {
-        case (_, height) => height < (lowestMajorityHeight - 2)
-      }).map(_.map(_._1))
-
-      _ <- checkpointStorage.removeCheckpoints(checkpointsToRemove)
 
       _ <- if (meaningfulMajorityState.isEmpty) logger.debug("No majority - skipping redownload") else F.unit
 
@@ -203,12 +196,22 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- logger.debug("Removing unaccepted snapshots from disk.")
       _ <- removeUnacceptedSnapshotsFromDisk().value.flatMap(F.fromEither)
 
+      lowestMajorityHeight <- redownloadStorage.getLowestMajorityHeight
+
+      checkpointsToRemove <- checkpointStorage.getInSnapshot.map(_.filter {
+        case (_, height) => height < (lowestMajorityHeight - 2)
+      }).map(_.map(_._1))
+
+      _ <- logger.debug(s"Removing checkpoints below height: ${lowestMajorityHeight - 2}. To remove: ${checkpointsToRemove.size}")
+//      _ <- checkpointStorage.removeCheckpoints(checkpointsToRemove)
+//
       _ <- if (shouldPerformRedownload && !isDownload) { // I think we should only set it to Ready when we are not joining
         broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       } else F.unit
 
       _ <- logger.debug("Accepting all the checkpoint blocks received during the redownload.")
       _ <- acceptCheckpointBlocks().value.flatMap(F.fromEither)
+
 
       _ <- if (!shouldPerformRedownload) findAndFetchMissingProposals(peersProposals, peersCache) else F.unit
     } yield ()
@@ -389,10 +392,6 @@ class RedownloadService[F[_]: NonEmptyParallel](
                 }
             )
 
-//          snapshotInfoFromMemPool <- fetchSnapshotInfo(client).flatMap { s =>
-//            C.evalOn(boundedExecutionContext)(F.delay { KryoSerializer.deserializeCast[SnapshotInfo](s) })
-//          }
-
           _ <- snapshotService.setSnapshot(majoritySnapshotInfo)
 
           blocksToAccept = acceptedSnapshots.flatMap(_.checkpointCache)
@@ -406,6 +405,15 @@ class RedownloadService[F[_]: NonEmptyParallel](
           _ <- sorted.traverse { block =>
             checkpointService.addToAcceptance(block)
           }
+
+          snapshotInfoFromMemPool <- fetchSnapshotInfo(client)
+            .flatMap { snapshotInfo =>
+              C.evalOn(boundedExecutionContext)(F.delay {
+                KryoSerializer.deserializeCast[SnapshotInfo](snapshotInfo)
+              })
+            }
+
+          _ <- checkpointStorage.setTips(snapshotInfoFromMemPool.tips)
         } yield ()
       }.attemptT
     } yield ()

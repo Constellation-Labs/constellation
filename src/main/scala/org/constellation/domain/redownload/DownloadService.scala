@@ -70,16 +70,16 @@ class DownloadService[F[_]](
       clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>
         for {
-          accepted <- redownloadService.fetchAcceptedSnapshots(client)
-          acceptedSnapshots <- accepted.values.toList
-            .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
-            .flatMap { snapshotsSerialized =>
-              snapshotsSerialized.traverse { snapshot =>
-                C.evalOn(boundedExecutionContext)(F.delay {
-                  KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
-                })
-              }
-            }
+//          accepted <- redownloadService.fetchAcceptedSnapshots(client)
+//          acceptedSnapshots <- accepted.values.toList
+//            .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
+//            .flatMap { snapshotsSerialized =>
+//              snapshotsSerialized.traverse { snapshot =>
+//                C.evalOn(boundedExecutionContext)(F.delay {
+//                  KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
+//                })
+//              }
+//            }
           snapshotInfoFromMemPool <- redownloadService
             .fetchSnapshotInfo(client)
             .flatMap { snapshotInfo =>

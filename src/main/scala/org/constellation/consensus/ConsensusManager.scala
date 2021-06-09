@@ -83,7 +83,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     } yield maybe
 
   def getActiveMinHeight: F[Option[Long]] =
-    consensuses.get.map(_.flatMap(_._2.tipMinHeight).toList match {
+    consensuses.get.map(_.map(_._2.tipMinHeight).toList match {
       case Nil  => None
       case list => Some(list.min)
     })
@@ -416,7 +416,7 @@ case class OwnConsensus[F[_]: Concurrent](
 
 case class ConsensusInfo[F[_]: Concurrent](
   consensus: Consensus[F],
-  tipMinHeight: Option[Long],
+  tipMinHeight: Long,
   startTime: Long
 )
 

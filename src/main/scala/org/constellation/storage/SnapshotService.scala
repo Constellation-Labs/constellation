@@ -2,37 +2,28 @@ package org.constellation.storage
 
 import cats.Parallel
 import cats.data.EitherT
-import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Concurrent, ContextShift, Sync}
 import cats.syntax.all._
 import constellation.withMetric
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus._
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
-import org.constellation.domain.cloud.CloudStorageOld
-import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.redownload.RedownloadStorageAlgebra
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.p2p.Cluster
-import org.constellation.schema.checkpoint.{
-  CheckpointBlock,
-  CheckpointBlockMetadata,
-  CheckpointCache,
-  FinishedCheckpoint
-}
-import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
+import org.constellation.schema.Id
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
 import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.serialization.KryoSerializer
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
-import org.constellation.{ConfigUtil, ConstellationExecutionContext, ProcessingConfig}
+import org.constellation.{ConfigUtil, ProcessingConfig}
 
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
@@ -50,6 +41,7 @@ class SnapshotService[F[_]: Concurrent](
   snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
   eigenTrustStorage: LocalFileStorage[F, StoredRewards],
   eigenTrust: EigenTrust[F],
+  redownloadStorage: RedownloadStorageAlgebra[F],
   boundedExecutionContext: ExecutionContext,
   unboundedExecutionContext: ExecutionContext,
   metrics: Metrics,
@@ -68,11 +60,19 @@ class SnapshotService[F[_]: Concurrent](
 //      _ <- validateMaxAcceptedCBHashesInMemory()
 
       nextHeightInterval <- getNextHeightInterval.attemptT.leftMap(SnapshotUnexpectedError).leftWiden[SnapshotError]
+
+      _ <- validateMaxDistanceFromMajority(nextHeightInterval)
+
       minTipHeight <- checkpointStorage.getMinTipHeight.attemptT
         .leftMap(SnapshotUnexpectedError)
         .leftWiden[SnapshotError]
 
-      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight)
+      minWaitingHeight <- checkpointStorage.getMinWaitingHeight
+        .attemptT
+        .leftMap(SnapshotUnexpectedError)
+        .leftWiden[SnapshotError]
+
+      _ <- validateSnapshotHeightIntervalCondition(nextHeightInterval, minTipHeight, minWaitingHeight)
 
       blocksWithinHeightInterval <- getBlocksWithinHeightInterval(nextHeightInterval).attemptT
         .leftMap(SnapshotUnexpectedError)
@@ -304,26 +304,38 @@ class SnapshotService[F[_]: Concurrent](
     }
   }
 
+  private def validateMaxDistanceFromMajority(nextHeightInterval: Long): EitherT[F, SnapshotError, Unit] =
+    EitherT {
+      redownloadStorage.getLatestMajorityHeight.map { height =>
+        nextHeightInterval <= (height + (snapshotHeightDelayInterval / 2))
+      }.ifM(
+        ().asRight[SnapshotError].pure[F],
+        SnapshotUnexpectedError(new Throwable(s"Max distance from majority has been reached!")).asLeft[Unit].leftWiden[SnapshotError].pure[F]
+      )
+    }
+
   private def validateSnapshotHeightIntervalCondition(
     nextHeightInterval: Long,
-    minTipHeight: Long
+    minTipHeight: Long,
+    minWaitingHeight: Option[Long]
   ): EitherT[F, SnapshotError, Unit] =
     EitherT {
 
       metrics.updateMetricAsync[F]("minTipHeight", minTipHeight) >>
+        metrics.updateMetricAsync[F]("minWaitingHeight", minWaitingHeight.getOrElse(0L)) >>
         Sync[F].pure {
-          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval))
+          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval) && minWaitingHeight.fold(true)(_ > nextHeightInterval))
             ().asRight[SnapshotError]
           else
             HeightIntervalConditionNotMet.asLeft[Unit]
         }.flatTap { e =>
           if (e.isRight)
             logger.debug(
-              s"height interval met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
+              s"height interval met minTipHeight: $minTipHeight minWaitingHeight: $minWaitingHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
             ) >> metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionMet")
           else
             logger.debug(
-              s"height interval not met minTipHeight: $minTipHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
+              s"height interval not met minTipHeight: $minTipHeight minWaitingHeight: $minWaitingHeight nextHeightInterval: $nextHeightInterval and ${nextHeightInterval + snapshotHeightDelayInterval}"
             ) >> metrics.incrementMetricAsync[F]("snapshotHeightIntervalConditionNotMet")
         }
     }
@@ -338,9 +350,7 @@ class SnapshotService[F[_]: Concurrent](
       soeHashes <- checkpointStorage.getAccepted.map(_.toList)
       blocks <- soeHashes.traverse(checkpointStorage.getCheckpoint).map(_.flatten)
       blocksWithinInterval = blocks.filter { block =>
-        block.height.exists { h =>
-          h.min > height && h.min <= nextHeightInterval
-        }
+        block.height.min > height && block.height.min <= nextHeightInterval
       }
 
       _ <- logger.debug(
@@ -555,6 +565,7 @@ object SnapshotService {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     eigenTrustStorage: LocalFileStorage[F, StoredRewards],
     eigenTrust: EigenTrust[F],
+    redownloadStorage: RedownloadStorageAlgebra[F],
     boundedExecutionContext: ExecutionContext,
     unboundedExecutionContext: ExecutionContext,
     metrics: Metrics,
@@ -574,6 +585,7 @@ object SnapshotService {
       snapshotInfoStorage,
       eigenTrustStorage,
       eigenTrust,
+      redownloadStorage,
       boundedExecutionContext,
       unboundedExecutionContext,
       metrics,

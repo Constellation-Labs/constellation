@@ -112,11 +112,6 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
       waitingForResolving.remove(soeHash) >>
       unmarkForAcceptanceAfterDownload(soeHash)
 
-  def updateCheckpointHeight(soeHash: String, height: Option[Height]): F[Unit] =
-    checkpoints(soeHash).update(_.map { cb =>
-      cb.copy(height = height)
-    })
-
   def existsCheckpoint(soeHash: String): F[Boolean] =
     checkpoints(soeHash).get.map(_.nonEmpty)
 
@@ -138,6 +133,9 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
   def setWaitingForAcceptance(soeHashes: Set[String]): F[Unit] =
     waitingForAcceptance.set(soeHashes)
 
+  def unmarkWaitingForAcceptance(soeHash: String): F[Unit] =
+    waitingForAcceptance.remove(soeHash)
+
   def markForAcceptanceAfterDownload(cb: CheckpointCache): F[Unit] =
     waitingForAcceptanceAfterDownload.add(cb)
 
@@ -150,6 +148,9 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
     waitingForAcceptanceAfterDownload.modify { cbs =>
       (cbs.filterNot(_.checkpointBlock.soeHash == soeHash), ())
     }
+
+  def isCheckpointWaitingForAcceptanceAfterDownload(soeHash: String): F[Boolean] =
+    waitingForAcceptanceAfterDownload.get.map(_.exists(_.checkpointBlock.soeHash == soeHash))
 
   def getAccepted: F[Set[String]] =
     accepted.get
@@ -204,10 +205,10 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
 
   def calculateHeight(soeHash: String): F[Option[Height]] = {
     for {
-      checkpointHeight <- getCheckpoint(soeHash).map(_.flatMap(_.height))
+      checkpointHeight <- getCheckpoint(soeHash).map(_.map(_.height))
       calculatedHeight <- getParents(soeHash).map {
         _.flatMap { parents =>
-          val maybeHeight = parents.flatMap(_.height)
+          val maybeHeight = parents.map(_.height)
           if (maybeHeight.isEmpty)
             none[Height]
           else
@@ -220,7 +221,7 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
   def calculateHeight(checkpoint: CheckpointBlock): F[Option[Height]] =
     checkpoint.parentSOEHashes.toList.traverse { getCheckpoint }
       .map(a => a.flatten).map { parents =>
-        val maybeHeight = parents.flatMap(_.height)
+        val maybeHeight = parents.map(_.height)
         if (maybeHeight.isEmpty)
           none[Height]
         else
@@ -285,7 +286,7 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
     tips.modify(_ => (newTips, ()))
 
   def countTips: F[Int] =
-    tips.get.map(_.size)
+    getTips.map(_.size)
 
   def getMinTipHeight: F[Long] =
     for {
@@ -294,13 +295,19 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
       minHeight = if (tips.nonEmpty) minHeights.min else 0L
     } yield minHeight
 
+  def getMinWaitingHeight: F[Option[Long]] =
+    for {
+      waiting <- getWaitingForAcceptance
+      minHeights = waiting.map(_.height.min)
+    } yield if (minHeights.nonEmpty) minHeights.min.some else none
+
   def getTips: F[Set[(String, Height)]] =
     tips.get
       .flatMap(_.toList.traverse(getCheckpoint))
       .map(
         a =>
           a.flatten.map { checkpoint =>
-            (checkpoint.checkpointBlock.soeHash, checkpoint.height.getOrElse(Height(0L, 0L)))
+            (checkpoint.checkpointBlock.soeHash, checkpoint.height)
           }
       )
       .map(_.toSet)

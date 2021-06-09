@@ -35,6 +35,7 @@ class CheckpointAcceptanceRecalculationTrigger(
   checkpointService: CheckpointService[IO],
   boundedExecutionContext: ExecutionContext
 ) extends PeriodicIO("checkpointRecalculation", boundedExecutionContext) {
+
   override def trigger(): IO[Unit] = checkpointService.recalculateQueue()
 
   schedule(500.millis)

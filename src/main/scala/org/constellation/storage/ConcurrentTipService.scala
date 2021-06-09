@@ -8,7 +8,7 @@ import org.constellation.schema.edge.SignedObservationEdge
 import org.constellation.schema.{Height, Id, checkpoint}
 import scala.util.Random
 
-case class TipSoe(soe: Seq[SignedObservationEdge], minHeight: Option[Long])
+case class TipSoe(soe: Seq[SignedObservationEdge], minHeight: Long)
 
 object TipSoe {
   implicit val tipSoeEncoder: Encoder[TipSoe] = deriveEncoder

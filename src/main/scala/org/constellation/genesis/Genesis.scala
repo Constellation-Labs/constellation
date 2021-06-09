@@ -35,9 +35,9 @@ class Genesis[F[_]: Concurrent](
   implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true): F[Unit] = {
-    val genesisBlock = CheckpointCache(go.genesis, height = Some(Height(0, 0)))
-    val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
-    val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
+    val genesisBlock = CheckpointCache(go.genesis, height = Height(0, 0))
+    val initialBlock1 = CheckpointCache(go.initialDistribution, height = Height(1, 1))
+    val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Height(1, 1))
 
     val putBlocks = checkpointStorage.persistCheckpoint(genesisBlock) >>
       checkpointStorage.persistCheckpoint(initialBlock1) >>

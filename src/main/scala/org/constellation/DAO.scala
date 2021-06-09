@@ -238,12 +238,12 @@ class DAO(
     Blocker.liftExecutionContext(unboundedExecutionContext)
   )
 
-  val merkleService = new CheckpointMerkleService[IO](
-    transactionService,
-    notificationService,
-    observationService,
-    dataResolver
-  )
+//  val merkleService = new CheckpointMerkleService[IO](
+//    transactionService,
+//    notificationService,
+//    observationService,
+//    dataResolver
+//  )
 
   val snapshotProposalGossipService: SnapshotProposalGossipService[IO] =
     SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, clusterStorage, apiClient, metrics)
@@ -263,7 +263,6 @@ class DAO(
   )
 
   val checkpointService: CheckpointService[IO] = new CheckpointService[IO](
-    merkleService,
     addressService,
     blacklistedAddresses,
     transactionService,
@@ -338,6 +337,7 @@ class DAO(
     snapshotInfoStorage,
     rewardsStorage,
     eigenTrust,
+    redownloadStorage,
     boundedExecutionContext,
     unboundedExecutionContext,
     metrics,
@@ -411,7 +411,7 @@ class DAO(
     new ConsensusWatcher(ConfigUtil.config, consensusManager, unboundedExecutionContext)
 
   val consensusScheduler: ConsensusScheduler =
-    new ConsensusScheduler(ConfigUtil.config, consensusManager, nodeStorage, unboundedExecutionContext)
+    new ConsensusScheduler(ConfigUtil.config, consensusManager, nodeStorage, snapshotServiceStorage, redownloadStorage, unboundedExecutionContext)
 
   val checkpointAcceptanceRecalculationTrigger: CheckpointAcceptanceRecalculationTrigger = new CheckpointAcceptanceRecalculationTrigger(
     checkpointService,
