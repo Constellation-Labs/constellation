@@ -7,14 +7,8 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
 import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator}
-import org.constellation.consensus.Consensus.{
-  ConsensusDataProposal,
-  ConsensusProposal,
-  RoundData,
-  SelectedUnionBlock,
-  UnionBlockProposal
-}
-import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
+import org.constellation.consensus.Consensus.{ConsensusDataProposal, ConsensusProposal, RoundData, SelectedUnionBlock, UnionBlockProposal}
+import org.constellation.consensus.ConsensusManager.{NondeNotAnActiveLightNode, SnapshotHeightAboveTip}
 import org.constellation.consensus.{ConsensusManager, RoundDataRemote}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.PeerData
@@ -87,6 +81,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
           case err @ SnapshotHeightAboveTip(_, _, _) =>
             logger
               .error(s"Error when participating in new round: ${cmd.roundId} cause: ${err.getMessage}") >>
+              BadRequest(err.getMessage)
+          case err @ NondeNotAnActiveLightNode(_) =>
+            logger.error(s"Error when participating in new round: ${cmd.roundId} cause: ${err.getMessage}") >>
               BadRequest(err.getMessage)
           case err =>
             logger

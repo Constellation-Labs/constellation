@@ -16,7 +16,7 @@ import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAt
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster.{ClusterNode, MissingActivePeers}
-import org.constellation.schema.snapshot.LatestMajorityHeight
+import org.constellation.schema.snapshot.{LatestMajorityHeight, NextActiveNodes}
 import org.constellation.schema.{Id, NodeState, NodeType, PeerNotification}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.SessionTokenService
@@ -238,7 +238,7 @@ class Cluster[F[_]](
   def getActiveLightNodes(withSelfId: Boolean = false): F[Set[Id]] =
     for {
       activeLightNodes <- activeLightNodes.get
-      ownId <- isNodeAnActiveLightNode
+      ownId <- isNodeAnActiveLightNode()
         .map(_ && withSelfId)
         .ifM(
           Set(id).pure[F],
@@ -287,7 +287,7 @@ class Cluster[F[_]](
 
   def isNodeAnActiveFullNode: F[Boolean] = isActiveFullNode.get
 
-  def isNodeAnActiveLightNode: F[Boolean] =
+  def isNodeAnActiveLightNode(): F[Boolean] =
     for {
       isActiveFullNode <- isActiveFullNode.get
       isActiveLightNode <- isActiveLightNode.get
@@ -594,7 +594,7 @@ class Cluster[F[_]](
             )
           )(_.pure[F])
         leavingPeerId = leavingPeer.peerMetadata.id
-        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
+        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight())
 
         proposals <- notOfflinePeers.toList.traverse {
           case (_, pd) =>
@@ -876,7 +876,7 @@ class Cluster[F[_]](
       for {
         _ <- logger.info("Trying to gracefully leave the cluster")
 
-        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight)
+        majorityHeight <- LiftIO[F].liftIO(dao.redownloadService.latestMajorityHeight())
         _ <- broadcastLeaveRequest(majorityHeight)
         _ <- compareAndSet(NodeState.all, NodeState.Leaving)
 
@@ -969,18 +969,31 @@ class Cluster[F[_]](
     validWithLoopbackGuard(hp.host) && !hostAlreadyExists
   }
 
-  private def setAsActivePeer(): F[Unit] =
-    isActiveFullNode.modify(_ => (true, ()))
+  private def setAsActivePeer(): F[Unit] = {
+    dao.nodeType match {
+      case Full =>
+        isActiveFullNode.modify(_ => (true, ()))
+      case Light =>
+        isActiveLightNode.modify(_ -> (true, ()))
+    }
+  }
 
   private def unsetAsActivePeer(): F[Unit] =
-    isActiveFullNode.modify(_ => (false, ()))
+    isActiveFullNode.modify(_ => (false, ())) >>
+      isActiveLightNode.modify(_ => (false, ()))
 
-  def setActivePeers(newActiveFullNodes: Set[Id]): F[Unit] =
-    if (newActiveFullNodes.contains(id))
-      activeFullNodes.modify(_ => (newActiveFullNodes - id, ())) >>
+  def setActivePeers(nextActiveNodes: NextActiveNodes): F[Unit] =
+    if (nextActiveNodes.full.contains(id))
+      activeFullNodes.modify(_ => (nextActiveNodes.full - id, ())) >>
+        activeLightNodes.modify(_ => (nextActiveNodes.light, ())) >>
+        setAsActivePeer()
+    else if (nextActiveNodes.light.contains(id))
+      activeLightNodes.modify(_ => (nextActiveNodes.light - id, ())) >>
+        activeFullNodes.modify(_ => (nextActiveNodes.full, ())) >>
         setAsActivePeer()
     else
       activeFullNodes.modify(_ => (Set.empty, ())) >>
+        activeLightNodes.modify(_ => (Set.empty, ())) >>
         unsetAsActivePeer() >>
         clearActiveBetweenHeights()
 

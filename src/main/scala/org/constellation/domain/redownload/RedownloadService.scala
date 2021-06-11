@@ -100,7 +100,7 @@ class RedownloadService[F[_]: NonEmptyParallel](
   def getLastMajorityState(): F[SnapshotsAtHeight] =
     lastMajorityState.get
 
-  def latestMajorityHeight: F[Long] = lastMajorityState.modify { s =>
+  def latestMajorityHeight(): F[Long] = lastMajorityState.modify { s =>
     (s, maxHeight(s))
   }
 
@@ -178,9 +178,11 @@ class RedownloadService[F[_]: NonEmptyParallel](
         activeFullNodes match {
           case Some(activePeers) => activePeers.pure[F]
           case None =>
-            cluster.getActiveFullNodesPeerInfo.map(
-              _.values.toList.filter(p => NodeState.isNotOffline(p.peerMetadata.nodeState))
-            )
+            cluster
+              .getActiveFullNodesPeerInfo()
+              .map(
+                _.values.toList.filter(p => NodeState.isNotOffline(p.peerMetadata.nodeState))
+              )
         }
       }
       apiClients = peers.map(_.peerMetadata.toPeerClientMetadata)
@@ -497,7 +499,8 @@ class RedownloadService[F[_]: NonEmptyParallel](
                       .void
                 }
             }
-          } else logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=$isDownload")
+          } else
+            logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=$isDownload")
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
@@ -520,7 +523,9 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- acceptCheckpointBlocks().value.flatMap(F.fromEither)
 
       _ <- if (!shouldPerformRedownload) findAndFetchMissingProposals(peersProposals, peersCache) else F.unit
-      _ <- activeBetweenHeights.left.exists(_ <= maxMajorityHeight).pure[F]
+      _ <- activeBetweenHeights.left
+        .exists(_ <= maxMajorityHeight)
+        .pure[F]
         .ifM(
           notifyNewActivePeersAndLeaveThePool(),
           logger.debug(s"Still in the active window!")
@@ -528,12 +533,10 @@ class RedownloadService[F[_]: NonEmptyParallel](
 
     } yield ()
 
-    cluster.getNodeState
-      .map { current =>
-        if (isDownload) NodeState.validForDownload.contains(current)
-        else NodeState.validForRedownload.contains(current)
-      }
-      .flatMap(isValidForRedownload => cluster.isNodeAnActiveFullNode.map(_ && isValidForRedownload))
+    cluster.getNodeState.map { current =>
+      if (isDownload) NodeState.validForDownload.contains(current)
+      else NodeState.validForRedownload.contains(current)
+    }.flatMap(isValidForRedownload => cluster.isNodeAnActiveFullNode.map(_ && isValidForRedownload))
       .map(_ || isJoiningActivePool) // TODO: Improve - different logs for every reason wrappedCheck won't run
       .ifM(
         wrappedCheck,
@@ -579,12 +582,35 @@ class RedownloadService[F[_]: NonEmptyParallel](
       _ <- apiClient.traverse(fetchAndUpdatePeerProposals(peerId))
     } yield ()
 
-  private def addAndCheckJoinActivePoolCommand(joinActivePoolCommand: JoinActivePoolCommand): F[Unit] =
+  private def addAndCheckJoinActivePoolCommand(joinActivePoolCommand: JoinActivePoolCommand): F[JoinActivePoolCommand] =
     for {
       currentRequests <- joinActivePoolCommandRequests.modify { last =>
         val updated = last :+ joinActivePoolCommand
         (updated, updated)
       }
+      fullNodes <- cluster.getActiveFullNodes()
+      response <- cluster.isNodeAnActiveLightNode().ifM(
+        if (currentRequests.distinct.size == 1 && currentRequests.size == 3)
+          joinActivePoolCommandRequests.modify(_ => (List.empty, ())) >>
+            logger.debug(s"Added joinActivePool request and the condition to join active pool was met!")
+        else
+          F.raiseError(
+            new Throwable(
+              s"Added joinActivePool request but the amount of needed requests wasn't met. request=$joinActivePoolCommand! currentRequests size = ${currentRequests.size} != 3."
+            )
+          )
+        ,
+        if (currentRequests.distinct.size == 1 && currentRequests.size == 3)
+          joinActivePoolCommandRequests.modify(_ => (List.empty, ())) >>
+            logger.debug(s"Added joinActivePool request and the condition to join active pool was met!")
+        else
+          F.raiseError(
+            new Throwable(
+              s"Added joinActivePool request but the amount of needed requests wasn't met. request=$joinActivePoolCommand! currentRequests size = ${currentRequests.size} != 3."
+            )
+          )
+      )
+
       _ <- if (currentRequests.distinct.size == 1 && currentRequests.size == 3)
         joinActivePoolCommandRequests.modify(_ => (List.empty, ())) >>
           logger.debug(s"Added joinActivePool request and the condition to join active pool was met!")
@@ -599,23 +625,23 @@ class RedownloadService[F[_]: NonEmptyParallel](
   def redownloadBeforeJoiningActivePeersPool(joinActivePoolCommand: JoinActivePoolCommand): F[Unit] = {
     for {
       _ <- addAndCheckJoinActivePoolCommand(joinActivePoolCommand)
-      _ <- logger.debug(s"Joining active peers pool! lastActivePeers: ${logIds(joinActivePoolCommand.lastActivePeers)}")
-      JoinActivePoolCommand(lastActivePeers, lastActiveBetweenHeight) = joinActivePoolCommand
+      JoinActivePoolCommand(lastActiveFullNodes, lastActiveBetweenHeight) = joinActivePoolCommand
+      _ <- logger.debug(s"Joining active peers pool! lastActivePeers: ${logIds(lastActiveFullNodes)}")
       _ <- logger.debug(s"Joining active peers pool! lastActiveBetweenHeight: $lastActiveBetweenHeight")
-      peers <- lastActivePeers.toList
+      peers <- lastActiveFullNodes.toList
         .traverse(
           cluster.getPeerData
         )
         .map(_.flatten.map(_.copy(majorityHeight = NonEmptyList.one(lastActiveBetweenHeight)))) // TODO: should we handle the situation when at least one of the last active peers is not found?
       _ <- logger.debug(s"Joining active peers pool! peers=$peers")
       _ <- clear
-      //_ <- fetchAndUpdatePeersProposals(peers.some)
+      _ <- fetchAndUpdatePeersProposals(peers.some)
       _ <- checkForAlignmentWithMajoritySnapshot(isJoiningActivePool = true, lastActivePeers = peers.some)
-      latestMajorityHeight <- latestMajorityHeight
+      latestMajorityHeight <- latestMajorityHeight()
       _ <- logger.debug(s"Joining active peers pool! latestMajorityHeight: $latestMajorityHeight")
       _ <- cluster.setActiveBetweenHeights(latestMajorityHeight)
       newActivePeers <- snapshotService.getNextSnapshotFacilitators
-      _ <- logger.debug(s"Joining active peers pool! newActivePeers: ${logIds(newActivePeers)}")
+      _ <- logger.debug(s"Joining active peers pool! newActivePeers: $newActivePeers") //TODO: logging function
       _ <- cluster.setActivePeers(newActivePeers)
     } yield ()
   }.handleErrorWith { e =>
@@ -627,29 +653,34 @@ class RedownloadService[F[_]: NonEmptyParallel](
   private def notifyNewActivePeersAndLeaveThePool(): F[Unit] =
     for {
       _ <- logger.debug(s"Notifying new active peers to join the active pool!")
-      lastActivePeers <- cluster.getActiveFullNodesPeerInfo
+      lastActiveFullNodes <- cluster
+        .getActiveFullNodesPeerInfo()
         .map(_.keySet + cluster.id)
+      lastActiveLightNodes <- cluster.getActiveLightNodes()
       lastActiveBetweenHeights <- cluster.getActiveBetweenHeights()
-      joinActivePoolCommand = JoinActivePoolCommand(lastActivePeers, lastActiveBetweenHeights)
-      snapshot <- snapshotService.storedSnapshot.get
-      nextActivePeers = snapshot.snapshot.nextActiveFullNodes
-      _ <- logger.debug(s"LastActivePeers: ${logIds(lastActivePeers)}")
-      _ <- logger.debug(s"NextActivePeers: ${logIds(nextActivePeers)}")
-      nextActivePeersData <- (nextActivePeers - cluster.id).toList
+      joinActivePoolCommand = JoinActivePoolCommand(lastActiveFullNodes, lastActiveBetweenHeights)
+      nextActiveNodes <- snapshotService.storedSnapshot.get.map(_.snapshot.nextActiveNodes)
+      _ <- logger.debug(s"LastActiveFullNodes: ${logIds(lastActiveFullNodes)}")
+      _ <- logger.debug(s"NextActiveFullNodes: ${logIds(nextActiveNodes.full)}")
+      _ <- logger.debug(s"LastActiveLightNodes: ${logIds(lastActiveLightNodes)}")
+      _ <- logger.debug(s"NextActiveLightNodes: ${logIds(nextActiveNodes.light)}")
+      peersToNotify <- (nextActiveNodes.full ++ nextActiveNodes.light ++ lastActiveLightNodes - cluster.id).toList
         .traverse(cluster.getPeerData)
         .map(_.flatten) //TODO: what about missing peers
         .map(_.map(_.peerMetadata.toPeerClientMetadata))
 
-      _ <- nextActivePeersData.traverse { peerClientMetadata =>
+      _ <- peersToNotify.traverse { peerClientMetadata =>
         // notify the peers or if everybody does redownload then it's not needed, maybe send the last snapshot
         // to the nodes joining the L0 pool explicitly first
         apiClient.snapshot.notifyNextActivePeer(joinActivePoolCommand)(peerClientMetadata)
       }
       _ <- logger.debug(s"Setting next active peers!")
-      _ <- cluster.setActivePeers(nextActivePeers) // TODO: or nextActivePeers but then all nodes should redownload
-      _ <- nextActivePeers.contains(cluster.id).pure[F]
+      _ <- cluster.setActivePeers(nextActiveNodes) // TODO: or nextActivePeers but then all nodes should redownload
+      _ <- nextActiveNodes.full
+        .contains(cluster.id)
+        .pure[F]
         .ifM(
-          latestMajorityHeight >>= { lmh =>
+          latestMajorityHeight() >>= { lmh =>
             cluster.setActiveBetweenHeights(lmh)
           },
           logger.debug("Leaving active peers pool!")

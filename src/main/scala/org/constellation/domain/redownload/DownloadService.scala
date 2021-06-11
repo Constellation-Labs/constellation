@@ -59,7 +59,7 @@ class DownloadService[F[_]](
   private[redownload] def fetchAndPersistBlocks(): F[Unit] =
     for {
       // Should we use getActivePeerInfo?
-      peers <- cluster.getActiveFullNodesPeerInfo.map(_.values.toList)
+      peers <- cluster.getActiveFullNodesPeerInfo().map(_.values.toList)
       readyPeers = peers.filter(p => NodeState.canActAsDownloadSource(p.peerMetadata.nodeState))
       clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>

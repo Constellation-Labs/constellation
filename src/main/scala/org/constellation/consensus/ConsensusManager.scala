@@ -202,9 +202,9 @@ class ConsensusManager[F[_]](
 
   def participateInBlockCreationRound(roundData: RoundData): F[(ConsensusInfo[F], RoundData)] =
     (for {
-      _ <- cluster.isNodeAnActiveLightNode.ifM(
+      _ <- cluster.isNodeAnActiveLightNode().ifM(
         F.unit,
-        F.raiseError(new Throwable("Not an active light node!"))
+        F.raiseError(NondeNotAnActiveLightNode(dao.id))
       )
       _ <- metrics.incrementMetricAsync("consensus_participateInRound")
       state <- cluster.getNodeState
@@ -239,6 +239,8 @@ class ConsensusManager[F[_]](
         metrics.incrementMetricAsync("consensus_participateInRound_snapshotHeightAboveTipError")
       case InvalidNodeState(_, _) =>
         metrics.incrementMetricAsync("consensus_participateInRound_invalidNodeStateError")
+      case NondeNotAnActiveLightNode(_) =>
+        metrics.incrementMetricAsync("consensus_participateInRound_nodeNotAnActiveLightNode")
       case _ => metrics.incrementMetricAsync("consensus_participateInRound_unknownError")
     }
 
@@ -359,7 +361,7 @@ class ConsensusManager[F[_]](
     } yield ()
 
   private[consensus] def adjustPeers(roundData: RoundData): F[RoundData] =
-    cluster.getActiveFullNodesPeerInfo.map { peers =>
+    cluster.getActiveNodesPeerInfo().map { peers =>
       val initiator = peers.get(roundData.facilitatorId.id) match {
         case Some(value) => value
         case None =>
@@ -469,4 +471,8 @@ object ConsensusManager {
       extends Exception(
         s"Can't participate in round $id snapshot height: $snapHeight is above or/equal proposed tip $tipHeight"
       )
+
+  case class NondeNotAnActiveLightNode(id: Id) extends Exception(
+    s"Node is not and active light node currently. Id=$id"
+  )
 }

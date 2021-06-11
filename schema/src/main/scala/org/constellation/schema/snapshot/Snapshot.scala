@@ -9,12 +9,13 @@ case class Snapshot(
   lastSnapshot: String,
   checkpointBlocks: Seq[String],
   publicReputation: SortedMap[Id, Double],
-  nextActiveFullNodes: Set[Id],
-  nextActiveLightNodes: Set[Id]
+  nextActiveNodes: NextActiveNodes
 ) extends Signable {
-  override def toEncode = checkpointBlocks :+ lastSnapshot
+  override def toEncode: Seq[String] = checkpointBlocks :+ lastSnapshot
 }
 
 object Snapshot {
-  val snapshotZero: Snapshot = Snapshot("", Seq(), SortedMap.empty, Set.empty, Set.empty)
+  val snapshotZero: Snapshot = Snapshot("", Seq(), SortedMap.empty, NextActiveNodes(Set.empty, Set.empty))
 }
+
+case class NextActiveNodes(light: Set[Id], full: Set[Id])

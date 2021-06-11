@@ -24,10 +24,10 @@ import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointBlockMeta
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.observation.{NodeMemberOfActivePool, NodeNotMemberOfActivePool, Observation}
-import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
+import org.constellation.schema.snapshot.{NextActiveNodes, Snapshot, SnapshotInfo, StoredSnapshot, TotalSupply}
 import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.serialization.KryoSerializer
-import org.constellation.storage.SnapshotService.{JoinActivePoolCommand, NextActiveNodes}
+import org.constellation.storage.SnapshotService.JoinActivePoolCommand
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 import org.constellation.{ConfigUtil, ConstellationExecutionContext, DAO}
@@ -91,15 +91,15 @@ class SnapshotService[F[_]](
       hashes <- acceptedCBSinceSnapshot.get
     } yield hashes
 
-  def getNextSnapshotFacilitators: F[Set[Id]] =
+  def getNextSnapshotFacilitators: F[NextActiveNodes] =
     storedSnapshot.get
-      .map(_.snapshot.nextActiveFullNodes)
+      .map(_.snapshot.nextActiveNodes)
 
   def attemptSnapshot()(implicit cluster: Cluster[F]): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
       lastStoredSnapshot <- storedSnapshot.get.attemptT
         .leftMap[SnapshotError](SnapshotUnexpectedError)
-      _ <- checkActivePeersPoolMembership(lastStoredSnapshot)
+      _ <- checkFullActivePeersPoolMembership(lastStoredSnapshot)
       _ <- checkActiveBetweenHeightsCondition()
       _ <- checkDiskSpace()
 
@@ -141,8 +141,7 @@ class SnapshotService[F[_]](
       nextSnapshot <- getNextSnapshot(
         hashesForNextSnapshot,
         publicReputation,
-        nextActiveFullNodes = nextActiveNodes.full,
-        nextActiveLightNodes = nextActiveNodes.light
+        nextActiveNodes
       ).attemptT
         .leftMap[SnapshotError](SnapshotUnexpectedError)
       _ <- nextSnapshotHash
@@ -227,16 +226,17 @@ class SnapshotService[F[_]](
           .sortBy { case (_, reputation) => reputation }
           .map(_._1).reverse.take(3).toSet
 
-        val lightCandidates = publicReputation.filterKeys(lightNodes.contains)
-        val nextLight = (if (lightCandidates.size >= 3) lightCandidates else publicReputation).toList
+        //val lightCandidates = publicReputation.filterKeys(lightNodes.contains)
+        //val nextLight = (if (lightCandidates.size >= 3) lightCandidates else publicReputation).toList
+        val nextLight = publicReputation.filterKeys(lightNodes.contains).toList
           .sortBy { case (_, reputation) => reputation }
           .map(_._1).reverse.take(3).toSet
 
         NextActiveNodes(light = nextLight, full = nextFull)
       } else if (lastStoredSnapshot.snapshot == Snapshot.snapshotZero)
-        NextActiveNodes(light = dao.nodeConfig.initialActiveFullNodes, full = dao.nodeConfig.initialActiveFullNodes)
+        NextActiveNodes(light = Set.empty, full = dao.nodeConfig.initialActiveFullNodes)
       else
-        NextActiveNodes(light = lastStoredSnapshot.snapshot.nextActiveLightNodes, full = lastStoredSnapshot.snapshot.nextActiveFullNodes)
+        lastStoredSnapshot.snapshot.nextActiveNodes
     } yield nextActiveNodes
 
   def writeSnapshotInfoToDisk(): EitherT[F, SnapshotInfoIOError, Unit] =
@@ -488,8 +488,7 @@ class SnapshotService[F[_]](
   private def getNextSnapshot(
     hashesForNextSnapshot: Seq[String],
     publicReputation: Map[Id, Double],
-    nextActiveFullNodes: Set[Id],
-    nextActiveLightNodes: Set[Id]
+    nextActiveNodes: NextActiveNodes
   ): F[Snapshot] =
     storedSnapshot.get
       .map(_.snapshot.hash)
@@ -499,8 +498,7 @@ class SnapshotService[F[_]](
             hash,
             hashesForNextSnapshot,
             SortedMap(publicReputation.toSeq: _*),
-            nextActiveFullNodes = nextActiveFullNodes,
-            nextActiveLightNodes = nextActiveLightNodes
+            nextActiveNodes
           )
       )
 
@@ -710,25 +708,25 @@ class SnapshotService[F[_]](
       }
       .void
 
-  private def isMemberOfActivePeersPool(snapshot: Snapshot): Boolean =
-    snapshot.nextActiveFullNodes.contains(dao.id)
+  private def isMemberOfFullActivePeersPool(snapshot: Snapshot): Boolean =
+    snapshot.nextActiveNodes.full.contains(dao.id) // full or light???
 
-  private def checkActivePeersPoolMembership(storedSnapshot: StoredSnapshot): EitherT[F, SnapshotError, Unit] = {
+  private def checkFullActivePeersPoolMembership(storedSnapshot: StoredSnapshot): EitherT[F, SnapshotError, Unit] = {
     val checkedSnapshot =
       if (storedSnapshot.snapshot == Snapshot.snapshotZero)
-        storedSnapshot.snapshot.copy(nextActiveFullNodes = dao.nodeConfig.initialActiveFullNodes)
+        storedSnapshot.snapshot.copy(nextActiveNodes = NextActiveNodes(light = Set.empty, dao.nodeConfig.initialActiveFullNodes))
       else
         storedSnapshot.snapshot
 
-    if (isMemberOfActivePeersPool(checkedSnapshot)) {
+    if (isMemberOfFullActivePeersPool(checkedSnapshot)) {
       metrics
-        .updateMetricAsync("snapshot_isMemeberOfActivePool", 1)
+        .updateMetricAsync("snapshot_isMemeberOfFullActivePool", 1)
         .attemptT
         .leftMap[SnapshotError](SnapshotUnexpectedError) >>
         EitherT.rightT[F, SnapshotError](())
     } else
       metrics
-        .updateMetricAsync("snapshot_isMemeberOfActivePool", 0)
+        .updateMetricAsync("snapshot_isMemeberOfFullActivePool", 0)
         .attemptT
         .leftMap[SnapshotError](SnapshotUnexpectedError) >>
         EitherT.leftT[F, Unit](NodeNotPartOfL0FacilitatorsPool)
@@ -816,13 +814,17 @@ object SnapshotService {
       unboundedExecutionContext
     )
 
-  case class JoinActivePoolCommand(lastActivePeers: Set[Id], lastActiveBetweenHeight: MajorityHeight)
-
-  case class NextActiveNodes(light: Set[Id], full: Set[Id])
+  case class JoinActivePoolCommand(lastActiveFullNodes: Set[Id], lastActiveBetweenHeight: MajorityHeight)
 
   object JoinActivePoolCommand {
     implicit val joinActivePoolCommandCodec: Codec[JoinActivePoolCommand] = deriveCodec
   }
+
+  sealed trait ActivePoolAction
+  case object JoinLightPool extends ActivePoolAction
+  case object JoinFullPool extends ActivePoolAction
+  case object LeaveLightPool extends ActivePoolAction
+  case object LeaveFullPool extends ActivePoolAction
 }
 
 sealed trait SnapshotError extends Throwable {
