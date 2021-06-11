@@ -156,6 +156,7 @@ redeploy() {
 
   assemble
   upload
+  setHosts
   updateJar
   restart
 }

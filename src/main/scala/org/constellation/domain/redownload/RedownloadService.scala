@@ -143,16 +143,23 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
     ) >> addPeerProposals(List(proposal))
 
   def addPeerProposals(proposals: Iterable[Signed[SnapshotProposal]]): F[Unit] =
-    proposals.groupBy(_.signature.id).toList.traverse {
-      case (id, proposals) =>
-        peerProposals(id)
-          .modify[SnapshotProposalsAtHeight] { maybeMap =>
-            val oldProposals = maybeMap.getOrElse(Map.empty)
-            val newProposals = proposals.map(s => (s.value.height, s)).toMap
-            ((oldProposals ++ newProposals).some, newProposals -- oldProposals.keySet)
-          }
-          .flatMap(addToLocalFilter)
-    } >> F.unit
+    proposals
+      .groupBy(_.signature.id)
+      .toList
+      .traverse {
+        case (id, proposals) =>
+          for {
+            addedProposals <- peerProposals(id)
+              .modify[SnapshotProposalsAtHeight] { maybeMap =>
+                val oldProposals = maybeMap.getOrElse(Map.empty)
+                val newProposals = proposals.map(s => (s.value.height, s)).toMap
+                ((oldProposals ++ newProposals).some, newProposals -- oldProposals.keySet)
+              }
+            _ <- addToLocalFilter(addedProposals)
+            _ <- addedProposals.maxHeightValue.traverse(updatePeerProposalMetric)
+          } yield ()
+      }
+      .void
 
   private def addToLocalFilter(proposals: SnapshotProposalsAtHeight): F[Unit] =
     proposals.values.toList.map { spp =>
@@ -162,6 +169,13 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
         .insert(p)
         .ifM(F.unit, F.raiseError(new RuntimeException(s"Unable to insert proposal $p to local filter")))
     } >> F.unit
+
+  private def updatePeerProposalMetric(proposal: Signed[SnapshotProposal]): F[Unit] =
+    metrics.updateMetricAsync(
+      "redownload_lastPeerProposalHeight",
+      proposal.value.height,
+      Seq(("peerId", proposal.signature.id.hex))
+    )
 
   def replaceRemoteFilter(peerId: Id, filterData: FilterData): F[Unit] =
     remoteFilters(peerId).set(CuckooFilter(filterData).some)
@@ -591,11 +605,27 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
                 logger.info(s"Missing proposals found in range $lookupRange, $missingProposals") >>
                   queryMissingProposals(missingProposals),
                 logger.info(s"No missing proposals found")
-              )
+              ) >> updateMissingProposalsMetric(missingProposals)
           }
         )
 
     } yield ()
+
+  def updateMissingProposalsMetric(coordinates: Set[ProposalCoordinate]): F[Unit] =
+    coordinates
+      .groupBy(_._1)
+      .toList
+      .traverse {
+        case (id, coordinates) =>
+          coordinates.map(_._2).toList.minimumOption.traverse { height =>
+            metrics.updateMetricAsync(
+              "redownload_lowestMissingSnapshotProposalHeight",
+              height,
+              Seq(("peerId", id.hex))
+            )
+          }
+      }
+      .void
 
   private def queryMissingProposals(coordinates: Set[ProposalCoordinate]): F[Unit] =
     for {
@@ -962,6 +992,10 @@ object RedownloadService {
     def minHeightEntry: Option[(Long, V)] = map.toList.minimumByOption { case (height, _) => height }
 
     def maxHeightEntry: Option[(Long, V)] = map.toList.maximumByOption { case (height, _) => height }
+
+    def minHeightValue: Option[V] = minHeightEntry.map(_._2)
+
+    def maxHeightValue: Option[V] = maxHeightEntry.map(_._2)
 
     def heightRange: HeightRange = HeightRange(minHeight, maxHeight)
   }

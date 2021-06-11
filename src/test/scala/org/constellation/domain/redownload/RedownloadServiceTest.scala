@@ -84,6 +84,7 @@ class RedownloadServiceTest
 
     metrics.incrementMetricAsync[IO](*)(*) shouldReturnF Unit
     metrics.updateMetricAsync[IO](*, any[Long])(*) shouldReturnF Unit
+    metrics.updateMetricAsync[IO](*, any[Long], *)(*) shouldReturnF Unit
 
     redownloadService = RedownloadService[IO](
       meaningfulSnapshotsCount,

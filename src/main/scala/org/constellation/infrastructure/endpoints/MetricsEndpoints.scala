@@ -40,7 +40,7 @@ class MetricsEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
   private def metricsEndpoint(metrics: Metrics): HttpRoutes[F] =
     HttpRoutes.of[F] {
-      case GET -> Root / "metrics" => Ok(MetricsResult(metrics.getMetrics).asJson)
+      case GET -> Root / "metrics" => Ok(MetricsResult(metrics.getSimpleMetrics, metrics.getTaggedMetrics).asJson)
     }
 
   private def micrometerMetricsEndpoint(metrics: Metrics): HttpRoutes[F] =
