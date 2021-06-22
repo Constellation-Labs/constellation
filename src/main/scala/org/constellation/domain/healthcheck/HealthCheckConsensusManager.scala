@@ -698,9 +698,10 @@ class HealthCheckConsensusManager[F[_]](
       _ <- if (peersToAdd.nonEmpty)
         logger.warn(s"Peers that we don't have online but we should: ${logIds(peersToAdd.keySet)}")
       else F.unit
-      _ <- F.start(
-        peersToAdd.toList.traverse { case (id, (_, consensus)) => addMissingPeer(id, consensus) }
-      )
+//      TODO: @mwadon @mmuszynski Adding missing peers
+//      _ <- F.start(
+//        peersToAdd.toList.traverse { case (id, (_, consensus)) => addMissingPeer(id, consensus) }
+//      )
       _ <- peersToRunConsensusFor.modify(peers => (peers ++ peersWeStillDontHave, ()))
       _ <- peersThatNeedReconciliation.modify(peers => (peers ++ newPeers, ()))
       _ <- F.start(

@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.23.4] 2021-06-22
+### Changed
+- Disabled addition of missing peers after health check consensus
+
 ## [v2.23.3] 2021-04-19
 ### Changed
 - Missing proposal offset set to 0
