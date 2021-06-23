@@ -14,6 +14,7 @@ trait ClusterStorageAlgebra[F[_]] {
 
   def getPeers: F[Map[Id, PeerData]]
   def getReadyPeers: F[Map[Id, PeerData]]
+  def getJoinedPeers: F[Map[Id, PeerData]]
   def getReadyAndFullPeers: F[Map[Id, PeerData]]
   def getLeavingPeers: F[Map[Id, PeerData]]
   def getNotOfflinePeers: F[Map[Id, PeerData]]

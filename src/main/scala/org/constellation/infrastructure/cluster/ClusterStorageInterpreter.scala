@@ -40,6 +40,9 @@ class ClusterStorageInterpreter[F[_]]()(implicit F: Sync[F], C: Clock[F]) extend
   def getReadyPeers: F[Map[Id, PeerData]] =
     getPeers.map(_.filter(eqNodeState(NodeState.readyStates)))
 
+  def getJoinedPeers: F[Map[Id, PeerData]] =
+    getNotOfflinePeers.map(_.filter(_._2.majorityHeight.head.joined.nonEmpty))
+
   def getPeers: F[Map[Id, PeerData]] = peers.get
 
   private def eqNodeState(nodeStates: Set[NodeState])(peer: (Id, PeerData)): Boolean =

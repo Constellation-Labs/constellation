@@ -2,6 +2,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Initial joining cutoff height
+- Select fully joined peers for resolving and broadcasting
 
 ## [v2.24.0] 2021-06-23
 ### Added

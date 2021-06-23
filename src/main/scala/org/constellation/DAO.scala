@@ -482,6 +482,7 @@ class DAO(
 
   val rollbackService: RollbackService[IO] = new RollbackService[IO](
     genesis,
+    metrics,
     snapshotService,
     snapshotStorage,
     snapshotInfoStorage,
