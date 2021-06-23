@@ -2,9 +2,12 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.24.1] 2021-06-23
 ### Fixed
 - Initial joining cutoff height
 - Select fully joined peers for resolving and broadcasting
+- Wallet last transaction reference
 
 ## [v2.24.0] 2021-06-23
 ### Added
