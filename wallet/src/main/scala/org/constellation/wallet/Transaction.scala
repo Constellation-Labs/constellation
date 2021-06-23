@@ -54,6 +54,8 @@ object TransactionExt {
 
   def createTransaction(
     prevTx: Option[Transaction] = None,
+    txRef: LastTransactionRef,
+    forcePrevTx: Boolean,
     src: String,
     dst: String,
     amount: Long,
@@ -64,8 +66,15 @@ object TransactionExt {
       prevTx
         .map(tx => LastTransactionRef(tx.hash, tx.ordinal))
         .getOrElse(LastTransactionRef.empty)
-    val edge = createTransactionEdge(src, dst, lastTxRef, amount, keyPair, fee)
-    Transaction(edge, lastTxRef, false, false)
+
+    if (lastTxRef != txRef && !forcePrevTx) {
+      println(s"Previous transaction ref is different, taking one from the cluster!")
+    }
+
+    val correctReference = if (forcePrevTx) lastTxRef else txRef
+
+    val edge = createTransactionEdge(src, dst, correctReference, amount, keyPair, fee)
+    Transaction(edge, correctReference, false, false)
   }
 
 }

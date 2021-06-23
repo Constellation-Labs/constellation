@@ -21,5 +21,6 @@ case class CliConfig(
   txPath: String = null,
   fee: Double = 0,
   amount: Long = 0L,
-  normalized: Boolean = false
+  normalized: Boolean = false,
+  forcePrevTx: Boolean = false
 )
