@@ -59,9 +59,6 @@ object ConfigUtil {
   def isEnabledAWSStorage: Boolean =
     Try(configStorage.getBoolean("aws.enabled")).getOrElse(false)
 
-  def isEnabledCloudStorage: Boolean =
-    isEnabledGCPStorage || isEnabledAWSStorage
-
   case class AWSStorageConfig(accessKey: String, secretKey: String, region: String, bucket: String)
 
   def loadAWSStorageConfigs(constellationConfig: Config = constellation): NonEmptyList[AWSStorageConfig] = {

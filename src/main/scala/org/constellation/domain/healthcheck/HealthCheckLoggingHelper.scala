@@ -116,8 +116,7 @@ object HealthCheckLoggingHelper {
     }.toString()
 
   // Logging and metrics
-  def logHealthcheckConsensusDecicion[F[_]: Sync](
-    decision: HealthcheckConsensusDecision)(
+  def logHealthcheckConsensusDecicion[F[_]: Sync](decision: HealthcheckConsensusDecision)(
     metrics: Metrics,
     logger: SelfAwareStructuredLogger[F]
   ): F[Unit] =

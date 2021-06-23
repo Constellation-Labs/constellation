@@ -23,8 +23,8 @@ class TipsClientInterpreter[F[_]: Concurrent: ContextShift](
   implicit val tipDataMapDecoder: Decoder[Map[String, TipData]] = Decoder.decodeMap[String, TipData]
   implicit val idLongDecoder: Decoder[(Id, Long)] = deriveDecoder[(Id, Long)]
 
-  def getTips(): PeerResponse[F, Map[String, TipData]] =
-    PeerResponse[F, Map[String, TipData]]("tips")(client, sessionTokenService)
+  def getTips(): PeerResponse[F, Set[(String, Height)]] =
+    PeerResponse[F, Set[(String, Height)]]("tips")(client, sessionTokenService)
 
   def getHeights(): PeerResponse[F, List[Height]] =
     PeerResponse[F, List[Height]]("heights")(client, sessionTokenService)

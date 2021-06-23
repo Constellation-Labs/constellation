@@ -5,6 +5,7 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.checkpoint.CheckpointService
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.schema.address.Address
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.transaction.Transaction
@@ -25,9 +26,9 @@ class RateLimiting[F[_]: Concurrent]() {
       _ <- blacklist()
     } yield ()
 
-  def reset(cbHashes: List[String])(checkpointService: CheckpointService[F]): F[Unit] =
+  def reset(cbHashes: List[String])(checkpointStorage: CheckpointStorageAlgebra[F]): F[Unit] =
     for {
-      cbs <- cbHashes.map(checkpointService.fullData).sequence[F, Option[CheckpointCache]].map(_.flatten)
+      cbs <- cbHashes.map(checkpointStorage.getCheckpoint).sequence[F, Option[CheckpointCache]].map(_.flatten)
       txs = cbs.flatMap(_.checkpointBlock.transactions.toList)
       filtered = txs.filterNot(_.isDummy)
       grouped = filtered.groupBy(_.src).mapValues(_.size)

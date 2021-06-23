@@ -7,8 +7,9 @@ import org.constellation.domain.consensus.ConsensusService
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.observation.Observation
 import org.constellation.trust.TrustManager
+import org.constellation.util.Metrics
 
-class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: DAO)
+class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], metrics: Metrics)
     extends ConsensusService[F, Observation] {
   protected[domain] val pending = new PendingObservationsMemPool[F]()
 
@@ -20,11 +21,11 @@ class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], dao: D
     super
       .accept(o)
       .flatTap(_ => trustManager.updateStoredReputation(o))
-      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAccepted"))
+      .flatTap(_ => metrics.incrementMetricAsync[F]("observationAccepted"))
 
   def applyAfterRedownload(o: Observation, cpc: Option[CheckpointCache]): F[Unit] =
     super
       .accept(o)
-      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAccepted"))
-      .flatTap(_ => dao.metrics.incrementMetricAsync[F]("observationAcceptedFromRedownload"))
+      .flatTap(_ => metrics.incrementMetricAsync[F]("observationAccepted"))
+      .flatTap(_ => metrics.incrementMetricAsync[F]("observationAcceptedFromRedownload"))
 }

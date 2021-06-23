@@ -1,23 +1,145 @@
 package org.constellation.genesis
 
+import cats.effect.{Concurrent, Sync}
 import cats.syntax.all._
-import cats.effect.{IO, LiftIO, Sync}
-import com.typesafe.scalalogging.StrictLogging
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.cloud.CloudService.CloudServiceEnqueue
+import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.configuration.NodeConfig
+import org.constellation.domain.consensus.ConsensusStatus
+import org.constellation.domain.genesis.GenesisStorageAlgebra
+import org.constellation.domain.transaction.TransactionService
+import org.constellation.genesis.Genesis.{CoinbaseKey, GenesisTips}
 import org.constellation.keytool.KeyUtils
 import org.constellation.schema.address.AddressCacheData
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.edge.{EdgeHashType, SignedObservationEdge, TypedEdgeHash}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionCacheData}
 import org.constellation.schema.{GenesisObservation, Height, PublicKeyExt}
-import org.constellation.util.AccountBalance
-import org.constellation.DAO
+import org.constellation.storage.AddressService
+import org.constellation.util.{AccountBalance, Metrics}
 
-object Genesis extends StrictLogging {
+class Genesis[F[_]: Concurrent](
+  genesisStorage: GenesisStorageAlgebra[F],
+  transactionService: TransactionService[F],
+  nodeStorage: NodeStorageAlgebra[F],
+  nodeConfig: NodeConfig,
+  checkpointStorage: CheckpointStorageAlgebra[F],
+  addressService: AddressService[F],
+  genesisObservationStorage: GenesisObservationLocalStorage[F],
+  cloudService: CloudServiceEnqueue[F],
+  metrics: Metrics
+) {
+  implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
-  implicit val unsafeLogger: SelfAwareStructuredLogger[IO] = Slf4jLogger.getLogger[IO]
+  def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true): F[Unit] = {
+    val genesisBlock = CheckpointCache(go.genesis, height = Height(0, 0))
+    val initialBlock1 = CheckpointCache(go.initialDistribution, height = Height(1, 1))
+    val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Height(1, 1))
 
+    val putBlocks = checkpointStorage.persistCheckpoint(genesisBlock) >>
+      checkpointStorage.persistCheckpoint(initialBlock1) >>
+      checkpointStorage.persistCheckpoint(initialBlock2)
+
+    val acceptBlocks = checkpointStorage.acceptCheckpoint(genesisBlock.checkpointBlock.soeHash) >>
+      checkpointStorage.acceptCheckpoint(initialBlock1.checkpointBlock.soeHash) >>
+      checkpointStorage.acceptCheckpoint(initialBlock2.checkpointBlock.soeHash)
+
+    val setBalances = go.genesis.transactions.toList.traverse { rtx =>
+      val bal = rtx.amount
+      addressService
+        .set(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
+    }
+
+    for {
+      _ <- storeTransactions(go)
+      _ <- putBlocks
+      _ <- acceptBlocks
+      _ <- setBalances
+      _ <- metrics.updateMetricAsync[F]("genesisAccepted", "true")
+      _ <- if (setAsTips) {
+        List(go.initialDistribution, go.initialDistribution2)
+          .map(_.soeHash)
+          .traverse(checkpointStorage.addTip)
+      } else Sync[F].unit
+      _ <- metrics.updateMetricAsync[F]("genesisHash", go.genesis.soeHash)
+      _ <- genesisStorage.setGenesisObservation(go)
+      _ <- genesisObservationStorage
+        .write(go)
+        .fold(
+          err => logger.error(s"Cannot write genesis observation ${err.getMessage}"),
+          _ => logger.debug("Genesis observation saved successfully")
+        )
+      _ <- cloudService.enqueueGenesis(go)
+    } yield ()
+  }
+
+  def start(): F[Unit] =
+    for {
+      _ <- nodeStorage.setParticipatedInGenesisFlow(true)
+      _ <- nodeStorage.setParticipatedInRollbackFlow(false)
+      _ <- nodeStorage.setJoinedAsInitialFacilitator(true)
+      _ <- nodeStorage.setOwnJoinedHeight(0L)
+      genesisObservation <- createGenesisObservation(nodeConfig.allocAccountBalances)
+      _ <- acceptGenesis(genesisObservation)
+    } yield ()
+
+  private def createGenesisObservation(
+    allocAccountBalances: Seq[AccountBalance] = Seq.empty
+  ): F[GenesisObservation] =
+    for {
+      genesis <- createDistributionTransactions(allocAccountBalances)
+        .map(createGenesisBlock)
+      emptyA <- createEmptyBlockFromGenesis(genesis.soe)
+      emptyB <- createEmptyBlockFromGenesis(genesis.soe)
+    } yield GenesisObservation(genesis, emptyA, emptyB)
+
+  private def createDistributionTransactions(allocAccountBalances: Seq[AccountBalance]): F[List[Transaction]] =
+    allocAccountBalances.toList.traverse { ab =>
+      logger.info(s"Account Balance set : $ab") >>
+        transactionService.createTransaction(
+          LastTransactionRef.empty.prevHash,
+          ab.accountHash,
+          ab.balance,
+          CoinbaseKey,
+          normalized = false
+        )
+    }
+
+  private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =
+    CheckpointBlock.createCheckpointBlock(transactions, GenesisTips)(CoinbaseKey)
+
+  private def createEmptyBlockFromGenesis(
+    genesisSOE: SignedObservationEdge
+  ): F[CheckpointBlock] = {
+    val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.address
+    val dummyTransactionDst = KeyUtils.makeKeyPair.getPublic.toId.address
+
+    transactionService.createDummyTransaction(dummyTransactionSrc, dummyTransactionDst, CoinbaseKey).map { tx =>
+      CheckpointBlock.createCheckpointBlock(
+        Seq(tx),
+        Seq(
+          TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
+          TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
+        )
+      )(CoinbaseKey)
+    }
+  }
+
+  private def storeTransactions(genesisObservation: GenesisObservation): F[Unit] =
+    List(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2)
+      .flatMap(
+        cb =>
+          cb.transactions
+            .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.soeHash)))
+      )
+      .traverse(transactionService.put(_, ConsensusStatus.Accepted))
+      .void
+}
+
+object Genesis {
   final val Coinbase = "Nature loves courage. You make the commitment and nature will respond to that commitment " +
     "by removing impossible obstacles. Dream the impossible dream and the world will not grind you under, it will " +
     "lift you up. This is the trick. This is what all these teachers and philosophers who really counted, who really " +
@@ -31,148 +153,4 @@ object Genesis extends StrictLogging {
     TypedEdgeHash(Coinbase, EdgeHashType.CheckpointHash),
     TypedEdgeHash(Coinbase, EdgeHashType.CheckpointHash)
   )
-
-  private def createDistributionTransactions[F[_]: Sync: LiftIO](
-    allocAccountBalances: Seq[AccountBalance]
-  )(implicit dao: DAO): F[List[Transaction]] = LiftIO[F].liftIO {
-    allocAccountBalances.toList
-      .traverse(
-        ab =>
-          IO.delay(logger.info(s"Account Balance set : $ab")) >> dao.transactionService
-            .createTransaction(
-              LastTransactionRef.empty.prevHash,
-              ab.accountHash,
-              ab.balance,
-              CoinbaseKey,
-              normalized = false
-            )
-      )
-  }
-
-  private def createGenesisBlock(transactions: Seq[Transaction]): CheckpointBlock =
-    CheckpointBlock.createCheckpointBlock(transactions, GenesisTips)(CoinbaseKey)
-
-  private def createEmptyBlockFromGenesis[F[_]: Sync: LiftIO](
-    genesisSOE: SignedObservationEdge
-  )(implicit dao: DAO): F[CheckpointBlock] = LiftIO[F].liftIO {
-    val dummyTransactionSrc = KeyUtils.makeKeyPair.getPublic.toId.address
-    val dummyTransactionDst = KeyUtils.makeKeyPair.getPublic.toId.address
-
-    dao.transactionService.createDummyTransaction(dummyTransactionSrc, dummyTransactionDst, CoinbaseKey).map { tx =>
-      CheckpointBlock.createCheckpointBlock(
-        Seq(tx),
-        Seq(
-          TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash)),
-          TypedEdgeHash(genesisSOE.hash, EdgeHashType.CheckpointHash, Some(genesisSOE.baseHash))
-        )
-      )(CoinbaseKey)
-    }
-  }
-
-  // TODO: Make F[Unit]
-  def createGenesisObservation(
-    allocAccountBalances: Seq[AccountBalance] = Seq.empty
-  )(implicit dao: DAO): GenesisObservation = {
-    for {
-      genesis <- createDistributionTransactions[IO](allocAccountBalances)
-        .map(createGenesisBlock)
-      emptyA <- createEmptyBlockFromGenesis[IO](genesis.soe)
-      emptyB <- createEmptyBlockFromGenesis[IO](genesis.soe)
-    } yield GenesisObservation(genesis, emptyA, emptyB)
-  }.unsafeRunSync() // TODO: Get rid of unsafeRunSync and fix all the unit tests
-
-  def start()(implicit dao: DAO): Unit = {
-    val startIO = for {
-      _ <- dao.cluster.setParticipatedInGenesisFlow(true)
-      _ <- dao.cluster.setParticipatedInRollbackFlow(false)
-      _ <- dao.cluster.setJoinedAsInitialFacilitator(true)
-      _ <- dao.cluster.setOwnJoinedHeight(0L)
-      genesisObservation = createGenesisObservation(dao.nodeConfig.allocAccountBalances)
-      _ <- IO.delay {
-        acceptGenesis(genesisObservation)
-      }
-    } yield genesisObservation
-
-    startIO.unsafeRunSync()
-  }
-
-  // TODO: Make F[Unit]
-  def acceptGenesis(go: GenesisObservation, setAsTips: Boolean = true)(implicit dao: DAO): Unit = {
-    // Store hashes for the edges
-
-    val genesisBlock = CheckpointCache(go.genesis, height = Some(Height(0, 0)))
-    val initialBlock1 = CheckpointCache(go.initialDistribution, height = Some(Height(1, 1)))
-    val initialBlock2 = CheckpointCache(go.initialDistribution2, height = Some(Height(1, 1)))
-
-    (dao.soeService.put(go.genesis.soeHash, go.genesis.soe) >>
-      dao.soeService
-        .put(go.initialDistribution.soeHash, go.initialDistribution.soe) >>
-      dao.soeService
-        .put(go.initialDistribution2.soeHash, go.initialDistribution2.soe) >>
-      dao.checkpointService.put(genesisBlock) >>
-      dao.checkpointService.put(initialBlock1) >>
-      dao.checkpointService.put(initialBlock2) >>
-      IO(dao.recentBlockTracker.put(genesisBlock)) >>
-      IO(dao.recentBlockTracker.put(initialBlock1)) >>
-      IO(
-        dao.recentBlockTracker
-          .put(initialBlock2)
-      ))
-    // TODO: Get rid of unsafeRunSync
-      .unsafeRunSync()
-
-    go.genesis.transactions.foreach { rtx =>
-      val bal = rtx.amount
-      dao.addressService
-        .set(rtx.dst.hash, AddressCacheData(bal, bal, Some(1000d), balanceByLatestSnapshot = bal))
-        // TODO: Get rid of unsafeRunSync
-        .unsafeRunSync()
-    }
-
-    dao.genesisObservation = Some(go)
-    dao.genesisBlock = Some(go.genesis)
-
-    /*
-    // Dumb way to set these as active tips, won't pass a double validation but no big deal.
-    checkpointMemPool(go.initialDistribution.baseHash) = go.initialDistribution
-    checkpointMemPool(go.initialDistribution2.baseHash) = go.initialDistribution2
-    checkpointMemPoolThresholdMet(go.initialDistribution.baseHash) = go.initialDistribution -> 0
-    checkpointMemPoolThresholdMet(go.initialDistribution2.baseHash) = go.initialDistribution2 -> 0
-     */
-
-    dao.metrics.updateMetric("genesisAccepted", "true")
-
-    if (setAsTips) {
-      List(go.initialDistribution, go.initialDistribution2)
-        .map(dao.concurrentTipService.update(_, Height(1, 1), isGenesis = true))
-        .sequence
-        .unsafeRunSync() // TODO: Get rid of unsafeRunSync
-    }
-    storeTransactions(go)
-
-    dao.metrics.updateMetric("genesisHash", go.genesis.soeHash)
-
-    // TODO: Get rid of unsafeRunSync
-
-    dao.genesisObservationStorage
-      .write(go)
-      .fold(
-        err => logger.error(s"Cannot write genesis observation ${err.getMessage}"),
-        _ => logger.debug("Genesis observation saved successfully")
-      )
-      .unsafeRunSync()
-
-    dao.cloudService.enqueueGenesis(go).unsafeRunSync()
-  }
-
-  private def storeTransactions(genesisObservation: GenesisObservation)(implicit dao: DAO): Unit =
-    List(genesisObservation.genesis, genesisObservation.initialDistribution, genesisObservation.initialDistribution2)
-      .flatMap(
-        cb =>
-          cb.transactions
-            .map(tx => TransactionCacheData(transaction = tx, cbBaseHash = Some(cb.baseHash)))
-      )
-      .traverse(dao.transactionService.accept(_))
-      .void
-      .unsafeRunSync() // TODO: Get rid of unsafeRunSync
 }

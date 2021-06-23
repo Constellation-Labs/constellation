@@ -21,3 +21,4 @@ jobs:
       - name: Test
         run: |
           sbt -J-Xss128m -J-Xmx3200m keytool/test wallet/test test:test
+          sbt scalafmtCheckAll keytool/scalafmtCheckAll wallet/scalafmtCheckAll schema/scalafmtCheckAll

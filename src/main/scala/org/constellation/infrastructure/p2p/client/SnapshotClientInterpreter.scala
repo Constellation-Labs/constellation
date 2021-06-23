@@ -9,7 +9,8 @@ import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.p2p.PeerResponse
 import org.constellation.infrastructure.p2p.PeerResponse.PeerResponse
 import org.constellation.schema.Id
-import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotProposalPayload}
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotProposal, SnapshotProposalPayload}
 import org.constellation.session.SessionTokenService
 import org.http4s.Method._
 import org.http4s.Status.Successful
@@ -55,6 +56,14 @@ class SnapshotClientInterpreter[F[_]: ContextShift](
       sessionTokenService
     )
 
+  def queryPeerProposals(query: List[(Id, Long)]): PeerResponse[F, List[Option[Signed[SnapshotProposal]]]] =
+    PeerResponse[F, List[Option[Signed[SnapshotProposal]]]](s"snapshot/proposal/_query", POST)(
+      client,
+      sessionTokenService
+    ) { (req, c) =>
+      c.expect(req.withEntity(query))
+    }
+
   def getNextSnapshotHeight(): PeerResponse[F, (Id, Long)] =
     PeerResponse[F, (Id, Long)]("snapshot/nextHeight")(client, sessionTokenService)
 
@@ -85,7 +94,9 @@ class SnapshotClientInterpreter[F[_]: ContextShift](
         if (a) F.unit
         else
           F.raiseError(
-            new Throwable(s"Cannot post proposal of hash ${message.payload.proposal.value.hash} and height ${message.payload.proposal.value.height}")
+            new Throwable(
+              s"Cannot post proposal of hash ${message.payload.proposal.value.hash} and height ${message.payload.proposal.value.height}"
+            )
           )
     )
 }

@@ -74,8 +74,8 @@ updateJar() {
   checkTag
   echo -e "${blu} Updating jar${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo wget https://constellationlabs-dag.s3.amazonaws.com/cluster/dag-$TAG.jar -O /home/admin/constellation/dag.jar" && \
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo chown -R admin:admin /home/admin/constellation"
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo wget https://constellationlabs-dag.s3.amazonaws.com/cluster/dag-$TAG.jar -q -O /home/admin/constellation/dag.jar" && \
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i "sudo chown -R admin:admin /home/admin/constellation"
 }
 
 start() {
@@ -86,7 +86,7 @@ start() {
 
   echo -e "${blu} Using: ${grn}$ip${blu} as a genesis node.${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo cp /home/admin/constellation/start_node /home/admin/constellation/start'
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo cp /home/admin/constellation/start_node /home/admin/constellation/start'
 
   ssh admin@$ip -o StrictHostKeyChecking=no 'sudo cp /home/admin/constellation/start_genesis /home/admin/constellation/start'
 
@@ -101,7 +101,7 @@ rollback() {
 
   echo -e "${blu} Using: ${grn}$ip${blu} as a rollback node.${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo cp /home/admin/constellation/start_node /home/admin/constellation/start'
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo cp /home/admin/constellation/start_node /home/admin/constellation/start'
 
   ssh admin@$ip -o StrictHostKeyChecking=no 'sudo cp /home/admin/constellation/start_rollback /home/admin/constellation/start'
 
@@ -116,7 +116,7 @@ restart() {
   checkHosts
   echo -e "${blu} Restarting${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/tmp && sudo rm -f /home/admin/constellation/logs/app.log && sudo systemctl restart constellation && sudo service filebeat restart'
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/tmp && sudo rm -f /home/admin/constellation/logs/app.log && sudo systemctl restart constellation && sudo service filebeat restart'
 
   sleep 15
 
@@ -130,6 +130,7 @@ restart() {
     else
       echo "Joining node: $ip"
       ssh admin@$ip -o StrictHostKeyChecking=no -n "curl -s -X POST http://127.0.0.1:9002/join -H 'Content-type: application/json' -d '{ \"host\": \"$headIP\", \"port\": 9001, \"id\": \"$headId\" }'"
+
     fi
   done <$HOSTS_FILE
 }
@@ -138,7 +139,7 @@ stop() {
   checkHosts
   echo -e "${blu} Stopping nodes${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo systemctl stop constellation'
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo systemctl stop constellation'
 }
 
 exportIPs() {
@@ -156,6 +157,7 @@ redeploy() {
 
   assemble
   upload
+  setHosts
   updateJar
   restart
 }
@@ -179,7 +181,7 @@ clearLogs() {
   checkHosts
   echo -e "${blu} Clear all logs${clr}"
 
-  pssh -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/logs'
+  pssh -p 20 -l admin -h $HOSTS_FILE -O StrictHostKeyChecking=no -i 'sudo rm -rf /home/admin/constellation/logs'
 }
 
 output() {

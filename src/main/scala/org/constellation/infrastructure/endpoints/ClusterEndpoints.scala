@@ -19,6 +19,7 @@ import JoinedHeight._
 import PeerUnregister._
 import TrustData._
 import Id._
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.schema.observation.ObservationEvent
 
 class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
@@ -26,10 +27,10 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
   def publicEndpoints(cluster: Cluster[F], trustManager: TrustManager[F]) =
     infoEndpoint(cluster) <+> trustEndpoint(trustManager)
 
-  def peerEndpoints(cluster: Cluster[F], trustManager: TrustManager[F]) =
+  def peerEndpoints(cluster: Cluster[F], clusterStorage: ClusterStorageAlgebra[F], trustManager: TrustManager[F]) =
     infoEndpoint(cluster) <+>
-      setNodeStatusEndpoint(cluster) <+>
-      setJoiningHeightEndpoint(cluster) <+>
+      setNodeStatusEndpoint(cluster, clusterStorage) <+>
+      setJoiningHeightEndpoint(clusterStorage) <+>
       deregisterEndpoint(cluster) <+>
       trustEndpoint(trustManager)
 
@@ -39,23 +40,24 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         cluster.clusterNodes().map(_.asJson).flatMap(Ok(_))
     }
 
-  private def setNodeStatusEndpoint(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case req @ POST -> Root / "status" =>
-      (for {
-        sns <- req.decodeJson[SetNodeStatus]
-        _ <- if (sns.nodeStatus == NodeState.Offline) {
-          cluster.markOfflinePeer(sns.id)
-        } else {
-          cluster.setNodeStatus(sns.id, sns.nodeStatus)
-        }
-      } yield ()) >> Ok()
-  }
+  private def setNodeStatusEndpoint(cluster: Cluster[F], clusterStorage: ClusterStorageAlgebra[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case req @ POST -> Root / "status" =>
+        (for {
+          sns <- req.decodeJson[SetNodeStatus]
+          _ <- if (sns.nodeStatus == NodeState.Offline) {
+            cluster.markOfflinePeer(sns.id)
+          } else {
+            clusterStorage.setNodeState(sns.id, sns.nodeStatus)
+          }
+        } yield ()) >> Ok()
+    }
 
-  private def setJoiningHeightEndpoint(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+  private def setJoiningHeightEndpoint(clusterStorage: ClusterStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case req @ POST -> Root / "joinedHeight" =>
       (for {
         joiningHeight <- req.decodeJson[JoinedHeight]
-        _ <- cluster.updateJoinedHeight(joiningHeight)
+        _ <- clusterStorage.updateJoinedHeight(joiningHeight)
       } yield ()) >> Ok()
   }
 
@@ -83,8 +85,9 @@ object ClusterEndpoints {
 
   def peerEndpoints[F[_]: Concurrent](
     cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     trustManager: TrustManager[F]
   ): HttpRoutes[F] =
-    new ClusterEndpoints[F].peerEndpoints(cluster, trustManager)
+    new ClusterEndpoints[F].peerEndpoints(cluster, clusterStorage, trustManager)
 
 }

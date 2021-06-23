@@ -3,6 +3,7 @@ package org.constellation.schema.edge
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
 import org.constellation.schema.signature.Signable
+import org.constellation.schema.signature.Signable.runLengthEncoding
 
 /**
   * Basic edge format for linking two hashes with an optional piece of data attached. Similar to GraphX format.

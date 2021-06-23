@@ -7,12 +7,14 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
 import org.constellation.checkpoint.CheckpointService
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.p2p.{Cluster, MajorityHeight}
 import org.constellation.schema.checkpoint.CheckpointEdge
 import org.constellation.schema.observation.Observation
 import org.constellation.schema.snapshot.Snapshot
 import org.constellation.schema.transaction.Transaction
-import org.constellation.schema.{ChannelMessage, PeerNotification, Schema}
+import org.constellation.schema.{ChannelMessage, Id, PeerNotification, Schema}
 import org.constellation.storage.AddressService
 import org.constellation.trust.TrustEdge
 import org.constellation.util.Metrics
@@ -25,11 +27,13 @@ case class RewardSnapshot(
 
 class RewardsManager[F[_]: Concurrent](
   eigenTrust: EigenTrust[F],
-  checkpointService: CheckpointService[F],
   addressService: AddressService[F],
   selfAddress: String,
   metrics: Metrics,
-  cluster: Cluster[F]
+  clusterStorage: ClusterStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
+  nodeId: Id
 ) {
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -67,15 +71,15 @@ class RewardsManager[F[_]: Concurrent](
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
       trustMap <- eigenTrust.getTrustForAddresses
 
-      peers <- cluster.getPeerInfo
+      peers <- clusterStorage.getPeers
 
-      ownJoiningHeight <- cluster.getOwnJoinedHeight()
+      ownJoiningHeight <- nodeStorage.getOwnJoinedHeight
       ownMajorityHeight = MajorityHeight(
         joined = ownJoiningHeight
       )
 
       peersMajorityHeightsWithOwn = peers
-        .mapValues(_.majorityHeight) + (cluster.id -> NonEmptyList.of(ownMajorityHeight))
+        .mapValues(_.majorityHeight) + (nodeId -> NonEmptyList.of(ownMajorityHeight))
 
       _ <- logger.debug("Majority heights for rewarding:")
       _ <- peersMajorityHeightsWithOwn.toList.traverse {
@@ -171,7 +175,7 @@ class RewardsManager[F[_]: Concurrent](
 
   private def observationsFromSnapshot(snapshot: Snapshot): F[Seq[Observation]] =
     snapshot.checkpointBlocks.toList
-      .traverse(checkpointService.fullData)
+      .traverse(checkpointStorage.getCheckpoint)
       .map(_.flatten.flatMap(_.checkpointBlock.observations))
 
   private def updateAddressBalances(rewards: Map[String, Long]): F[Map[String, Long]] =

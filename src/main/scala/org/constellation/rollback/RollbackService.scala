@@ -6,14 +6,17 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.{ConfigUtil, DAO}
 import org.constellation.domain.cloud.HeightHashFileStorage
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.genesis.{Genesis, GenesisObservationLocalStorage, GenesisObservationS3Storage}
+import org.constellation.migrations.SnapshotInfoV1Migration
 import org.constellation.p2p.Cluster
 import org.constellation.schema.GenesisObservation
 import org.constellation.rewards.{EigenTrust, RewardsManager}
-import org.constellation.schema.snapshot.{SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotInfoV1, StoredSnapshot, StoredSnapshotV1}
+import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
 
@@ -23,19 +26,21 @@ case class RollbackData(
   genesisObservation: GenesisObservation
 )
 
-class RollbackService[F[_]: Concurrent](
-  dao: DAO,
+class RollbackService[F[_]](
+  genesis: Genesis[F],
   snapshotService: SnapshotService[F],
   snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
   snapshotCloudStorage: NonEmptyList[HeightHashFileStorage[F, StoredSnapshot]],
   snapshotInfoCloudStorage: NonEmptyList[HeightHashFileStorage[F, SnapshotInfo]],
   genesisObservationCloudStorage: NonEmptyList[GenesisObservationS3Storage[F]],
-  redownloadService: RedownloadService[F],
-  cluster: Cluster[F]
-)(implicit C: ContextShift[F]) {
+  redownloadStorage: RedownloadStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F]
+)(implicit F: Concurrent[F], C: ContextShift[F]) {
   private val logger = Slf4jLogger.getLogger[F]
   private val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+
+  private val snapshotInfoV1MaxHeight: Long = ConfigUtil.constellation.getLong("schema.v1.snapshotInfo")
 
   def restore(): EitherT[F, Throwable, Unit] =
     for {
@@ -61,11 +66,31 @@ class RollbackService[F[_]: Concurrent](
         }
     }
 
+  private[rollback] def readSnapshot(height: Long, hash: String): EitherT[F, Throwable, StoredSnapshot] =
+    height match {
+      case h if h > snapshotInfoV1MaxHeight =>
+        executeWithFallback(snapshotCloudStorage)(_.read(height, hash))
+      case _ =>
+        executeWithFallback(snapshotCloudStorage)(_.readBytes(height, hash).map { bytes =>
+          KryoSerializer.deserializeCast[StoredSnapshotV1](bytes)
+        }.map(SnapshotInfoV1Migration.convertStoredSnapshot))
+    }
+
+  private[rollback] def readSnapshotInfo(height: Long, hash: String): EitherT[F, Throwable, SnapshotInfo] =
+    height match {
+      case h if h > snapshotInfoV1MaxHeight =>
+        executeWithFallback(snapshotInfoCloudStorage)(_.read(height, hash))
+      case _ =>
+        executeWithFallback(snapshotInfoCloudStorage)(_.readBytes(height, hash).map { bytes =>
+          KryoSerializer.deserializeCast[SnapshotInfoV1](bytes)
+        }.map(SnapshotInfoV1Migration.convert))
+    }
+
   private[rollback] def validate(height: Long, hash: String): EitherT[F, Throwable, RollbackData] =
     for {
       _ <- logger.debug(s"Validating rollback data for height $height and hash $hash").attemptT
-      snapshot <- executeWithFallback(snapshotCloudStorage)(_.read(height, hash))
-      snapshotInfo <- executeWithFallback(snapshotInfoCloudStorage)(_.read(height, hash))
+      snapshot <- readSnapshot(height, hash)
+      snapshotInfo <- readSnapshotInfo(height, hash)
       genesisObservation <- executeWithFallback(genesisObservationCloudStorage)(_.read())
       addressData = snapshotInfo.addressCacheData.map {
         case (address, data) => (address, data.balance)
@@ -75,9 +100,9 @@ class RollbackService[F[_]: Concurrent](
 
   private[rollback] def restore(rollbackData: RollbackData, height: Long): EitherT[F, Throwable, Unit] =
     for {
-      _ <- cluster.setParticipatedInRollbackFlow(true).attemptT
-      _ <- cluster.setParticipatedInGenesisFlow(false).attemptT
-      _ <- cluster.setJoinedAsInitialFacilitator(true).attemptT
+      _ <- nodeStorage.setParticipatedInRollbackFlow(true).attemptT
+      _ <- nodeStorage.setParticipatedInGenesisFlow(false).attemptT
+      _ <- nodeStorage.setJoinedAsInitialFacilitator(true).attemptT
       _ <- logger.debug("Applying the rollback.").attemptT
       _ <- logger.debug(s"Accepting GenesisObservation").attemptT
       _ <- acceptGenesis(rollbackData.genesisObservation)
@@ -99,9 +124,7 @@ class RollbackService[F[_]: Concurrent](
     } yield highest
 
   private def acceptGenesis(genesisObservation: GenesisObservation): EitherT[F, Throwable, Unit] =
-    Concurrent[F].delay {
-      Genesis.acceptGenesis(genesisObservation)(dao)
-    }.attemptT
+    genesis.acceptGenesis(genesisObservation).attemptT
 
   private def acceptSnapshotInfo(snapshotInfo: SnapshotInfo): EitherT[F, Throwable, Unit] =
     for {
@@ -115,18 +138,18 @@ class RollbackService[F[_]: Concurrent](
 
       ownJoinedHeight = height - snapshotHeightInterval
 
-      _ <- cluster.setOwnJoinedHeight(ownJoinedHeight).attemptT
+      _ <- nodeStorage.setOwnJoinedHeight(ownJoinedHeight).attemptT
 
-      _ <- redownloadService
+      _ <- redownloadStorage
         .persistAcceptedSnapshot(height, storedSnapshot.snapshot.hash)
         .attemptT
 
-      _ <- redownloadService
+      _ <- redownloadStorage
         .persistCreatedSnapshot(height, storedSnapshot.snapshot.hash, storedSnapshot.snapshot.publicReputation)
         .attemptT
 
-      _ <- redownloadService.setLastMajorityState(Map(height -> storedSnapshot.snapshot.hash)).attemptT
-      _ <- redownloadService.setLastSentHeight(height).attemptT
+      _ <- redownloadStorage.setLastMajorityState(Map(height -> storedSnapshot.snapshot.hash)).attemptT
+      _ <- redownloadStorage.setLastSentHeight(height).attemptT
     } yield ()
 
   private def validateAccountBalance(accountBalances: AccountBalances): EitherT[F, Throwable, Unit] =

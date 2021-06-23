@@ -7,7 +7,7 @@ import better.files.File
 import cats.effect.IO
 import com.google.common.hash.Hashing
 import com.typesafe.scalalogging.Logger
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointService}
+import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.domain.blacklist.BlacklistedAddresses
 import org.constellation.domain.configuration.NodeConfig
@@ -20,7 +20,6 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
-import org.constellation.schema.snapshot.{SnapshotProposalPayload}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
@@ -75,16 +74,16 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         dao.alias shouldReturn None
 
         dao.snapshotProposalGossipService shouldReturn mock[SnapshotProposalGossipService[IO]]
-        dao.snapshotProposalGossipService.spread(*[SnapshotProposalPayload]) shouldReturnF Unit
-        dao.snapshotProposalGossipService.spread(*[GossipMessage[SnapshotProposalPayload]]) shouldReturnF Unit
+//        dao.snapshotProposalGossipService.spread(*[SnapshotProposalPayload]) shouldReturnF Unit
+//        dao.snapshotProposalGossipService.spread(*[GossipMessage[SnapshotProposalPayload]]) shouldReturnF Unit
 
         val rds = mock[RedownloadService[IO]]
         dao.redownloadService shouldReturn rds
-        dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
-        dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
+//        dao.redownloadService.persistAcceptedSnapshot(*, *) shouldReturnF Unit
+//        dao.redownloadService.persistCreatedSnapshot(*, *, *) shouldReturnF Unit
 
-        val ss = mock[SOEService[IO]]
-        dao.soeService shouldReturn ss
+//        val ss = mock[SOEService[IO]]
+//        dao.soeService shouldReturn ss
 
         val ns = mock[NotificationService[IO]]
         dao.notificationService shouldReturn ns
@@ -95,8 +94,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         val ts = mock[TransactionService[IO]]
         dao.transactionService shouldReturn ts
 
-        val cts = mock[ConcurrentTipService[IO]]
-        dao.concurrentTipService shouldReturn cts
+//        val cts = mock[ConcurrentTipService[IO]]
+//        dao.concurrentTipService shouldReturn cts
 
         val rl = mock[RateLimiting[IO]]
         dao.rateLimiting shouldReturn rl
@@ -107,8 +106,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         val cs = mock[CheckpointService[IO]]
         dao.checkpointService shouldReturn cs
 
-        val cas = mock[CheckpointAcceptanceService[IO]]
-        dao.checkpointAcceptanceService shouldReturn cas
+//        val cas = mock[CheckpointAcceptanceService[IO]]
+//        dao.checkpointAcceptanceService shouldReturn cas
 
         val os = mock[ObservationService[IO]]
         dao.observationService shouldReturn os
@@ -120,18 +119,18 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         dao.keyPair shouldReturn keyPair
 
         dao.cluster shouldReturn mock[Cluster[IO]]
-        dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
+//        dao.cluster.getNodeState shouldReturn IO.pure(NodeState.Ready)
 
         val ba = mock[BlacklistedAddresses[IO]]
         dao.blacklistedAddresses shouldReturn ba
 
-        dao.peerInfo shouldReturn IO.pure(Map.empty)
+//        dao.peerInfo shouldReturn IO.pure(Map.empty)
 
-        val metrics = new Metrics(registry, 600, ExecutionContext.global)(dao)
-        dao.metrics shouldReturn metrics
+//        val metrics = new Metrics(registry, 600, ExecutionContext.global)(dao)
+//        dao.metrics shouldReturn metrics
 
         val cluster = mock[Cluster[IO]]
-        cluster.getNodeState shouldReturnF NodeState.Ready
+//        cluster.getNodeState shouldReturnF NodeState.Ready
         dao.cluster shouldReturn cluster
 
         val tcs = mock[TransactionChainService[IO]]
@@ -143,15 +142,15 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
         val ds = mock[DownloadService[IO]]
         dao.downloadService shouldReturn ds
 
-        dao.miscLogger shouldReturn Logger("miscLogger")
+//        dao.miscLogger shouldReturn Logger("miscLogger")
 
-        dao.readyPeers shouldReturn IO.pure(facilitators)
+//        dao.readyPeers shouldReturn IO.pure(facilitators)
 
         val dr = mock[DataResolver[IO]]
         dao.dataResolver shouldReturn dr
 
         val tsmmp = mock[ThreadSafeMessageMemPool]
-        dao.threadSafeMessageMemPool shouldReturn tsmmp
+//        dao.threadSafeMessageMemPool shouldReturn tsmmp
 
         IO(dao)
       }

@@ -27,7 +27,6 @@ class ThreadSafeMessageMemPool() extends StrictLogging {
 
     }
 
-  // TODO: Fix
   def pull(minCount: Int = 1): Option[Seq[ChannelMessage]] = this.synchronized {
     /*if (messages.size >= minCount) {
       val (left, right) = messages.splitAt(minCount)
@@ -75,21 +74,21 @@ case class MissingHeightException(baseHash: String, soeHash: String)
     extends Exception(s"CheckpointBlock ${baseHash} height is missing for soeHash ${soeHash}.")
 
 object MissingHeightException {
-  def apply(cb: CheckpointBlock): MissingHeightException = new MissingHeightException(cb.baseHash, cb.soeHash)
+  def apply(cb: CheckpointBlock): MissingHeightException = new MissingHeightException(cb.soeHash, cb.soeHash)
 }
 
 case class HeightBelow(baseHash: String, height: Long)
     extends Exception(s"CheckpointBlock hash=${baseHash} height=${height} is below the last snapshot height")
 
 object HeightBelow {
-  def apply(cb: CheckpointBlock, height: Height): HeightBelow = new HeightBelow(cb.baseHash, height.min)
+  def apply(cb: CheckpointBlock, height: Height): HeightBelow = new HeightBelow(cb.soeHash, height.min)
 }
 
 case class PendingAcceptance(baseHash: String)
     extends Exception(s"CheckpointBlock: $baseHash is already pending acceptance phase.")
 
 object PendingAcceptance {
-  def apply(cb: CheckpointBlock): PendingAcceptance = new PendingAcceptance(cb.baseHash)
+  def apply(cb: CheckpointBlock): PendingAcceptance = new PendingAcceptance(cb.soeHash)
 }
 
 case class CheckpointAcceptBlockAlreadyStored(baseHash: String)
@@ -98,18 +97,18 @@ case class CheckpointAcceptBlockAlreadyStored(baseHash: String)
 object CheckpointAcceptBlockAlreadyStored {
 
   def apply(cb: CheckpointBlock): CheckpointAcceptBlockAlreadyStored =
-    new CheckpointAcceptBlockAlreadyStored(cb.baseHash)
+    new CheckpointAcceptBlockAlreadyStored(cb.soeHash)
 }
 
 case class MissingTransactionReference(cb: CheckpointBlock)
-    extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing transaction reference.")
+    extends Exception(s"CheckpointBlock hash=${cb.soeHash} have missing transaction reference.")
 
 object MissingTransactionReference {
   def apply(cb: CheckpointBlock): MissingTransactionReference = new MissingTransactionReference(cb)
 }
 
 case class MissingParents(cb: CheckpointBlock)
-    extends Exception(s"CheckpointBlock hash=${cb.baseHash} have missing parents.")
+    extends Exception(s"CheckpointBlock hash=${cb.soeHash} have missing parents.")
 
 object MissingParents {
   def apply(cb: CheckpointBlock): MissingParents = new MissingParents(cb)
@@ -121,5 +120,5 @@ case class ContainsInvalidTransactionsException(cbHash: String, txsToExclude: Li
 object ContainsInvalidTransactionsException {
 
   def apply(cb: CheckpointBlock, txsToExclude: List[String]): ContainsInvalidTransactionsException =
-    new ContainsInvalidTransactionsException(cb.baseHash, txsToExclude)
+    new ContainsInvalidTransactionsException(cb.soeHash, txsToExclude)
 }

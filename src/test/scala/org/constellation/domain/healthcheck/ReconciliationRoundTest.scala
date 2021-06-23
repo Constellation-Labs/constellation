@@ -2,9 +2,23 @@ package org.constellation.domain.healthcheck
 
 import cats.syntax.all._
 import org.constellation.domain.healthcheck.HealthCheckConsensus.HealthcheckRoundId
-import org.constellation.domain.healthcheck.ReconciliationRound.{NodeAligned, NodeInconsistentlySeenAsOnlineOrOffline, NodeNotPresentOnAllNodes, NodeReconciliationData, calculateClusterAlignment}
+import org.constellation.domain.healthcheck.ReconciliationRound.{
+  NodeAligned,
+  NodeInconsistentlySeenAsOnlineOrOffline,
+  NodeNotPresentOnAllNodes,
+  NodeReconciliationData,
+  calculateClusterAlignment
+}
 import org.constellation.schema.Id
-import org.constellation.schema.NodeState.{DownloadInProgress, Leaving, Offline, PendingDownload, Ready, ReadyForDownload, SnapshotCreation}
+import org.constellation.schema.NodeState.{
+  DownloadInProgress,
+  Leaving,
+  Offline,
+  PendingDownload,
+  Ready,
+  ReadyForDownload,
+  SnapshotCreation
+}
 import org.constellation.schema.consensus.RoundId
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -33,7 +47,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, Ready.some, None, Some(100L)),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -52,7 +66,12 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
         val peersClusterState = Map(
           peerA -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
-            peerB -> NodeReconciliationData(peerB, Offline.some, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), Some(100L)),
+            peerB -> NodeReconciliationData(
+              peerB,
+              Offline.some,
+              Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))),
+              Some(100L)
+            ),
             peerC -> NodeReconciliationData(peerC, DownloadInProgress.some, None, Some(100L))
           ),
           peerB -> Map(
@@ -63,7 +82,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, Ready.some, None, Some(100L)),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -82,7 +101,12 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
         val peersClusterState = Map(
           peerA -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
-            peerB -> NodeReconciliationData(peerB, Ready.some, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), Some(100L)),
+            peerB -> NodeReconciliationData(
+              peerB,
+              Ready.some,
+              Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))),
+              Some(100L)
+            ),
             peerC -> NodeReconciliationData(peerC, DownloadInProgress.some, None, Some(100L))
           ),
           peerB -> Map(
@@ -93,7 +117,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, Leaving.some, None, Some(100L)),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -122,7 +146,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, PendingDownload.some, None, None),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -151,7 +175,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, Leaving.some, None, Some(100L)),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -179,8 +203,13 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           ),
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
-            peerB -> NodeReconciliationData(peerB, DownloadInProgress.some, Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))), Some(100L)),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerB -> NodeReconciliationData(
+              peerB,
+              DownloadInProgress.some,
+              Some(Set(HealthcheckRoundId(RoundId("r1"), peerB))),
+              Some(100L)
+            ),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -211,7 +240,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, DownloadInProgress.some, None, None),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -243,7 +272,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, DownloadInProgress.some, None, None),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 
@@ -276,7 +305,7 @@ class ReconciliationRoundTest extends AnyFreeSpec with Matchers {
           peerC -> Map(
             peerA -> NodeReconciliationData(peerA, Ready.some, None, Some(100L)),
             peerB -> NodeReconciliationData(peerB, DownloadInProgress.some, None, Some(100L)),
-            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L)),
+            peerC -> NodeReconciliationData(peerC, Ready.some, None, Some(100L))
           )
         )
 

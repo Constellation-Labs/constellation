@@ -3,12 +3,13 @@ package org.constellation.trust
 import cats.effect.{Blocker, IO}
 import cats.syntax.all._
 import com.typesafe.config.Config
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.gossip.sampling.PartitionerPeerSampling
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
-import org.constellation.util.PeriodicIO
+import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.{ConfigUtil, DAO}
 
 import scala.concurrent.ExecutionContext
@@ -17,15 +18,15 @@ import scala.concurrent.duration._
 class TrustDataPollingScheduler(
   config: Config,
   trustManager: TrustManager[IO],
-  cluster: Cluster[IO],
+  clusterStorage: ClusterStorageAlgebra[IO],
   apiClient: ClientInterpreter[IO],
   partitionerPeerSampling: PartitionerPeerSampling[IO],
-  dao: DAO,
-  unboundedExecutionContext: ExecutionContext
+  unboundedExecutionContext: ExecutionContext,
+  metrics: Metrics
 ) extends PeriodicIO("TrustDataPollingScheduler", unboundedExecutionContext) {
 
   override def trigger(): IO[Unit] =
-    cluster.getPeerInfo
+    clusterStorage.getPeers
       .map(_.filter(t => NodeState.validForLettingOthersDownload.contains(t._2.peerMetadata.nodeState)).values.toList)
       .flatMap(
         _.traverse(
@@ -47,7 +48,7 @@ class TrustDataPollingScheduler(
           _ <- partitionerPeerSampling.repartition(selfTdi, tdi)
         } yield ()
       }
-      .flatTap(_ => dao.metrics.incrementMetricAsync[IO]("trustDataPollingRound"))
+      .flatTap(_ => metrics.incrementMetricAsync[IO]("trustDataPollingRound"))
 
   schedule(ConfigUtil.getDurationFromConfig("constellation.trust.pull-trust-interval", 60 seconds, config))
 
@@ -58,19 +59,19 @@ object TrustDataPollingScheduler {
   def apply(
     config: Config,
     trustManager: TrustManager[IO],
-    cluster: Cluster[IO],
+    clusterStorage: ClusterStorageAlgebra[IO],
     apiClient: ClientInterpreter[IO],
     partitionerPeerSampling: PartitionerPeerSampling[IO],
-    dao: DAO,
-    unboundedExecutionContext: ExecutionContext
+    unboundedExecutionContext: ExecutionContext,
+    metrics: Metrics
   ) =
     new TrustDataPollingScheduler(
       config,
       trustManager,
-      cluster,
+      clusterStorage,
       apiClient,
       partitionerPeerSampling,
-      dao,
-      unboundedExecutionContext
+      unboundedExecutionContext,
+      metrics
     )
 }

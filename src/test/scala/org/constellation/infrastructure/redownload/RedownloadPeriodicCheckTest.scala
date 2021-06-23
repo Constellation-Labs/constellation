@@ -31,7 +31,7 @@ class RedownloadPeriodicCheckTest
   "triggerRedownloadCheck" - {
 
     "calls check for alignment with majority snapshot" in {
-      val redownloadPeriodicCheck = new RedownloadPeriodicCheck(30, ExecutionContext.global)
+      val redownloadPeriodicCheck = new RedownloadPeriodicCheck(30, ExecutionContext.global, dao.redownloadService)
 
       val trigger = redownloadPeriodicCheck.trigger()
       val cancel = redownloadPeriodicCheck.cancel()

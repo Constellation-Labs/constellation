@@ -2,8 +2,23 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Gossiping for checkpoint blocks
 ### Changed
 - Whitelisting update
+- Majority selection algorithm
+- Missing proposal lookup algorithm
+- DAO usage removed
+- Initialization flow changed
+- Checkpoint statuses
+- Checkpoint acceptance flow
+- Split joining height and broadcasting logic
+- SnapshotInfo class schema change
+- Metrics
+### Fixed
+- Tip usages cache
+- Initialize kryo for wallet
+
 
 ## [v2.23.4] 2021-06-22
 ### Changed

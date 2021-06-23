@@ -1,10 +1,10 @@
 package org.constellation.gossip.snapshot
 
 import java.security.KeyPair
-
 import cats.Parallel
 import cats.effect.{Concurrent, ContextShift, Timer}
 import cats.syntax.all._
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.redownload.RedownloadService.SnapshotProposalsAtHeight
 import org.constellation.gossip.GossipService
 import org.constellation.gossip.sampling.PeerSampling
@@ -20,14 +20,14 @@ class SnapshotProposalGossipService[F[_]: Concurrent: Timer: Parallel: ContextSh
   selfId: Id,
   keyPair: KeyPair,
   peerSampling: PeerSampling[F],
-  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
   apiClient: ClientInterpreter[F],
   metrics: Metrics
 ) extends GossipService[F, SnapshotProposalPayload](
       selfId,
       keyPair,
       peerSampling,
-      cluster,
+      clusterStorage,
       metrics,
       new GossipMessagePathTracker[F, SnapshotProposalPayload](metrics)
     ) {
@@ -59,9 +59,9 @@ object SnapshotProposalGossipService {
     selfId: Id,
     keyPair: KeyPair,
     peerSampling: PeerSampling[F],
-    cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     apiClient: ClientInterpreter[F],
     metrics: Metrics
   ): SnapshotProposalGossipService[F] =
-    new SnapshotProposalGossipService(selfId, keyPair, peerSampling, cluster, apiClient, metrics)
+    new SnapshotProposalGossipService(selfId, keyPair, peerSampling, clusterStorage, apiClient, metrics)
 }

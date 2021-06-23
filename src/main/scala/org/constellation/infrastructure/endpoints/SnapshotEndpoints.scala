@@ -8,18 +8,29 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Encoder
 import io.circe.generic.semiauto._
 import io.circe.syntax._
-import org.constellation.domain.redownload.RedownloadService
+import org.constellation.collection.MapUtils._
+import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
+import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.gossip.state.GossipMessage
 import org.constellation.gossip.validation._
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id._
-import org.constellation.schema.snapshot.{LatestMajorityHeight, SnapshotInfo, SnapshotProposalPayload, StoredSnapshot}
+import org.constellation.schema.signature.Signed
+import org.constellation.schema.snapshot.{
+  LatestMajorityHeight,
+  SnapshotInfo,
+  SnapshotProposal,
+  SnapshotProposalPayload,
+  StoredSnapshot
+}
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.Registration.`X-Id`
 import org.constellation.storage.SnapshotService
+import org.constellation.util.Metrics
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{HttpRoutes, Response}
@@ -34,18 +45,19 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   def publicEndpoints(
-    nodeId: Id,
+    selfId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotService: SnapshotService[F],
-    redownloadService: RedownloadService[F]
+    redownloadStorage: RedownloadStorageAlgebra[F]
   ) =
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
-      getCreatedSnapshotsEndpoint(redownloadService) <+>
-      getAcceptedSnapshotsEndpoint(redownloadService) <+>
-      getPeerProposals(nodeId, redownloadService) <+>
-      getNextSnapshotHeight(nodeId, snapshotService) <+>
-      getLatestMajorityHeight(redownloadService) <+>
-      getLatestMajorityState(redownloadService) <+>
+      getCreatedSnapshotsEndpoint(redownloadStorage) <+>
+      getAcceptedSnapshotsEndpoint(redownloadStorage) <+>
+      getPeerProposals(selfId, redownloadStorage) <+>
+      queryPeerProposals(selfId, redownloadStorage) <+>
+      getNextSnapshotHeight(selfId, snapshotService) <+>
+      getLatestMajorityHeight(redownloadStorage) <+>
+      getLatestMajorityState(redownloadStorage) <+>
       getTotalSupply(snapshotService)
 
   def peerEndpoints(
@@ -53,33 +65,36 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
-    cluster: Cluster[F],
-    redownloadService: RedownloadService[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    redownloadStorage: RedownloadStorageAlgebra[F],
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
-    messageValidator: MessageValidator
+    messageValidator: MessageValidator,
+    metrics: Metrics
   ) =
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
       getStoredSnapshotByHash(snapshotStorage) <+>
-      getCreatedSnapshotsEndpoint(redownloadService) <+>
-      getAcceptedSnapshotsEndpoint(redownloadService) <+>
-      getPeerProposals(nodeId, redownloadService) <+>
+      getCreatedSnapshotsEndpoint(redownloadStorage) <+>
+      getAcceptedSnapshotsEndpoint(redownloadStorage) <+>
+      getPeerProposals(nodeId, redownloadStorage) <+>
+      queryPeerProposals(nodeId, redownloadStorage) <+>
       getNextSnapshotHeight(nodeId, snapshotService) <+>
-      getSnapshotInfo(snapshotService, cluster) <+>
+      getSnapshotInfo(snapshotService, nodeStorage) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
-      getLatestMajorityHeight(redownloadService) <+>
-      postSnapshotProposal(snapshotProposalGossipService, redownloadService, messageValidator)
+      getLatestMajorityHeight(redownloadStorage) <+>
+      postSnapshotProposal(snapshotProposalGossipService, redownloadStorage, messageValidator, metrics)
 
   def ownerEndpoints(
     nodeId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
-    redownloadService: RedownloadService[F]
+    redownloadStorage: RedownloadStorageAlgebra[F]
   ) =
     getStoredSnapshotsEndpoint(snapshotStorage) <+>
       getStoredSnapshotByHash(snapshotStorage) <+>
-      getCreatedSnapshotsEndpoint(redownloadService) <+>
-      getAcceptedSnapshotsEndpoint(redownloadService) <+>
-      getPeerProposals(nodeId, redownloadService) <+>
-      getLatestMajorityHeight(redownloadService)
+      getCreatedSnapshotsEndpoint(redownloadStorage) <+>
+      getAcceptedSnapshotsEndpoint(redownloadStorage) <+>
+      getPeerProposals(nodeId, redownloadStorage) <+>
+      queryPeerProposals(nodeId, redownloadStorage) <+>
+      getLatestMajorityHeight(redownloadStorage)
 
   private def getStoredSnapshotsEndpoint(snapshotStorage: LocalFileStorage[F, StoredSnapshot]): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -104,28 +119,44 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       }
     }
 
-  private def getCreatedSnapshotsEndpoint(redownloadService: RedownloadService[F]): HttpRoutes[F] =
+  private def getCreatedSnapshotsEndpoint(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "created" =>
-        redownloadService.getCreatedSnapshots().map(_.asJson).flatMap(Ok(_))
+        redownloadStorage.getCreatedSnapshots.map(_.asJson).flatMap(Ok(_))
     }
 
-  private def getAcceptedSnapshotsEndpoint(redownloadService: RedownloadService[F]): HttpRoutes[F] =
+  private def getAcceptedSnapshotsEndpoint(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "accepted" =>
-        redownloadService.getAcceptedSnapshots().map(_.asJson).flatMap(Ok(_))
+        redownloadStorage.getAcceptedSnapshots.map(_.asJson).flatMap(Ok(_))
     }
 
-  private def getPeerProposals(nodeId: Id, redownloadService: RedownloadService[F]): HttpRoutes[F] =
+  private def getPeerProposals(ownId: Id, redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
-      case GET -> Root / "peer" / peerId / "snapshot" / "created" =>
+      case GET -> Root / "peer" / hex / "snapshot" / "created" =>
+        val peerId = Id(hex)
         val peerProposals =
-          if (Id(peerId) == nodeId)
-            redownloadService.getCreatedSnapshots()
+          if (peerId == ownId)
+            redownloadStorage.getCreatedSnapshots
           else
-            redownloadService.getPeerProposals(nodeId).map(_.getOrElse(Map.empty))
+            redownloadStorage.getPeerProposals(peerId).map(_.getOrElse(Map.empty))
 
         peerProposals.map(_.asJson).flatMap(Ok(_))
+    }
+
+  private def queryPeerProposals(ownId: Id, redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case req @ POST -> Root / "snapshot" / "proposal" / "_query" =>
+        for {
+          query <- req.decodeJson[List[(Id, Long)]]
+          result <- query.traverse {
+            case (`ownId`, height) =>
+              redownloadStorage.getCreatedSnapshots.map(_.get(height))
+            case (peerId, height) =>
+              redownloadStorage.getPeerProposals(peerId).map(_.flatMap(_.get(height)))
+          }
+          resp <- Ok(result.asJson)
+        } yield resp
     }
 
   implicit val idLongEncoder: Encoder[(Id, Long)] = deriveEncoder
@@ -136,14 +167,14 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
         snapshotService.getNextHeightInterval.map((nodeId, _)).map(_.asJson).flatMap(Ok(_))
     }
 
-  private def getSnapshotInfo(snapshotService: SnapshotService[F], cluster: Cluster[F]): HttpRoutes[F] =
+  private def getSnapshotInfo(snapshotService: SnapshotService[F], nodeStorage: NodeStorageAlgebra[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case GET -> Root / "snapshot" / "info" => {
-        val getSnapshotInfo = snapshotService.getSnapshotInfoWithFullData.flatMap { si =>
+        val getSnapshotInfo = snapshotService.getSnapshotInfo().flatMap { si =>
           F.delay(KryoSerializer.serializeAnyRef(si))
         }
 
-        val result = cluster.getNodeState
+        val result = nodeStorage.getNodeState
           .map(NodeState.canActAsRedownloadSource)
           .ifM(
             getSnapshotInfo.map(_.some),
@@ -174,18 +205,20 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       }
     }
 
-  private def getLatestMajorityHeight(redownloadService: RedownloadService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
-    case GET -> Root / "latestMajorityHeight" =>
-      redownloadService.getMajorityRange
-        .map(LatestMajorityHeight(_))
-        .map(_.asJson)
-        .flatMap(Ok(_))
-  }
+  private def getLatestMajorityHeight(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "latestMajorityHeight" =>
+        redownloadStorage.getMajorityRange
+          .map(LatestMajorityHeight(_))
+          .map(_.asJson)
+          .flatMap(Ok(_))
+    }
 
   private[endpoints] def postSnapshotProposal(
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
-    redownloadService: RedownloadService[F],
-    messageValidator: MessageValidator
+    redownloadStorage: RedownloadStorageAlgebra[F],
+    messageValidator: MessageValidator,
+    metrics: Metrics
   ): HttpRoutes[F] =
     HttpRoutes.of[F] {
       case req @ POST -> Root / "peer" / "snapshot" / "created" =>
@@ -202,8 +235,9 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
             case Valid(_) =>
               val processProposalAsync = F.start(
                 C.shift >>
-                  redownloadService.persistPeerProposal(message.origin, payload.proposal) >>
-                  redownloadService.updatePeerMajorityInfo(message.origin, payload.majorityInfo) >>
+                  redownloadStorage.persistPeerProposal(payload.proposal) >>
+                  redownloadStorage.replaceRemoteFilterData(message.origin, payload.filterData) >>
+                  updatePeerProposalMetric(metrics, payload.proposal) >>
                   snapshotProposalGossipService.spread(message)
               )
 
@@ -217,10 +251,16 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
         } yield res
     }
 
-  private def getLatestMajorityState(redownloadService: RedownloadService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+  private def updatePeerProposalMetric(metrics: Metrics, proposal: Signed[SnapshotProposal]): F[Unit] =
+    metrics.updateMetricAsync(
+      "snapshot_lastPeerProposalHeight",
+      proposal.value.height,
+      Seq(("peerId", proposal.signature.id.hex))
+    )
+
+  private def getLatestMajorityState(redownloadStorage: RedownloadStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "majority" / "state" =>
-      redownloadService
-        .getLastMajorityState()
+      redownloadStorage.getLastMajorityState
         .map(_.asJson)
         .flatMap(Ok(_))
   }
@@ -240,19 +280,20 @@ object SnapshotEndpoints {
     nodeId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotService: SnapshotService[F],
-    redownloadService: RedownloadService[F]
+    redownloadStorage: RedownloadStorageAlgebra[F]
   ): HttpRoutes[F] =
-    new SnapshotEndpoints[F]().publicEndpoints(nodeId, snapshotStorage, snapshotService, redownloadService)
+    new SnapshotEndpoints[F]().publicEndpoints(nodeId, snapshotStorage, snapshotService, redownloadStorage)
 
   def peerEndpoints[F[_]: Concurrent: ContextShift](
     nodeId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
-    cluster: Cluster[F],
-    redownloadService: RedownloadService[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    redownloadStorage: RedownloadStorageAlgebra[F],
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
-    messageValidator: MessageValidator
+    messageValidator: MessageValidator,
+    metrics: Metrics
   ): HttpRoutes[F] =
     new SnapshotEndpoints[F]()
       .peerEndpoints(
@@ -260,17 +301,18 @@ object SnapshotEndpoints {
         snapshotStorage,
         snapshotInfoStorage,
         snapshotService,
-        cluster,
-        redownloadService,
+        nodeStorage,
+        redownloadStorage,
         snapshotProposalGossipService,
-        messageValidator
+        messageValidator,
+        metrics
       )
 
   def ownerEndpoints[F[_]: Concurrent: ContextShift](
     nodeId: Id,
     snapshotStorage: LocalFileStorage[F, StoredSnapshot],
-    redownloadService: RedownloadService[F]
+    redownloadStorage: RedownloadStorageAlgebra[F]
   ): HttpRoutes[F] =
     new SnapshotEndpoints[F]()
-      .ownerEndpoints(nodeId, snapshotStorage, redownloadService)
+      .ownerEndpoints(nodeId, snapshotStorage, redownloadStorage)
 }

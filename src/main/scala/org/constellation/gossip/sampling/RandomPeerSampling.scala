@@ -5,6 +5,7 @@ import cats.implicits._
 import io.chrisdavenport.fuuid.FUUID
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
 
@@ -14,7 +15,8 @@ import scala.util.Random
 /**
   * Peer sampling strategy based on uniform random sample selection
   */
-class RandomPeerSampling[F[_]](selfId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) extends PeerSampling[F] {
+class RandomPeerSampling[F[_]](selfId: Id, clusterStorage: ClusterStorageAlgebra[F])(implicit F: Concurrent[F])
+    extends PeerSampling[F] {
 
   private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
   private val fanout: Int = 1
@@ -45,11 +47,7 @@ class RandomPeerSampling[F[_]](selfId: Id, cluster: Cluster[F])(implicit F: Conc
       .map(IndexedSeq[Id](_: _*))
   }
 
-  private def getPeers: F[Set[Id]] =
-    cluster.getPeerInfo
-      .map(_.filter {
-        case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState)
-      }.keySet)
+  private def getPeers: F[Set[Id]] = clusterStorage.getNotOfflinePeers.map(_.keySet)
 
   protected def generatePathId: F[String] = FUUID.randomFUUID.map(_.toString)
 }

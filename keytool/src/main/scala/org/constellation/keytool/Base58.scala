@@ -58,7 +58,6 @@ object Base58 {
     * @param input string to check
     * @return true if input contains base58 chars only, false otherwise
     */
-  def isBase58(input: String): Boolean = {
+  def isBase58(input: String): Boolean =
     input.forall(alphabet.toSet.contains)
-  }
 }

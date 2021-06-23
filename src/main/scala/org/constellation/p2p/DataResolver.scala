@@ -1,35 +1,36 @@
 package org.constellation.p2p
 
-import java.net.SocketTimeoutException
-import java.security.KeyPair
-
+import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
-import org.constellation.checkpoint.CheckpointAcceptanceService
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.consensus.ConsensusStatus
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.transaction.TransactionService
-import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.{PeerClientMetadata, PeerResponse}
-import org.constellation.storage.SOEService
-import org.constellation.util.Logging._
-import org.constellation.util.Distance
-import DataResolver._
+import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
+import org.constellation.p2p.DataResolver._
 import org.constellation.schema.NodeState
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.{Observation, RequestTimeoutOnResolving}
 import org.constellation.schema.transaction.TransactionCacheData
+import org.constellation.util.Distance
+import org.constellation.util.Logging._
+
+import java.net.SocketTimeoutException
+import java.security.KeyPair
 
 class DataResolver[F[_]](
   keyPair: KeyPair,
   apiClient: ClientInterpreter[F],
-  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
   transactionService: TransactionService[F],
   observationService: ObservationService[F],
-  checkpointAcceptanceService: () => CheckpointAcceptanceService[F],
   unboundedBlocker: Blocker
 )(
   implicit F: Concurrent[F],
@@ -41,9 +42,8 @@ class DataResolver[F[_]](
 
   private val getPeersForResolving: F[List[PeerClientMetadata]] =
     for {
-      all <- cluster.getPeerInfo
-      notOffline = all.filter { case (_, peer) => NodeState.isNotOffline(peer.peerMetadata.nodeState) }
-      peers = notOffline.map { case (_, peer)  => peer.peerMetadata.toPeerClientMetadata }
+      notOffline <- clusterStorage.getNotOfflinePeers
+      peers = notOffline.map { case (_, peer) => peer.peerMetadata.toPeerClientMetadata }
     } yield peers.toList
 
   def resolveBatchTransactionsDefaults(
@@ -54,15 +54,6 @@ class DataResolver[F[_]](
     if (hashes.nonEmpty)
       getPeersForResolving.flatMap(resolveBatchTransactions(hashes, _, priorityClient, roundId))
     else List.empty[TransactionCacheData].pure[F]
-
-  def resolveBatchObservationsDefaults(
-    hashes: List[String],
-    priorityClient: Option[PeerClientMetadata] = None,
-    roundId: Option[RoundId] = None
-  ): F[List[Observation]] =
-    if (hashes.nonEmpty)
-      getPeersForResolving.flatMap(resolveBatchObservations(hashes, _, priorityClient, roundId))
-    else List.empty[Observation].pure[F]
 
   def resolveBatchTransactions(
     hashes: List[String],
@@ -81,6 +72,15 @@ class DataResolver[F[_]](
               )
           }
       )
+
+  def resolveBatchObservationsDefaults(
+    hashes: List[String],
+    priorityClient: Option[PeerClientMetadata] = None,
+    roundId: Option[RoundId] = None
+  ): F[List[Observation]] =
+    if (hashes.nonEmpty)
+      getPeersForResolving.flatMap(resolveBatchObservations(hashes, _, priorityClient, roundId))
+    else List.empty[Observation].pure[F]
 
   def resolveBatchObservations(
     hashes: List[String],
@@ -101,11 +101,66 @@ class DataResolver[F[_]](
             }
         )
 
+  private[p2p] def resolveBatchData[A <: AnyRef](
+    hashes: List[String],
+    endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
+    sortedPeers: List[PeerClientMetadata]
+  ): F[List[A]] = {
+
+    def makeAttempt(
+      peers: List[PeerClientMetadata],
+      allHashes: List[String],
+      innerHashes: List[String] = List.empty[String],
+      response: List[A] = List.empty[A]
+    ): F[List[A]] = {
+
+      if (peers.isEmpty && innerHashes.size != allHashes.size) {
+        return F.raiseError(DataResolutionOutOfPeers(hashes, sortedPeers.map(_.id.short)))
+      }
+
+      if (innerHashes.size == allHashes.size) {
+        return response.pure[F]
+      }
+
+      val peer = peers.head
+      val filteredPeers = peers.filterNot(_ == peer)
+      val requestHashes = allHashes.filterNot(innerHashes.toSet)
+
+      getBatchData[A](requestHashes, endpoint, peer).flatMap { data =>
+        logger.debug(
+          s"Requested : ${peer.host} : for hashes = ${requestHashes.mkString(",")} : and response hashes = ${data.size}"
+        ) >>
+          CS.shift >> makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
+      }
+    }
+
+    makeAttempt(sortedPeers, hashes).handleErrorWith(
+      e => logger.error(e)(s"Unexpected error while resolving hashes") *> F.raiseError[List[A]](e)
+    )
+  }
+
+  private[p2p] def getBatchData[A <: AnyRef](
+    hashes: List[String],
+    endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
+    peerClientMetadata: PeerClientMetadata
+  ): F[List[(String, A)]] =
+    PeerResponse
+      .run(endpoint(hashes), unboundedBlocker)(peerClientMetadata)
+      .map(_.mapFilter {
+        case (hash, data) => data.map((hash, _))
+      })
+      .onError {
+        case _: SocketTimeoutException =>
+          observationService
+            .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(hashes))(keyPair))
+            .void
+      }
+
   def resolveCheckpointDefaults(
     hash: String,
     priorityClient: Option[PeerClientMetadata] = None
   ): F[CheckpointCache] =
-    checkpointAcceptanceService().waitingForAcceptance.modify(a => (a + hash, ())) >>
+    checkpointStorage.markCheckpointForResolving(hash) >>
       getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
 
   def resolveCheckpoint(
@@ -119,12 +174,12 @@ class DataResolver[F[_]](
         apiClient.checkpoint.getCheckpoint,
         pool,
         priorityClient
-      ).head
-        .flatTap(cb => F.start(CS.shift >> checkpointAcceptanceService().accept(cb)))
-        .flatTap { cb =>
-          logger.debug(s"Resolving checkpoint=$hash with baseHash=${cb.checkpointBlock.baseHash}")
-        }
-        .onError { case _ => checkpointAcceptanceService().waitingForAcceptance.modify(a => (a - hash, ())) },
+      ).head.flatTap { cb =>
+        logger.debug(s"Resolving checkpoint=$hash with soeHash=${cb.checkpointBlock.soeHash}") >>
+          checkpointStorage.persistCheckpoint(cb) >>
+          checkpointStorage.registerUsage(cb.checkpointBlock.soeHash) >>
+          checkpointStorage.unmarkCheckpointForResolving(hash)
+      }.onError { case _ => checkpointStorage.unmarkCheckpointForResolving(hash) },
       s"dataResolver_resolveCheckpoint [$hash]"
     )
 
@@ -186,44 +241,6 @@ class DataResolver[F[_]](
     } yield t
   }
 
-  private[p2p] def resolveBatchData[A <: AnyRef](
-    hashes: List[String],
-    endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
-    sortedPeers: List[PeerClientMetadata]
-  ): F[List[A]] = {
-
-    def makeAttempt(
-      peers: List[PeerClientMetadata],
-      allHashes: List[String],
-      innerHashes: List[String] = List.empty[String],
-      response: List[A] = List.empty[A]
-    ): F[List[A]] = {
-
-      if (peers.isEmpty && innerHashes.size != allHashes.size) {
-        return F.raiseError(DataResolutionOutOfPeers(hashes, sortedPeers.map(_.id.short)))
-      }
-
-      if (innerHashes.size == allHashes.size) {
-        return response.pure[F]
-      }
-
-      val peer = peers.head
-      val filteredPeers = peers.filterNot(_ == peer)
-      val requestHashes = allHashes.filterNot(innerHashes.toSet)
-
-      getBatchData[A](requestHashes, endpoint, peer).flatMap { data =>
-        logger.debug(
-          s"Requested : ${peer.host} : for hashes = ${requestHashes.mkString(",")} : and response hashes = ${data.size}"
-        ) >>
-          CS.shift >> makeAttempt(filteredPeers, allHashes, innerHashes ++ data.map(_._1), response ++ data.map(_._2))
-      }
-    }
-
-    makeAttempt(sortedPeers, hashes).handleErrorWith(
-      e => logger.error(e)(s"Unexpected error while resolving hashes") *> F.raiseError[List[A]](e)
-    )
-  }
-
   private[p2p] def getData[T <: AnyRef](
     hash: String,
     endpoint: String => PeerResponse[F, Option[T]],
@@ -235,23 +252,6 @@ class DataResolver[F[_]](
           .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(List(hash)))(keyPair))
           .void
     }
-
-  private[p2p] def getBatchData[A <: AnyRef](
-    hashes: List[String],
-    endpoint: List[String] => PeerResponse[F, List[(String, Option[A])]],
-    peerClientMetadata: PeerClientMetadata
-  ): F[List[(String, A)]] =
-    PeerResponse
-      .run(endpoint(hashes), unboundedBlocker)(peerClientMetadata)
-      .map(_.mapFilter {
-        case (hash, data) => data.map((hash, _))
-      })
-      .onError {
-        case _: SocketTimeoutException =>
-          observationService
-            .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(hashes))(keyPair))
-            .void
-      }
 }
 
 object DataResolver {
@@ -259,19 +259,19 @@ object DataResolver {
   def apply[F[_]: Concurrent: ContextShift: Timer](
     keyPair: KeyPair,
     apiClient: ClientInterpreter[F],
-    cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    checkpointStorage: CheckpointStorageAlgebra[F],
     transactionService: TransactionService[F],
     observationService: ObservationService[F],
-    checkpointAcceptanceService: () => CheckpointAcceptanceService[F],
     unboundedBlocker: Blocker
   ): DataResolver[F] =
     new DataResolver(
       keyPair,
       apiClient,
-      cluster,
+      clusterStorage,
+      checkpointStorage,
       transactionService,
       observationService,
-      checkpointAcceptanceService,
       unboundedBlocker
     )
 

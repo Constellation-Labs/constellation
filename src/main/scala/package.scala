@@ -2,7 +2,6 @@ import java.net.InetSocketAddress
 import java.nio.{ByteBuffer, ByteOrder}
 import java.security.{KeyPair, PrivateKey, PublicKey}
 import java.util.concurrent.TimeUnit
-
 import cats.effect.Sync
 import cats.syntax.all._
 import com.google.common.hash.Hashing
@@ -13,7 +12,7 @@ import org.constellation.schema.Id
 import org.constellation.schema.address.AddressMetaData
 import org.constellation.schema.signature.SignHelpExt
 import org.constellation.serialization.KryoSerializer
-import org.constellation.util.POWExt
+import org.constellation.util.{Metrics, POWExt}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -42,9 +41,9 @@ package object constellation extends POWExt with SignHelpExt {
   implicit def pubKeyToAddress(key: PublicKey): AddressMetaData =
     AddressMetaData(publicKeyToAddressString(key))
 
-  def withMetric[F[_]: Sync, A](fa: F[A], prefix: String)(implicit dao: DAO): F[A] =
-    fa.flatTap(_ => dao.metrics.incrementMetricAsync[F](s"${prefix}_success")).handleErrorWith { err =>
-      dao.metrics.incrementMetricAsync[F](s"${prefix}_failure") >> err.raiseError[F, A]
+  def withMetric[F[_]: Sync, A](fa: F[A], prefix: String)(metrics: Metrics): F[A] =
+    fa.flatTap(_ => metrics.incrementMetricAsync[F](s"${prefix}_success")).handleErrorWith { err =>
+      metrics.incrementMetricAsync[F](s"${prefix}_failure") >> err.raiseError[F, A]
     }
 
   implicit class PublicKeyExt(publicKey: PublicKey) {

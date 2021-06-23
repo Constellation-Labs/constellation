@@ -6,7 +6,7 @@ import org.constellation.schema.signature.Signed
 
 case class SnapshotProposalPayload(
   proposal: Signed[SnapshotProposal],
-  majorityInfo: MajorityInfo
+  filterData: FilterData
 )
 
 object SnapshotProposalPayload {

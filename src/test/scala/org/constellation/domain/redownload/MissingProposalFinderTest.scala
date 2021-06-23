@@ -5,11 +5,10 @@ import cats.syntax.all._
 import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
 import org.constellation.schema.signature.{HashSignature, Signed}
-import org.constellation.schema.snapshot.{HeightRange, MajorityInfo, SnapshotProposal}
+import org.constellation.schema.snapshot.{HeightRange, SnapshotProposal}
 import org.mockito.cats.IdiomaticMockitoCats
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.OptionValues._
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -23,7 +22,7 @@ class MissingProposalFinderTest
     with ArgumentMatchersSugar
     with BeforeAndAfterEach {
 
-  private val finder = MissingProposalFinder(2, 0, 10, Id("self"))
+  private val finder = MissingProposalFinder(2, Id("self"))
 
   private val toPeerProposals: ((Id, List[Int])) => (Id, Map[Long, Signed[SnapshotProposal]]) = {
     case (id, heights) =>
@@ -111,9 +110,9 @@ class MissingProposalFinderTest
 
       val result = finder.findMissingPeerProposals(majorityRange, peerProposals, peersCache)
 
-      result should (contain.key(Id("b")).and(contain).key(Id("c")))
-      result.get(Id("b")).value should contain only (6L)
-      result.get(Id("c")).value should contain only (2L, 6L)
+      result should contain(Id("b"), 6L)
+      result should contain(Id("c"), 2L)
+      result should contain(Id("c"), 6L)
     }
 
     "should not find missing proposals when nodes were absent" in {
@@ -130,36 +129,6 @@ class MissingProposalFinderTest
       val majorityRange = HeightRange(2, 6)
 
       val result = finder.findMissingPeerProposals(majorityRange, peerProposals, peersCache)
-      result shouldBe empty
-    }
-  }
-
-  "selectPeerForFetchingMissingProposals" - {
-    "should select peer that has the least gaps" in {
-      val peerMajorityInfo = Map(
-        Id("a") -> MajorityInfo(HeightRange(2, 6), List(HeightRange(4, 6))),
-        Id("b") -> MajorityInfo(HeightRange(2, 6), List(HeightRange(4, 4))),
-        Id("c") -> MajorityInfo(HeightRange(2, 6), List(HeightRange(2, 4)))
-      )
-      val missingProposals = Set(2L, 4L, 6L)
-      val majorityRange = HeightRange(2, 6)
-
-      val result = finder.selectPeerForFetchingMissingProposals(majorityRange, missingProposals, peerMajorityInfo)
-      result should contain(Id("b"))
-    }
-
-    "should not select any peer" in {
-      val peerMajorityInfo = Map(
-        Id("a") -> MajorityInfo(HeightRange(2, 10), List(HeightRange(6, 6))),
-        Id("b") -> MajorityInfo(HeightRange(8, 10), List.empty),
-        Id("c") -> MajorityInfo(HeightRange(2, 4), List.empty)
-      )
-
-      val missingProposals = Set(6L)
-
-      val bounds = HeightRange(2, 6)
-
-      val result = finder.selectPeerForFetchingMissingProposals(bounds, missingProposals, peerMajorityInfo)
       result shouldBe empty
     }
   }

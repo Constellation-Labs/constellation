@@ -78,8 +78,10 @@ class DataGenerator[F[_]: Concurrent] {
         Some(TrustEdge(n.id, n2.id, 2 * (trustZeroToOne - 0.5)))
       }
 
-  def generateData(numNodes: Int = 30,
-                   edgeLogic: (TrustNode, TrustNode) => F[Option[TrustEdge]] = randomEdge()): F[List[TrustNode]] =
+  def generateData(
+    numNodes: Int = 30,
+    edgeLogic: (TrustNode, TrustNode) => F[Option[TrustEdge]] = randomEdge()
+  ): F[List[TrustNode]] =
     for {
       random <- randomEffect.get
       nodes = (0 until numNodes).toList.map(id => TrustNode(id, random.nextDouble(), random.nextDouble()))

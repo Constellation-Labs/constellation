@@ -6,11 +6,18 @@ import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.PeerMetadata
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.schema.Id
 
-class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], ownId: Id, unboundedBlocker: Blocker)(
+class PeerDiscovery[F[_]](
+  apiClient: ClientInterpreter[F],
+  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  ownId: Id,
+  unboundedBlocker: Blocker
+)(
   implicit F: Concurrent[F],
   C: ContextShift[F]
 ) {
@@ -29,7 +36,7 @@ class PeerDiscovery[F[_]](apiClient: ClientInterpreter[F], cluster: Cluster[F], 
         )(peerMetadata.toPeerClientMetadata)
         .handleErrorWith(_ => F.pure(Seq.empty[PeerMetadata]))
 
-      knownPeers <- cluster.getPeerInfo
+      knownPeers <- clusterStorage.getPeers
       unknownPeers = peers.filter { peer =>
         peer.id != ownId && !knownPeers.exists(_._2.peerMetadata.toPeerClientMetadata == peer.toPeerClientMetadata)
       }.toList
@@ -83,8 +90,9 @@ object PeerDiscovery {
   def apply[F[_]: Concurrent: ContextShift](
     apiClient: ClientInterpreter[F],
     cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
     ownId: Id,
     unboundedBlocker: Blocker
   ) =
-    new PeerDiscovery(apiClient, cluster, ownId, unboundedBlocker)
+    new PeerDiscovery(apiClient, cluster, clusterStorage, ownId, unboundedBlocker)
 }

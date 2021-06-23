@@ -3,6 +3,7 @@ package org.constellation.schema.transaction
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
 import org.constellation.schema.signature.Signable
+import org.constellation.schema.signature.Signable.runLengthEncoding
 
 import scala.util.Random
 

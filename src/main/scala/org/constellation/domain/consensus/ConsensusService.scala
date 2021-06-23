@@ -42,9 +42,15 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
     withLock("merklePoolUpdate", merklePool.remove(merkleRoot)) >>
       a.traverse(x => withLock("acceptedUpdate", accepted.remove(x.hash))).void
 
+  def applySnapshotDirect(a: List[A]): F[Unit] =
+    a.traverse(x => withLock("acceptedUpdate", accepted.remove(x.hash))).void
+
   def removeMerkleRoot(merkleRoot: String): F[Unit] =
     findHashesByMerkleRoot(merkleRoot).flatMap(a => withLock("acceptedUpdate", accepted.remove(a.toSet.flatten))) >>
       withLock("merklePoolUpdate", merklePool.remove(merkleRoot))
+
+  def remove(hash: String): F[Unit] =
+    accepted.remove(hash)
 
   def put(a: A): F[A] = put(a, ConsensusStatus.Pending)
 
@@ -55,21 +61,21 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService pendingPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(_.checkpointBlock.baseHash)}")
+              .map(_.checkpointBlock.soeHash)}")
         )
     case ConsensusStatus.Accepted =>
       withLock("acceptedUpdate", accepted.put(a.hash, a))
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService acceptedPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(_.checkpointBlock.baseHash)}")
+              .map(_.checkpointBlock.soeHash)}")
         )
     case ConsensusStatus.Unknown =>
       withLock("unknownUpdate", unknown.put(a.hash, a))
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService unknownPut with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(_.checkpointBlock.baseHash)}")
+              .map(_.checkpointBlock.soeHash)}")
         )
     case _ => new Exception("Unknown consensus status").raiseError[F, A]
   }
@@ -124,7 +130,7 @@ abstract class ConsensusService[F[_]: Concurrent, A <: ConsensusObject] extends 
         .flatTap(
           _ =>
             logger.debug(s"ConsensusService remove with hash=${a.hash} - with checkpoint hash=${cpc
-              .map(_.checkpointBlock.baseHash)}")
+              .map(_.checkpointBlock.soeHash)}")
         )
 
   def isAccepted(hash: String): F[Boolean] = accepted.contains(hash)

@@ -13,6 +13,7 @@ import io.circe.generic.semiauto.deriveCodec
 import io.circe.syntax.EncoderOps
 import org.constellation.ConfigUtil
 import org.constellation.ConstellationExecutionContext.createSemaphore
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.healthcheck.HealthCheckConsensus._
 import org.constellation.domain.healthcheck.HealthCheckLoggingHelper._
 import org.constellation.domain.healthcheck.ReconciliationRound._
@@ -32,6 +33,8 @@ import scala.util.Random
 class HealthCheckConsensusManager[F[_]](
   ownId: Id,
   cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F],
   peerHealthCheck: PeerHealthCheck[F],
   metrics: Metrics,
   apiClient: ClientInterpreter[F],
@@ -232,7 +235,7 @@ class HealthCheckConsensusManager[F[_]](
 
   def startOwnConsensusForId(checkedId: Id): F[Unit] =
     for {
-      allPeers <- cluster.getPeerInfo
+      allPeers <- clusterStorage.getPeers
       roundId <- createHealthcheckRoundId()
       delayedHealthCheckStatus <- F.start(PeerUnresponsive(checkedId).asInstanceOf[PeerHealthCheckStatus].pure[F])
       _ <- startNewRoundForId(
@@ -250,7 +253,7 @@ class HealthCheckConsensusManager[F[_]](
     roundId: HealthcheckRoundId
   ): F[Either[HistoricalRoundData, HealthCheckConsensus[F]]] =
     for {
-      allPeers <- cluster.getPeerInfo
+      allPeers <- clusterStorage.getPeers
       checkedPeerData = allPeers.get(checkedId) // should I check the status if it's not offline or leaving at the moment
       delayedHealthCheckStatus <- F.start {
         checkedPeerData
@@ -270,7 +273,7 @@ class HealthCheckConsensusManager[F[_]](
 
   def startKeepUpRound(notification: NotifyAboutMissedConsensus): F[Unit] =
     for {
-      allPeers <- cluster.getPeerInfo
+      allPeers <- clusterStorage.getPeers
       NotifyAboutMissedConsensus(checkedId, roundIds, ConsensusHealthStatus(_, _, roundId, _, _)) = notification
       checkedPeerData = allPeers.get(checkedId) // should I check the status if it's not offline or leaving at the moment
       delayedHealthCheckStatus <- F.start {
@@ -397,15 +400,15 @@ class HealthCheckConsensusManager[F[_]](
       rounds <- (keepUpRounds ++ inProgress).toList.traverse {
         case (id, consensus) => consensus.getRoundIds().map(id -> _.toSortedSet)
       }.map(_.toMap)
-      ownState <- cluster.getNodeState
-      ownJoinedHeight <- cluster.getOwnJoinedHeight()
+      ownState <- nodeStorage.getNodeState
+      ownJoinedHeight <- nodeStorage.getOwnJoinedHeight
       ownNodeReconciliationData = NodeReconciliationData(
         id = ownId,
         nodeState = ownState.some,
         roundInProgress = None,
         joiningHeight = ownJoinedHeight
       )
-      allPeers <- cluster.getPeerInfo
+      allPeers <- clusterStorage.getPeers
       peersWeRunConsensusForButDontHave = (rounds -- allPeers.keySet).map {
         case (id, roundIds) =>
           id -> NodeReconciliationData(id = id, nodeState = None, roundInProgress = roundIds.some, joiningHeight = None)
@@ -427,7 +430,7 @@ class HealthCheckConsensusManager[F[_]](
     proxyToPeer: Id
   ): F[Either[SendProposalError, Unit]] =
     for {
-      maybePeerData <- cluster.getPeerInfo.map(_.get(proxyToPeer))
+      maybePeerData <- clusterStorage.getPeers.map(_.get(proxyToPeer))
       result <- maybePeerData match {
         case Some(peerData) =>
           logger.debug(
@@ -453,7 +456,7 @@ class HealthCheckConsensusManager[F[_]](
     originId: Id
   ): F[Either[FetchProposalError, SendPerceivedHealthStatus]] =
     for {
-      maybePeerData <- cluster.getPeerInfo.map(_.get(proxyToPeer))
+      maybePeerData <- clusterStorage.getPeers.map(_.get(proxyToPeer))
       result <- maybePeerData match {
         case Some(peerData) =>
           logger.debug(s"Proxying getting healthProposal from ${logId(proxyToPeer)} for ${logId(originId)}") >>
@@ -533,7 +536,7 @@ class HealthCheckConsensusManager[F[_]](
   private def inspectConsensusPeers(consensuses: List[HealthCheckConsensus[F]]): F[Unit] =
     for {
       _ <- logger.debug("Started inspection of consensus peers!")
-      peers <- cluster.getPeerInfo
+      peers <- clusterStorage.getPeers
       leavingOrOfflinePeers = peers.filter {
         case (_, peerData) => isInvalidForJoining(peerData.peerMetadata.nodeState)
       }.keySet
@@ -592,7 +595,7 @@ class HealthCheckConsensusManager[F[_]](
 
   def notifyRemainingPeersAboutMissedConsensuses(remainingPeers: Set[Id]) =
     for {
-      peers <- cluster.getPeerInfo
+      peers <- clusterStorage.getPeers
       peersWeHave = peers -- peers.keySet.diff(remainingPeers)
       inProgress <- getInProgressRounds()
       missedInProgress <- inProgress.values.toList.traverse { consensus =>
@@ -643,7 +646,7 @@ class HealthCheckConsensusManager[F[_]](
 
   def monitorAndManageConsensuses(consensuses: Map[Id, HealthCheckConsensus[F]]): F[Unit] =
     for {
-      peers <- cluster.getPeerInfo
+      peers <- clusterStorage.getPeers
       notOfflinePeers = peers.filter {
         case (_, peerData) => canActAsJoiningSource(peerData.peerMetadata.nodeState)
       }.keySet
@@ -770,7 +773,7 @@ class HealthCheckConsensusManager[F[_]](
 
   def manageSchedulingReconciliation(): F[Unit] =
     for {
-      peersCount <- cluster.getPeerInfo.map(_.size)
+      peersCount <- clusterStorage.getPeers.map(_.size)
       currentEpoch <- getTimeInSeconds()
       peersThatNeedReconciliation <- peersThatNeedReconciliation.get
       runAfter <- runReconciliationRoundAfter.get
@@ -781,7 +784,8 @@ class HealthCheckConsensusManager[F[_]](
             round <- reconciliationRound.modify { _ =>
               val round = ReconciliationRound[F](
                 ownId,
-                cluster,
+                clusterStorage,
+                nodeStorage,
                 currentEpoch,
                 roundId,
                 apiClient,
@@ -871,7 +875,7 @@ class HealthCheckConsensusManager[F[_]](
         unresponsivePeers <- peerHealthCheck
           .check(peersUnderConsensus, peersToRunHealthcheckFor)
           .map(_.map(_.peerMetadata.id).toSet)
-        notOfflinePeers <- cluster.getPeerInfo.map(_.filter {
+        notOfflinePeers <- clusterStorage.getPeers.map(_.filter {
           case (_, peerData) => canActAsJoiningSource(peerData.peerMetadata.nodeState)
         }.keySet)
         historical <- getHistoricalRounds()
@@ -913,6 +917,8 @@ object HealthCheckConsensusManager {
   def apply[F[_]: Concurrent: ContextShift: Parallel: Timer](
     ownId: Id,
     cluster: Cluster[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    nodeStorage: NodeStorageAlgebra[F],
     peerHealthCheck: PeerHealthCheck[F],
     metrics: Metrics,
     apiClient: ClientInterpreter[F],
@@ -923,6 +929,8 @@ object HealthCheckConsensusManager {
     new HealthCheckConsensusManager(
       ownId,
       cluster,
+      clusterStorage,
+      nodeStorage,
       peerHealthCheck,
       metrics,
       apiClient,

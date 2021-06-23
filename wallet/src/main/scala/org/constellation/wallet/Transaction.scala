@@ -39,9 +39,8 @@ object TransactionExt {
   def transactionParser[F[_]](fis: FileInputStream)(implicit F: Sync[F]): F[Option[Transaction]] =
     KeyStoreUtils.parseFileOfTypeOp[F, Transaction](parse(_).map(_.as[Transaction]).toOption.flatMap(_.toOption))(fis)
 
-  def transactionWriter[F[_]](t: Transaction)(implicit F: Sync[F]): OutputStream => F[Unit] = {
-    (fos: OutputStream) =>
-      KeyStoreUtils.writeTypeToFileStream[F, Transaction](_.asJson.noSpaces)(t)(fos)
+  def transactionWriter[F[_]](t: Transaction)(implicit F: Sync[F]): OutputStream => F[Unit] = { (fos: OutputStream) =>
+    KeyStoreUtils.writeTypeToFileStream[F, Transaction](_.asJson.noSpaces)(t)(fos)
   }
 
   def transactionToJsonString(transaction: Transaction): String =

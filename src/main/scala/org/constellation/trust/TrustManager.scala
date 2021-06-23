@@ -4,12 +4,13 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
 import org.constellation.schema.observation._
 import org.constellation.schema.{Id, NodeState}
 
-class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent[F]) {
+class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(implicit F: Concurrent[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -20,7 +21,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
   def getTrustDataInternalSelf: F[TrustDataInternal] = getStoredReputation.map(TrustDataInternal(nodeId, _))
 
   def handleTrustScoreUpdate(peerTrustScores: List[TrustDataInternal]): F[Unit] =
-    cluster.getPeerInfo.flatMap { peers =>
+    clusterStorage.getPeers.flatMap { peers =>
       if (peers.size > 2) {
         for {
           reputation <- getStoredReputation
@@ -68,7 +69,7 @@ class TrustManager[F[_]](nodeId: Id, cluster: Cluster[F])(implicit F: Concurrent
     def filterFn(peers: Map[Id, PeerData])(id: Id): Boolean =
       !peers.get(id).exists(p => NodeState.offlineStates.contains(p.peerMetadata.nodeState))
 
-    cluster.getPeerInfo.flatMap { peers =>
+    clusterStorage.getPeers.flatMap { peers =>
       storedReputation.get.map(
         reputation => peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ reputation.filterKeys(filterFn(peers))
       )
@@ -135,5 +136,6 @@ object TrustManager {
         )
     }
 
-  def apply[F[_]: Concurrent](nodeId: Id, cluster: Cluster[F]): TrustManager[F] = new TrustManager[F](nodeId, cluster)
+  def apply[F[_]: Concurrent](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F]): TrustManager[F] =
+    new TrustManager[F](nodeId, clusterStorage)
 }

@@ -6,7 +6,7 @@ import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
-import org.constellation.checkpoint.{CheckpointAcceptanceService, CheckpointBlockValidator}
+import org.constellation.checkpoint.{CheckpointBlockValidator, CheckpointService}
 import org.constellation.consensus.Consensus.{
   ConsensusDataProposal,
   ConsensusProposal,
@@ -25,6 +25,7 @@ import RoundDataRemote._
 import ConsensusDataProposal._
 import UnionBlockProposal._
 import SelectedUnionBlock._
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.schema.observation.ObservationEvent
 
 class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) extends Http4sDsl[F] {
@@ -54,10 +55,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
       case Some(consensus) =>
         proposal match {
           case proposal: ConsensusDataProposal =>
-            CheckpointAcceptanceService
-              .areTransactionsAllowedForAcceptance[F](proposal.transactions.toList)(
-                checkpointBlockValidator
-              )
+            checkpointBlockValidator
+              .validateLastTxRefChain(proposal.transactions.toList)
+              .map(_.isValid)
               .ifM(F.start(consensus.addConsensusDataProposal(proposal)) >> Accepted(), BadRequest())
           case proposal: UnionBlockProposal =>
             F.start(consensus.addBlockProposal(proposal)) >> Accepted()
@@ -73,13 +73,12 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
     case req @ POST -> Root / "block-round" / "new-round" =>
       for {
         cmd <- req.decodeJson[RoundDataRemote]
-        participate = cmd.tipsSOE.minHeight
-          .fold(F.unit) { min =>
-            snapshotService.getNextHeightInterval
-              .map(
-                last => if (last != 2 && last > min) throw SnapshotHeightAboveTip(cmd.roundId, last, min)
-              )
-          }
+        participate = snapshotService.getNextHeightInterval
+          .map(
+            last =>
+              if (last != 2 && last > cmd.tipsSOE.minHeight)
+                throw SnapshotHeightAboveTip(cmd.roundId, last, cmd.tipsSOE.minHeight)
+          )
           .flatMap(_ => consensusManager.participateInBlockCreationRound(convert(cmd)))
         response <- participate.flatMap { res =>
           F.start(C.shift >> consensusManager.continueRoundParticipation(res._1, res._2)) >> Ok()

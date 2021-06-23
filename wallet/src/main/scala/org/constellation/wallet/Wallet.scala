@@ -1,11 +1,11 @@
 package org.constellation.wallet
 
 import java.security.KeyPair
-
 import org.constellation.keytool.{KeyStoreUtils, KeyUtils}
 import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import cats.syntax.all._
+import org.constellation.schema.serialization.Kryo
 import org.constellation.schema.transaction.Transaction
 import scopt.OParser
 
@@ -15,6 +15,7 @@ object Wallet extends IOApp {
     for {
       cliParams <- loadCliParams[IO](args)
       keypair <- getKeypair[IO](cliParams)
+      _ <- Kryo.init[IO]().attemptT
       _ <- runMethod[IO](cliParams, keypair)
     } yield ()
   }.fold[ExitCode](throw _, _ => ExitCode.Success)

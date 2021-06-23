@@ -67,7 +67,8 @@ class TransactionEndpointsTest
       "should respond with an Ok status" in {
         transactionService.findByPredicate(*) shouldReturnF List.empty
 
-        val response = transactionPublicEndpoints.orNotFound.run(Request(Method.GET, uri"transaction?src=src")).unsafeRunSync
+        val response =
+          transactionPublicEndpoints.orNotFound.run(Request(Method.GET, uri"transaction?src=src")).unsafeRunSync
 
         response.status shouldBe Status.Ok
       }

@@ -2,30 +2,45 @@ package org.constellation.snapshot
 
 import cats.effect.IO
 import cats.syntax.all._
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.exception.InvalidNodeState
+import org.constellation.domain.redownload.{RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.gossip.snapshot.SnapshotProposalGossipService
 import org.constellation.p2p.{Cluster, SetStateResult}
 import org.constellation.schema.NodeState
 import org.constellation.schema.signature.Signed.signed
-import org.constellation.schema.snapshot.{MajorityInfo, SnapshotProposal, SnapshotProposalPayload}
-import org.constellation.storage.{HeightIntervalConditionNotMet, NotEnoughSpace, SnapshotError, SnapshotIllegalState}
+import org.constellation.schema.snapshot.{SnapshotProposal, SnapshotProposalPayload}
+import org.constellation.storage.{
+  HeightIntervalConditionNotMet,
+  NotEnoughSpace,
+  SnapshotError,
+  SnapshotIllegalState,
+  SnapshotService
+}
 import org.constellation.util.Logging._
 import org.constellation.util.{Metrics, PeriodicIO}
 import org.constellation.{ConfigUtil, DAO}
 
+import java.security.KeyPair
 import scala.collection.SortedMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: ExecutionContext)(
-  implicit dao: DAO,
   cluster: Cluster[IO],
-  snapshotProposalGossipService: SnapshotProposalGossipService[IO]
+  clusterStorage: ClusterStorageAlgebra[IO],
+  nodeStorage: NodeStorageAlgebra[IO],
+  snapshotProposalGossipService: SnapshotProposalGossipService[IO],
+  metrics: Metrics,
+  keyPair: KeyPair,
+  redownloadStorage: RedownloadStorageAlgebra[IO],
+  snapshotService: SnapshotService[IO],
+  broadcastService: BroadcastService[IO]
 ) extends PeriodicIO("SnapshotTrigger", unboundedExecutionContext) {
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
-  private val preconditions = cluster.getNodeState
+  private val preconditions = nodeStorage.getNodeState
     .map(NodeState.canCreateSnapshot)
     .map {
       _ && executionNumber.get() % snapshotHeightInterval == 0
@@ -34,16 +49,14 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
   private def triggerSnapshot(): IO[Unit] =
     preconditions.ifM(
       for {
-        stateSet <- dao.cluster
-          .compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation, skipBroadcast = true)
+        stateSet <- broadcastService.compareAndSet(NodeState.validForSnapshotCreation, NodeState.SnapshotCreation)
         _ <- if (!stateSet.isNewSet)
           IO.raiseError(InvalidNodeState(NodeState.validForSnapshotCreation, stateSet.oldState))
         else IO.unit
         startTime <- IO(System.currentTimeMillis())
-        snapshotResult <- dao.snapshotService.attemptSnapshot().value
+        snapshotResult <- snapshotService.attemptSnapshot().value
         elapsed <- IO(System.currentTimeMillis() - startTime)
-        majorityRange <- dao.redownloadService.getMajorityRange
-        majorityGapRanges <- dao.redownloadService.getMajorityGapRanges
+        filterData <- redownloadStorage.localFilterData
         _ = logger.debug(s"Attempt snapshot took: $elapsed millis")
         _ <- snapshotResult match {
           case Left(NotEnoughSpace) =>
@@ -53,16 +66,18 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
           case Left(err @ HeightIntervalConditionNotMet) =>
             resetNodeState(stateSet) >>
               IO(logger.warn(s"Snapshot attempt: ${err.message}")) >>
-              dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + "_heightIntervalNotMet")
+              metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + "_heightIntervalNotMet")
           case Left(err) =>
             handleError(err, stateSet)
           case Right(created) =>
-            dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success) >>
-              dao.redownloadService
+            metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.success) >>
+              redownloadStorage
                 .persistCreatedSnapshot(created.height, created.hash, SortedMap(created.publicReputation.toSeq: _*)) >>
-              dao.redownloadService
+              redownloadStorage
                 .persistAcceptedSnapshot(created.height, created.hash) >>
               resetNodeState(stateSet) >>
+              markLeavingPeersAsOffline() >>
+              removeOfflinePeers() >>
               snapshotProposalGossipService
                 .spread(
                   SnapshotProposalPayload(
@@ -72,12 +87,9 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
                         created.height,
                         SortedMap(created.publicReputation.toSeq: _*)
                       ),
-                      dao.keyPair
+                      keyPair
                     ),
-                    MajorityInfo(
-                      majorityRange,
-                      majorityGapRanges
-                    )
+                    filterData
                   )
                 )
                 .start
@@ -88,15 +100,43 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
     )
 
   def resetNodeState(stateSet: SetStateResult): IO[SetStateResult] =
-    cluster.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState, skipBroadcast = true)
+    broadcastService.compareAndSet(Set(NodeState.SnapshotCreation), stateSet.oldState)
 
   def handleError(err: SnapshotError, stateSet: SetStateResult): IO[Unit] = {
     implicit val cs = contextShift
 
     resetNodeState(stateSet) >>
       IO(logger.warn(s"Snapshot attempt error: ${err.message}")) >>
-      dao.metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure)
+      metrics.incrementMetricAsync[IO](Metrics.snapshotAttempt + Metrics.failure)
   }
+
+  private def markLeavingPeersAsOffline(): IO[Unit] =
+    clusterStorage.getPeers
+      .map(_.filter {
+        case (id, pd) => Set[NodeState](NodeState.Leaving).contains(pd.peerMetadata.nodeState)
+      })
+      .flatMap {
+        _.values.toList.map(_.peerMetadata.id).traverse { p =>
+          cluster
+            .markOfflinePeer(p)
+            .handleErrorWith(err => IO.delay { logger.warn(s"Cannot mark leaving peer as offline: ${err.getMessage}") })
+        }
+      }
+      .void
+
+  private def removeOfflinePeers(): IO[Unit] =
+    clusterStorage.getPeers
+      .map(_.filter {
+        case (id, pd) => NodeState.offlineStates.contains(pd.peerMetadata.nodeState)
+      })
+      .flatMap {
+        _.values.toList.traverse { p =>
+          cluster
+            .removePeer(p)
+            .handleErrorWith(err => IO.delay { logger.warn(s"Cannot remove offline peer: ${err.getMessage}") })
+        }
+      }
+      .void
 
   override def trigger(): IO[Unit] = logThread(triggerSnapshot(), "triggerSnapshot", logger)
 

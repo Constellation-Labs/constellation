@@ -3,9 +3,9 @@
 set -e
 
 mkdir -p /tmp/constellation
-wget https://constellationlabs-dag.s3.amazonaws.com/cluster/dag-$1.jar -O /tmp/constellation/dag.jar
-wget https://constellationlabs-dag.s3.amazonaws.com/keys/key-$2.p12 -O /tmp/constellation/key.p12
-wget https://constellationlabs-dag.s3.amazonaws.com/keys/data.csv -O /tmp/constellation/data.csv
+wget https://constellationlabs-dag.s3.amazonaws.com/cluster/dag-$1.jar -q -O /tmp/constellation/dag.jar
+wget https://constellationlabs-dag.s3.amazonaws.com/keys/key-$2.p12 -q -O /tmp/constellation/key.p12
+wget https://constellationlabs-dag.s3.amazonaws.com/keys/data.csv -q -O /tmp/constellation/data.csv
 
 # take external host ip
 curl http://checkip.amazonaws.com > /tmp/constellation/external_host_ip

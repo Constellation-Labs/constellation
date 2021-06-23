@@ -17,7 +17,8 @@ trait Signable {
   def getEncoding: String = hashSerialized(toEncode)
 
   def getHexEncoding = KeyUtils.bytes2hex(hashSerializedBytes(toEncode))
+}
 
+object Signable {
   def runLengthEncoding(hashes: String*): String = hashes.fold("")((acc, hash) => s"$acc${hash.length}$hash")
-
 }

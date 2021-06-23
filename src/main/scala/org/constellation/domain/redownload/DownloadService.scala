@@ -1,10 +1,12 @@
 package org.constellation.domain.redownload
 
-import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
+import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.DAO
-import org.constellation.checkpoint.{CheckpointAcceptanceService, TopologicalSort}
+import org.constellation.checkpoint.{CheckpointService, TopologicalSort}
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
+import org.constellation.domain.cluster.{BroadcastService, ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.genesis.Genesis
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster
@@ -18,9 +20,15 @@ import scala.concurrent.ExecutionContext
 
 class DownloadService[F[_]](
   redownloadService: RedownloadService[F],
-  cluster: Cluster[F],
-  checkpointAcceptanceService: CheckpointAcceptanceService[F],
+  redownloadStorage: RedownloadStorageAlgebra[F],
+  nodeStorage: NodeStorageAlgebra[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  checkpointService: CheckpointService[F],
+  checkpointStorage: CheckpointStorageAlgebra[F],
   apiClient: ClientInterpreter[F],
+  broadcastService: BroadcastService[F],
+  snapshotService: SnapshotService[F],
+  genesis: Genesis[F],
   metrics: Metrics,
   boundedExecutionContext: ExecutionContext,
   unboundedBlocker: Blocker
@@ -31,25 +39,24 @@ class DownloadService[F[_]](
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  def download()(implicit dao: DAO): F[Unit] = {
+  def download(): F[Unit] = {
     val wrappedDownload = for {
-      _ <- clearDataBeforeDownload()
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals()
       _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(isDownload = true)
-      majorityState <- redownloadService.lastMajorityState.get
+      majorityState <- redownloadStorage.getLastMajorityState
       _ <- if (majorityState.isEmpty)
         fetchAndPersistBlocks()
       else F.unit
-      _ <- cluster.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
+      _ <- broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       _ <- metrics.incrementMetricAsync("downloadFinished_total")
     } yield ()
 
-    (cluster.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
+    (broadcastService.compareAndSet(NodeState.initial, NodeState.ReadyForDownload).flatMap { state =>
       if (state.isNewSet) {
         wrappedDownload.handleErrorWith { error =>
           logger.error(error)(s"Error during download process") >>
-            cluster.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
+            broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.PendingDownload).void >>
             error.raiseError[F, Unit]
         }
       } else F.unit
@@ -58,21 +65,21 @@ class DownloadService[F[_]](
 
   private[redownload] def fetchAndPersistBlocks(): F[Unit] =
     for {
-      peers <- cluster.getPeerInfo.map(_.values.toList)
+      peers <- clusterStorage.getPeers.map(_.values.toList)
       readyPeers = peers.filter(p => NodeState.canActAsDownloadSource(p.peerMetadata.nodeState))
       clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>
         for {
-          accepted <- redownloadService.fetchAcceptedSnapshots(client)
-          acceptedSnapshots <- accepted.values.toList
-            .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
-            .flatMap { snapshotsSerialized =>
-              snapshotsSerialized.traverse { snapshot =>
-                C.evalOn(boundedExecutionContext)(F.delay {
-                  KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
-                })
-              }
-            }
+//          accepted <- redownloadService.fetchAcceptedSnapshots(client)
+//          acceptedSnapshots <- accepted.values.toList
+//            .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
+//            .flatMap { snapshotsSerialized =>
+//              snapshotsSerialized.traverse { snapshot =>
+//                C.evalOn(boundedExecutionContext)(F.delay {
+//                  KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
+//                })
+//              }
+//            }
           snapshotInfoFromMemPool <- redownloadService
             .fetchSnapshotInfo(client)
             .flatMap { snapshotInfo =>
@@ -81,61 +88,34 @@ class DownloadService[F[_]](
               })
             }
 
-          blocksFromSnapshots = acceptedSnapshots.flatMap(_.checkpointCache)
+          _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool)
 
-          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
-          awaitingBlocksFromSnapshotInfo = snapshotInfoFromMemPool.awaitingCbs
+//          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
+//          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
+//            checkpointStorage.getCheckpoint
+//          }.map(_.flatten)
 
-          blocksToAccept = (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo).distinct
+//          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
+//            .distinct
+//            .filterA { c =>
+//                checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_)
+//              }
 
-          _ <- checkpointAcceptanceService.waitingForAcceptance.modify { blocks =>
-            val updated = blocks ++ blocksToAccept.map(_.checkpointBlock.soeHash)
-            (updated, ())
-          }
-
-          _ <- C
-            .evalOn(boundedExecutionContext) {
-              F.delay {
-                TopologicalSort.sortBlocksTopologically(blocksToAccept).toList
-              }
-            }
-            .flatMap {
-              _.traverse { b =>
-                logger.debug(s"Accepting block above majority: ${b.height}") >>
-                  C.evalOn(boundedExecutionContext) {
-                      checkpointAcceptanceService.accept(b)
-                    }
-                    .handleErrorWith { error =>
-                      logger.warn(error)(s"Error during blocks acceptance after download") >> F.unit
-                    }
-              }
-            }
+//          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
         } yield ()
       }
     } yield ()
 
-  private[redownload] def clearDataBeforeDownload()(implicit dao: DAO): F[Unit] =
-    for {
-      _ <- logger.debug("Clearing data before download.")
-      _ <- LiftIO[F].liftIO(dao.blacklistedAddresses.clear)
-      _ <- LiftIO[F].liftIO(dao.transactionChainService.clear)
-      _ <- LiftIO[F].liftIO(dao.addressService.clear)
-      _ <- LiftIO[F].liftIO(dao.soeService.clear)
-    } yield ()
-
-  private[redownload] def downloadAndAcceptGenesis()(implicit dao: DAO): F[Unit] =
+  private[redownload] def downloadAndAcceptGenesis(): F[Unit] =
     for {
       _ <- logger.debug("Downloading and accepting genesis.")
-      _ <- cluster
+      _ <- broadcastService
         .broadcast(PeerResponse.run(apiClient.checkpoint.getGenesis(), unboundedBlocker))
         .map(_.values.flatMap(_.toOption))
         .map(_.find(_.nonEmpty).flatten.get)
-        .flatTap { genesis =>
-          ContextShift[F].evalOn(boundedExecutionContext)(F.delay {
-            Genesis.acceptGenesis(genesis)
-          })
+        .flatMap { go =>
+          ContextShift[F].evalOn(boundedExecutionContext)(genesis.acceptGenesis(go))
         }
-        .void
     } yield ()
 }
 
@@ -143,18 +123,30 @@ object DownloadService {
 
   def apply[F[_]: Concurrent: ContextShift](
     redownloadService: RedownloadService[F],
-    cluster: Cluster[F],
-    checkpointAcceptanceService: CheckpointAcceptanceService[F],
+    redownloadStorage: RedownloadStorageAlgebra[F],
+    nodeStorage: NodeStorageAlgebra[F],
+    clusterStorage: ClusterStorageAlgebra[F],
+    checkpointService: CheckpointService[F],
+    checkpointStorage: CheckpointStorageAlgebra[F],
     apiClient: ClientInterpreter[F],
+    broadcastService: BroadcastService[F],
+    snapshotService: SnapshotService[F],
+    genesis: Genesis[F],
     metrics: Metrics,
     boundedExecutionContext: ExecutionContext,
     unboundedBlocker: Blocker
   ): DownloadService[F] =
     new DownloadService[F](
       redownloadService,
-      cluster,
-      checkpointAcceptanceService,
+      redownloadStorage,
+      nodeStorage,
+      clusterStorage,
+      checkpointService,
+      checkpointStorage,
       apiClient,
+      broadcastService,
+      snapshotService,
+      genesis,
       metrics,
       boundedExecutionContext,
       unboundedBlocker

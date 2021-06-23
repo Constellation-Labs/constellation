@@ -4,16 +4,14 @@ import cats.syntax.all._
 import org.constellation.domain.redownload.RedownloadService.{PeersCache, PeersProposals, SnapshotsAtHeight}
 import org.constellation.schema.Id
 import org.constellation.schema.snapshot.HeightRange.MaxRange
-import org.constellation.schema.snapshot.{HeightRange, MajorityInfo}
+import org.constellation.schema.snapshot.HeightRange
 
 import scala.collection.immutable.NumericRange.inclusive
 import scala.math.{max, min}
 
 class MissingProposalFinder(
-  private val heightInterval: Long,
-  private val offset: Long,
-  private val limit: Long,
-  private val selfId: Id
+  heightInterval: Long,
+  selfId: Id
 ) {
 
   /**
@@ -23,9 +21,9 @@ class MissingProposalFinder(
     lookupRange: HeightRange,
     proposals: PeersProposals,
     peersCache: PeersCache
-  ): Map[Id, Set[Long]] = {
+  ): Set[(Id, Long)] = {
     val receivedProposals = proposals.mapValues(_.keySet)
-    val bounds = boundedRange(lookupRange)
+    val bounds = lookupRange
 
     (peersCache - selfId)
       .mapValues(
@@ -36,34 +34,13 @@ class MissingProposalFinder(
           }
         }
       )
-      .map {
+      .toList
+      .flatMap {
         case (id, majorityHeights) =>
           val allProposals = expandIntervals(bounds, majorityHeights)
-          (id, allProposals -- receivedProposals.getOrElse(id, Set.empty))
+          (allProposals -- receivedProposals.getOrElse(id, Set.empty)).map((id, _)).toList
       }
-      .filter {
-        case (_, missingProposals) => missingProposals.nonEmpty
-      }
-  }
-
-  /**
-    * @return Id of the peer that can provide the most proposals that are missing, if one could be found
-    */
-  def selectPeerForFetchingMissingProposals(
-    lookupRange: HeightRange,
-    missingProposals: Set[Long],
-    peerMajorityInfo: Map[Id, MajorityInfo]
-  ): Option[Id] = {
-    val bounds = boundedRange(lookupRange)
-
-    (peerMajorityInfo - selfId).mapValues { majorityInfo =>
-      val peerGaps = expandIntervals(bounds, majorityInfo.majorityGaps) ++
-        rangeSet(majorityInfo.majorityRange.to + heightInterval, bounds.to) ++
-        rangeSet(bounds.from, majorityInfo.majorityRange.from - heightInterval)
-      missingProposals -- peerGaps
-    }.toList.filter { case (_, proposalsToFill) => proposalsToFill.nonEmpty }.maximumByOption {
-      case (_, proposalsToFill) => proposalsToFill.size
-    }.map { case (id, _) => id }
+      .toSet
   }
 
   def findGapRanges(majorityState: SnapshotsAtHeight): List[HeightRange] =
@@ -92,14 +69,10 @@ class MissingProposalFinder(
 
   private def rangeSet(from: Long, to: Long): Set[Long] =
     inclusive(from, to, heightInterval).toSet
-
-  private def boundedRange(range: HeightRange) =
-    HeightRange(max(range.from, range.to - (offset + limit)), range.to - offset)
-
 }
 
 object MissingProposalFinder {
 
-  def apply(heightInterval: Long, offset: Long, limit: Long, selfId: Id) =
-    new MissingProposalFinder(heightInterval, offset, limit, selfId)
+  def apply(heightInterval: Long, selfId: Id) =
+    new MissingProposalFinder(heightInterval, selfId)
 }

@@ -1,4 +1,8 @@
 resource "null_resource" "grafana_provisioner" {
+  triggers = {
+    ips_for_grafana = var.ips_for_grafana
+  }
+
   connection {
     host = var.grafana_ip
     type = "ssh"
@@ -13,6 +17,8 @@ resource "null_resource" "grafana_provisioner" {
 
   provisioner "remote-exec" {
     inline = [
+      "sudo docker-compose down",
+      "sudo docker-compose kill",
       "sudo docker-compose up -d"
     ]
   }

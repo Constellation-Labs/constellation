@@ -1,7 +1,6 @@
 package org.constellation.gossip
 
 import java.security.KeyPair
-
 import cats.Parallel
 import cats.effect.syntax.all._
 import cats.effect.{Concurrent, ContextShift, Timer}
@@ -9,6 +8,7 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.gossip.bisect.Bisect
 import org.constellation.gossip.sampling.{GossipPath, PeerSampling}
 import org.constellation.gossip.state.{GossipMessage, GossipMessagePathTracker}
@@ -24,7 +24,7 @@ abstract class GossipService[F[_]: Parallel, A](
   selfId: Id,
   keyPair: KeyPair,
   peerSampling: PeerSampling[F],
-  cluster: Cluster[F],
+  clusterStorage: ClusterStorageAlgebra[F],
   metrics: Metrics,
   messageTracker: GossipMessagePathTracker[F, A]
 )(
@@ -148,7 +148,7 @@ abstract class GossipService[F[_]: Parallel, A](
     path.toIndexedSeq.length * spreadRequestTimeout
 
   protected def getClientMetadata(id: Id): F[PeerClientMetadata] =
-    cluster.getPeerInfo.flatMap(_.get(id) match {
+    clusterStorage.getPeers.flatMap(_.get(id) match {
       case Some(metadata) => metadata.peerMetadata.toPeerClientMetadata.pure[F]
       case None           => F.raiseError[PeerClientMetadata](MissingClientForId(id))
     })

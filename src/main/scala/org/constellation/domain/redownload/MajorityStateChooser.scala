@@ -2,14 +2,17 @@ package org.constellation.domain.redownload
 
 import cats.syntax.all._
 import org.constellation.domain.redownload.MajorityStateChooser.ExtendedSnapshotProposal
-import org.constellation.domain.redownload.RedownloadService.{PeersCache, PeersProposals, SnapshotProposalsAtHeight, SnapshotsAtHeight}
+import org.constellation.domain.redownload.RedownloadService.{
+  PeersCache,
+  PeersProposals,
+  SnapshotProposalsAtHeight,
+  SnapshotsAtHeight
+}
 import org.constellation.p2p.MajorityHeight
 import org.constellation.schema.Id
 
-
 class MajorityStateChooser(id: Id) {
 
-  // TODO: Use RedownloadService type definitions
   def chooseMajorityState(
     createdSnapshots: SnapshotProposalsAtHeight,
     peersProposals: PeersProposals,

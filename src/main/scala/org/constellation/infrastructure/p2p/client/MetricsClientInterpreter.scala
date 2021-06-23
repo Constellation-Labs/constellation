@@ -16,7 +16,8 @@ class MetricsClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTok
 ) extends MetricsClientAlgebra[F] {
 
   def checkHealth(): PeerResponse[F, Unit] =
-    PeerResponse.successful[F]("health", "Cannot check health")(client, sessionTokenService)//should we be checking token for health? I guess we should
+    PeerResponse
+      .successful[F]("health", "Cannot check health")(client, sessionTokenService) //should we be checking token for health? I guess we should
 
   def getMetrics(): PeerResponse[F, MetricsResult] =
     PeerResponse[F, MetricsResult]("metrics")(client, sessionTokenService)

@@ -3,9 +3,11 @@ package org.constellation.util
 import cats.effect.{Blocker, Concurrent, ContextShift, LiftIO, Sync}
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
+import org.constellation.checkpoint.CheckpointService
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
+import org.constellation.p2p.Cluster
 import org.constellation.schema.{Id, NodeState}
-import org.constellation.storage.ConcurrentTipService
 import org.constellation.{ConfigUtil, DAO}
 
 class MetricFailure(message: String) extends Exception(message)
@@ -19,26 +21,6 @@ case class InconsistentSnapshotHash(nodeId: String, hashes: Set[String])
 
 object HealthChecker {
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
-
-  // TODO: unused, consider removing
-  /*
-  def checkAllMetrics(apis: Seq[APIClient]): Either[MetricFailure, Unit] = {
-    var hashes: Set[String] = Set.empty
-    val it = apis.iterator
-    var lastCheck: Either[MetricFailure, Unit] = Right(())
-    while (it.hasNext && lastCheck.isRight) {
-      val a = it.next()
-      val metrics = IO
-        .fromFuture(IO { a.metricsAsync })(IO.contextShift(ConstellationExecutionContext.bounded))
-        .unsafeRunSync() // TODO: wkoszycki revisit
-      lastCheck = checkLocalMetrics(metrics, a.baseURI).orElse {
-        hashes ++= Set(metrics.getOrElse(Metrics.lastSnapshotHash, "no_snap"))
-        Either.cond(hashes.size == 1, (), InconsistentSnapshotHash(a.baseURI, hashes))
-      }
-    }
-    lastCheck
-  }
-   */
 
   def checkLocalMetrics(metrics: Map[String, String], nodeId: String): Either[MetricFailure, Unit] =
     hasEmptyHeight(metrics, nodeId)
@@ -54,13 +36,13 @@ object HealthChecker {
 case class RecentSync(hash: String, height: Long)
 
 class HealthChecker[F[_]: Concurrent](
-  dao: DAO,
-  concurrentTipService: ConcurrentTipService[F],
+  checkpointService: CheckpointService[F],
   apiClient: ClientInterpreter[F],
-  unboundedBlocker: Blocker
+  unboundedBlocker: Blocker,
+  id: Id,
+  clusterStorage: ClusterStorageAlgebra[F],
+  numFacilitatorPeers: Int
 )(implicit C: ContextShift[F]) {
-
-  implicit val shadedDao: DAO = dao
 
   val logger = Slf4jLogger.getLogger[F]
 
@@ -73,23 +55,21 @@ class HealthChecker[F[_]: Concurrent](
 
   def checkForStaleTips(): F[Unit] = {
     val check = for {
-      _ <- logger.debug(s"[${dao.id.short}] Re-download checking cluster consistency")
+      _ <- logger.debug(s"[${id.short}] Re-download checking cluster consistency")
       _ <- clearStaleTips()
     } yield ()
 
     check.recoverWith {
       case err =>
         logger
-          .error(err)(s"[${dao.id.short}] Unexpected error during check for stale tips process: ${err.getMessage}")
+          .error(err)(s"[${id.short}] Unexpected error during check for stale tips process: ${err.getMessage}")
           .flatMap(_ => Sync[F].pure[Unit](None))
     }
   }
 
   private def collectNextSnapshotHeights(): F[Map[Id, Long]] =
     for {
-      peers <- LiftIO[F]
-        .liftIO(dao.cluster.getPeerInfo)
-        .map(_.filter { case (_, pd) => NodeState.isNotOffline(pd.peerMetadata.nodeState) })
+      peers <- clusterStorage.getNotOfflinePeers
       nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)
         .traverse(
@@ -111,7 +91,7 @@ class HealthChecker[F[_]: Concurrent](
       heights = nextSnasphotHeights.values.toList
       nodesWithHeights = heights.filter(_ > 0)
 
-      _ <- if (nodesWithHeights.size >= dao.processingConfig.numFacilitatorPeers) {
+      _ <- if (nodesWithHeights.size >= numFacilitatorPeers) {
 
         /*
           nodes:            A     B     C
@@ -125,67 +105,12 @@ class HealthChecker[F[_]: Concurrent](
         val maxNextSnapshotHeight = nodesWithHeights.maximumOption
 
         if (maxNextSnapshotHeight.nonEmpty) {
-          concurrentTipService.clearStaleTips(maxNextSnapshotHeight.get)
+          checkpointService.clearStaleTips(maxNextSnapshotHeight.get)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(
-          s"[Clear stale tips] Size=${nextSnasphotHeights.size} numFacilPeers=${dao.processingConfig.numFacilitatorPeers}"
+          s"[Clear stale tips] Size=${nextSnasphotHeights.size} numFacilPeers=${numFacilitatorPeers}"
         )
     } yield ()
-
-  /*
-  def startReDownload(
-    diff: SnapshotDiff,
-    peers: Map[Id, PeerData]
-  ): F[Unit] = {
-    val reDownload = for {
-      _ <- logger.info(s"[${dao.id.short}] Starting re-download process ${diff.snapshotsToDownload.size}")
-
-      _ <- logger.debug(s"[${dao.id.short}] NodeState set to DownloadInProgress")
-
-      _ <- LiftIO[F].liftIO(dao.terminateConsensuses())
-      _ <- logger.debug(s"[${dao.id.short}] Consensuses terminated")
-
-      _ <- downloader.reDownload(
-        diff.snapshotsToDownload.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash),
-        peers.filterKeys(diff.peers.contains)
-      )
-
-      _ <- Snapshot.removeSnapshots(
-        diff.snapshotsToDelete.map(_.hash).filterNot(_ == Snapshot.snapshotZeroHash)
-      )
-
-      _ <- logger.info(s"[${dao.id.short}] Re-download process finished")
-      _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadFinished)
-    } yield ()
-
-    val wrappedDownload =
-      cluster.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress).flatMap { stateSetResult =>
-        if (stateSetResult.isNewSet) {
-          val recover = reDownload.handleErrorWith { err =>
-            for {
-              _ <- logger.error(err)(s"[${dao.id.short}] re-download process error: ${err.getMessage}")
-              recoverSet <- cluster.compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-              _ <- logger
-                .info(s"[${dao.id.short}] trying set state back to: ${stateSetResult.oldState} result: ${recoverSet}")
-              _ <- dao.metrics.incrementMetricAsync(Metrics.reDownloadError)
-              _ <- Sync[F].raiseError[Unit](err)
-            } yield ()
-          }
-
-          recover.flatMap(
-            _ =>
-              cluster
-                .compareAndSet(NodeState.validDuringDownload, stateSetResult.oldState)
-                .void
-          )
-        } else {
-          logger.warn(s"Download process can't start due to invalid node state: ${stateSetResult.oldState}")
-        }
-      }
-
-    wrappedDownload
-  }
- */
 
 }

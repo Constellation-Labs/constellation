@@ -3,6 +3,7 @@ package org.constellation.schema.transaction
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
 import org.constellation.schema.signature.Signable
+import org.constellation.schema.signature.Signable.runLengthEncoding
 
 case class LastTransactionRef(
   prevHash: String,

@@ -10,6 +10,7 @@ import org.constellation.schema.address.Address
 import org.constellation.schema.consensus.ConsensusObject
 import org.constellation.schema.edge.Edge
 import org.constellation.schema.signature.HashSignature
+import org.constellation.schema.signature.Signable.runLengthEncoding
 
 import org.constellation.schema._
 
@@ -64,9 +65,13 @@ case class Transaction(
 
   def fee: Option[Long] = edge.data.fee
 
-  def baseHash: String = edge.signedObservationEdge.baseHash
+  def baseHash: String = hashSerialized(
+    edge.parents.length +
+      runLengthEncoding(edge.parents.map(_.hashReference): _*) +
+      edge.data.getEncoding
+  )
 
-  def hash: String = edge.observationEdge.hash
+  def hash: String = edge.signedObservationEdge.hash
 
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 
@@ -74,8 +79,8 @@ case class Transaction(
     edge = edge.withSignatureFrom(keyPair)
   )
 
-  def isValid = signatures.exists { hs ⇒
-    hs.publicKey.address == src.address && hs.valid(signaturesHash) && hash == signaturesHash
+  def isValid: Boolean = signatures.nonEmpty && signatures.forall { hs ⇒
+    hs.publicKey.address == src.address && hs.valid(baseHash) && baseHash == signaturesHash
   }
 
   def feeValue: Long = fee.map(v => if (v < 0L) 0L else v).getOrElse(0L)

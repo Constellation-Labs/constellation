@@ -33,7 +33,7 @@ abstract class PeriodicIO(taskName: String, taskExecutionContext: ExecutionConte
   def schedule(duration: FiniteDuration): Unit = {
     val delayedTask = timer
       .sleep(duration)
-      .flatMap(_ => IO(logger.debug(s"triggering periodic task ${taskName}")))
+//      .flatMap(_ => IO(logger.debug(s"triggering periodic task ${taskName}")))
       .flatMap(
         _ =>
           IO.contextShift(timerPool)
@@ -45,7 +45,7 @@ abstract class PeriodicIO(taskName: String, taskExecutionContext: ExecutionConte
       .unsafeToFuture()
       .onComplete { res =>
         val currNumber = executionNumber.incrementAndGet()
-        logger.debug(s"Periodic task: $taskName has finished $res execution number: $currNumber")
+//        logger.debug(s"Periodic task: $taskName has finished $res execution number: $currNumber")
         if (!cancellationToken.get()) schedule(duration)
       }(timerPool)
   }
