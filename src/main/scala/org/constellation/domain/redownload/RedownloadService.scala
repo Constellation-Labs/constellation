@@ -75,7 +75,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
   def fetchAndUpdatePeersProposals(): F[Unit] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
-      peers <- clusterStorage.getNotOfflinePeers.map(_.values.toList)
+      peers <- clusterStorage.getJoinedPeers.map(_.values.toList)
       apiClients = peers.map(_.peerMetadata.toPeerClientMetadata)
       responses <- apiClients.traverse { client =>
         fetchCreatedSnapshots(client).map(client.id -> _)
@@ -319,8 +319,9 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       calculatedMajorityWithoutGaps = if (gaps.isEmpty) calculatedMajority
       else calculatedMajority.removeHeightsAbove(gaps.min)
 
-      joinHeight = if (isDownload) calculatedMajorityWithoutGaps.maxHeight
-      else ownPeer.getOrElse(calculatedMajorityWithoutGaps.maxHeight)
+      joinHeight = ownPeer.getOrElse(calculatedMajorityWithoutGaps.maxHeight)
+
+      _ <- if (isDownload) logger.debug(s"Join height is ${joinHeight}") else F.unit
 
       majorityBeforeCutOff = {
         val intersect = lastMajority.keySet & calculatedMajorityWithoutGaps.keySet
@@ -331,11 +332,18 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       }
 
       cutOffHeight = getCutOffHeight(joinHeight, calculatedMajorityWithoutGaps, lastMajority)
+
+      _ <- if (isDownload) logger.debug(s"cutOffHeight=${cutOffHeight}") else F.unit
+
       meaningfulMajority = majorityBeforeCutOff.removeHeightsBelow(cutOffHeight)
       _ <- redownloadStorage.setLastMajorityState(meaningfulMajority) >>
         metrics.updateMetricAsync("redownload_lastMajorityStateHeight", meaningfulMajority.maxHeight)
 
-      (meaningfulAcceptedSnapshots, _, _) <- redownloadStorage.removeSnapshotsAndProposalsBelowHeight(cutOffHeight)
+      removeBelow = cutOffHeight - (redownloadInterval / 2)
+
+      _ <- logger.debug(s"removeBelow = $cutOffHeight - ${redownloadInterval / 2} = ${removeBelow}")
+
+      (meaningfulAcceptedSnapshots, _, _) <- redownloadStorage.removeSnapshotsAndProposalsBelowHeight(removeBelow)
 
       _ <- logger.debug(s"Meaningful majority in range ${calculatedMajority.heightRange}")
 
@@ -445,7 +453,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
     lastMajority: SnapshotsAtHeight
   ): Long = {
     val ignorePoint = getIgnorePoint(candidateMajority.maxHeight)
-    min(max(ignorePoint, joinHeight), lastMajority.maxHeight)
+    max(joinHeight, min(max(ignorePoint, joinHeight), lastMajority.maxHeight))
   }
 
   def getIgnorePoint(maxHeight: Long): Long = maxHeight - meaningfulSnapshotsCount

@@ -19,6 +19,7 @@ import org.constellation.schema.snapshot.{SnapshotInfo, SnapshotInfoV1, StoredSn
 import org.constellation.serialization.KryoSerializer
 import org.constellation.storage.SnapshotService
 import org.constellation.util.AccountBalances.AccountBalances
+import org.constellation.util.Metrics
 
 case class RollbackData(
   snapshotInfo: SnapshotInfo,
@@ -28,6 +29,7 @@ case class RollbackData(
 
 class RollbackService[F[_]](
   genesis: Genesis[F],
+  metrics: Metrics,
   snapshotService: SnapshotService[F],
   snapshotLocalStorage: LocalFileStorage[F, StoredSnapshot],
   snapshotInfoLocalStorage: LocalFileStorage[F, SnapshotInfo],
@@ -139,6 +141,7 @@ class RollbackService[F[_]](
       ownJoinedHeight = height - snapshotHeightInterval
 
       _ <- nodeStorage.setOwnJoinedHeight(ownJoinedHeight).attemptT
+      _ <- metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", ownJoinedHeight).attemptT
 
       _ <- redownloadStorage
         .persistAcceptedSnapshot(height, storedSnapshot.snapshot.hash)

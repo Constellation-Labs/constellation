@@ -52,11 +52,12 @@ class BroadcastService[F[_]: Clock: ContextShift](
   def broadcast[T](
     f: PeerClientMetadata => F[T],
     skip: Set[Id] = Set.empty,
-    subset: Set[Id] = Set.empty
+    subset: Set[Id] = Set.empty,
+    forceAllPeers: Boolean = false
   ): F[Map[Id, Either[Throwable, T]]] =
     logThread(
       for {
-        peerInfo <- clusterStorage.getNotOfflinePeers
+        peerInfo <- if (forceAllPeers) clusterStorage.getNotOfflinePeers else clusterStorage.getJoinedPeers
         selected = if (subset.nonEmpty) {
           peerInfo.filterKeys(subset.contains)
         } else {

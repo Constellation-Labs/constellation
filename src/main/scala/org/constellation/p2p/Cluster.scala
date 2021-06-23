@@ -288,7 +288,7 @@ class Cluster[F[_]](
 
   def setOwnJoinedHeight(): F[Unit] = {
     val discoverJoinedHeight = for {
-      p <- clusterStorage.getNotOfflinePeers
+      p <- clusterStorage.getJoinedPeers
       clients = p.map(_._2.peerMetadata).toList
       maxMajorityHeight <- clients
         .traverse(
@@ -330,16 +330,19 @@ class Cluster[F[_]](
       ownHeight <- if (height.isEmpty) F.raiseError(new Throwable("Own joined height not set!")) else height.get.pure[F]
       _ <- logger.debug(s"Broadcasting own joined height - step2: height=$ownHeight")
       _ <- broadcastService.broadcast(
-        PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker)
+        PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker),
+        forceAllPeers = true
       )
       _ <- F.start(
         T.sleep(10.seconds) >> broadcastService.broadcast(
-          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker)
+          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker),
+          forceAllPeers = true
         )
       )
       _ <- F.start(
         T.sleep(30.seconds) >> broadcastService.broadcast(
-          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker)
+          PeerResponse.run(apiClient.cluster.setJoiningHeight(JoinedHeight(nodeId, ownHeight)), unboundedBlocker),
+          forceAllPeers = true
         )
       )
     } yield ()
@@ -574,7 +577,9 @@ class Cluster[F[_]](
 
         _ <- clusterStorage.clearPeers()
         _ <- sessionTokenService.clearOwnToken()
-        _ <- if (nodeConfig.isGenesisNode) nodeStorage.setOwnJoinedHeight(0L) else nodeStorage.clearOwnJoinedHeight()
+        _ <- if (nodeConfig.isGenesisNode)
+          nodeStorage.setOwnJoinedHeight(0L) >> metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", 0L)
+        else nodeStorage.clearOwnJoinedHeight()
         _ <- eigenTrust.clearAgents()
 
         _ <- gracefulShutdown
@@ -601,7 +606,8 @@ class Cluster[F[_]](
       broadcastService
         .broadcast(
           PeerResponse.run(apiClient.cluster.setNodeStatus(SetNodeStatus(nodeId, nodeState)), unboundedBlocker),
-          Set(nodeId)
+          Set(nodeId),
+          forceAllPeers = true
         )
         .flatTap {
           _.filter(_._2.isLeft).toList.traverse {
@@ -616,7 +622,10 @@ class Cluster[F[_]](
     def peerUnregister(c: PeerClientMetadata) =
       PeerUnregister(peerHostPort.host, peerHostPort.port, nodeId, majorityHeight)
     broadcastService
-      .broadcast(c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)), unboundedBlocker)(c))
+      .broadcast(
+        c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)), unboundedBlocker)(c),
+        forceAllPeers = true
+      )
       .void
   }
 

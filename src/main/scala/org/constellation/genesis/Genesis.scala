@@ -82,6 +82,7 @@ class Genesis[F[_]: Concurrent](
       _ <- nodeStorage.setParticipatedInRollbackFlow(false)
       _ <- nodeStorage.setJoinedAsInitialFacilitator(true)
       _ <- nodeStorage.setOwnJoinedHeight(0L)
+      _ <- metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", 0L)
       genesisObservation <- createGenesisObservation(nodeConfig.allocAccountBalances)
       _ <- acceptGenesis(genesisObservation)
     } yield ()
