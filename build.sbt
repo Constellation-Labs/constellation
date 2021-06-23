@@ -154,7 +154,7 @@ lazy val sharedDependencies = scoptDependencies ++ jodaTimeDependencies ++ circe
 
 lazy val keyToolSharedDependencies = googleCloudStorageDependencies ++ spongyCastleDependencies ++ sharedDependencies
 
-lazy val walletSharedDependencies = bitcoinjDependencies ++ sharedDependencies
+lazy val walletSharedDependencies = bitcoinjDependencies ++ sharedDependencies ++ http4sClientDependencies
 
 lazy val schemaSharedDependencies = keyToolSharedDependencies ++ twitterChillDependencies
 

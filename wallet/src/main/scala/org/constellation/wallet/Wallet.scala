@@ -6,26 +6,42 @@ import cats.data.EitherT
 import cats.effect.{ExitCode, IO, IOApp, Sync}
 import cats.syntax.all._
 import org.constellation.schema.serialization.Kryo
-import org.constellation.schema.transaction.Transaction
+import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import scopt.OParser
 
+import org.http4s._
+import org.http4s.dsl.io._
+import org.http4s.implicits._
+
+import org.http4s.client.blaze._
+import org.http4s.client._
+import org.http4s.circe.CirceEntityDecoder._
+
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object Wallet extends IOApp {
+
+  val lbAddress = "http://lb.constellationnetwork.io:9000"
 
   def run(args: List[String]): IO[ExitCode] = {
     for {
       cliParams <- loadCliParams[IO](args)
       keypair <- getKeypair[IO](cliParams)
       _ <- Kryo.init[IO]().attemptT
-      _ <- runMethod[IO](cliParams, keypair)
+      _ <- BlazeClientBuilder[IO](global).resource.use { client =>
+        runMethod[IO](cliParams, keypair, client).rethrowT
+      }.attemptT
     } yield ()
   }.fold[ExitCode](throw _, _ => ExitCode.Success)
 
-  def runMethod[F[_]](cliParams: CliConfig, keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
+  def runMethod[F[_]](cliParams: CliConfig, keypair: KeyPair, client: Client[F])(
+    implicit F: Sync[F]
+  ): EitherT[F, Throwable, Unit] =
     cliParams.method match {
       case CliMethod.ShowAddress =>
         displayAddress[F](keypair)
       case CliMethod.CreateTransaction =>
-        createTransaction[F](cliParams, keypair).flatMap(storeTransaction[F](cliParams, _))
+        createTransaction[F](cliParams, keypair, client).flatMap(storeTransaction[F](cliParams, _))
       case CliMethod.ShowId =>
         displayId[F](keypair)
       case CliMethod.ShowPublicKey =>
@@ -53,17 +69,24 @@ object Wallet extends IOApp {
   def displayPublicKey[F[_]](keypair: KeyPair)(implicit F: Sync[F]): EitherT[F, Throwable, Unit] =
     EitherT.liftF[F, Throwable, Unit] { F.delay { println(keypair.getPublic) } }
 
-  def createTransaction[F[_]](cliParams: CliConfig, keypair: KeyPair)(
+  def lastTxRef[F[_]: Sync](client: Client[F], address: String): EitherT[F, Throwable, LastTransactionRef] =
+    client.expect[LastTransactionRef](s"$lbAddress/transaction/last-ref/$address").attemptT
+
+  def createTransaction[F[_]](cliParams: CliConfig, keypair: KeyPair, client: Client[F])(
     implicit F: Sync[F]
   ): EitherT[F, Throwable, Transaction] =
     for {
       prevTx <- KeyStoreUtils
         .readFromFileStream[F, Option[Transaction]](cliParams.prevTxPath, TransactionExt.transactionParser[F])
+      src = getAddress(keypair)
+      txRef <- lastTxRef(client, src)
       tx <- EitherT.liftF[F, Throwable, Transaction] {
         F.delay {
           TransactionExt.createTransaction(
             prevTx,
-            getAddress(keypair),
+            txRef,
+            cliParams.forcePrevTx,
+            src,
             cliParams.destination,
             cliParams.amount,
             keypair,
@@ -122,6 +145,8 @@ object Wallet extends IOApp {
               .valueName("<int>")
               .action((x, c) => c.copy(fee = x.toDouble))
               .validate(x => if (x.toDouble >= 0) success else failure("Value <fee> must be >=0")),
+            opt[Boolean]("prevTxForce")
+              .action((x, c) => c.copy(forcePrevTx = x)),
             opt[String]("amount").required
               .valueName("<int|long>")
               .abbr("a")
