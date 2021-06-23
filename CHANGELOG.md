@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.24.0] 2021-06-23
 ### Added
 - Gossiping for checkpoint blocks
 ### Changed
