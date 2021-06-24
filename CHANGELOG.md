@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.24.4] 2021-06-24
+### Changed
+- Reduced max snapshot distance from majority to 6
+
 ## [v2.24.3] 2021-06-24
 ### Fixed
 - Exclude min waiting height from snapshot preconditions

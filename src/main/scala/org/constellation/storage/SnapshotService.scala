@@ -316,7 +316,7 @@ class SnapshotService[F[_]: Concurrent](
   private def validateMaxDistanceFromMajority(nextHeightInterval: Long): EitherT[F, SnapshotError, Unit] =
     EitherT {
       redownloadStorage.getLatestMajorityHeight.map { height =>
-        nextHeightInterval <= (height + (snapshotHeightDelayInterval / 2))
+        nextHeightInterval <= (height + 6L)
       }.ifM(
         ().asRight[SnapshotError].pure[F],
         SnapshotUnexpectedError(new Throwable(s"Max distance from majority has been reached!"))
