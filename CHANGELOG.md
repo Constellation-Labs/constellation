@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 ## [v2.24.4] 2021-06-24
 ### Changed
 - Reduced max snapshot distance from majority to 6
+- Tips usages and clearing stale tips
 
 ## [v2.24.3] 2021-06-24
 ### Fixed

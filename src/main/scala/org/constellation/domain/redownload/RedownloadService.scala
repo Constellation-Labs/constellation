@@ -256,6 +256,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
           }
 
           _ <- checkpointStorage.setTips(snapshotInfoFromMemPool.tips)
+          _ <- checkpointStorage.setUsages(snapshotInfoFromMemPool.usages)
         } yield ()
       }.attemptT
     } yield ()

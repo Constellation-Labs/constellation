@@ -369,7 +369,7 @@ class CheckpointService[F[_]: Timer: Clock](
           s"Block ${soeHash} with height ${height} and usages=${usages} is below the min tip height ${minTipHeight}"
         )
       } else F.unit
-      _ <- if (canUseTip && height >= minTipHeight && usages < maxTipUsage) {
+      _ <- if (canUseTip && height > minTipHeight && usages < maxTipUsage) {
         checkpointStorage.addTip(soeHash)
       } else {
         logger.debug(

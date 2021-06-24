@@ -223,6 +223,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- checkpointStorage.setInSnapshot(snapshotInfo.inSnapshot)
       _ <- addressService.setAll(snapshotInfo.addressCacheData)
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
+
       _ <- checkpointStorage.setTips(snapshotInfo.tips)
       _ <- checkpointStorage.setUsages(snapshotInfo.usages)
 

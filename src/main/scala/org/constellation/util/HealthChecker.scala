@@ -105,7 +105,7 @@ class HealthChecker[F[_]: Concurrent](
         val maxNextSnapshotHeight = nodesWithHeights.maximumOption
 
         if (maxNextSnapshotHeight.nonEmpty) {
-          checkpointService.clearStaleTips(maxNextSnapshotHeight.get)
+          checkpointService.clearStaleTips(maxNextSnapshotHeight.get + 4L)
         } else logger.debug("[Clear stale tips] Not enough data to determine height")
       } else
         logger.debug(
