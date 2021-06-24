@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.24.2] 2021-06-24
+### Fixed
+- Fetch initial majority at joining height
+- Set transactions and observations on set snapshot method
+
 ## [v2.24.1] 2021-06-23
 ### Fixed
 - Initial joining cutoff height
