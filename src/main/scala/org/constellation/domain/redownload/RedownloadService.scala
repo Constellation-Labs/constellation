@@ -339,11 +339,9 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       _ <- redownloadStorage.setLastMajorityState(meaningfulMajority) >>
         metrics.updateMetricAsync("redownload_lastMajorityStateHeight", meaningfulMajority.maxHeight)
 
-      removeBelow = cutOffHeight - (redownloadInterval / 2)
+      _ <- logger.debug(s"cutOffHeight = $cutOffHeight")
 
-      _ <- logger.debug(s"removeBelow = $cutOffHeight - ${redownloadInterval / 2} = ${removeBelow}")
-
-      (meaningfulAcceptedSnapshots, _, _) <- redownloadStorage.removeSnapshotsAndProposalsBelowHeight(removeBelow)
+      (meaningfulAcceptedSnapshots, _, _) <- redownloadStorage.removeSnapshotsAndProposalsBelowHeight(cutOffHeight)
 
       _ <- logger.debug(s"Meaningful majority in range ${calculatedMajority.heightRange}")
 
@@ -453,7 +451,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
     lastMajority: SnapshotsAtHeight
   ): Long = {
     val ignorePoint = getIgnorePoint(candidateMajority.maxHeight)
-    max(joinHeight, min(max(ignorePoint, joinHeight), lastMajority.maxHeight))
+    max(joinHeight - heightInterval, min(max(ignorePoint, joinHeight), lastMajority.maxHeight))
   }
 
   def getIgnorePoint(maxHeight: Long): Long = maxHeight - meaningfulSnapshotsCount
