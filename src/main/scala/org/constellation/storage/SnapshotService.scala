@@ -336,9 +336,7 @@ class SnapshotService[F[_]: Concurrent](
       metrics.updateMetricAsync[F]("minTipHeight", minTipHeight) >>
         metrics.updateMetricAsync[F]("minWaitingHeight", minWaitingHeight.getOrElse(0L)) >>
         Sync[F].pure {
-          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval) && minWaitingHeight.fold(true)(
-                _ > nextHeightInterval
-              ))
+          if (minTipHeight > (nextHeightInterval + snapshotHeightDelayInterval)) //  && minWaitingHeight.fold(true)(_ > nextHeightInterval)
             ().asRight[SnapshotError]
           else
             HeightIntervalConditionNotMet.asLeft[Unit]
