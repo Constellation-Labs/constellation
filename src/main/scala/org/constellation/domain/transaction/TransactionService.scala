@@ -43,6 +43,21 @@ class TransactionService[F[_]: Concurrent](
       .flatTap(_ => metrics.incrementMetricAsync[F]("transactionAcceptedFromRedownload"))
       .flatTap(_ => logger.debug(s"Accepting transaction after redownload with hash=${tx.hash}"))
 
+  def setAccepted(blocks: Set[CheckpointCache]): F[Unit] =
+    accepted.clear >>
+      blocks
+        .map(_.checkpointBlock)
+        .toList
+        .traverse { block =>
+          block.transactions.toList.traverse { tx =>
+            put(
+              TransactionCacheData(tx, inDAGByAncestor = Map(block.soeHash -> true), cbBaseHash = Some(block.soeHash)),
+              ConsensusStatus.Accepted
+            )
+          }
+        }
+        .void
+
   def createDummyTransactions(count: Int): F[List[TransactionCacheData]] =
     List
       .fill(count) {

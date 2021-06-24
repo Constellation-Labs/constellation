@@ -226,6 +226,11 @@ class SnapshotService[F[_]: Concurrent](
       _ <- checkpointStorage.setTips(snapshotInfo.tips)
       _ <- checkpointStorage.setUsages(snapshotInfo.usages)
 
+      acceptedBlocks = snapshotInfo.checkpoints.filterKeys(snapshotInfo.accepted.contains).values.toSet
+
+      _ <- transactionService.setAccepted(acceptedBlocks)
+      _ <- observationService.setAccepted(acceptedBlocks)
+
 //      _ <- C.evalOn(boundedExecutionContext) {
 //        (snapshotInfo.snapshotCache ++ snapshotInfo.acceptedCBSinceSnapshotCache).toList.traverse { h =>
 //          checkpointStorage.persistCheckpoint(h) >>

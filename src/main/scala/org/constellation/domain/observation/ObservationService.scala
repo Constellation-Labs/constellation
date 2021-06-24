@@ -3,9 +3,10 @@ package org.constellation.domain.observation
 import cats.effect.Concurrent
 import cats.syntax.all._
 import org.constellation.DAO
-import org.constellation.domain.consensus.ConsensusService
+import org.constellation.domain.consensus.{ConsensusService, ConsensusStatus}
 import org.constellation.schema.checkpoint.CheckpointCache
 import org.constellation.schema.observation.Observation
+import org.constellation.schema.transaction.TransactionCacheData
 import org.constellation.trust.TrustManager
 import org.constellation.util.Metrics
 
@@ -28,4 +29,16 @@ class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], metric
       .accept(o)
       .flatTap(_ => metrics.incrementMetricAsync[F]("observationAccepted"))
       .flatTap(_ => metrics.incrementMetricAsync[F]("observationAcceptedFromRedownload"))
+
+  def setAccepted(blocks: Set[CheckpointCache]): F[Unit] =
+    accepted.clear >>
+      blocks
+        .map(_.checkpointBlock)
+        .toList
+        .traverse { block =>
+          block.observations.toList.traverse { obs =>
+            put(obs, ConsensusStatus.Accepted)
+          }
+        }
+        .void
 }
