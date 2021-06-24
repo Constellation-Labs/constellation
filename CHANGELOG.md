@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.24.3] 2021-06-24
+### Fixed
+- Exclude min waiting height from snapshot preconditions
+
 ## [v2.24.2] 2021-06-24
 ### Fixed
 - Fetch initial majority at joining height
