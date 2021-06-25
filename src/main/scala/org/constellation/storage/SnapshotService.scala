@@ -53,6 +53,7 @@ class SnapshotService[F[_]: Concurrent](
 
   val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
   val snapshotHeightDelayInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightDelayInterval")
+  val distanceFromMajority: Int = ConfigUtil.constellation.getInt("snapshot.distanceFromMajority")
 
   def attemptSnapshot(): EitherT[F, SnapshotError, SnapshotCreated] =
     for {
@@ -317,7 +318,7 @@ class SnapshotService[F[_]: Concurrent](
   private def validateMaxDistanceFromMajority(nextHeightInterval: Long): EitherT[F, SnapshotError, Unit] =
     EitherT {
       redownloadStorage.getLatestMajorityHeight.map { height =>
-        nextHeightInterval <= (height + 6L)
+        nextHeightInterval <= (height + distanceFromMajority)
       }.ifM(
         ().asRight[SnapshotError].pure[F],
         SnapshotUnexpectedError(new Throwable(s"Max distance from majority has been reached!"))
