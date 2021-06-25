@@ -11,10 +11,10 @@ import org.constellation.keytool.KeyUtils.hexToPublicKey
 case class Id(hex: String) extends Ordered[Id] {
 
   @transient
-  val short: String = hex.toString.slice(0, 5)
+  lazy val short: String = hex.slice(0, 5)
 
   @transient
-  val medium: String = hex.toString.slice(0, 10)
+  lazy val medium: String = hex.slice(0, 10)
 
   @transient
   lazy val address: String = KeyUtils.publicKeyToAddressString(toPublicKey)

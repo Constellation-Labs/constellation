@@ -4,6 +4,7 @@ import cats.implicits._
 import org.constellation.gossip.sampling.GossipPath
 import org.constellation.schema.Id
 import org.constellation.schema.signature.HashSignature
+import org.constellation.collection.SeqUtils.PathSeqOps
 
 sealed trait MessageValidationError extends Throwable {}
 
@@ -22,8 +23,8 @@ case class IncorrectSenderId(sender: Id) extends MessageValidationError {
 case class IncorrectSignatureChain(path: GossipPath, signatures: IndexedSeq[HashSignature])
     extends MessageValidationError {
   override def getMessage: String = {
-    val chainIds = signatures.map(_.id.short).mkString(" -> ")
-    val pathIds = path.toIndexedSeq.map(_.short).mkString(" -> ")
+    val chainIds = signatures.map(_.id).formatPath
+    val pathIds = path.toIndexedSeq.formatPath
     s"Signature chain incorrect: Got $chainIds for path $pathIds"
   }
 }

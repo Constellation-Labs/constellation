@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Gossip path logging
 
 ## [v2.24.5] 2021-06-25
 ### Changed
