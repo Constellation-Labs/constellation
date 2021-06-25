@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.24.5] 2021-06-25
+### Changed
+- Distance from majority for snapshots and consensuses
+
 ## [v2.24.4] 2021-06-24
 ### Changed
 - Reduced max snapshot distance from majority to 6
