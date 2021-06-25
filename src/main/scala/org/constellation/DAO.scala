@@ -437,6 +437,7 @@ class DAO(
       ConfigUtil.config,
       consensusManager,
       nodeStorage,
+      checkpointStorage,
       snapshotServiceStorage,
       redownloadStorage,
       unboundedExecutionContext
