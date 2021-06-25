@@ -17,6 +17,7 @@ import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.p2p.Cluster
 import org.constellation.schema.Id
 import org.constellation.util.Metrics
+import org.constellation.collection.SeqUtils.PathSeqOps
 
 import scala.concurrent.duration._
 
@@ -60,6 +61,7 @@ abstract class GossipService[F[_]: Parallel, A](
         sequence
       )
       retryIds = sequence.dropWhile(node => !failureNode.contains(node))
+      _ <- logger.debug(s"Retrying path ${message.path.id} on nodes ${retryIds.formatPath}")
       _ <- retryIds.headOption.traverse { headId =>
         F.start(C.shift >> retryHead(headId, message))
       }
