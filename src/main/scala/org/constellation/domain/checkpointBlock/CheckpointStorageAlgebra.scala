@@ -27,6 +27,9 @@ trait CheckpointStorageAlgebra[F[_]] {
   def setCheckpoints(checkpoints: Map[String, CheckpointCache]): F[Unit]
   def getCheckpoints: F[Map[String, CheckpointCache]]
 
+  def getAcceptedHash: F[Map[Long, String]]
+  def getAcceptedAtHeight(height: Long): F[List[String]]
+
   def removeCheckpoint(soeHash: String): F[Unit]
   def removeCheckpoints(soeHashes: Set[String]): F[Unit]
 

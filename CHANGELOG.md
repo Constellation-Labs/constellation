@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Compare checkpoints at heights
 ### Changed
 - Start resolving missing references and parents in a fiber
 ### Fixed

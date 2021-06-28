@@ -15,10 +15,11 @@ import org.constellation.domain.checkpointBlock.{
   CheckpointBlockDoubleSpendChecker,
   CheckpointStorageAlgebra
 }
-import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
+import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.p2p.{DataResolver, PeerData}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.signature.{HashSignature, SignatureRequest, SignatureResponse}
@@ -40,6 +41,8 @@ class CheckpointService[F[_]: Timer: Clock](
   snapshotStorage: SnapshotStorageAlgebra[F],
   checkpointBlockValidator: CheckpointBlockValidator[F],
   nodeStorage: NodeStorageAlgebra[F],
+  clusterStorage: ClusterStorageAlgebra[F],
+  apiClient: ClientInterpreter[F],
   checkpointStorage: CheckpointStorageAlgebra[F],
   rateLimiting: RateLimiting[F],
   dataResolver: DataResolver[F],
@@ -294,7 +297,7 @@ class CheckpointService[F[_]: Timer: Clock](
       } else F.unit
     }
 
-  def resolveMissingParents(cb: CheckpointBlock): F[List[CheckpointCache]] =
+  def resolveMissingParents(cb: CheckpointBlock): F[Unit] =
     for {
       soeHashes <- cb.parentSOEHashes.toList.pure[F]
       existing <- soeHashes.filterA(checkpointStorage.existsCheckpoint)
@@ -315,7 +318,7 @@ class CheckpointService[F[_]: Timer: Clock](
           }
       )
       _ <- cbs.traverse(_.fold(_ => F.unit, addToAcceptance))
-    } yield cbs
+    } yield ()
 
   def acceptObservations(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] =
     cb.observations.toList.traverse(o => observationService.accept(o, cpc)).void
@@ -352,6 +355,11 @@ class CheckpointService[F[_]: Timer: Clock](
             .debug(
               s"Removing tips that are below cluster height: $min to remove $toRemove"
             )
+            .flatTap { _ =>
+              toRemove.toList.traverse { _ =>
+                metrics.incrementMetricAsync[F]("tips_staleRemoved")
+              }
+            }
             .flatMap(_ => checkpointStorage.removeTips(toRemove.map(_._1)))
         },
         logger.debug(
@@ -382,9 +390,9 @@ class CheckpointService[F[_]: Timer: Clock](
       totalSize <- checkpointStorage.countTips
       canUseTip = totalSize < maxWidth
       height = checkpointBlock.map(_.height.min).getOrElse(0L)
-      _ <- if (height < minTipHeight) {
+      _ <- if (height <= minTipHeight) {
         logger.warn(
-          s"Block ${soeHash} with height ${height} and usages=${usages} is below the min tip height ${minTipHeight}"
+          s"Block ${soeHash} with height ${height} and usages=${usages} is below or equal the min tip height ${minTipHeight}"
         )
       } else F.unit
       _ <- if (canUseTip && height > minTipHeight && usages < maxTipUsage) {
@@ -417,6 +425,66 @@ class CheckpointService[F[_]: Timer: Clock](
       },
       "concurrentTipService_pull"
     )
+
+  def compareAcceptedCheckpoints(): F[Unit] =
+    for {
+      peers <- clusterStorage.getJoinedPeers
+      randomPeerSeq <- F.delay { Random.shuffle(peers.values.toSeq).take(1) }
+      randomPeer <- if (randomPeerSeq.nonEmpty) randomPeerSeq.head.pure[F]
+      else F.raiseError[PeerData](new Throwable(s"No peers to compare accepted checkpoints."))
+      peerClientMetadata = randomPeer.peerMetadata.toPeerClientMetadata
+
+      joinedHeightOpt <- nodeStorage.getOwnJoinedHeight
+      _ <- if (joinedHeightOpt.nonEmpty) F.unit else F.raiseError[Unit](new Throwable("Not connected yet"))
+
+      joinedHeight = joinedHeightOpt.get
+
+      acceptedAtHeights <- apiClient.checkpoint
+        .getAcceptedHash()
+        .run(peerClientMetadata)
+        .map(_.filterKeys(_ > joinedHeight))
+      ownAcceptedAtHeights <- checkpointStorage.getAcceptedHash.map(_.filterKeys(_ > joinedHeight))
+      diff = acceptedAtHeights.filterNot {
+        case (height, hash) =>
+          ownAcceptedAtHeights.exists { case (height2, hash2) => height == height2 && hash == hash2 }
+      }
+      diffHeights = diff.keySet.toList
+
+      _ <- if (diffHeights.isEmpty) logger.debug(s"Compare accepted blocks with ${peerClientMetadata.id.short}: equal")
+      else
+        for {
+          _ <- logger.debug(
+            s"Compare accepted blocks with ${peerClientMetadata.id.short}: difference at heights ${diffHeights}"
+          )
+
+          hashesAtHeight <- diffHeights.traverse { height =>
+            apiClient.checkpoint.getAcceptedAtHeight(height).run(peerClientMetadata).map(s => (height, s))
+          }.map(_.toMap)
+          ownAtHeight <- diffHeights.traverse { height =>
+            checkpointStorage.getAcceptedAtHeight(height).map(s => (height, s))
+          }.map(_.toMap)
+          diffHashes = ownAtHeight.flatMap {
+            case (height, hashes) => hashesAtHeight.getOrElse(height, List.empty).diff(hashes)
+          }.toList
+
+          missingHashes <- diffHashes
+            .filterA(soeHash => checkpointStorage.isCheckpointWaitingForAcceptance(soeHash).map(!_))
+            .flatMap(_.filterA(soeHash => checkpointStorage.isWaitingForResolving(soeHash).map(!_)))
+
+          _ <- logger.debug(
+            s"Compare accepted blocks with ${peerClientMetadata.id.short}: missing hashes ${missingHashes}"
+          )
+          _ <- missingHashes.traverse { _ =>
+            metrics.incrementMetricAsync[F]("compare_missingBlock")
+          }
+
+          _ <- missingHashes.traverse { soeHash =>
+            F.start {
+              dataResolver.resolveCheckpointDefaults(soeHash, Some(peerClientMetadata)) >>= { addToAcceptance }
+            }
+          }
+        } yield ()
+    } yield ()
 
   private def calculateTipsSOE(tips: Set[(String, Height)]): F[TipSoe] =
     Random

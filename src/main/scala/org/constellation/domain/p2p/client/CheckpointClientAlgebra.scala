@@ -14,4 +14,8 @@ trait CheckpointClientAlgebra[F[_]] {
   def requestBlockSignature(signatureRequest: SignatureRequest): PeerResponse[F, SignatureResponse]
 
   def postFinishedCheckpoint(message: GossipMessage[CheckpointBlockPayload]): PeerResponse[F, Unit]
+
+  def getAcceptedHash(): PeerResponse[F, Map[Long, String]]
+
+  def getAcceptedAtHeight(height: Long): PeerResponse[F, List[String]]
 }

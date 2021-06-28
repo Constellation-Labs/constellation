@@ -3,6 +3,7 @@ package org.constellation.infrastructure.checkpointBlock
 import cats.effect.Concurrent
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.syntax.all._
+import constellation.SHA256ByteExt
 import io.chrisdavenport.mapref.MapRef
 import org.constellation.concurrency.MapRefUtils
 import org.constellation.concurrency.MapRefUtils.MapRefOps
@@ -12,6 +13,10 @@ import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.genesis.Genesis
 import org.constellation.schema.Height
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.serialization.KryoSerializer
+import org.constellation.serialization.KryoSerializer.serializeAnyRef
+
+import scala.collection.SortedSet
 
 class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends CheckpointStorageAlgebra[F] {
 
@@ -329,4 +334,24 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
     checkpoints.clear >> map.toList.traverse {
       case (soeHash, checkpoint) => checkpoints(soeHash).set(checkpoint.some)
     }.void
+
+  def getAcceptedHash: F[Map[Long, String]] =
+    getAccepted
+      .map(_.toList)
+      .flatMap { _.traverse { getCheckpoint } }
+      .map(_.flatten)
+      .map(blocks => blocks.groupBy(_.height.min).mapValues(_.map(_.checkpointBlock.soeHash).toSeq))
+      .map(
+        m =>
+          m.mapValues(_.sorted).mapValues { s =>
+            serializeAnyRef(s).sha256
+          }
+      )
+
+  def getAcceptedAtHeight(height: Long): F[List[String]] =
+    getAccepted
+      .map(_.toList)
+      .flatMap { _.traverse { getCheckpoint } }
+      .map(_.flatten)
+      .map(blocks => blocks.filter(_.height.min == height).map(_.checkpointBlock.soeHash))
 }

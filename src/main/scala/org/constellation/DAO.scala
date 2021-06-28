@@ -289,6 +289,8 @@ class DAO(
     snapshotServiceStorage,
     checkpointBlockValidator,
     nodeStorage,
+    clusterStorage,
+    apiClient,
     checkpointStorage,
     rateLimiting,
     dataResolver,
@@ -304,6 +306,8 @@ class DAO(
     metrics,
     keyPair
   )
+
+  val checkpointCompare = new CheckpointCompare(checkpointService, unboundedExecutionContext)
 
   val rewardsManager: RewardsManager[IO] = new RewardsManager[IO](
     eigenTrust,

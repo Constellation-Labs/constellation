@@ -71,7 +71,7 @@ case class Transaction(
       edge.data.getEncoding
   )
 
-  def hash: String = edge.signedObservationEdge.hash
+  def hash: String = edge.observationEdge.hash
 
   def signaturesHash: String = edge.signedObservationEdge.signatureBatch.hash
 

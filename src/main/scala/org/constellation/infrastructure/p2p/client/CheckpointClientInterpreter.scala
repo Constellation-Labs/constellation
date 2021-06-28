@@ -49,6 +49,12 @@ class CheckpointClientInterpreter[F[_]: ContextShift](
           )
         )
     }
+
+  def getAcceptedHash(): PeerResponse[F, Map[Long, String]] =
+    PeerResponse[F, Map[Long, String]](s"checkpoint/accepted/_hash")(client, sessionTokenService)
+
+  def getAcceptedAtHeight(height: Long): PeerResponse[F, List[String]] =
+    PeerResponse[F, List[String]](s"checkpoint/accepted/$height")(client, sessionTokenService)
 }
 
 object CheckpointClientInterpreter {

@@ -46,7 +46,9 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
         snapshotService,
         checkpointService,
         checkpointStorage
-      )
+      ) <+>
+      getAcceptedHashEndpoint(checkpointStorage) <+>
+      getAcceptedAtHeightEndpoint(checkpointStorage)
 
   private def requestBlockSignatureEndpoint(
     checkpointService: CheckpointService[F]
@@ -114,6 +116,18 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
   private def getCheckpointEndpoint(checkpointStorage: CheckpointStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
     case GET -> Root / "checkpoint" / soeHash => checkpointStorage.getCheckpoint(soeHash).map(_.asJson).flatMap(Ok(_))
   }
+
+  private def getAcceptedHashEndpoint(checkpointStorage: CheckpointStorageAlgebra[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "checkpoint" / "accepted" / "_hash" =>
+        checkpointStorage.getAcceptedHash.map(_.asJson).flatMap(Ok(_))
+    }
+
+  private def getAcceptedAtHeightEndpoint(checkpointStorage: CheckpointStorageAlgebra[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case GET -> Root / "checkpoint" / "accepted" / LongVar(height) =>
+        checkpointStorage.getAcceptedAtHeight(height).map(_.asJson).flatMap(Ok(_))
+    }
 
 }
 
