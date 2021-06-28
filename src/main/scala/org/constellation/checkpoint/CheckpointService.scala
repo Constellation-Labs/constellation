@@ -140,10 +140,14 @@ class CheckpointService[F[_]: Timer: Clock](
       }
 
       withNoParentsAccepted = notAlreadyAccepted.toSet.diff(withParentsAccepted.toSet)
-      _ <- withNoParentsAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingParents }
+      _ <- F.start {
+        withNoParentsAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingParents }
+      }
 
       withNoReferencesAccepted = notAlreadyAccepted.toSet.diff(withReferencesAccepted.toSet)
-      _ <- withNoReferencesAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingReferences }
+      _ <- F.start {
+        withNoReferencesAccepted.toList.map(_.checkpointBlock).traverse { resolveMissingReferences }
+      }
 
       waitingForResolving <- withReferencesAccepted.filterA { c =>
         checkpointStorage.isWaitingForResolving(c.checkpointBlock.soeHash)
@@ -275,8 +279,17 @@ class CheckpointService[F[_]: Timer: Clock](
             .flatMap {
               _.filterA(soeHash => checkpointStorage.isWaitingForResolving(soeHash).map(!_))
             }
-            .flatMap(_.traverse(hash => dataResolver.resolveCheckpointDefaults(hash)))
-          _ <- cbs.traverse(addToAcceptance)
+            .flatMap(
+              _.traverse(
+                hash =>
+                  dataResolver.resolveCheckpointDefaults(hash).map(_.asRight[Unit]).handleErrorWith { error =>
+                    logger
+                      .error(error)(s"Error resolving checkpoint block soeHash=${hash}")
+                      .map(_.asLeft[CheckpointCache])
+                  }
+              )
+            )
+          _ <- cbs.traverse(_.fold(_ => F.unit, addToAcceptance))
         } yield ()
       } else F.unit
     }
@@ -295,8 +308,13 @@ class CheckpointService[F[_]: Timer: Clock](
         .flatMap { _.traverse { addToAcceptance } }
 
       missingSoeHashes = soeHashes.diff(waitingForResolving).diff(existing)
-      cbs <- missingSoeHashes.traverse(dataResolver.resolveCheckpointDefaults(_))
-      _ <- cbs.traverse(addToAcceptance)
+      cbs <- missingSoeHashes.traverse(
+        soeHash =>
+          dataResolver.resolveCheckpointDefaults(soeHash).map(_.asRight[Unit]).handleErrorWith { error =>
+            logger.error(error)(s"Error resolving missing parent soeHash=${soeHash}").map(_.asLeft[CheckpointCache])
+          }
+      )
+      _ <- cbs.traverse(_.fold(_ => F.unit, addToAcceptance))
     } yield cbs
 
   def acceptObservations(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] =
