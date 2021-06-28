@@ -1,7 +1,7 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v2.24.6] 2021-06-29
 ### Added
 - Compare checkpoints at heights
 ### Changed
