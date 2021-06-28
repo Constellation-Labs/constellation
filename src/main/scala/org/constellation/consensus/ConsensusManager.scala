@@ -367,8 +367,15 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       soes <- roundData.tipsSOE.soe.toList.pure[F]
       peers = roundData.peers.map(_.peerMetadata.toPeerClientMetadata)
-      existing <- soes.map(_.hash).filterA(checkpointStorage.isCheckpointAccepted)
-      missing = soes.filterNot(soe => existing.contains(soe.hash))
+      accepted <- soes.map(_.hash).filterA(checkpointStorage.isCheckpointAccepted)
+      existing <- soes.map(_.hash).traverse(checkpointStorage.getCheckpoint).map(_.flatten)
+      missing = soes
+        .filterNot(soe => accepted.contains(soe.hash))
+        .filterNot(soe => existing.map(_.checkpointBlock.soeHash).contains(soe.hash))
+
+      _ <- existing.filterNot(cb => accepted.contains(cb.checkpointBlock.soeHash)).traverse {
+        checkpointService.addToAcceptance
+      }
 
       resolved <- missing
         .map(_.hash)
@@ -391,7 +398,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           }
         }
       _ <- logger.debug(
-        s"[${nodeId.short}] Missing parents size=${missing.size}, existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
+        s"[${nodeId.short}] Missing parents size=${missing.size}, accepted size=${accepted.size} existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
       )
       _ <- if (missing.nonEmpty && (resolved.size != missing.size))
         logger.error(s"Missing parents: ${missing.map(_.hash)} with soe hashes: ${missing.map(_.hash)}")
