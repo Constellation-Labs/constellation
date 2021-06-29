@@ -60,6 +60,37 @@ class CheckpointService[F[_]: Timer: Clock](
 
   import CheckpointService._
 
+  private val toExclude: Set[String] = Set(
+    "c0e4b08a9cb7cd0fd8237aa2bc7fce5998d0153572c365fa1166d3511277c974",
+    "5594062fcba0a3798e274471e28e5dc0d2e8fd7c69c0a6869b8707e00489d0af",
+    "afa09526e0f876e341a6a504e5dbd1bb27f2b36aecde7127e5dc49c4c0e70659",
+    "8e68e65ab3c1e6e8b92772af6c34ef8f82dc078af9a5ce8c46971c39cd35d98d",
+    "3b39e6be4f43b9f3380f23a64ff11d99c330f1cec02e70255dd423d3571903ef",
+    "f77adbc2cef5a26d86c3161332a86433ed282c9c9de6596ea0444d4e7aaaa978",
+    "ac071f37093ff1257697a250ef91318494a9383cd6fc0741d5887aa28273bc8d",
+    "4a563f2eb425755854ea3d53873f6097f35c2bc589ab6d76725a3dcdfe21e5ac",
+    "c541c0d2ccf5d7a1062f367a18f309234dd60d2e22ee33c3c56e0fa4dc4aea51",
+    "228be87b6ca7f5dc5fbd014a902efb92d6946f0a035a719fbeb9de9cac8f9609",
+    "f254a9853c5428a73ccddace9fe9920bb507442ea532ee2421bf461009389676",
+    "f630edaf1f745b72878dc66d076da402ed5ea52b065cbb50427cb0c95186d875",
+    "515061c326ac2357e216c6a4f94c708e4f2f6a082463e6d3712c7022bd8ce8b8",
+    "7bca0c2ae4ba0720cdc813aed0f56e779a905432b115609ba0997f701951d426",
+    "0f4c6fd20f8b77dd67aa3db39675e76b44167563c3c487da49659c3781974b8f",
+    "ac071f37093ff1257697a250ef91318494a9383cd6fc0741d5887aa28273bc8d",
+    "de95b5a15a581cc73c5037162a7ae4c3d1457537670ef5c830557a669b305e61",
+    "d0b989761216a2150c77d614cfd39d9ccc64aca7bee92ccd7a992777072dc995",
+    "3043a186541c97d44a7a66e8bf1420fcc585e99fe622c248c45c803df8699c18",
+    "577bd2e1be94c58f4f40d40bd917d50a3697e312a3a9ea40c342d8a41ca21f03",
+    "88db83e2b1042e08b720a51e206553512282ba04bc0f99a7bfde8ff0d01965fd",
+    "ad18ea6439c065c43d581684bb354d880a53afb0135980c314dc5d6b8f6cf496",
+    "047d045e1f275597934206b8a9a0552cb31b05ea8630e74e40ef505e953884aa",
+    "e8bece52e0af864cd7f9c031a1d9acf8131b8c7ebeceb6687186781adc3b1dbb",
+    "a2550d64b8f265d7f338a3f38a7484c118e2c3844a93b05b46dcd64685ca7417",
+    "2420e2609c5a0efd9b8104dc2346fd4da37f75971650de67cd69b19f85a09e11",
+    "6e716510abb4123d39e2c860d70baac67837487b731f16b23c3e5ddc23ea939e",
+    "e4629bc2239b29c3f23b9767b63c10a35db89e8399533c56097cad1188a3ab26"
+  )
+
   private val snapshotHeightInterval: Int =
     ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
 
@@ -155,6 +186,19 @@ class CheckpointService[F[_]: Timer: Clock](
       waitingForResolving <- withReferencesAccepted.filterA { c =>
         checkpointStorage.isWaitingForResolving(c.checkpointBlock.soeHash)
       }
+
+      blocksWithNoParents = withNoParentsAccepted.map(_.checkpointBlock.soeHash).intersect(toExclude)
+      blocksWithNoReferences = withNoReferencesAccepted.map(_.checkpointBlock.soeHash).intersect(toExclude)
+
+      _ <- if (blocksWithNoParents.nonEmpty) logger.debug {
+        s"[acc] Removing blocks with no parents: ${blocksWithNoParents}"
+      } else F.unit
+      _ <- if (blocksWithNoReferences.nonEmpty) logger.debug {
+        s"[acc] Removing blocks with no references: ${blocksWithNoReferences}"
+      } else F.unit
+
+      _ <- blocksWithNoParents.toList.traverse { checkpointStorage.removeCheckpoint }
+      _ <- blocksWithNoReferences.toList.traverse { checkpointStorage.removeCheckpoint }
 
       _ <- logger.debug { s"[acc] Already accepted: ${alreadyAccepted.map(_.checkpointBlock.soeHash)}" }
       _ <- logger.debug {
