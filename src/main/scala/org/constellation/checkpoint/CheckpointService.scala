@@ -17,6 +17,7 @@ import org.constellation.domain.checkpointBlock.{
 }
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.redownload.RedownloadStorageAlgebra
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
@@ -483,11 +484,15 @@ class CheckpointService[F[_]: Timer: Clock](
 
       joinedHeight = joinedHeightOpt.get
 
+      lastSnapshotHeight <- snapshotStorage.getLastSnapshotHeight
       acceptedAtHeights <- apiClient.checkpoint
         .getAcceptedHash()
         .run(peerClientMetadata)
         .map(_.filterKeys(_ > joinedHeight))
-      ownAcceptedAtHeights <- checkpointStorage.getAcceptedHash.map(_.filterKeys(_ > joinedHeight))
+        .map(_.filterKeys(_ > lastSnapshotHeight))
+      ownAcceptedAtHeights <- checkpointStorage.getAcceptedHash
+        .map(_.filterKeys(_ > joinedHeight))
+        .map(_.filterKeys(_ > lastSnapshotHeight))
       diff = acceptedAtHeights.filterNot {
         case (height, hash) =>
           ownAcceptedAtHeights.exists { case (height2, hash2) => height == height2 && hash == hash2 }
