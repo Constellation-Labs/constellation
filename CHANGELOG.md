@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [v2.24.8] 2021-06-29
+### Fixed
+- Exclude parents
+
 ## [v2.24.7] 2021-06-29
 ### Fixed
 - Add missing but existing tips to acceptance
