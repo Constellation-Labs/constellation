@@ -517,8 +517,12 @@ class CheckpointService[F[_]: Timer: Clock](
           }.toList
 
           missingHashes <- diffHashes
-            .filterA(soeHash => checkpointStorage.isCheckpointWaitingForAcceptance(soeHash).map(!_))
+            .filterA(soeHash => checkpointStorage.getCheckpoint(soeHash).map(_.isEmpty))
+            .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointWaitingForAcceptance(soeHash).map(!_)))
+            .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointAccepted(soeHash).map(!_)))
             .flatMap(_.filterA(soeHash => checkpointStorage.isWaitingForResolving(soeHash).map(!_)))
+            .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointAwaiting(soeHash).map(!_)))
+            .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointWaitingForAcceptanceAfterDownload(soeHash).map(!_)))
 
           _ <- logger.debug(
             s"Compare accepted blocks with ${peerClientMetadata.id.short}: missing hashes ${missingHashes}"
