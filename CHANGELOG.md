@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [v2.24.10] 2021-06-29
+### Changed
+- Do not resolve blocks on compare that are known on the node
+
 ## [v2.24.9] 2021-06-29
 ### Changed
 - Ignore blocks to compare below last snapshot height
