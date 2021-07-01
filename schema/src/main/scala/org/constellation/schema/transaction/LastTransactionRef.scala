@@ -19,5 +19,9 @@ object LastTransactionRef {
   val empty = LastTransactionRef("", 0L)
 
   implicit val lastTransactionRefEncoder: Encoder[LastTransactionRef] = deriveEncoder
-  implicit val lastTransactionRefDecoder: Decoder[LastTransactionRef] = deriveDecoder
+  implicit val lastTransactionRefDecoder: Decoder[LastTransactionRef] =
+    deriveDecoder[LastTransactionRef].map(ltr => if (ltr == empty) empty else ltr)
+  // Necessary for stable kryo serialization-deserialization of objects initially deserialized with circe. In kryo
+  // references to different empty string instances are not preserved during deserialization and they're replaced with
+  // a single reference to an empty string from Java string pool.
 }
