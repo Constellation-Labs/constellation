@@ -1,7 +1,9 @@
 package org.constellation.checkpoint
 
-import cats.effect.concurrent.{Ref, Semaphore}
-import cats.effect.{Clock, Concurrent, ContextShift, Sync, Timer}
+import java.security.KeyPair
+
+import cats.effect.concurrent.Semaphore
+import cats.effect.{Clock, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import constellation._
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
@@ -17,7 +19,6 @@ import org.constellation.domain.checkpointBlock.{
 }
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.observation.ObservationService
-import org.constellation.domain.redownload.RedownloadStorageAlgebra
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
@@ -30,8 +31,6 @@ import org.constellation.storage._
 import org.constellation.util.Logging.logThread
 import org.constellation.util.Metrics
 
-import java.security.KeyPair
-import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 class CheckpointService[F[_]: Timer: Clock](
@@ -522,7 +521,9 @@ class CheckpointService[F[_]: Timer: Clock](
             .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointAccepted(soeHash).map(!_)))
             .flatMap(_.filterA(soeHash => checkpointStorage.isWaitingForResolving(soeHash).map(!_)))
             .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointAwaiting(soeHash).map(!_)))
-            .flatMap(_.filterA(soeHash => checkpointStorage.isCheckpointWaitingForAcceptanceAfterDownload(soeHash).map(!_)))
+            .flatMap(
+              _.filterA(soeHash => checkpointStorage.isCheckpointWaitingForAcceptanceAfterDownload(soeHash).map(!_))
+            )
 
           _ <- logger.debug(
             s"Compare accepted blocks with ${peerClientMetadata.id.short}: missing hashes ${missingHashes}"
