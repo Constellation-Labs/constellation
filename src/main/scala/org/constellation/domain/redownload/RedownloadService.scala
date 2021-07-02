@@ -261,7 +261,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       }.attemptT
     } yield ()
 
-  def checkForAlignmentWithMajoritySnapshot(isDownload: Boolean = false): F[Unit] = {
+  def checkForAlignmentWithMajoritySnapshot(joiningHeight: Option[Long] = None): F[Unit] = {
     def wrappedRedownload(
       shouldRedownload: Boolean,
       meaningfulAcceptedSnapshots: SnapshotsAtHeight,
@@ -320,9 +320,9 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       calculatedMajorityWithoutGaps = if (gaps.isEmpty) calculatedMajority
       else calculatedMajority.removeHeightsAbove(gaps.min)
 
-      joinHeight = ownPeer.getOrElse(calculatedMajorityWithoutGaps.maxHeight)
+      joinHeight = joiningHeight.getOrElse(ownPeer.getOrElse(calculatedMajorityWithoutGaps.maxHeight))
 
-      _ <- if (isDownload) logger.debug(s"Join height is ${joinHeight}") else F.unit
+      _ <- if (joiningHeight.nonEmpty) logger.debug(s"Join height is ${joinHeight}") else F.unit
 
       majorityBeforeCutOff = {
         val intersect = lastMajority.keySet & calculatedMajorityWithoutGaps.keySet
@@ -334,7 +334,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
 
       cutOffHeight = getCutOffHeight(joinHeight, calculatedMajorityWithoutGaps, lastMajority)
 
-      _ <- if (isDownload) logger.debug(s"cutOffHeight=${cutOffHeight}") else F.unit
+      _ <- if (joiningHeight.nonEmpty) logger.debug(s"cutOffHeight=${cutOffHeight}") else F.unit
 
       meaningfulMajority = majorityBeforeCutOff.removeHeightsBelow(cutOffHeight)
       _ <- redownloadStorage.setLastMajorityState(meaningfulMajority) >>
@@ -357,12 +357,12 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
         meaningfulAcceptedSnapshots,
         meaningfulMajority,
         redownloadInterval,
-        isDownload
+        joiningHeight.nonEmpty
       )
 
       _ <- if (shouldPerformRedownload) {
         {
-          if (isDownload)
+          if (joiningHeight.nonEmpty)
             broadcastService.compareAndSet(NodeState.validForDownload, NodeState.DownloadInProgress)
           else
             broadcastService.compareAndSet(NodeState.validForRedownload, NodeState.DownloadInProgress)
@@ -370,8 +370,10 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
           if (state.isNewSet) {
             wrappedRedownload(shouldPerformRedownload, meaningfulAcceptedSnapshots, meaningfulMajority).handleErrorWith {
               error =>
-                logger.error(error)(s"Redownload error, isDownload=$isDownload: ${stringifyStackTrace(error)}") >> {
-                  if (isDownload)
+                logger.error(error)(
+                  s"Redownload error, isDownload=${joiningHeight.nonEmpty}: ${stringifyStackTrace(error)}"
+                ) >> {
+                  if (joiningHeight.nonEmpty)
                     error.raiseError[F, Unit]
                   else
                     broadcastService
@@ -380,7 +382,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
                 }
             }
           } else
-            logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=$isDownload")
+            logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=${joiningHeight.nonEmpty}")
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
@@ -408,7 +410,7 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       )
       _ <- checkpointStorage.removeCheckpoints(checkpointsToRemove)
 
-      _ <- if (shouldPerformRedownload && !isDownload) { // I think we should only set it to Ready when we are not joining
+      _ <- if (shouldPerformRedownload && joiningHeight.isEmpty) { // I think we should only set it to Ready when we are not joining
         broadcastService.compareAndSet(NodeState.validDuringDownload, NodeState.Ready)
       } else F.unit
 
@@ -419,11 +421,11 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
     } yield ()
 
     nodeStorage.getNodeState.map { current =>
-      if (isDownload) NodeState.validForDownload.contains(current)
+      if (joiningHeight.nonEmpty) NodeState.validForDownload.contains(current)
       else NodeState.validForRedownload.contains(current)
     }.ifM(
       wrappedCheck,
-      logger.debug(s"Node state is not valid for redownload, skipping. isDownload=$isDownload") >> F.unit
+      logger.debug(s"Node state is not valid for redownload, skipping. isDownload=${joiningHeight.nonEmpty}") >> F.unit
     )
   }.handleErrorWith { error =>
     logger.error(error)("Error during checking alignment with majority snapshot.") >>

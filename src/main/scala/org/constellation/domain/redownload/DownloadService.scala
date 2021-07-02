@@ -39,11 +39,11 @@ class DownloadService[F[_]](
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  def download(): F[Unit] = {
+  def download(joiningHeight: Long): F[Unit] = {
     val wrappedDownload = for {
       _ <- downloadAndAcceptGenesis()
       _ <- redownloadService.fetchAndUpdatePeersProposals()
-      _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(isDownload = true)
+      _ <- redownloadService.checkForAlignmentWithMajoritySnapshot(joiningHeight = Some(joiningHeight))
       majorityState <- redownloadStorage.getLastMajorityState
       _ <- if (majorityState.isEmpty)
         fetchAndPersistBlocks()

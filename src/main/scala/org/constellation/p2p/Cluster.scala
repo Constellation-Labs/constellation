@@ -273,8 +273,9 @@ class Cluster[F[_]](
 //          _ <- clearServicesBeforeJoin()
           _ <- attemptRegisterPeer(hp)
           _ <- T.sleep(15.seconds)
+          joiningHeight <- discoverJoiningHeight()
+          _ <- downloadService.download(joiningHeight)
           _ <- setOwnJoinedHeight()
-          _ <- downloadService.download()
           _ <- broadcastOwnJoinedHeight()
         } yield ()
       }.handleErrorWith { error =>
@@ -286,8 +287,8 @@ class Cluster[F[_]](
       "cluster_join"
     )
 
-  def setOwnJoinedHeight(): F[Unit] = {
-    val discoverJoinedHeight = for {
+  def discoverJoiningHeight(): F[Long] =
+    for {
       p <- clusterStorage.getJoinedPeers
       clients = p.map(_._2.peerMetadata).toList
       maxMajorityHeight <- clients
@@ -313,16 +314,17 @@ class Cluster[F[_]](
       ownHeight = if (participatedInGenesisFlow && joinedAsInitialFacilitator) 0L
       else if (participatedInRollbackFlow && joinedAsInitialFacilitator) maxMajorityHeight
       else maxMajorityHeight + delay
-
-      _ <- nodeStorage.setOwnJoinedHeight(ownHeight)
-      _ <- metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", ownHeight)
     } yield ownHeight
 
+  def setOwnJoinedHeight(): F[Unit] =
     for {
       height <- nodeStorage.getOwnJoinedHeight
-      _ <- height.map(_.pure[F]).getOrElse(discoverJoinedHeight)
+      _ <- height
+        .map(_.pure[F])
+        .getOrElse(discoverJoiningHeight().flatTap { nodeStorage.setOwnJoinedHeight }.flatTap {
+          metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", _)
+        })
     } yield ()
-  }
 
   def broadcastOwnJoinedHeight(): F[Unit] =
     for {
