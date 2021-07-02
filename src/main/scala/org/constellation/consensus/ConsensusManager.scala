@@ -18,6 +18,7 @@ import org.constellation.concurrency.SingleLock
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.gossip.checkpoint.CheckpointBlockGossipService
+import org.constellation.p2p.DataResolver.DataResolverCheckpointsEnqueue
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.observation.Observation
@@ -48,7 +49,8 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   calculationContext: ContextShift[F],
   metrics: Metrics,
   nodeId: Id,
-  keyPair: KeyPair
+  keyPair: KeyPair,
+  checkpointsQueueInstance: DataResolverCheckpointsEnqueue[F]
 ) {
 
   import ConsensusManager._
@@ -377,7 +379,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         checkpointService.addToAcceptance
       }
 
-      resolved <- missing
+      _ <- missing
         .map(_.hash)
         .filterA(checkpointStorage.isWaitingForResolving(_).map(!_))
         .flatMap {
@@ -393,18 +395,17 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
           logger.debug(s"${roundData.roundId}] Trying to resolve: ${hashes}")
         }
         .flatMap {
-          _.traverse { hash =>
-            dataResolver.resolveCheckpointDefaults(hash, peers.find(_.id == roundData.facilitatorId.id))
+          _.traverse {
+            checkpointsQueueInstance
+              .enqueueCheckpoint(_, peers.find(_.id == roundData.facilitatorId.id), checkpointService.addToAcceptance)
           }
         }
       _ <- logger.debug(
-        s"[${nodeId.short}] Missing parents size=${missing.size}, accepted size=${accepted.size} existing size=${existing.size}, resolved size=${resolved.size} for round ${roundData.roundId}"
+        s"[${nodeId.short}] Missing parents size=${missing.size}, accepted size=${accepted.size} existing size=${existing.size}, for round ${roundData.roundId}"
       )
-      _ <- if (missing.nonEmpty && (resolved.size != missing.size))
-        logger.error(s"Missing parents: ${missing.map(_.hash)} with soe hashes: ${missing.map(_.hash)}")
+      _ <- if (missing.nonEmpty)
+        logger.error(s"Missing parents: ${missing.map(_.hash)}")
       else Sync[F].unit
-
-      _ <- resolved.traverse { checkpointService.addToAcceptance }
 
       _ <- if (missing.nonEmpty) {
         val roundId = roundData.roundId

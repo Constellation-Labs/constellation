@@ -22,6 +22,7 @@ import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.p2p.DataResolver.DataResolverCheckpointsEnqueue
 import org.constellation.p2p.{DataResolver, PeerData}
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache, FinishedCheckpoint}
 import org.constellation.schema.signature.{HashSignature, SignatureRequest, SignatureResponse}
@@ -52,7 +53,8 @@ class CheckpointService[F[_]: Timer: Clock](
   facilitatorFilter: FacilitatorFilter[F],
   id: Id,
   metrics: Metrics,
-  keyPair: KeyPair
+  keyPair: KeyPair,
+  checkpointsQueueInstance: DataResolverCheckpointsEnqueue[F]
 )(implicit F: Concurrent[F], C: ContextShift[F]) {
 
   implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
@@ -319,24 +321,14 @@ class CheckpointService[F[_]: Timer: Clock](
         for {
           allTxs <- dataResolver.resolveBatchTransactionsDefaults(txs)
           _ <- logger.info(s"${Console.YELLOW}${allTxs.map(tx => (tx.hash, tx.cbBaseHash))}${Console.RESET}")
-          cbs <- allTxs
+          _ <- allTxs
             .flatMap(_.cbBaseHash)
             .distinct
             .filterA(checkpointStorage.existsCheckpoint(_).map(!_))
             .flatMap {
               _.filterA(soeHash => checkpointStorage.isWaitingForResolving(soeHash).map(!_))
             }
-            .flatMap(
-              _.traverse(
-                hash =>
-                  dataResolver.resolveCheckpointDefaults(hash).map(_.asRight[Unit]).handleErrorWith { error =>
-                    logger
-                      .error(error)(s"Error resolving checkpoint block soeHash=${hash}")
-                      .map(_.asLeft[CheckpointCache])
-                  }
-              )
-            )
-          _ <- cbs.traverse(_.fold(_ => F.unit, addToAcceptance))
+            .flatMap { _.traverse { checkpointsQueueInstance.enqueueCheckpoint(_, None, addToAcceptance) } }
         } yield ()
       } else F.unit
     }
@@ -355,13 +347,7 @@ class CheckpointService[F[_]: Timer: Clock](
         .flatMap { _.traverse { addToAcceptance } }
 
       missingSoeHashes = soeHashes.diff(waitingForResolving).diff(existing)
-      cbs <- missingSoeHashes.traverse(
-        soeHash =>
-          dataResolver.resolveCheckpointDefaults(soeHash).map(_.asRight[Unit]).handleErrorWith { error =>
-            logger.error(error)(s"Error resolving missing parent soeHash=${soeHash}").map(_.asLeft[CheckpointCache])
-          }
-      )
-      _ <- cbs.traverse(_.fold(_ => F.unit, addToAcceptance))
+      _ <- missingSoeHashes.traverse { checkpointsQueueInstance.enqueueCheckpoint(_, None, addToAcceptance) }
     } yield ()
 
   def acceptObservations(cb: CheckpointBlock, cpc: Option[CheckpointCache] = None): F[Unit] =
@@ -532,10 +518,8 @@ class CheckpointService[F[_]: Timer: Clock](
             metrics.incrementMetricAsync[F]("compare_missingBlock")
           }
 
-          _ <- missingHashes.traverse { soeHash =>
-            F.start {
-              dataResolver.resolveCheckpointDefaults(soeHash, Some(peerClientMetadata)) >>= { addToAcceptance }
-            }
+          _ <- missingHashes.traverse {
+            checkpointsQueueInstance.enqueueCheckpoint(_, Some(peerClientMetadata), addToAcceptance)
           }
         } yield ()
     } yield ()

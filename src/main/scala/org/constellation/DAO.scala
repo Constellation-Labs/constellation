@@ -4,6 +4,7 @@ import better.files.File
 import cats.data.NonEmptyList
 import cats.effect.{Blocker, ConcurrentEffect, ContextShift, IO, Timer}
 import constellation.PublicKeyExt
+import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.ConfigUtil.AWSStorageConfig
@@ -44,6 +45,7 @@ import org.constellation.infrastructure.checkpointBlock.CheckpointStorageInterpr
 import org.constellation.infrastructure.cloud.{AWSStorageOld, GCPStorageOld}
 import org.constellation.infrastructure.cluster.{ClusterStorageInterpreter, NodeStorageInterpreter}
 import org.constellation.infrastructure.genesis.GenesisStorageInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerHealthCheckWatcher}
 import org.constellation.infrastructure.redownload.{RedownloadPeriodicCheck, RedownloadStorageInterpreter}
 import org.constellation.infrastructure.rewards.{RewardsLocalStorage, RewardsS3Storage}
@@ -55,6 +57,7 @@ import org.constellation.infrastructure.snapshot.{
   SnapshotStorageInterpreter
 }
 import org.constellation.keytool.KeyUtils
+import org.constellation.p2p.DataResolver.DataResolverCheckpointsEnqueue
 import org.constellation.p2p._
 import org.constellation.rewards.{EigenTrust, RewardsManager}
 import org.constellation.rollback.RollbackService
@@ -80,7 +83,15 @@ class DAO(
   val sessionTokenService: SessionTokenService[IO],
   val apiClient: ClientInterpreter[IO],
   val clusterStorage: ClusterStorageAlgebra[IO],
-  val metrics: Metrics
+  val metrics: Metrics,
+  val checkpointStorage: CheckpointStorageAlgebra[IO],
+  val rateLimiting: RateLimiting[IO],
+  val transactionChainService: TransactionChainService[IO],
+  val transactionService: TransactionService[IO],
+  val trustManager: TrustManager[IO],
+  val observationService: ObservationService[IO],
+  val dataResolver: DataResolver[IO],
+  val checkpointsQueueInstance: DataResolverCheckpointsEnqueue[IO]
 ) {
 
   val keyPair: KeyPair = nodeConfig.primaryKeyPair
@@ -171,7 +182,6 @@ class DAO(
     id
   )
 
-  val checkpointStorage: CheckpointStorageAlgebra[IO] = new CheckpointStorageInterpreter[IO]()
   val snapshotServiceStorage: SnapshotStorageAlgebra[IO] = new SnapshotStorageInterpreter[IO](snapshotStorage)
   val initialState = if (nodeConfig.cliConfig.startOfflineMode) NodeState.Offline else NodeState.PendingDownload
   val nodeStorage: NodeStorageAlgebra[IO] = new NodeStorageInterpreter[IO](initialState)
@@ -201,8 +211,7 @@ class DAO(
   val joiningPeerValidator: JoiningPeerValidator[IO] =
     JoiningPeerValidator[IO](apiClient, Blocker.liftExecutionContext(unboundedExecutionContext))
   val blacklistedAddresses: BlacklistedAddresses[IO] = BlacklistedAddresses[IO]
-  val transactionChainService: TransactionChainService[IO] = TransactionChainService[IO]
-  val rateLimiting: RateLimiting[IO] = new RateLimiting[IO]
+
   val notificationService = new NotificationService[IO]()
   val channelService = new ChannelService[IO]()
   val recentBlockTracker = new RecentDataTracker[CheckpointCache](200)
@@ -210,9 +219,6 @@ class DAO(
   val addressService: AddressService[IO] = new AddressService[IO]()
   val messageValidator: MessageValidator = MessageValidator(id)
   val eigenTrust: EigenTrust[IO] = new EigenTrust[IO](id)
-
-  val transactionService: TransactionService[IO] =
-    TransactionService[IO](transactionChainService, rateLimiting, metrics)
 
   val transactionGossiping: TransactionGossiping[IO] =
     new TransactionGossiping[IO](transactionService, clusterStorage, processingConfig.txGossipingFanout, id)
@@ -230,12 +236,8 @@ class DAO(
     metrics
   )
 
-  val trustManager: TrustManager[IO] = TrustManager[IO](id, clusterStorage)
-
   val partitionerPeerSampling: PartitionerPeerSampling[IO] =
     PartitionerPeerSampling[IO](id, clusterStorage, trustManager)
-
-  val observationService: ObservationService[IO] = new ObservationService[IO](trustManager, metrics)
 
   val trustDataPollingScheduler: TrustDataPollingScheduler = TrustDataPollingScheduler(
     ConfigUtil.config,
@@ -245,16 +247,6 @@ class DAO(
     partitionerPeerSampling,
     unboundedExecutionContext,
     metrics
-  )
-
-  val dataResolver: DataResolver[IO] = DataResolver(
-    keyPair,
-    apiClient,
-    clusterStorage,
-    checkpointStorage,
-    transactionService,
-    observationService,
-    Blocker.liftExecutionContext(unboundedExecutionContext)
   )
 
 //  val merkleService = new CheckpointMerkleService[IO](
@@ -304,7 +296,8 @@ class DAO(
     ),
     id,
     metrics,
-    keyPair
+    keyPair,
+    checkpointsQueueInstance
   )
 
   val checkpointCompare = new CheckpointCompare(checkpointService, unboundedExecutionContext)
@@ -344,7 +337,8 @@ class DAO(
     IO.contextShift(boundedExecutionContext),
     metrics = metrics,
     id,
-    keyPair
+    keyPair,
+    checkpointsQueueInstance
   )
 
   val snapshotService: SnapshotService[IO] = SnapshotService[IO](
