@@ -2,7 +2,7 @@ package org.constellation
 
 import java.security.KeyPair
 import better.files.File
-import cats.effect.{ExitCode, IO, IOApp, Resource, Sync, SyncIO}
+import cats.effect.{Blocker, ExitCode, IO, IOApp, Resource, Sync, SyncIO}
 import cats.syntax.all._
 import com.typesafe.config.{Config, ConfigFactory}
 import constellation.PublicKeyExt
@@ -12,21 +12,29 @@ import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.circe.Decoder
 import io.prometheus.client.CollectorRegistry
 import org.constellation.ConstellationExecutionContext._
+import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cloud.CloudService
 import org.constellation.domain.cloud.CloudService.{CloudServiceEnqueue, DataToSend}
 import org.constellation.domain.cloud.config.CloudConfig
 import org.constellation.domain.configuration.{CliConfig, NodeConfig}
+import org.constellation.domain.observation.ObservationService
+import org.constellation.domain.transaction.{TransactionChainService, TransactionService}
 import org.constellation.genesis.Genesis
+import org.constellation.infrastructure.checkpointBlock.CheckpointStorageInterpreter
 import org.constellation.infrastructure.cluster.ClusterStorageInterpreter
 import org.constellation.infrastructure.configuration.CliConfigParser
 import org.constellation.infrastructure.endpoints._
 import org.constellation.infrastructure.endpoints.middlewares.PeerAuthMiddleware
 import org.constellation.infrastructure.p2p.ClientInterpreter
+import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.keytool.KeyStoreUtils
-import org.constellation.schema.checkpoint.CheckpointBlock
+import org.constellation.p2p.DataResolver
+import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
 import org.constellation.schema.{GenesisObservation, Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.SessionTokenService
+import org.constellation.storage.RateLimiting
+import org.constellation.trust.TrustManager
 import org.constellation.util.{AccountBalance, AccountBalanceCSVReader, HostPort, Metrics}
 import org.http4s.Request
 import org.http4s.client.Client
@@ -304,6 +312,27 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         nodeConfig.hostName
       )
 
+      checkpointStorage: CheckpointStorageAlgebra[IO] = new CheckpointStorageInterpreter[IO]()
+      rateLimiting = new RateLimiting[IO]
+      transactionChainService = TransactionChainService[IO]
+      transactionService = TransactionService[IO](transactionChainService, rateLimiting, metrics)
+      trustManager = TrustManager[IO](id, clusterStorage)
+      observationService = new ObservationService[IO](trustManager, metrics)
+
+      dataResolver = DataResolver[IO](
+        keyPair,
+        apiClient,
+        clusterStorage,
+        checkpointStorage,
+        transactionService,
+        observationService,
+        Blocker.liftExecutionContext(unboundedExecutionContext)
+      )
+      checkpointsQueue <- Stream.eval(
+        Queue.unbounded[IO, (String, Option[PeerClientMetadata], CheckpointCache => IO[Unit])]
+      )
+      checkpointsQueueInstance <- Stream.eval(dataResolver.checkpointsQueue(checkpointsQueue))
+
       dao <- Stream.eval(IO {
         new DAO(
           boundedExecutionContext,
@@ -314,7 +343,15 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           sessionTokenService,
           apiClient,
           clusterStorage,
-          metrics
+          metrics,
+          checkpointStorage,
+          rateLimiting,
+          transactionChainService,
+          transactionService,
+          trustManager,
+          observationService,
+          dataResolver,
+          checkpointsQueueInstance
         )
       })
       _ <- Stream.eval(IO {

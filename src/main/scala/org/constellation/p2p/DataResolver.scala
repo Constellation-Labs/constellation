@@ -3,6 +3,8 @@ package org.constellation.p2p
 import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
+import fs2.Pipe
+import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
@@ -39,6 +41,8 @@ class DataResolver[F[_]](
 ) {
 
   implicit private val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
+
+  private val maxCheckpointResolvingWorkers = 200
 
   private val getPeersForResolving: F[List[PeerClientMetadata]] =
     for {
@@ -156,13 +160,6 @@ class DataResolver[F[_]](
             .void
       }
 
-  def resolveCheckpointDefaults(
-    hash: String,
-    priorityClient: Option[PeerClientMetadata] = None
-  ): F[CheckpointCache] =
-    checkpointStorage.markCheckpointForResolving(hash) >>
-      getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient))
-
   def resolveCheckpoint(
     hash: String,
     pool: List[PeerClientMetadata],
@@ -252,6 +249,33 @@ class DataResolver[F[_]](
           .put(Observation.create(peerClientMetadata.id, RequestTimeoutOnResolving(List(hash)))(keyPair))
           .void
     }
+
+  def checkpointsQueue(
+    queue: Queue[F, (String, Option[PeerClientMetadata], CheckpointCache => F[Unit])]
+  ): F[DataResolverCheckpointsEnqueue[F]] = {
+    val worker: F[Unit] = queue.dequeue.through(resolve).compile.drain
+
+    F.start(worker).map { _ =>
+      new DataResolverCheckpointsEnqueue[F]() {
+        def enqueueCheckpoint(
+          hash: String,
+          priorityClient: Option[PeerClientMetadata],
+          callback: CheckpointCache => F[Unit]
+        ): F[Unit] =
+          checkpointStorage.markCheckpointForResolving(hash) >>
+            queue.enqueue1((hash, priorityClient, callback)) >>
+            logger.debug(s"Enqueued checkpoint=${hash} to resolve")
+      }
+    }
+  }
+
+  private def resolve: Pipe[F, (String, Option[PeerClientMetadata], CheckpointCache => F[Unit]), Unit] =
+    _.parEvalMap(maxCheckpointResolvingWorkers) {
+      case (hash, priorityClient, callback) =>
+        getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient)) >>= { block =>
+          logger.debug(s"Resolved checkpoint=${block.checkpointBlock.soeHash}") >> callback(block)
+        }
+    }
 }
 
 object DataResolver {
@@ -288,4 +312,13 @@ object DataResolver {
       extends Exception(
         s"Max errors threshold reached when resolving hash: $hash aborting"
       )
+
+  trait DataResolverCheckpointsEnqueue[F[_]] {
+
+    def enqueueCheckpoint(
+      hash: String,
+      priorityClient: Option[PeerClientMetadata],
+      callback: CheckpointCache => F[Unit]
+    ): F[Unit]
+  }
 }

@@ -382,7 +382,9 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
                 }
             }
           } else
-            logger.debug(s"Setting node state during redownload failed! Skipping redownload. isDownload=${joiningHeight.nonEmpty}")
+            logger.debug(
+              s"Setting node state during redownload failed! Skipping redownload. isDownload=${joiningHeight.nonEmpty}"
+            )
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
