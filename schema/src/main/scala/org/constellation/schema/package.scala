@@ -31,9 +31,9 @@ package object schema {
 
   }
 
-  def hashSerialized(obj: AnyRef, withRefs: Boolean = false) = Kryo.serializeAnyRef(obj, withRefs).sha256
+  def hashSerialized(obj: AnyRef, withRefs: Boolean = true) = Kryo.serializeAnyRef(obj, withRefs).sha256
 
-  def hashSerializedBytes(obj: AnyRef, withRefs: Boolean = false) = Kryo.serializeAnyRef(obj, withRefs).sha256Bytes
+  def hashSerializedBytes(obj: AnyRef, withRefs: Boolean = true) = Kryo.serializeAnyRef(obj, withRefs).sha256Bytes
 
   def signHashWithKey(hash: String, privateKey: PrivateKey): String =
     bytes2hex(signData(hash.getBytes())(privateKey))
