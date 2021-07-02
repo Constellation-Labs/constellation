@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Fixed
 - Fixed signature validation for gossip messages when payload contains more than one empty string
+### Changed
+- Joining height is defined separately for download and for set
 
 ## [v2.24.10] 2021-06-29
 ### Changed
