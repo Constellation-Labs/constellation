@@ -75,16 +75,17 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
           senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
 
           res <- messageValidator.validateForForward(message, senderId) match {
-            case Invalid(EndOfCycle)                                                            => checkpointBlockGossipService.finishCycle(message) >> Ok()
-            case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) => BadRequest()
-            case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
-            case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
+            case Invalid(EndOfCycle) => checkpointBlockGossipService.finishCycle(message) >> Ok("end of a loop")
+            case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) =>
+              BadRequest("incorrect receiver or path is not a loop")
+            case Invalid(IncorrectSenderId(_)) => Response[F](status = Unauthorized).pure[F]
+            case Invalid(e)                    => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
-              val accept = checkpointService.addToAcceptance(payload.block.value)
+              val accept = checkpointService.addToAcceptance(payload.block)
               val processFinishedCheckpointAsync = F.start(
                 C.shift >>
                   snapshotService.getNextHeightInterval.flatMap { nextHeight =>
-                    (nextHeight, payload.block.value.checkpointCacheData.height) match {
+                    (nextHeight, payload.block.checkpointCacheData.height) match {
                       case (2, _)                                           => accept
                       case (nextHeight, Height(min, _)) if nextHeight > min => F.unit
                       case (_, _)                                           => accept
@@ -93,12 +94,7 @@ class CheckpointEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) e
                   checkpointBlockGossipService.spread(message)
               )
 
-              payload.block.validSignature
-                .pure[F]
-                .ifM(
-                  processFinishedCheckpointAsync >> Ok(),
-                  BadRequest()
-                )
+              processFinishedCheckpointAsync >> Ok()
           }
         } yield res
     }
