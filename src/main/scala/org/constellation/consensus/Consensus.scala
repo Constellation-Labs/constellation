@@ -27,7 +27,6 @@ import org.constellation.schema.checkpoint._
 import org.constellation.schema.consensus.RoundId
 import org.constellation.schema.edge.{EdgeHashType, TypedEdgeHash}
 import org.constellation.schema.observation.Observation
-import org.constellation.schema.signature.Signed.signed
 import org.constellation.schema.transaction.{Transaction, TransactionCacheData}
 import org.constellation.schema.{ChannelMessage, Id, PeerNotification}
 import org.constellation.storage._
@@ -372,12 +371,9 @@ class Consensus[F[_]: Concurrent: ContextShift](
     Concurrent[F].start {
       checkpointBlockGossipService.spread(
         CheckpointBlockPayload(
-          signed(
-            FinishedCheckpointBlock(
-              finishedCheckpoint.checkpointCacheData,
-              finishedCheckpoint.facilitators
-            ),
-            keyPair
+          FinishedCheckpointBlock(
+            finishedCheckpoint.checkpointCacheData,
+            finishedCheckpoint.facilitators
           )
         )
       )

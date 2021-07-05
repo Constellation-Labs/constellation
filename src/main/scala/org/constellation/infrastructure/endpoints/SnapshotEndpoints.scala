@@ -228,10 +228,11 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
           senderId = req.headers.get(`X-Id`).map(_.value).map(Id(_)).get
 
           res <- messageValidator.validateForForward(message, senderId) match {
-            case Invalid(EndOfCycle)                                                            => snapshotProposalGossipService.finishCycle(message) >> Ok()
-            case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) => BadRequest()
-            case Invalid(IncorrectSenderId(_))                                                  => Response[F](status = Unauthorized).pure[F]
-            case Invalid(e)                                                                     => logger.error(e)(e.getMessage) >> InternalServerError()
+            case Invalid(EndOfCycle) => snapshotProposalGossipService.finishCycle(message) >> Ok("end of a loop")
+            case Invalid(IncorrectReceiverId(_, _)) | Invalid(PathDoesNotStartAndEndWithOrigin) =>
+              BadRequest("incorrect receiver or path is not a loop")
+            case Invalid(IncorrectSenderId(_)) => Response[F](status = Unauthorized).pure[F]
+            case Invalid(e)                    => logger.error(e)(e.getMessage) >> InternalServerError()
             case Valid(_) =>
               val processProposalAsync = F.start(
                 C.shift >>
@@ -245,7 +246,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
                 .pure[F]
                 .ifM(
                   processProposalAsync >> Ok(),
-                  BadRequest()
+                  BadRequest("snapshot proposal signature validation failed")
                 )
           }
         } yield res

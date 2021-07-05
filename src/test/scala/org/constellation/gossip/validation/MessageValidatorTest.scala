@@ -58,7 +58,7 @@ class MessageValidatorTest
 
     "when validates message with empty strings" in {
       val bValiator = new MessageValidator(bId)
-      val path = GossipPath(IndexedSeq(aId, bId, aId), "")
+      val path = GossipPath(IndexedSeq(aId, bId, aId), "pathId")
       val payload = ("", new String(""))
       val msg: GossipMessage[(String, String)] = GossipMessage(payload, path, aId).sign(aKp)
 

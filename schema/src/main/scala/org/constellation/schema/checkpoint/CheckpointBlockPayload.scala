@@ -17,7 +17,7 @@ object FinishedCheckpointBlock {
     FinishedCheckpoint(a.checkpointCacheData, a.facilitators)
 }
 
-case class CheckpointBlockPayload(block: Signed[FinishedCheckpointBlock])
+case class CheckpointBlockPayload(block: FinishedCheckpointBlock)
 
 object CheckpointBlockPayload {
   implicit val encoder: Encoder[CheckpointBlockPayload] = deriveEncoder
