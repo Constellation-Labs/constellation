@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Added
+- Method to keytool for printing public key hex and dag address
 ### Fixed
 - Fixed signature validation for gossip messages when payload contains more than one empty string
 ### Changed

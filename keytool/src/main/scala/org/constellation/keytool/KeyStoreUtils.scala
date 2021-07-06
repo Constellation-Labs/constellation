@@ -136,6 +136,29 @@ object KeyStoreUtils {
       )
       .attemptT
 
+  /**
+    * Prints PublicKey in hexadecimal format and DAG address to stdout
+    */
+  def printKeyInfo[F[_]: Sync](
+    path: String,
+    alias: String,
+    storePassword: Array[Char],
+    keyPassword: Array[Char]
+  ): EitherT[F, Throwable, Unit] =
+    for {
+      keyPair <- keyPairFromStorePath(path, alias, storePassword, keyPassword)
+      hex <- EitherT.liftF(Sync[F].delay {
+        KeyUtils.publicKeyToHex(keyPair.getPublic)
+      })
+      address <- EitherT.liftF(Sync[F].delay {
+        KeyUtils.publicKeyToAddressString(keyPair.getPublic)
+      })
+      _ <- EitherT.liftF(Sync[F].delay {
+        println(s"Hex: $hex")
+        println(s"Address: $address")
+      })
+    } yield ()
+
   def keyPairFromStorePath[F[_]: Sync](
     path: String,
     alias: String

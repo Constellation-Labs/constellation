@@ -24,6 +24,7 @@ object KeyTool extends IOApp {
         migrateKeyStoreToSinglePassword[F](cliParams).map(_ => ())
       case CliMethod.ExportPrivateKeyHex =>
         exportPrivateKeyAsHex[F](cliParams).map(_ => ())
+      case CliMethod.PrintKeyInfo => printKeyInfo(cliParams)
       case _ =>
         EitherT.leftT[F, Unit](new RuntimeException("Unknown command"))
     }
@@ -51,6 +52,16 @@ object KeyTool extends IOApp {
   private def generateKeyStoreWithKeyPair[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, KeyStore] =
     getPasswords(cliParams).flatMap { passwords =>
       KeyStoreUtils.generateKeyPairToStorePath(
+        path = cliParams.keystore,
+        alias = cliParams.alias,
+        storePassword = passwords.storepass,
+        keyPassword = passwords.keypass
+      )
+    }
+
+  private def printKeyInfo[F[_]: Sync](cliParams: CliConfig): EitherT[F, Throwable, Unit] =
+    getPasswords(cliParams).flatMap { passwords =>
+      KeyStoreUtils.printKeyInfo(
         path = cliParams.keystore,
         alias = cliParams.alias,
         storePassword = passwords.storepass,
@@ -95,7 +106,10 @@ object KeyTool extends IOApp {
           .text("Clone existing KeyStore and set storepass for both store and keypair"),
         cmd("export-private-key-hex")
           .action((_, c) => c.copy(method = CliMethod.ExportPrivateKeyHex))
-          .text("Exports PrivateKey in hexadecimal format")
+          .text("Exports PrivateKey in hexadecimal format"),
+        cmd("print-key-info")
+          .action((_, c) => c.copy(method = CliMethod.PrintKeyInfo))
+          .text("Prints PublicKey in hexadecimal format and DAG address to stdout")
       )
     }
     EitherT.fromEither[F] {
