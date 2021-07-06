@@ -80,7 +80,7 @@ case class Transaction(
   )
 
   def isValid: Boolean = signatures.nonEmpty && signatures.forall { hs ⇒
-    hs.publicKey.address == src.address && hs.valid(baseHash) && baseHash == signaturesHash
+    hs.publicKey.address == src.address && hs.valid(baseHash) && baseHash == signaturesHash && hash == signaturesHash
   }
 
   def feeValue: Long = fee.map(v => if (v < 0L) 0L else v).getOrElse(0L)
