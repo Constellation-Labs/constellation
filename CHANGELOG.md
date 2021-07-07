@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Joining height is defined separately for download and for set
 - Resolving checkpoints in queue with max concurrent limit
 - Improve transaction data consistency
+- Update whitelisting file
 
 ## [v2.24.10] 2021-06-29
 ### Changed
