@@ -2,12 +2,15 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.25.0] 2021-07-07
 ### Fixed
 - Fixed signature validation for gossip messages when payload contains more than one empty string
 ### Changed
 - Joining height is defined separately for download and for set
 - Resolving checkpoints in queue with max concurrent limit
 - Improve transaction data consistency
+- Update whitelisting file
 
 ## [v2.24.10] 2021-06-29
 ### Changed
