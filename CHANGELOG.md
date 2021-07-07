@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.25.0] 2021-07-07
 ### Fixed
 - Fixed signature validation for gossip messages when payload contains more than one empty string
 ### Changed
