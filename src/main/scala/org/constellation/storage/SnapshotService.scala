@@ -15,6 +15,7 @@ import org.constellation.domain.rewards.StoredRewards
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.TransactionService
+import org.constellation.p2p.DataResolver.DataResolverCheckpointsEnqueue
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.Id
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
@@ -42,6 +43,7 @@ class SnapshotService[F[_]: Concurrent](
   eigenTrustStorage: LocalFileStorage[F, StoredRewards],
   eigenTrust: EigenTrust[F],
   redownloadStorage: RedownloadStorageAlgebra[F],
+  checkpointsQueueInstance: DataResolverCheckpointsEnqueue[F],
   boundedExecutionContext: ExecutionContext,
   unboundedExecutionContext: ExecutionContext,
   metrics: Metrics,
@@ -222,6 +224,7 @@ class SnapshotService[F[_]: Concurrent](
       _ <- checkpointStorage.setAccepted(snapshotInfo.accepted)
       _ <- checkpointStorage.setAwaiting(snapshotInfo.awaiting)
       _ <- checkpointStorage.setInSnapshot(snapshotInfo.inSnapshot)
+      _ <- checkpointsQueueInstance.incrementIgnoreCounter
       _ <- addressService.setAll(snapshotInfo.addressCacheData)
       _ <- transactionService.transactionChainService.applySnapshotInfo(snapshotInfo)
 
@@ -580,6 +583,7 @@ object SnapshotService {
     eigenTrustStorage: LocalFileStorage[F, StoredRewards],
     eigenTrust: EigenTrust[F],
     redownloadStorage: RedownloadStorageAlgebra[F],
+    checkpointsQueueInstance: DataResolverCheckpointsEnqueue[F],
     boundedExecutionContext: ExecutionContext,
     unboundedExecutionContext: ExecutionContext,
     metrics: Metrics,
@@ -600,6 +604,7 @@ object SnapshotService {
       eigenTrustStorage,
       eigenTrust,
       redownloadStorage,
+      checkpointsQueueInstance,
       boundedExecutionContext,
       unboundedExecutionContext,
       metrics,

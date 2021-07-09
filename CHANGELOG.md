@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- Clear resolving queue on setSnapshot
 
 ## [v2.25.1] 2021-07-07
 ### Changed
