@@ -329,7 +329,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         Blocker.liftExecutionContext(unboundedExecutionContext)
       )
       checkpointsQueue <- Stream.eval(
-        Queue.unbounded[IO, (String, Option[PeerClientMetadata], CheckpointCache => IO[Unit])]
+        Queue.unbounded[IO, (String, Option[PeerClientMetadata], Long, CheckpointCache => IO[Unit])]
       )
       checkpointsQueueInstance <- Stream.eval(dataResolver.checkpointsQueue(checkpointsQueue))
 

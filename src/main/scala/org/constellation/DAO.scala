@@ -355,6 +355,7 @@ class DAO(
     rewardsStorage,
     eigenTrust,
     redownloadStorage,
+    checkpointsQueueInstance,
     boundedExecutionContext,
     unboundedExecutionContext,
     metrics,

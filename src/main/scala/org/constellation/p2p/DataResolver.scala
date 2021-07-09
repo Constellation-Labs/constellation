@@ -4,6 +4,7 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Blocker, Concurrent, ContextShift, Timer}
 import cats.syntax.all._
 import fs2.Pipe
+import fs2.Stream
 import fs2.concurrent.Queue
 import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -250,8 +251,10 @@ class DataResolver[F[_]](
           .void
     }
 
+  private val ignoreCounter: Ref[F, Long] = Ref.unsafe(0L)
+
   def checkpointsQueue(
-    queue: Queue[F, (String, Option[PeerClientMetadata], CheckpointCache => F[Unit])]
+    queue: Queue[F, (String, Option[PeerClientMetadata], Long, CheckpointCache => F[Unit])]
   ): F[DataResolverCheckpointsEnqueue[F]] = {
     val worker: F[Unit] = queue.dequeue.through(resolve).compile.drain
 
@@ -263,18 +266,29 @@ class DataResolver[F[_]](
           callback: CheckpointCache => F[Unit]
         ): F[Unit] =
           checkpointStorage.markCheckpointForResolving(hash) >>
-            queue.enqueue1((hash, priorityClient, callback)) >>
+            ignoreCounter.get.flatMap { skip =>
+              queue.enqueue1((hash, priorityClient, skip, callback))
+            } >>
             logger.debug(s"Enqueued checkpoint=${hash} to resolve")
+
+        def incrementIgnoreCounter: F[Unit] =
+          ignoreCounter.update(_ + 1)
       }
     }
   }
 
-  private def resolve: Pipe[F, (String, Option[PeerClientMetadata], CheckpointCache => F[Unit]), Unit] =
+  private def resolve: Pipe[F, (String, Option[PeerClientMetadata], Long, CheckpointCache => F[Unit]), Unit] =
     _.parEvalMap(maxCheckpointResolvingWorkers) {
-      case (hash, priorityClient, callback) =>
-        getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient)) >>= { block =>
-          logger.debug(s"Resolved checkpoint=${block.checkpointBlock.soeHash}") >> callback(block)
+      case (hash, priorityClient, ignore, callback) =>
+        ignoreCounter.get.flatMap { currentIgnore =>
+          if (ignore >= currentIgnore) {
+            getPeersForResolving.flatMap(resolveCheckpoint(hash, _, priorityClient)) >>= { block =>
+              logger.debug(s"Resolved checkpoint=${block.checkpointBlock.soeHash}") >> callback(block)
+            }
+          } else
+            logger.debug(s"Skipping resolving checkpoint=$hash. Current ignore=$currentIgnore, block ignore=$ignore")
         }
+
     }
 }
 
@@ -320,5 +334,7 @@ object DataResolver {
       priorityClient: Option[PeerClientMetadata],
       callback: CheckpointCache => F[Unit]
     ): F[Unit]
+
+    def incrementIgnoreCounter: F[Unit]
   }
 }
