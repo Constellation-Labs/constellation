@@ -110,6 +110,8 @@ class CheckpointService[F[_]: Timer: Clock](
       .map(NodeState.canAcceptCheckpoint)
       .ifM(
         for {
+          isValid <- checkpointBlockValidator.simpleValidation(checkpoint.checkpointBlock).map(_.isValid)
+
           isWaitingForAcceptance <- checkpointStorage
             .isCheckpointWaitingForAcceptance(checkpoint.checkpointBlock.soeHash)
           isBeingAccepted <- checkpointStorage.isCheckpointInAcceptance(checkpoint.checkpointBlock.soeHash)
@@ -118,7 +120,7 @@ class CheckpointService[F[_]: Timer: Clock](
           isWaitingForAcceptanceAfterRedownload <- checkpointStorage
             .isCheckpointWaitingForAcceptanceAfterDownload(checkpoint.checkpointBlock.soeHash)
 
-          _ <- if (isWaitingForAcceptance || isBeingAccepted || isCheckpointAccepted || isWaitingForResolving || isWaitingForAcceptanceAfterRedownload)
+          _ <- if (!isValid || isWaitingForAcceptance || isBeingAccepted || isCheckpointAccepted || isWaitingForResolving || isWaitingForAcceptanceAfterRedownload)
             F.unit
           else
             checkpointStorage.persistCheckpoint(checkpoint) >>
@@ -137,11 +139,15 @@ class CheckpointService[F[_]: Timer: Clock](
     for {
       blocksForAcceptance <- checkpointStorage.getWaitingForAcceptance
 
+      valid <- blocksForAcceptance.toList.filterA { c =>
+        checkpointBlockValidator.simpleValidation(c.checkpointBlock).map(_.isValid)
+      }.map(_.toSet)
+
       accepted <- checkpointStorage.getAccepted
       inSnapshot <- checkpointStorage.getInSnapshot.map(_.map(_._1))
       acceptedPool = accepted ++ inSnapshot
 
-      notAlreadyAccepted = blocksForAcceptance.filterNot(cb => acceptedPool.contains(cb.checkpointBlock.soeHash)).toList
+      notAlreadyAccepted = valid.filterNot(cb => acceptedPool.contains(cb.checkpointBlock.soeHash)).toList
 
       lastSnapshotHeight <- snapshotStorage.getLastSnapshotHeight
       aboveLastSnapshotHeight = notAlreadyAccepted.filter { _.height.min > lastSnapshotHeight }
@@ -165,7 +171,12 @@ class CheckpointService[F[_]: Timer: Clock](
         allowedToAccept.map((cbc: CheckpointCache) => cbc.checkpointBlock.soeHash).toSet
       )
 
-      alreadyAccepted = blocksForAcceptance.diff(notAlreadyAccepted.toSet)
+      invalid = blocksForAcceptance.diff(valid)
+      _ <- invalid.toList.map(_.checkpointBlock.soeHash).traverse {
+        checkpointStorage.unmarkWaitingForAcceptance
+      }
+
+      alreadyAccepted = valid.diff(notAlreadyAccepted.toSet)
       _ <- alreadyAccepted.toList.map(_.checkpointBlock.soeHash).traverse {
         checkpointStorage.unmarkWaitingForAcceptance
       }
@@ -209,6 +220,7 @@ class CheckpointService[F[_]: Timer: Clock](
 
       _ <- logger.debug {
         s"All: ${blocksForAcceptance.size} |" +
+          s"Val: ${valid.size} | " +
           s"NotAcc: ${notAlreadyAccepted.size} |" +
           s"ParAcc: ${withParentsAccepted.size} |" +
           s"NoBlack: ${withNoBlacklistedTxs.size} |" +
@@ -223,7 +235,8 @@ class CheckpointService[F[_]: Timer: Clock](
         metrics.updateMetricAsync("accept_withNoBlacklistedTxs", withNoBlacklistedTxs.size) >>
         metrics.updateMetricAsync("accept_withReferencesAccepted", withReferencesAccepted.size) >>
         metrics.updateMetricAsync("accept_alreadyAccepted", alreadyAccepted.size) >>
-        metrics.updateMetricAsync("accept_belowLastSnapshotHeight", belowLastSnapshotHeight.size)
+        metrics.updateMetricAsync("accept_belowLastSnapshotHeight", belowLastSnapshotHeight.size) >>
+        metrics.updateMetricAsync("accept_invalid", invalid.size)
     } yield ()
 
   def acceptNextCheckpoint(): F[Unit] =
