@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Changed
 - Validate checkpoint block before adding it to the acceptance queue
+- Update whitelisting file
 
 ## [v2.25.2] 2021-07-09
 ### Fixed
