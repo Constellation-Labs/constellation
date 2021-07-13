@@ -286,7 +286,9 @@ class DataResolver[F[_]](
               logger.debug(s"Resolved checkpoint=${block.checkpointBlock.soeHash}") >> callback(block)
             }
           } else
-            logger.debug(s"Skipping resolving checkpoint=$hash. Current ignore=$currentIgnore, block ignore=$ignore")
+            checkpointStorage.unmarkCheckpointForResolving(hash) >> logger.debug(
+              s"Skipping resolving checkpoint=$hash. Current ignore=$currentIgnore, block ignore=$ignore"
+            )
         }
 
     }
