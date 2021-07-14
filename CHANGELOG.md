@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.26.1] 2021-07-15
 ### Fixed
 - Unmark checkpoint from resolving when skipping
 
