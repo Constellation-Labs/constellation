@@ -2,8 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.27.0] 2021-07-19
 ### Changed
 - Abstract away healthcheck and implement proposal healthcheck
+- Update whitelisting file
 
 ## [v2.26.1] 2021-07-15
 ### Fixed
