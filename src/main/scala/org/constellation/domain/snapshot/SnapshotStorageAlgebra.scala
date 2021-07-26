@@ -1,6 +1,6 @@
 package org.constellation.domain.snapshot
 
-import org.constellation.schema.snapshot.StoredSnapshot
+import org.constellation.schema.snapshot.{NextActiveNodes, StoredSnapshot}
 
 trait SnapshotStorageAlgebra[F[_]] {
 
@@ -15,4 +15,5 @@ trait SnapshotStorageAlgebra[F[_]] {
 
   def exists(hash: String): F[Boolean]
 
+  def getNextSnapshotFacilitators: F[NextActiveNodes]
 }

@@ -29,7 +29,7 @@ import org.constellation.schema.snapshot.{
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.Registration.`X-Id`
-import org.constellation.storage.SnapshotService
+import org.constellation.storage.{JoinActivePoolCommand, SnapshotService}
 import org.constellation.util.Metrics
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
@@ -66,6 +66,7 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     nodeStorage: NodeStorageAlgebra[F],
+    redownloadService: RedownloadService[F],
     redownloadStorage: RedownloadStorageAlgebra[F],
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
     messageValidator: MessageValidator,
@@ -81,7 +82,8 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
       getSnapshotInfo(snapshotService, nodeStorage) <+>
       getSnapshotInfoByHash(snapshotInfoStorage) <+>
       getLatestMajorityHeight(redownloadStorage) <+>
-      postSnapshotProposal(snapshotProposalGossipService, redownloadStorage, messageValidator, metrics)
+      postSnapshotProposal(snapshotProposalGossipService, redownloadStorage, messageValidator, metrics) <+>
+      redownloadAndJoinActivePeersPool(redownloadService)
 
   def ownerEndpoints(
     nodeId: Id,
@@ -273,6 +275,23 @@ class SnapshotEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ext
         .map(_.asJson)
         .flatMap(Ok(_))
   }
+
+  private def redownloadAndJoinActivePeersPool(redownloadService: RedownloadService[F]): HttpRoutes[F] =
+    HttpRoutes.of[F] {
+      case req @ POST -> Root / "join-active-pool" =>
+        for {
+          maybeId <- F.delay(req.headers.get(`X-Id`).map(_.value).map(Id(_)))
+          joinActivePoolCommand <- req.decodeJson[JoinActivePoolCommand]
+          response <- maybeId match {
+            case Some(senderId) =>
+              F.start(redownloadService.redownloadBeforeJoiningActivePeersPool(senderId, joinActivePoolCommand))
+                .void
+                .flatMap(foo => Ok(foo.asJson))
+            case None =>
+              BadRequest()
+          }
+        } yield response
+    }
 }
 
 object SnapshotEndpoints {
@@ -291,6 +310,7 @@ object SnapshotEndpoints {
     snapshotInfoStorage: LocalFileStorage[F, SnapshotInfo],
     snapshotService: SnapshotService[F],
     nodeStorage: NodeStorageAlgebra[F],
+    redownloadService: RedownloadService[F],
     redownloadStorage: RedownloadStorageAlgebra[F],
     snapshotProposalGossipService: SnapshotProposalGossipService[F],
     messageValidator: MessageValidator,
@@ -303,6 +323,7 @@ object SnapshotEndpoints {
         snapshotInfoStorage,
         snapshotService,
         nodeStorage,
+        redownloadService,
         redownloadStorage,
         snapshotProposalGossipService,
         messageValidator,

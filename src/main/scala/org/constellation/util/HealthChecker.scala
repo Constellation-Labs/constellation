@@ -69,7 +69,7 @@ class HealthChecker[F[_]: Concurrent](
 
   private def collectNextSnapshotHeights(): F[Map[Id, Long]] =
     for {
-      peers <- clusterStorage.getJoinedPeers
+      peers <- clusterStorage.getActiveFullPeers() // TODO: was getJoinedPeers before
       nextSnapshotHeights <- peers.values.toList
         .map(_.peerMetadata.toPeerClientMetadata)
         .traverse(

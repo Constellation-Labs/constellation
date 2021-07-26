@@ -85,6 +85,8 @@ class PingHealthCheckConsensusManager[F[_]](
       case (_, peerData) => canActAsJoiningSource(peerData.peerMetadata.nodeState)
     }.keySet
 
+  override def getHealthcheckPeers(): F[Map[Id, PeerData]] = clusterStorage.getPeers
+
   override def periodicPeersHealthCheck(): F[Unit] =
     for {
       peersUnderConsensus <- getPeersUnderConsensus()
@@ -93,7 +95,7 @@ class PingHealthCheckConsensusManager[F[_]](
       unresponsivePeers <- peerHealthCheck
         .check(peersUnderConsensus, peersToRunHealthcheckFor)
         .map(_.map(_.peerMetadata.id).toSet)
-      peers <- clusterStorage.getPeers
+      peers <- getHealthcheckPeers()
       notOfflinePeers = getNotOfflinePeers(peers)
       historical <- getHistoricalRounds()
       peerToRunConsensusFor = unresponsivePeers
@@ -127,7 +129,7 @@ class PingHealthCheckConsensusManager[F[_]](
 
   override def checkHealthForPeer(key: PingHealthCheckKey): F[Fiber[F, PeerPingHealthCheckStatus]] =
     for {
-      allPeers <- clusterStorage.getPeers
+      allPeers <- getHealthcheckPeers()
       checkedPeerData = allPeers.get(key.id) // should I check the status if it's not offline or leaving at the moment
       delayedHealthCheckStatus <- F.start {
         checkedPeerData
@@ -152,7 +154,7 @@ class PingHealthCheckConsensusManager[F[_]](
     ]]
   ): F[Unit] =
     for {
-      peers <- clusterStorage.getPeers
+      peers <- getHealthcheckPeers()
       notOfflinePeers = getNotOfflinePeers(peers)
       peersWeDidntHave <- fetchAbsentPeers(consensuses)
       peersWeStillDontHave = peersWeDidntHave -- notOfflinePeers
@@ -184,7 +186,7 @@ class PingHealthCheckConsensusManager[F[_]](
     ]
   ): F[Unit] =
     for {
-      peers <- clusterStorage.getPeers
+      peers <- getHealthcheckPeers()
       notOfflinePeers = getNotOfflinePeers(peers)
       peersToAdd = positiveOutcomePeers -- notOfflinePeers.map(PingHealthCheckKey(_))
       _ <- if (peersToAdd.nonEmpty)
@@ -210,7 +212,7 @@ class PingHealthCheckConsensusManager[F[_]](
         roundInProgress = None,
         joiningHeight = ownJoinedHeight
       )
-      allPeers <- clusterStorage.getPeers
+      allPeers <- getHealthcheckPeers()
       peersWeRunConsensusForButDontHave = (rounds -- allPeers.keySet).map {
         case (id, roundIds) =>
           id -> NodeReconciliationData(
@@ -339,7 +341,7 @@ class PingHealthCheckConsensusManager[F[_]](
 
   def manageSchedulingReconciliation(): F[Unit] =
     for {
-      peersCount <- clusterStorage.getPeers.map(_.size)
+      peersCount <- getHealthcheckPeers().map(_.size)
       currentEpoch <- getTimeInSeconds()
       runAfter <- runReconciliationRoundAfter.get
       _ <- runAfter match {

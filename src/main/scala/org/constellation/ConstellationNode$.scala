@@ -29,7 +29,9 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.infrastructure.p2p.PeerResponse.PeerClientMetadata
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.p2p.DataResolver
+import org.constellation.schema.NodeType.Full
 import org.constellation.schema.checkpoint.{CheckpointBlock, CheckpointCache}
+import org.constellation.schema.snapshot.NextActiveNodes
 import org.constellation.schema.{GenesisObservation, Id, NodeState}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.SessionTokenService
@@ -47,6 +49,7 @@ import org.slf4j.MDC
 import pureconfig._
 import pureconfig.generic.auto._
 
+import scala.collection.immutable.ListMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.io.Source
@@ -166,6 +169,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dao.snapshotInfoStorage,
           dao.snapshotService,
           dao.nodeStorage,
+          dao.redownloadService,
           dao.redownloadStorage,
           dao.snapshotProposalGossipService,
           dao.messageValidator,
@@ -300,9 +304,30 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
         ClientInterpreter[IO](client, sessionTokenService)(ce, cs)
       }
-      clusterStorage = new ClusterStorageInterpreter[IO]()
       keyPair = nodeConfig.primaryKeyPair
       id = keyPair.getPublic.toId
+      clusterStorage = new ClusterStorageInterpreter[IO](id, nodeConfig.nodeType)
+      _ <- Stream.eval {
+        val authorizedPeers =
+          if (nodeConfig.initialActiveFullNodes.contains(id)) nodeConfig.initialActiveFullNodes
+          else Set.empty[Id]
+
+        clusterStorage.setAuthorizedPeers(authorizedPeers)
+      }
+      _ <- Stream.eval {
+        val activeFullPeers =
+          if (nodeConfig.initialActiveFullNodes.contains(id))
+            nodeConfig.initialActiveFullNodes - id
+          else
+            Set.empty[Id]
+
+        clusterStorage.setActiveFullPeers(activeFullPeers)
+      }
+      _ <- Stream.eval {
+        if (nodeConfig.initialActiveFullNodes.contains(id))
+          clusterStorage.setAsActivePeer(Full)
+        else IO.unit
+      }
       metrics = new Metrics(
         registry,
         clusterStorage,
@@ -320,7 +345,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       transactionChainService = TransactionChainService[IO]
       transactionService = TransactionService[IO](transactionChainService, rateLimiting, metrics)
       trustManager = TrustManager[IO](id, clusterStorage)
-      observationService = new ObservationService[IO](trustManager, metrics)
+      observationService = new ObservationService[IO](trustManager, clusterStorage, metrics)
 
       dataResolver = DataResolver[IO](
         keyPair,
@@ -467,7 +492,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
     }
   }
 
-  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[Map[Id, Option[String]]] =
+  private def getWhitelisting[F[_]: Sync](cliConfig: CliConfig): F[ListMap[Id, Option[String]]] =
     for {
       source <- Sync[F].delay {
         Source.fromFile(cliConfig.whitelisting)
@@ -475,10 +500,10 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       lines = source.getLines().filter(_.nonEmpty).toList
       values = lines.map(_.split(",").map(_.trim).toList)
       mappedValues = values.map {
-        case id :: alias :: Nil => Map(Id(id) -> Some(alias))
-        case id :: Nil          => Map(Id(id) -> None)
-        case _                  => Map.empty[Id, Option[String]]
-      }.fold(Map.empty[Id, Option[String]])(_ ++ _)
+        case id :: alias :: Nil => ListMap(Id(id) -> Some(alias))
+        case id :: Nil          => ListMap(Id(id) -> None)
+        case _                  => ListMap.empty[Id, Option[String]]
+      }.fold(ListMap.empty[Id, Option[String]])(_ ++ _)
       _ <- Sync[F].delay {
         source.close()
       }
@@ -527,11 +552,16 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
 
         whitelisting <- getWhitelisting(cliConfig)
 
+        initialActiveFullNodes <- whitelisting match {
+          case ids if ids.size >= 3 => ids.take(3).keySet.pure[F]
+          case _                    => Sync[F].raiseError(new Throwable(s"Not enough peers whitelisted to pick initial active peers!"))
+        }
+
         nodeConfig = NodeConfig(
           seeds = Seq.empty[HostPort],
           primaryKeyPair = keyPair,
           isGenesisNode = cliConfig.genesisNode,
-          isLightNode = cliConfig.lightNode,
+          nodeType = cliConfig.nodeType,
           isRollbackNode = cliConfig.rollbackNode,
           rollbackHeight = cliConfig.rollbackHeight,
           rollbackHash = cliConfig.rollbackHash,
@@ -548,7 +578,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
           allocAccountBalances = allocAccountBalances,
           whitelisting = whitelisting,
-          minRequiredSpace = constellationConfig.getInt("min-required-space")
+          minRequiredSpace = constellationConfig.getInt("min-required-space"),
+          initialActiveFullNodes = initialActiveFullNodes
         )
       } yield nodeConfig
     }

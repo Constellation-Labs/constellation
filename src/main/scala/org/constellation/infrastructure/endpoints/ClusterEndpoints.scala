@@ -18,6 +18,7 @@ import TrustData._
 import Id._
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.schema.observation.ObservationEvent
+import org.constellation.session.Registration.`X-Id`
 
 class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
 
@@ -29,7 +30,9 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
       setNodeStatusEndpoint(cluster, clusterStorage) <+>
       setJoiningHeightEndpoint(clusterStorage) <+>
       deregisterEndpoint(cluster) <+>
-      trustEndpoint(trustManager)
+      trustEndpoint(trustManager) <+>
+      getActiveFullNodesEndpoint(clusterStorage) <+>
+      receiveJoiningNotificationEndpoint(cluster)
 
   private def infoEndpoint(cluster: Cluster[F]): HttpRoutes[F] =
     HttpRoutes.of[F] {
@@ -72,6 +75,35 @@ class ClusterEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F] {
         if (predicted.isEmpty) trustManager.getStoredReputation.map(TrustData(_))
         else TrustData(predicted).pure[F]
       }.map(_.asJson).flatMap(Ok(_))
+  }
+
+  private def getActiveFullNodesEndpoint(clusterStorage: ClusterStorageAlgebra[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "cluster" / "active-full-nodes" =>
+      clusterStorage.isAnActiveFullPeer
+        .ifM(
+          clusterStorage.getActiveFullPeersIds(true).map {
+            case activeFullNodes if activeFullNodes.isEmpty => none[Set[Id]]
+            case activeFullNodes                            => activeFullNodes.some
+          },
+          none[Set[Id]].pure[F]
+        )
+        .flatMap(payload => Ok(payload.asJson))
+  }
+
+  private def receiveJoiningNotificationEndpoint(cluster: Cluster[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case req @ POST -> Root / "cluster" / "join-notification" =>
+      for {
+        maybeId <- F.delay(req.headers.get(`X-Id`).map(_.value).map(Id(_)))
+        response <- {
+          maybeId match {
+            case Some(id) =>
+              cluster
+                .handleJoiningClusterNotification(id) >> // TODO: shouldn't we have observation service available here?
+                Ok()
+            case None => BadRequest()
+          }
+        }
+      } yield response
   }
 }
 

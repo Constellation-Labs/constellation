@@ -6,7 +6,7 @@ import cats.syntax.all._
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.schema.snapshot.Snapshot.snapshotZero
-import org.constellation.schema.snapshot.StoredSnapshot
+import org.constellation.schema.snapshot.{NextActiveNodes, StoredSnapshot}
 import org.constellation.concurrency.SetRefUtils.RefOps
 
 class SnapshotStorageInterpreter[F[_]](
@@ -68,5 +68,8 @@ class SnapshotStorageInterpreter[F[_]](
 
   def setNextSnapshotHash(hash: String): F[Unit] =
     nextSnapshotHash.set(hash)
+
+  def getNextSnapshotFacilitators: F[NextActiveNodes] =
+    storedSnapshot.get.map(_.snapshot.nextActiveNodes)
 
 }

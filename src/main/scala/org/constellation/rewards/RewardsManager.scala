@@ -71,7 +71,7 @@ class RewardsManager[F[_]: Concurrent](
       _ <- eigenTrust.retrain(rewardSnapshot.observations)
       trustMap <- eigenTrust.getTrustForAddresses
 
-      peers <- clusterStorage.getPeers
+      peers <- clusterStorage.getActiveFullPeers()
 
       ownJoiningHeight <- nodeStorage.getOwnJoinedHeight
       ownMajorityHeight = MajorityHeight(

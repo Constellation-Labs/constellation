@@ -43,6 +43,8 @@ abstract class HealthCheckConsensusManagerBase[
   val logger: PrefixedHealthCheckLogger[F] = new PrefixedHealthCheckLogger[F](healthCheckType)
 
   // TO IMPLEMENT
+  def getHealthcheckPeers(): F[Map[Id, PeerData]]
+
   def checkHealthForPeer(key: K): F[Fiber[F, A]]
 
   def periodicOperationWhenNoConsensusesInProgress(): F[Unit]
@@ -63,7 +65,7 @@ abstract class HealthCheckConsensusManagerBase[
     negativeOutcomePeers: Map[K, (HealthcheckConsensusDecision[K], HealthCheckConsensus[F, K, A, B, C])]
   ): F[Unit] =
     for {
-      peers <- clusterStorage.getPeers
+      peers <- getHealthcheckPeers()
       toMarkOfflinePeers = peers.filterKeys(negativeOutcomePeers.keySet.map(_.id).contains).values.toList
       _ <- markOffline(toMarkOfflinePeers)
     } yield ()
@@ -227,7 +229,7 @@ abstract class HealthCheckConsensusManagerBase[
 
   def startOwnConsensusForId(key: K, delayedHealthCheckStatus: Fiber[F, A]): F[Unit] =
     for {
-      allPeers <- clusterStorage.getPeers
+      allPeers <- getHealthcheckPeers()
       roundId <- createHealthcheckRoundId()
       _ <- startNewRoundForId(
         key,
@@ -243,7 +245,7 @@ abstract class HealthCheckConsensusManagerBase[
     roundId: HealthcheckRoundId
   ): F[Either[HistoricalRoundData[K, A, B], HealthCheckConsensus[F, K, A, B, C]]] =
     for {
-      allPeers <- clusterStorage.getPeers
+      allPeers <- getHealthcheckPeers()
       delayedHealthCheckStatus <- checkHealthForPeer(key)
       result <- startNewRoundForId(
         key,
@@ -456,7 +458,7 @@ abstract class HealthCheckConsensusManagerBase[
   private def inspectConsensusPeers(consensuses: List[HealthCheckConsensus[F, K, A, B, C]]): F[Unit] =
     for {
       _ <- logger.debug("Started inspection of consensus peers!")
-      peers <- clusterStorage.getPeers
+      peers <- clusterStorage.getPeers // TODO: getHealthcheckPeers seems not suitable here
       leavingOrOfflinePeers = peers.filter {
         case (_, peerData) => isInvalidForJoining(peerData.peerMetadata.nodeState)
       }.keySet

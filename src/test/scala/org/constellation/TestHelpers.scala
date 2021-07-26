@@ -2,7 +2,6 @@ package org.constellation
 
 import java.security.KeyPair
 import java.util.UUID
-
 import better.files.File
 import cats.effect.IO
 import com.google.common.hash.Hashing
@@ -10,6 +9,7 @@ import com.typesafe.scalalogging.Logger
 import org.constellation.checkpoint.CheckpointService
 import org.constellation.consensus.ConsensusRemoteSender
 import org.constellation.domain.blacklist.BlacklistedAddresses
+import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.configuration.NodeConfig
 import org.constellation.domain.observation.ObservationService
 import org.constellation.domain.redownload.{DownloadService, RedownloadService}
@@ -20,6 +20,7 @@ import org.constellation.infrastructure.p2p.ClientInterpreter
 import org.constellation.keytool.KeyUtils
 import org.constellation.keytool.KeyUtils.makeKeyPair
 import org.constellation.p2p.{Cluster, DataResolver, PeerData}
+import org.constellation.schema.NodeType.Full
 import org.constellation.schema.{Id, NodeState}
 import org.constellation.storage._
 import org.constellation.util.Metrics
@@ -43,7 +44,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
           facilitatorId1,
           timeAdded = System
             .currentTimeMillis() - (ProcessingConfig().minPeerTimeAddedSeconds * 4000),
-          resourceInfo = mock[ResourceInfo]
+          resourceInfo = mock[ResourceInfo],
+          nodeType = Full
         )
 
         facilitatorId1 -> peerData1
@@ -128,6 +130,8 @@ object TestHelpers extends IdiomaticMockito with IdiomaticMockitoCats with Argum
 
 //        val metrics = new Metrics(registry, 600, ExecutionContext.global)(dao)
 //        dao.metrics shouldReturn metrics
+
+        dao.clusterStorage shouldReturn mock[ClusterStorageAlgebra[IO]]
 
         val cluster = mock[Cluster[IO]]
 //        cluster.getNodeState shouldReturnF NodeState.Ready

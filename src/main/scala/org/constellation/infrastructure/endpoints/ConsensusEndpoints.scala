@@ -14,7 +14,7 @@ import org.constellation.consensus.Consensus.{
   SelectedUnionBlock,
   UnionBlockProposal
 }
-import org.constellation.consensus.ConsensusManager.SnapshotHeightAboveTip
+import org.constellation.consensus.ConsensusManager.{NodeNotAnActiveLightNode, SnapshotHeightAboveTip}
 import org.constellation.consensus.{ConsensusManager, RoundDataRemote}
 import org.constellation.domain.transaction.TransactionService
 import org.constellation.p2p.PeerData
@@ -86,6 +86,9 @@ class ConsensusEndpoints[F[_]](implicit F: Concurrent[F], C: ContextShift[F]) ex
           case err @ SnapshotHeightAboveTip(_, _, _) =>
             logger
               .error(s"Error when participating in new round: ${cmd.roundId} cause: ${err.getMessage}") >>
+              BadRequest(err.getMessage)
+          case err @ NodeNotAnActiveLightNode(_) =>
+            logger.error(s"Error when participating in new round: ${cmd.roundId} cause: ${err.getMessage}") >>
               BadRequest(err.getMessage)
           case err =>
             logger

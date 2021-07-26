@@ -29,7 +29,7 @@ class TransactionGossiping[F[_]: Concurrent: Clock](
 
   private def getDiffPeers(tx: TransactionCacheData): F[Set[Id]] =
     for {
-      all <- clusterStorage.getPeers
+      all <- clusterStorage.getActivePeers //TODO: not important, not used class
       used <- getUsedPeers(tx)
     } yield all.keySet.diff(used)
 

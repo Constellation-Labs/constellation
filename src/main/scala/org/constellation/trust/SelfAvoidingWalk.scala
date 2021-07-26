@@ -172,7 +172,7 @@ object SelfAvoidingWalk extends StrictLogging {
       iterationNum += 1
       walkScores = merged
       walkProbability = renormalized
-      println(s"runWalkBatches - Batch number $iterationNum with delta $delta")
+      logger.debug(s"runWalkBatches - Batch number $iterationNum with delta $delta")
     }
 
     reweightEdges(walkProbability, nodes.map { n =>
@@ -333,7 +333,8 @@ object SelfAvoidingWalk extends StrictLogging {
     }.getOrElse(weightedEdgeZero)
 
     // TODO: Normalize again
-    weightedEdgesAll.zipWithIndex.foreach { println }
+    // it doesn't do anything so I'm commenting it out
+    //weightedEdgesAll.zipWithIndex.foreach { println }
 
     //  println(s"n1 id: ${n1.id}")
 
@@ -352,15 +353,15 @@ object SelfAvoidingWalk extends StrictLogging {
 
     var nodesCycle = nodes
     // TODO: Fix stack overflow issue
-    //    if (nodesCycle.size > 2) { //note, need min of 3 nodes
-    //      println(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
-    //      (0 until feedbackCycles).foreach { cycle =>
-    //        println(s"feedback cycle $cycle for node $selfId")
-    //        nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
-    //      }
-    //    }
+        if (nodesCycle.size > 2) { //note, need min of 3 nodes
+          logger.debug(s"runWalkFeedbackUpdateSingleNode nodes ${nodes.toList} for node $selfId")
+          (0 until feedbackCycles).foreach { cycle =>
+            logger.debug(s"feedback cycle $cycle for node $selfId")
+            nodesCycle = runWalkBatchesFeedback(selfId, nodes, batchIterationSize, epsilon, maxIterations)
+          }
+        }
     val res: TrustNode = nodesCycle.filter(_.id == selfId).head
-    println(s"runWalkFeedbackUpdateSingleNode res: TrustNode ${res} for node $selfId")
+    logger.debug(s"runWalkFeedbackUpdateSingleNode res: TrustNode ${res} for node $selfId")
 
     res
   }

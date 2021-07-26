@@ -33,7 +33,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.Try
 
-class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
+class ConsensusManager[F[_]](
   transactionService: TransactionService[F],
   checkpointService: CheckpointService[F],
   checkpointStorage: CheckpointStorageAlgebra[F],
@@ -51,7 +51,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
   nodeId: Id,
   keyPair: KeyPair,
   checkpointsQueueInstance: DataResolverCheckpointsEnqueue[F]
-) {
+)(implicit F: Concurrent[F], CS: ContextShift[F], T: Timer[F]) {
 
   import ConsensusManager._
 
@@ -170,7 +170,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     for {
       transactions <- transactionService.pullForConsensus(maxTransactionThreshold)
       _ <- logger.info(s"Pulled for new consensus: ${transactions.size}")
-      facilitators <- clusterStorage.getReadyAndFullPeers
+      facilitators <- clusterStorage.getActivePeers
       tips <- checkpointService.pullTips(facilitators)(metrics)
       _ <- if (tips.isEmpty)
         Sync[F].raiseError[Unit](NoTipsForConsensus(roundId, transactions.map(_.transaction), List.empty[Observation]))
@@ -198,6 +198,10 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
 
   def participateInBlockCreationRound(roundData: RoundData): F[(ConsensusInfo[F], RoundData)] =
     (for {
+      _ <- clusterStorage.isAnActivePeer.ifM(
+        F.unit,
+        F.raiseError(NodeNotAnActiveLightNode(nodeId))
+      )
       _ <- metrics.incrementMetricAsync("consensus_participateInRound")
       state <- nodeStorage.getNodeState
       state <- nodeStorage.getNodeState
@@ -229,6 +233,8 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
         metrics.incrementMetricAsync("consensus_participateInRound_snapshotHeightAboveTipError")
       case InvalidNodeState(_, _) =>
         metrics.incrementMetricAsync("consensus_participateInRound_invalidNodeStateError")
+      case NodeNotAnActiveLightNode(_) =>
+        metrics.incrementMetricAsync("consensus_participateInRound_nodeNotAnActiveLightNode")
       case _ => metrics.incrementMetricAsync("consensus_participateInRound_unknownError")
     }
 
@@ -349,7 +355,7 @@ class ConsensusManager[F[_]: Concurrent: ContextShift: Timer](
     } yield ()
 
   private[consensus] def adjustPeers(roundData: RoundData): F[RoundData] =
-    clusterStorage.getPeers.map { peers =>
+    clusterStorage.getActivePeers.map { peers =>
       val initiator = peers.get(roundData.facilitatorId.id) match {
         case Some(value) => value
         case None =>
@@ -466,5 +472,10 @@ object ConsensusManager {
   case class SnapshotHeightAboveTip(id: RoundId, snapHeight: Long, tipHeight: Long)
       extends Exception(
         s"Can't participate in round $id snapshot height: $snapHeight is above or/equal proposed tip $tipHeight"
+      )
+
+  case class NodeNotAnActiveLightNode(id: Id)
+      extends Exception(
+        s"Node is not and active light node currently. Id=$id"
       )
 }
