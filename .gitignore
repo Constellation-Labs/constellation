@@ -1,4 +1,6 @@
 .idea/
+.vscode/
+.metals/
 target/
 *.iml
 .DS_STORE
@@ -18,8 +20,7 @@ terraform/aws/whitelisting-*
 .dag
 *.log
 /logs
-.metals/
 .bloop/
-project/metals.sbt
+metals.sbt
 keys/
 integration-tests/src/test/resources/terraform-output.json

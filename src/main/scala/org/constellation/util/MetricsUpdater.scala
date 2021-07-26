@@ -46,6 +46,9 @@ class MetricsUpdater(
       _ <- checkpointStorage.countTips >>= { value =>
         metrics.updateMetricAsync[IO]("activeTips", value)
       }
+      _ <- checkpointStorage.countMissingTips >>= { value =>
+        metrics.updateMetricAsync[IO]("missingActiveTips", value)
+      }
       _ <- checkpointStorage.getMinTipHeight >>= { value =>
         metrics.updateMetricAsync[IO]("minTipHeight", value)
       }

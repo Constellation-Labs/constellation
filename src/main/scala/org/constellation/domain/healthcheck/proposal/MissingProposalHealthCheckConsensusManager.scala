@@ -34,13 +34,17 @@ import org.constellation.domain.healthcheck.{
 }
 import org.constellation.domain.redownload.{MissingProposalFinder, RedownloadService, RedownloadStorageAlgebra}
 import org.constellation.infrastructure.p2p.ClientInterpreter
-import org.constellation.p2p.{Cluster, MajorityHeight}
+import org.constellation.p2p.{Cluster, MajorityHeight, PeerData}
 import org.constellation.schema.Id
 import org.constellation.schema.snapshot.HeightRange
 import org.constellation.util.Metrics
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
+// TODO: peers selection needs to be reverified and the negative outcome action as well I think we may need to
+//       not remove the peers as this means they will only be removed on full active peers and not all the nodes
+//       so instead we may need to remove these nodes from active pool not from peers list, but in this case
+//       light nodes also need to be notified
 class MissingProposalHealthCheckConsensusManager[F[_]](
   ownId: Id,
   cluster: Cluster[F],
@@ -84,6 +88,8 @@ class MissingProposalHealthCheckConsensusManager[F[_]](
   case class MajorityMaxHeightWithTimestamp(height: Long, timestamp: FiniteDuration)
   private val lastMajorityHeightWithTimestamp: Ref[F, Option[MajorityMaxHeightWithTimestamp]] = Ref.unsafe(None)
 
+  override def getHealthcheckPeers(): F[Map[Id, PeerData]] = clusterStorage.getActiveFullPeers()
+
   override def periodicOperation(): F[Unit] =
     for {
       currentTimestamp <- getTimeInSeconds()
@@ -109,7 +115,7 @@ class MissingProposalHealthCheckConsensusManager[F[_]](
     for {
       currentTimestamp <- getTimeInSeconds()
       maybeLatestMajorityWithTimestamp <- lastMajorityHeightWithTimestamp.get
-      peers <- clusterStorage.getPeers
+      peers <- getHealthcheckPeers()
       ownPeer <- nodeStorage.getOwnJoinedHeight
       peersCache = peers.map {
         case (id, peerData) => (id, peerData.majorityHeight)

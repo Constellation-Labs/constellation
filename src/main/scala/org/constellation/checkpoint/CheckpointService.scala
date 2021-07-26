@@ -454,12 +454,14 @@ class CheckpointService[F[_]: Timer: Clock](
         metrics.updateMetric("activeTips", tips.size)
         (tips.size, readyFacilitators) match {
           case (size, facilitators) if size >= numFacilitatorPeers && facilitators.nonEmpty =>
-            calculateTipsSOE(tips).flatMap { tipSOE =>
-              facilitatorFilter.filterPeers(facilitators, numFacilitatorPeers, tipSOE).map {
-                case f if f.size >= numFacilitatorPeers =>
-                  Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
-                case _ => None
-              }
+            calculateTipsSOE(tips).flatMap {
+              tipSOE =>
+                facilitatorFilter.filterPeers(facilitators, numFacilitatorPeers, tipSOE).map {
+                  case f if f.size >= numFacilitatorPeers =>
+                    // TODO: joining pool note: calculateFinalFacilitators seems not needed as filterPeers will return the number of facilitators equal (or smaller) to numFacilitatorPeers
+                    Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
+                  case _ => None
+                }
             }
           case (size, _) if size >= numFacilitatorPeers =>
             calculateTipsSOE(tips).map(t => Some(PulledTips(t, Map.empty[Id, PeerData])))
@@ -471,7 +473,7 @@ class CheckpointService[F[_]: Timer: Clock](
 
   def compareAcceptedCheckpoints(): F[Unit] =
     for {
-      peers <- clusterStorage.getJoinedPeers
+      peers <- clusterStorage.getActivePeers
       randomPeerSeq <- F.delay { Random.shuffle(peers.values.toSeq).take(1) }
       randomPeer <- if (randomPeerSeq.nonEmpty) randomPeerSeq.head.pure[F]
       else F.raiseError[PeerData](new Throwable(s"No peers to compare accepted checkpoints."))

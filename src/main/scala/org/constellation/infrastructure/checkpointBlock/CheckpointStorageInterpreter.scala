@@ -4,6 +4,8 @@ import cats.effect.Concurrent
 import cats.effect.concurrent.{Ref, Semaphore}
 import cats.syntax.all._
 import constellation.SHA256ByteExt
+import io.chrisdavenport.log4cats.SelfAwareStructuredLogger
+import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import io.chrisdavenport.mapref.MapRef
 import org.constellation.concurrency.MapRefUtils
 import org.constellation.concurrency.MapRefUtils.MapRefOps
@@ -19,6 +21,8 @@ import org.constellation.serialization.KryoSerializer.serializeAnyRef
 import scala.collection.SortedSet
 
 class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends CheckpointStorageAlgebra[F] {
+
+  implicit val logger: SelfAwareStructuredLogger[F] = Slf4jLogger.getLogger[F]
 
   val checkpoints: MapRef[F, String, Option[CheckpointCache]] =
     MapRefUtils.ofConcurrentHashMap() // Consider cache and time-removal
@@ -299,6 +303,13 @@ class CheckpointStorageInterpreter[F[_]](implicit F: Concurrent[F]) extends Chec
 
   def countTips: F[Int] =
     getTips.map(_.size)
+
+  def countMissingTips: F[Int] =
+    tips.get
+      .flatMap(_.toList.traverse(tip => getCheckpoint(tip).map(tip -> _)))
+      .map(_.collect { case (str, None) => str })
+      .flatTap(missing => logger.debug(s"Found missing tips: ${missing.map(_.take(5))}"))
+      .map(_.size)
 
   def getMinTipHeight: F[Long] =
     for {

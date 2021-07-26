@@ -4,7 +4,7 @@ import better.files._
 import cats.effect.{ContextShift, IO}
 import cats.syntax.all._
 import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.snapshot.{Snapshot, StoredSnapshot}
+import org.constellation.schema.snapshot.{NextActiveNodes, Snapshot, StoredSnapshot}
 import org.constellation.serialization.KryoSerializer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.freespec.AnyFreeSpec
@@ -85,7 +85,8 @@ class SnapshotDiskStorageTest extends AnyFreeSpec with Matchers with BeforeAndAf
         val snapshotStorage = SnapshotLocalStorage[IO](snapshotsDir.pathAsString)
         snapshotStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        val snapshot = Snapshot("lastHash", Seq.empty[String], SortedMap.empty)
+        val snapshot =
+          Snapshot("lastHash", Seq.empty[String], SortedMap.empty, NextActiveNodes(Set.empty, Set.empty), Set.empty)
         val storedSnapshot = StoredSnapshot(snapshot, Seq.empty[CheckpointCache])
 
         val hash = "abc123"

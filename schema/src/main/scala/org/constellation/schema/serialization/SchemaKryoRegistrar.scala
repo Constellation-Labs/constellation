@@ -12,6 +12,7 @@ import org.constellation.schema.signature.{HashSignature, SignatureBatch, Signed
 import org.constellation.schema.snapshot.{
   FilterData,
   HeightRange,
+  NextActiveNodes,
   Snapshot,
   SnapshotInfo,
   SnapshotInfoV1,
@@ -113,6 +114,12 @@ object SchemaKryoRegistrar
         (classOf[HeightRange], 204, DefaultSerializer),
         (classOf[CheckpointBlockPayload], 205, DefaultSerializer),
         (classOf[FinishedCheckpointBlock], 206, DefaultSerializer),
+        (NodeMemberOfActivePool.getClass, 207, DefaultSerializer),
+        (NodeNotMemberOfActivePool.getClass, 208, DefaultSerializer),
+        (NodeJoinsTheCluster.getClass, 209, DefaultSerializer),
+        (NodeLeavesTheCluster.getClass, 210, DefaultSerializer),
+        (NodeKickedOutByHealthcheck.getClass, 211, DefaultSerializer),
+        (classOf[NextActiveNodes], 212, DefaultSerializer),
         (classOf[CheckpointCache], 1034, CompatibleSerializer),
         (classOf[StoredSnapshot], 1035, CompatibleSerializer),
         (classOf[SnapshotInfo], 1036, CompatibleSerializer)

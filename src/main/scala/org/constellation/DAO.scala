@@ -32,7 +32,7 @@ import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.domain.storage.LocalFileStorage
 import org.constellation.domain.transaction.{
   TransactionChainService,
-  TransactionGossiping,
+  //TransactionGossiping,
   TransactionService,
   TransactionValidator
 }
@@ -220,8 +220,8 @@ class DAO(
   val messageValidator: MessageValidator = MessageValidator(id)
   val eigenTrust: EigenTrust[IO] = new EigenTrust[IO](id)
 
-  val transactionGossiping: TransactionGossiping[IO] =
-    new TransactionGossiping[IO](transactionService, clusterStorage, processingConfig.txGossipingFanout, id)
+//  val transactionGossiping: TransactionGossiping[IO] =
+//    new TransactionGossiping[IO](transactionService, clusterStorage, processingConfig.txGossipingFanout, id)
   val transactionValidator: TransactionValidator[IO] = new TransactionValidator[IO](transactionService)
 
   val genesis: Genesis[IO] = new Genesis[IO](
@@ -236,15 +236,21 @@ class DAO(
     metrics
   )
 
-  val partitionerPeerSampling: PartitionerPeerSampling[IO] =
-    PartitionerPeerSampling[IO](id, clusterStorage, trustManager)
+  val snapshotPartitionerPeerSampling: PartitionerPeerSampling[IO] =
+    PartitionerPeerSampling[IO](id, () => clusterStorage.getActiveFullPeersIds(), trustManager) // TODO: separate functions for fetching id's only? here and in next line
+
+  val blockPartitionerPeerSampling: PartitionerPeerSampling[IO] =
+    PartitionerPeerSampling[IO](id, () => clusterStorage.getActivePeersIds(), trustManager)
 
   val trustDataPollingScheduler: TrustDataPollingScheduler = TrustDataPollingScheduler(
     ConfigUtil.config,
     trustManager,
     clusterStorage,
     apiClient,
-    partitionerPeerSampling,
+    List(
+      snapshotPartitionerPeerSampling,
+      blockPartitionerPeerSampling
+    ),
     unboundedExecutionContext,
     metrics
   )
@@ -257,10 +263,10 @@ class DAO(
 //  )
 
   val snapshotProposalGossipService: SnapshotProposalGossipService[IO] =
-    SnapshotProposalGossipService[IO](id, keyPair, partitionerPeerSampling, clusterStorage, apiClient, metrics)
+    SnapshotProposalGossipService[IO](id, keyPair, snapshotPartitionerPeerSampling, clusterStorage, apiClient, metrics)
 
   val checkpointBlockGossipService: CheckpointBlockGossipService[IO] =
-    CheckpointBlockGossipService[IO](id, keyPair, partitionerPeerSampling, clusterStorage, apiClient, metrics)
+    CheckpointBlockGossipService[IO](id, keyPair, blockPartitionerPeerSampling, clusterStorage, apiClient, metrics)
 
   val checkpointBlockValidator: CheckpointBlockValidator[IO] = new CheckpointBlockValidator[IO](
     addressService,
@@ -300,7 +306,7 @@ class DAO(
     checkpointsQueueInstance
   )
 
-  val checkpointCompare = new CheckpointCompare(checkpointService, unboundedExecutionContext)
+  val checkpointCompare = new CheckpointCompare(checkpointService, clusterStorage, unboundedExecutionContext)
 
   val rewardsManager: RewardsManager[IO] = new RewardsManager[IO](
     eigenTrust,
@@ -342,6 +348,8 @@ class DAO(
   )
 
   val snapshotService: SnapshotService[IO] = SnapshotService[IO](
+    apiClient,
+    clusterStorage,
     addressService,
     checkpointStorage,
     snapshotServiceStorage,
@@ -360,7 +368,9 @@ class DAO(
     unboundedExecutionContext,
     metrics,
     processingConfig,
-    id
+    id,
+    keyPair,
+    nodeConfig
   )
 
 //  ConfigUtil.constellation.getInt("snapshot.meaningfulSnapshotsCount"),
@@ -414,10 +424,12 @@ class DAO(
     redownloadStorage,
     downloadService,
     eigenTrust,
+    observationService,
     broadcastService,
     processingConfig,
     Blocker.liftExecutionContext(unboundedExecutionContext),
     id,
+    keyPair,
     alias.getOrElse("alias"),
     metrics,
     nodeConfig,
@@ -436,6 +448,7 @@ class DAO(
       ConfigUtil.config,
       consensusManager,
       nodeStorage,
+      clusterStorage,
       checkpointStorage,
       snapshotServiceStorage,
       redownloadStorage,
@@ -549,7 +562,8 @@ class DAO(
   val redownloadPeriodicCheck: RedownloadPeriodicCheck = new RedownloadPeriodicCheck(
     processingConfig.redownloadPeriodicCheckTimeSeconds,
     unboundedExecutionContext,
-    redownloadService
+    redownloadService,
+    clusterStorage
   )
 
   def idDir: File = File(s"tmp/${id.medium}")
@@ -570,7 +584,7 @@ class DAO(
     f
   }
 
-  val nodeType: NodeType = NodeType.Full
+  def nodeType: NodeType = nodeConfig.nodeType
 
   lazy val messageService: MessageService[IO] = new MessageService[IO]()
 

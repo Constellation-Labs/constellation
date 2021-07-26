@@ -65,7 +65,7 @@ class DownloadService[F[_]](
 
   private[redownload] def fetchAndPersistBlocks(): F[Unit] =
     for {
-      peers <- clusterStorage.getPeers.map(_.values.toList)
+      peers <- clusterStorage.getActiveFullPeers().map(_.values.toList)
       readyPeers = peers.filter(p => NodeState.canActAsDownloadSource(p.peerMetadata.nodeState))
       clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>

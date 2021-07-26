@@ -15,7 +15,7 @@ case class PeerMetadata(
   timeAdded: Long = System.currentTimeMillis(),
   auxHost: String = "",
   auxAddresses: Seq[String] = Seq(), // for testing multi key address partitioning
-  nodeType: NodeType = NodeType.Full,
+  nodeType: NodeType,
   resourceInfo: ResourceInfo
 ) {
   def toPeerClientMetadata: PeerClientMetadata = PeerClientMetadata(host, httpPort, id)

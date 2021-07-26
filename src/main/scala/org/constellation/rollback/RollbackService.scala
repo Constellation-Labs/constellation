@@ -44,15 +44,15 @@ class RollbackService[F[_]](
 
   private val snapshotInfoV1MaxHeight: Long = ConfigUtil.constellation.getLong("schema.v1.snapshotInfo")
 
-  def restore(): EitherT[F, Throwable, Unit] =
-    for {
-      _ <- logger.debug("Performing rollback by finding the highest snapshot in the cloud.").attemptT
-      highest <- getHighest()
-      _ <- logger.debug(s"Max height found: $highest").attemptT
-      _ <- highest match {
-        case (height, hash) => restore(height, hash)
-      }
-    } yield ()
+//  def restore(): EitherT[F, Throwable, Unit] =
+//    for {
+//      _ <- logger.debug("Performing rollback by finding the highest snapshot in the cloud.").attemptT
+//      highest <- getHighest()
+//      _ <- logger.debug(s"Max height found: $highest").attemptT
+//      _ <- highest match {
+//        case (height, hash) => restore(height, hash)
+//      }
+//    } yield ()
 
   def restore(height: Long, hash: String): EitherT[F, Throwable, Unit] =
     validate(height, hash).flatMap(restore(_, height))

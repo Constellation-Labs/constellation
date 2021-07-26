@@ -10,6 +10,7 @@ import org.constellation.domain.redownload.RedownloadService.{
 import org.constellation.schema.Id
 import org.constellation.schema.signature.Signed
 import org.constellation.schema.snapshot.{FilterData, HeightRange, SnapshotProposal}
+import org.constellation.storage.JoinActivePoolCommand
 
 trait RedownloadStorageAlgebra[F[_]] {
   def getCreatedSnapshots: F[SnapshotProposalsAtHeight]
@@ -52,5 +53,8 @@ trait RedownloadStorageAlgebra[F[_]] {
   def getMajorityStallCount: F[Int]
   def resetMajorityStallCount: F[Unit]
   def incrementMajorityStallCount: F[Unit]
+
+  def addJoinActivePoolCommand(senderId: Id, command: JoinActivePoolCommand): F[Map[Id, JoinActivePoolCommand]]
+  def clearJoinActivePoolCommands(): F[Unit]
 
 }

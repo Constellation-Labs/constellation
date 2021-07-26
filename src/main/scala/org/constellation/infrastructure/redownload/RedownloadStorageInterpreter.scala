@@ -18,11 +18,12 @@ import org.constellation.schema.Id
 import org.constellation.schema.signature.Signed
 import org.constellation.schema.signature.Signed.signed
 import org.constellation.schema.snapshot.{FilterData, HeightRange, SnapshotProposal}
-import java.security.KeyPair
 
+import java.security.KeyPair
 import org.constellation.collection.MapUtils._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.concurrency.cuckoo.{CuckooFilter, MutableCuckooFilter}
+import org.constellation.storage.JoinActivePoolCommand
 
 import scala.collection.immutable.SortedMap
 
@@ -53,6 +54,8 @@ class RedownloadStorageInterpreter[F[_]](
 
   private val lastMajorityState: Ref[F, SnapshotsAtHeight] = Ref.unsafe(Map.empty)
   private val lastSentHeight: Ref[F, Long] = Ref.unsafe(-1L)
+
+  private val joinActivePoolCommandRequests: Ref[F, Map[Id, JoinActivePoolCommand]] = Ref.unsafe(Map.empty)
 
   private val majorityStallCount: Ref[F, Int] = Ref.unsafe(0)
 
@@ -232,4 +235,12 @@ class RedownloadStorageInterpreter[F[_]](
   implicit val proposalCoordinateToString: ProposalCoordinate => String = {
     case (id, height) => s"$id:$height"
   }
+
+  def addJoinActivePoolCommand(senderId: Id, command: JoinActivePoolCommand): F[Map[Id, JoinActivePoolCommand]] =
+    joinActivePoolCommandRequests.modify { last =>
+      val updated = last + (senderId -> command)
+      (updated, updated)
+    }
+
+  def clearJoinActivePoolCommands(): F[Unit] = joinActivePoolCommandRequests.modify(_ => (Map.empty, ()))
 }

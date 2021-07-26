@@ -20,13 +20,14 @@ class TrustDataPollingScheduler(
   trustManager: TrustManager[IO],
   clusterStorage: ClusterStorageAlgebra[IO],
   apiClient: ClientInterpreter[IO],
-  partitionerPeerSampling: PartitionerPeerSampling[IO],
+  partitioners: List[PartitionerPeerSampling[IO]],
   unboundedExecutionContext: ExecutionContext,
   metrics: Metrics
 ) extends PeriodicIO("TrustDataPollingScheduler", unboundedExecutionContext) {
 
   override def trigger(): IO[Unit] =
-    clusterStorage.getPeers
+    clusterStorage
+      .getActiveFullPeers()
       .map(_.filter(t => NodeState.validForLettingOthersDownload.contains(t._2.peerMetadata.nodeState)).values.toList)
       .flatMap(
         _.traverse(
@@ -45,7 +46,7 @@ class TrustDataPollingScheduler(
         for {
           selfTdi <- trustManager.getTrustDataInternalSelf
           _ <- trustManager.handleTrustScoreUpdate(tdi)
-          _ <- partitionerPeerSampling.repartition(selfTdi, tdi)
+          _ <- partitioners.traverse(_.repartition(selfTdi, tdi)) //TODO: error handling?
         } yield ()
       }
       .flatTap(_ => metrics.incrementMetricAsync[IO]("trustDataPollingRound"))
@@ -61,7 +62,7 @@ object TrustDataPollingScheduler {
     trustManager: TrustManager[IO],
     clusterStorage: ClusterStorageAlgebra[IO],
     apiClient: ClientInterpreter[IO],
-    partitionerPeerSampling: PartitionerPeerSampling[IO],
+    partitioners: List[PartitionerPeerSampling[IO]],
     unboundedExecutionContext: ExecutionContext,
     metrics: Metrics
   ) =
@@ -70,7 +71,7 @@ object TrustDataPollingScheduler {
       trustManager,
       clusterStorage,
       apiClient,
-      partitionerPeerSampling,
+      partitioners,
       unboundedExecutionContext,
       metrics
     )

@@ -89,6 +89,7 @@ trait CheckpointStorageAlgebra[F[_]] {
   def removeTips(soeHashes: Set[String]): F[Unit]
   def setTips(tips: Set[String]): F[Unit]
   def countTips: F[Int]
+  def countMissingTips: F[Int]
 
   def getMinTipHeight: F[Long]
   def getMinWaitingHeight: F[Option[Long]]

@@ -12,6 +12,7 @@ import org.constellation.schema.signature.Signed.signed
 import org.constellation.schema.snapshot.{SnapshotProposal, SnapshotProposalPayload}
 import org.constellation.storage.{
   HeightIntervalConditionNotMet,
+  NodeNotPartOfL0FacilitatorsPool,
   NotEnoughSpace,
   SnapshotError,
   SnapshotIllegalState,
@@ -63,6 +64,8 @@ class SnapshotTrigger(periodSeconds: Int = 5, unboundedExecutionContext: Executi
             (IO.shift >> cluster.leave(IO.unit)).start >> handleError(NotEnoughSpace, stateSet)
           case Left(SnapshotIllegalState) =>
             handleError(SnapshotIllegalState, stateSet)
+          case Left(err @ NodeNotPartOfL0FacilitatorsPool) =>
+            handleError(err, stateSet)
           case Left(err @ HeightIntervalConditionNotMet) =>
             resetNodeState(stateSet) >>
               IO(logger.warn(s"Snapshot attempt: ${err.message}")) >>
