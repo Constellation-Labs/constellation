@@ -4,7 +4,7 @@ import better.files.File
 import cats.effect.{ContextShift, IO, Timer}
 import cats.syntax.all._
 import org.constellation.schema.checkpoint.CheckpointCache
-import org.constellation.schema.snapshot.{Snapshot, SnapshotInfo, StoredSnapshot}
+import org.constellation.schema.snapshot.{NextActiveNodes, Snapshot, SnapshotInfo, StoredSnapshot}
 import org.constellation.serialization.KryoSerializer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.freespec.AnyFreeSpec
@@ -66,7 +66,7 @@ class SnapshotInfoLocalStorageTest extends AnyFreeSpec with Matchers with Before
         val snapshotInfoStorage = SnapshotInfoLocalStorage[IO](snapshotInfosDir.pathAsString)
         snapshotInfoStorage.createDirectoryIfNotExists().value.unsafeRunSync
 
-        val snapshot = Snapshot("lastHash", Seq.empty[String], SortedMap.empty)
+        val snapshot = Snapshot("lastHash", Seq.empty[String], SortedMap.empty, NextActiveNodes(Set.empty, Set.empty), Set.empty)
         val storedSnapshot = StoredSnapshot(snapshot, Seq.empty[CheckpointCache])
         val snapshotInfo = SnapshotInfo(storedSnapshot)
 

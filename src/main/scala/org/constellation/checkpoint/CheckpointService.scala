@@ -457,6 +457,7 @@ class CheckpointService[F[_]: Timer: Clock](
             calculateTipsSOE(tips).flatMap { tipSOE =>
               facilitatorFilter.filterPeers(facilitators, numFacilitatorPeers, tipSOE).map {
                 case f if f.size >= numFacilitatorPeers =>
+                  // TODO: joining pool note: calculateFinalFacilitators seems not needed as filterPeers will return the number of facilitators equal (or smaller) to numFacilitatorPeers
                   Some(PulledTips(tipSOE, calculateFinalFacilitators(f, tipSOE.soe.map(_.hash).reduce(_ + _))))
                 case _ => None
               }

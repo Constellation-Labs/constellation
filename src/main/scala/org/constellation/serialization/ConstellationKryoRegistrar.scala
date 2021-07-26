@@ -9,7 +9,8 @@ import org.constellation.gossip.state.GossipMessage
 import org.constellation.infrastructure.endpoints.BuildInfoEndpoints.BuildInfoJson
 import org.constellation.rewards.EigenTrustAgents
 import org.constellation.schema.serialization.ExplicitKryoRegistrar
-import org.constellation.schema.serialization.ExplicitKryoRegistrar.KryoSerializer.DefaultSerializer
+import org.constellation.schema.serialization.ExplicitKryoRegistrar.KryoSerializer.{CompatibleSerializer, DefaultSerializer}
+import org.constellation.schema.snapshot.NextActiveNodes
 
 object ConstellationKryoRegistrar
     extends ExplicitKryoRegistrar(
@@ -23,6 +24,7 @@ object ConstellationKryoRegistrar
         (classOf[StoredRewards], 185, DefaultSerializer),
         (classOf[BuildInfoJson], 187, DefaultSerializer),
         (classOf[GossipPath], 1032, DefaultSerializer),
-        (classOf[GossipMessage[_]], 1033, DefaultSerializer)
+        (classOf[GossipMessage[_]], 1033, DefaultSerializer),
+        (Class.forName("scala.collection.immutable.MapLike$ImmutableDefaultKeySet"), 1037, DefaultSerializer)
       )
     ) {}

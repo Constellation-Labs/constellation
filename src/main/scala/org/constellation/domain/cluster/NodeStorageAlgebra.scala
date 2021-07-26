@@ -1,12 +1,14 @@
 package org.constellation.domain.cluster
 
-import org.constellation.p2p.SetStateResult
+import org.constellation.p2p.{MajorityHeight, SetStateResult}
 import org.constellation.schema.NodeState
 
 trait NodeStorageAlgebra[F[_]] {
   def getOwnJoinedHeight: F[Option[Long]]
   def setOwnJoinedHeight(height: Long): F[Unit]
   def clearOwnJoinedHeight(): F[Unit]
+
+//  def getActiveBetweenHeights: F[MajorityHeight]
 
   def didParticipateInGenesisFlow: F[Option[Boolean]]
   def setParticipatedInGenesisFlow(participated: Boolean): F[Unit]

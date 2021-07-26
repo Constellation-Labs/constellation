@@ -47,6 +47,17 @@ class ClusterClientInterpreter[F[_]: ContextShift](client: Client[F], sessionTok
 
   def getTrust(): PeerResponse[F, TrustData] =
     PeerResponse[F, TrustData]("trust")(client, sessionTokenService)
+
+  def getActiveFullNodes(): PeerResponse[F, Option[Set[Id]]] =
+    PeerResponse[F, Option[Set[Id]]]("cluster/active-full-nodes")(client, sessionTokenService)
+
+  def notifyAboutClusterJoin(): PeerResponse[F, Unit] =
+    PeerResponse[F, Boolean]("cluster/join-notification", POST)(client, sessionTokenService) { (req, c) =>
+      c.successful(req)
+    }.flatMapF { isSuccess =>
+      if (isSuccess) F.unit
+      else F.raiseError(new Throwable("Failed to notify active full node about cluster joining!"))
+    }
 }
 
 object ClusterClientInterpreter {

@@ -6,7 +6,7 @@ import com.typesafe.config.Config
 import org.constellation.ConfigUtil
 import org.constellation.consensus.ConsensusManager.{ConsensusError, ConsensusStartError}
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
-import org.constellation.domain.cluster.NodeStorageAlgebra
+import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.domain.redownload.RedownloadStorageAlgebra
 import org.constellation.domain.snapshot.SnapshotStorageAlgebra
 import org.constellation.schema.NodeState
@@ -19,6 +19,7 @@ class ConsensusScheduler(
   config: Config,
   consensusManager: ConsensusManager[IO],
   nodeStorage: NodeStorageAlgebra[IO],
+  clusterStorage: ClusterStorageAlgebra[IO],
   checkpointStorage: CheckpointStorageAlgebra[IO],
   snapshotStorage: SnapshotStorageAlgebra[IO],
   redownloadStorage: RedownloadStorageAlgebra[IO],
@@ -42,7 +43,8 @@ class ConsensusScheduler(
       canStartOwnConsensus <- nodeStorage.getNodeState.map(NodeState.canStartOwnConsensus)
       distanceFromMajorityNotExceeded <- isDistanceFromMajorityNotExceeded
       minTipDistanceNotExceeded <- isMinTipDistanceNotExceeded
-      _ <- if (canStartOwnConsensus && distanceFromMajorityNotExceeded && minTipDistanceNotExceeded) crossTalkConsensus
+      isAnActivePeer <- clusterStorage.isAnActivePeer
+      _ <- if (canStartOwnConsensus && distanceFromMajorityNotExceeded && minTipDistanceNotExceeded && isAnActivePeer) crossTalkConsensus
       else skip
     } yield ()
 

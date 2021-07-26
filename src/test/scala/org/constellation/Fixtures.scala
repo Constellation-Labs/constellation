@@ -4,7 +4,6 @@ import java.io.{BufferedReader, FileInputStream, InputStreamReader}
 import java.net.InetSocketAddress
 import java.security.{KeyPair, KeyStore, PrivateKey, PublicKey}
 import java.util.Random
-
 import cats.effect.{ContextShift, IO}
 import constellation._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
@@ -15,6 +14,7 @@ import org.constellation.schema.edge.{Edge, EdgeHashType, ObservationEdge, Signe
 import org.constellation.schema.signature.{HashSignature, SignatureBatch}
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction, TransactionEdgeData}
 import org.constellation.schema.Id
+import org.constellation.schema.NodeType.Full
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Random => ScalaRandom}
@@ -89,7 +89,7 @@ object Fixtures {
   val address4: InetSocketAddress = constellation.addressToSocket("localhost:16184")
   val address5: InetSocketAddress = constellation.addressToSocket("localhost:16185")
 
-  val addPeerRequest = PeerMetadata("host:", 1, id: Id, resourceInfo = ResourceInfo(diskUsableBytes = 1073741824))
+  val addPeerRequest = PeerMetadata("host:", 1, id: Id, resourceInfo = ResourceInfo(diskUsableBytes = 1073741824), nodeType = Full)
 
   val tempKeySet = Seq(tempKey, tempKey2, tempKey3, tempKey4, tempKey5)
 

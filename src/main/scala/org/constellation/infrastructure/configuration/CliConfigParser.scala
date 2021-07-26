@@ -6,6 +6,7 @@ import cats.syntax.all._
 import com.typesafe.config.Config
 import org.constellation.BuildInfo
 import org.constellation.domain.configuration.CliConfig
+import org.constellation.schema.NodeType.{Full, Light}
 import org.constellation.util.HostPort
 import scopt.OParser
 
@@ -47,9 +48,16 @@ object CliConfigParser {
       opt[Unit]('o', "offline")
         .action((x, c) => c.copy(startOfflineMode = true))
         .text("Start the node in offline mode. Won't connect automatically"),
-      opt[Unit]('l', "light")
-        .action((x, c) => c.copy(lightNode = true))
-        .text("Start a light node, only validates & stores portions of the graph"),
+      opt[String]("node-type")
+        .action(
+          (x, c) =>
+            x match {
+              case "light" => c.copy(nodeType = Light)
+              case "full"  => c.copy(nodeType = Full)
+              case _       => c
+            }
+        )
+        .text("A node type. Possible values: light,full. Light by default."),
       opt[Unit]('g', "genesis")
         .action((x, c) => c.copy(genesisNode = true))
         .text("Start in single node genesis mode"),

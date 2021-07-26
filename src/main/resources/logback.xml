@@ -1,7 +1,7 @@
 <configuration>
     <jmxConfigurator/>
 
-    <appender name="metrics" class="io.prometheus.client.logback.InstrumentedAppender" />
+    <appender name="metrics" class="io.prometheus.client.logback.InstrumentedAppender"/>
 
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -32,10 +32,10 @@
     </logger>
 
     <logger name="org.http4s" level="info">
-        <appender-ref ref="apiConsole" />
+        <appender-ref ref="apiConsole"/>
     </logger>
 
     <root level="info">
-        <appender-ref ref="metrics" />
+        <appender-ref ref="metrics"/>
     </root>
 </configuration>

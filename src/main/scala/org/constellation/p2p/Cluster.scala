@@ -20,13 +20,17 @@ import org.constellation.infrastructure.p2p.{ClientInterpreter, PeerResponse}
 import org.constellation.p2p.Cluster.ClusterNode
 import org.constellation.rewards.EigenTrust
 import org.constellation.schema.snapshot.LatestMajorityHeight
-import org.constellation.schema.{Id, NodeState, PeerNotification}
+import org.constellation.schema.{Id, NodeState, NodeType, PeerNotification}
 import org.constellation.serialization.KryoSerializer
 import org.constellation.session.SessionTokenService
 import org.constellation.util.Logging._
 import org.constellation.util._
 import org.constellation.collection.MapUtils._
+import org.constellation.domain.healthcheck.HealthCheckLoggingHelper.{logId, logIds}
+import org.constellation.domain.observation.ObservationService
+import org.constellation.schema.observation.{NodeJoinsTheCluster, Observation}
 
+import java.security.KeyPair
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -107,10 +111,12 @@ class Cluster[F[_]](
   redownloadStorage: RedownloadStorageAlgebra[F],
   downloadService: DownloadService[F],
   eigenTrust: EigenTrust[F],
+  observationService: ObservationService[F],
   broadcastService: BroadcastService[F],
   processingConfig: ProcessingConfig,
   unboundedBlocker: Blocker,
   nodeId: Id,
+  keyPair: KeyPair,
   alias: String,
   metrics: Metrics,
   nodeConfig: NodeConfig,
@@ -124,6 +130,10 @@ class Cluster[F[_]](
   C: ContextShift[F],
   T: Timer[F]
 ) {
+
+  val snapshotHeightInterval: Int = ConfigUtil.constellation.getInt("snapshot.snapshotHeightInterval")
+  val activePeersRotationInterval: Int = ConfigUtil.constellation.getInt("snapshot.activePeersRotationInterval")
+  val activePeersRotationEveryNHeights: Int = snapshotHeightInterval * activePeersRotationInterval
 
   private val peerDiscovery = PeerDiscovery[F](apiClient, this, clusterStorage, nodeId, unboundedBlocker)
 
@@ -274,7 +284,12 @@ class Cluster[F[_]](
           _ <- attemptRegisterPeer(hp)
           _ <- T.sleep(15.seconds)
           joiningHeight <- discoverJoiningHeight()
-          _ <- downloadService.download(joiningHeight)
+          // TODO: verify if this flow is still correct after refactor given joining pool functionality
+          _ <- clusterStorage.isAnActiveFullPeer.ifM(
+            downloadService.download(joiningHeight),
+            notifyCurrentActiveFullNodesAboutJoining() >>
+              compareAndSet(NodeState.initial, NodeState.Ready).void
+          )
           _ <- setOwnJoinedHeight()
           _ <- broadcastOwnJoinedHeight()
         } yield ()
@@ -321,7 +336,9 @@ class Cluster[F[_]](
       height <- nodeStorage.getOwnJoinedHeight
       _ <- height
         .map(_.pure[F])
-        .getOrElse(discoverJoiningHeight().flatTap { nodeStorage.setOwnJoinedHeight }.flatTap {
+        .getOrElse(discoverJoiningHeight().flatTap {
+          nodeStorage.setOwnJoinedHeight
+        }.flatTap {
           metrics.updateMetricAsync[F]("cluster_ownJoinedHeight", _)
         })
     } yield ()
@@ -490,14 +507,15 @@ class Cluster[F[_]](
                   nodeState = state.nodeState,
                   auxAddresses = state.addresses,
                   resourceInfo = request.resourceInfo,
-                  alias = alias
+                  alias = alias,
+                  nodeType = request.nodeType
                 )
                 majorityHeight = MajorityHeight(request.majorityHeight)
                 majorityHeights = existingMajorityHeight
                   .map(_.prepend(majorityHeight))
                   .getOrElse(NonEmptyList.one(majorityHeight))
                 peerData = PeerData(peerMetadata, majorityHeights)
-                _ <- updatePeerInfo(peerData) >> updateJoiningHeight >> updateToken >> C.shift >> F.start(
+                _ <- updatePeerInfo(peerData) /*>> updateJoiningHeight*/ >> updateToken >> C.shift >> F.start(
                   if (withDiscovery) peerDiscovery.discoverFrom(peerMetadata) else F.unit
                 )
               } yield ()
@@ -535,6 +553,7 @@ class Cluster[F[_]](
       whitelistingHash = KryoSerializer.serializeAnyRef(nodeConfig.whitelisting).sha256
       oOwnToken <- sessionTokenService.getOwnToken()
       ownToken <- oOwnToken.map(F.pure).getOrElse(F.raiseError(new Throwable("Own token not set!")))
+      nodeType = nodeConfig.nodeType
 
       _ <- logger.debug(
         s"Pending registration request: ownHeight=$height peers=$peersSize isInitialFacilitator=$isInitialFacilitator participatedInRollbackFlow=$participatedInRollbackFlow participatedInGenesisFlow=$participatedInGenesisFlow"
@@ -554,6 +573,7 @@ class Cluster[F[_]](
           joinsAsInitialFacilitator = isInitialFacilitator,
           whitelistingHash,
           ownToken,
+          nodeType,
           isReconciliationJoin
         )
       }
@@ -623,6 +643,7 @@ class Cluster[F[_]](
   private def broadcastLeaveRequest(majorityHeight: Long): F[Unit] = {
     def peerUnregister(c: PeerClientMetadata) =
       PeerUnregister(peerHostPort.host, peerHostPort.port, nodeId, majorityHeight)
+
     broadcastService
       .broadcast(
         c => PeerResponse.run(apiClient.cluster.deregister(peerUnregister(c)), unboundedBlocker)(c),
@@ -640,6 +661,61 @@ class Cluster[F[_]](
     }
     validWithLoopbackGuard(hp.host) && !hostAlreadyExists
   }
+
+  private def notifyCurrentActiveFullNodesAboutJoining(): F[Unit] = {
+    // TODO: is using tailRecM like this tail recursive already? :D
+    def loopNotifyUntilSuccess(lastActivePeersData: List[PeerData]): F[Unit] =
+      F.tailRecM(lastActivePeersData) {
+        case Nil =>
+          F.raiseError(new Throwable("Run out of active Full nodes when attempted to notify about cluster joining!"))
+        case peer :: otherPeers =>
+          logger.debug(s"Trying to send joining pool observation to ${peer.peerMetadata.id.medium}") >>
+            PeerResponse
+              .run(apiClient.cluster.notifyAboutClusterJoin(), unboundedBlocker)(peer.peerMetadata.toPeerClientMetadata)
+              .flatMap(_ => logger.debug(s"Success sending joining pool observation to ${peer.peerMetadata.id.medium}"))
+              .map(_.asRight[List[PeerData]])
+              .handleErrorWith { e =>
+                logger.debug(e)(
+                  s"Error sending join notification to active peer ${logId(peer.peerMetadata.id)}. Trying next peers: ${logIds(otherPeers.map(_.peerMetadata.id).toSet)}"
+                ) >>
+                  otherPeers.asLeft[Unit].pure[F]
+              }
+      }
+
+    for {
+      fullNodes <- clusterStorage.getFullPeers()
+      _ <- logger.debug(
+        s"Full nodes to broadcast request about current active full nodes to. Nodes ${fullNodes.keySet.map(_.medium)}"
+      )
+      lastActivePeers <- broadcastService
+        .broadcast(
+          PeerResponse.run(apiClient.cluster.getActiveFullNodes(), unboundedBlocker),
+          subset = fullNodes.keySet
+        )
+        .map(_.values.toList.separate._2.flatten.toSet)
+        .flatMap {
+          case setsOfActive if setsOfActive.size == 1 =>
+            logger.debug(s"Unanimous full active nodes indication! ${setsOfActive.flatten.map(_.medium)}") >>
+              setsOfActive.flatten.pure[F]
+          case setsOfActive =>
+            logger.debug(s"Non-unanimous full active nodes indication! ${setsOfActive.map(_.map(_.medium))}") >>
+              Set.empty[Id].pure[F]
+        }
+
+      lastActivePeersData <- lastActivePeers.toList
+        .traverse(clusterStorage.getPeer)
+        .map(_.flatten)
+      _ <- loopNotifyUntilSuccess(lastActivePeersData)
+    } yield ()
+  }
+
+  def handleJoiningClusterNotification(id: Id): F[Unit] = // TODO: pass observation service explicitly to Cluster
+    observationService
+      .put(
+        Observation.create(id, NodeJoinsTheCluster)(keyPair)
+      )
+      .map(obs => logger.debug(s"Registered NodeJoinedTheCluster observation: $obs")) >>
+      metrics.incrementMetricAsync("processedNodeJoinedTheClusterObservation")
 }
 
 object Cluster {
@@ -655,10 +731,12 @@ object Cluster {
     redownloadStorage: RedownloadStorageAlgebra[F],
     downloadService: DownloadService[F],
     eigenTrust: EigenTrust[F],
+    observationService: ObservationService[F],
     broadcastService: BroadcastService[F],
     processingConfig: ProcessingConfig,
     unboundedBlocker: Blocker,
     nodeId: Id,
+    keyPair: KeyPair,
     alias: String,
     metrics: Metrics,
     nodeConfig: NodeConfig,
@@ -677,10 +755,12 @@ object Cluster {
       redownloadStorage,
       downloadService,
       eigenTrust,
+      observationService,
       broadcastService,
       processingConfig,
       unboundedBlocker,
       nodeId,
+      keyPair,
       alias,
       metrics,
       nodeConfig,
@@ -700,6 +780,14 @@ object Cluster {
 
     implicit val clusterNodeEncoder: Encoder[ClusterNode] = deriveEncoder
     implicit val clusterNodeDecoder: Decoder[ClusterNode] = deriveDecoder
+  }
+
+  case class MissingActivePeers(ids: Set[Id], nodeType: NodeType) extends Throwable(s"Missing active $nodeType peers: $ids")
+
+  def calculateActiveBetweenHeights(starting: Long, rotationInterval: Long): MajorityHeight = {
+    val ending = starting + rotationInterval
+    // TODO: for sure it can be done better
+    MajorityHeight(if (starting < 2L ) starting.some else (starting - 2L).some, ending.some)
   }
 
 }
