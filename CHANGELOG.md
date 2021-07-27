@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.28.0] 2021-07-27
+### Changed
+- Reduced snapshot delays
+
 ## [v2.27.0] 2021-07-19
 ### Changed
 - Abstract away healthcheck and implement proposal healthcheck
