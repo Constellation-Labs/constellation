@@ -49,7 +49,7 @@ object KeyUtils extends StrictLogging {
   } catch {
     case _: Throwable => SecureRandom.getInstanceStrong
   }
-  private val secp256k = "secp256k1"
+  val secp256k = "secp256k1"
   val DefaultSignFunc = "SHA512withECDSA"
   private val PublicKeyHexPrefix: String = "3056301006072a8648ce3d020106052b8104000a03420004"
   private val PublicKeyHexPrefixLength: Int = PublicKeyHexPrefix.length
@@ -249,6 +249,13 @@ object KeyUtils extends StrictLogging {
     val keyHash = Base58.encode(Hashing.sha256().hashBytes(key.getEncoded).asBytes())
     keyHashToAddress(keyHash)
   }
+
+  def keyPairToAddress(
+    key: KeyPair
+  ): String = {
+    publicKeyToAddressString(key.getPublic)
+  }
+
 }
 
 /*
