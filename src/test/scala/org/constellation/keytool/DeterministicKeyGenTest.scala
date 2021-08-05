@@ -11,7 +11,6 @@ class DeterministicKeyGenTest extends AnyFunSuite with BeforeAndAfterAll with Ma
     val keyPairsOne = DeterministicKeyGen.makeKeyPairsLetterMap(10, seed)
     val keyPairsTwo = DeterministicKeyGen.makeKeyPairsLetterMap(10, seed)
 
-    keyPairsOne shouldBe keyPairsTwo
     keyPairsOne.map(KeyUtils.keyPairToAddress) shouldBe keyPairsTwo.map(KeyUtils.keyPairToAddress)
   }
 }

@@ -28,14 +28,9 @@ object DeterministicKeyGen extends StrictLogging {
   }
 
   def makeKeyPairs(count: Int = 10, seed: Array[Byte]): List[KeyPair] = {
-    val detSecureRandom: SecureRandom = try {
-      SecureRandom.getInstance("NativePRNGNonBlocking")
-    } catch {
-      case _: Throwable => SecureRandom.getInstanceStrong
-    }
-
+    logger.debug("Seed bytes {}", seed.size)
+    val detSecureRandom = SecureRandom.getInstance("SHA1PRNG")
     detSecureRandom.setSeed(seed)
-
     List.fill(count) {
       val keyGen: KeyPairGenerator = KeyPairGenerator.getInstance(ECDSA, provider)
       val ecSpec = new ECGenParameterSpec(secp256k)
