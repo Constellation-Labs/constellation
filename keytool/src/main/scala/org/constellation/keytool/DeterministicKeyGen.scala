@@ -27,6 +27,7 @@ object DeterministicKeyGen extends StrictLogging {
     makeKeyPairs(count, seed.getBytes(Charset.forName("UTF-8")))
   }
 
+  // TODO: SHA1PRNG requires higher byte counts for seed security -- need to expand original bytes and pad
   def makeKeyPairs(count: Int = 10, seed: Array[Byte]): List[KeyPair] = {
     logger.debug("Seed bytes {}", seed.size)
     val detSecureRandom = SecureRandom.getInstance("SHA1PRNG")
