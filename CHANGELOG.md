@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+### Changed
+- Whitelisting updated
 
 ## [v2.28.0] 2021-07-27
 ### Changed
