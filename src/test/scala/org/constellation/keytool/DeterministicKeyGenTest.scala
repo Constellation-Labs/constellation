@@ -1,5 +1,6 @@
 package org.constellation.keytool
 
+import org.constellation.wallet.DeterministicKeyGen
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers

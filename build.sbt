@@ -145,7 +145,7 @@ lazy val googleCloudStorageDependencies = Seq(
 )
 
 lazy val bitcoinjDependencies = Seq(
-  "org.bitcoinj" % "bitcoinj-core" % "0.15.8"
+  "org.bitcoinj" % "bitcoinj-core" % "0.15.10"
 )
 
 // -----------------
@@ -253,7 +253,7 @@ lazy val wallet = (project in file("wallet"))
     assemblyExcludedJars in assembly := {
       val cp = (fullClasspath in assembly).value
       // comes with bitcoinj which we only use for a bip44 reference implementation and it causes assembly issues
-      cp.filter { _.data.getName == "bcprov-jdk15to18-1.63.jar" }
+      cp.filter { _.data.getName == "bcprov-jdk15to18-1.68.jar" }
     }
   )
 
