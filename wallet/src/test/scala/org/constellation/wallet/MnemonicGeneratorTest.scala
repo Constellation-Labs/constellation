@@ -37,7 +37,7 @@ class MnemonicGeneratorTest extends AnyFreeSpec with Matchers {
   // NOTE: There is no checksum check here! If you don't use sha256 or exactly u8;32 / 256 bit byte array
   // then this will not work in other languages!
   "Private key gen" in {
-    val seedPhrase = stringUTF8ToMnemonic(testString).slice(0, 24).mkString(" ");
+    val seedPhrase = stringUTF8ToMnemonic(testString).mkString(" ");
     println(seedPhrase)
     val seed = new DeterministicSeed(seedPhrase, null, "", 0L)
     val chain: DeterministicKeyChain = DeterministicKeyChain.builder.seed(seed).build
