@@ -1,16 +1,25 @@
 package org.constellation.trust
 
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, IO}
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.trust.TrustDataInternal
 import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.rewards.EigenTrust
 import org.constellation.schema.observation._
 import org.constellation.schema.{Id, NodeState}
 
+import scala.util.{Failure, Success, Try}
+
 class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(implicit F: Concurrent[F]) {
+
+  private var eigenTrust: EigenTrust[IO] = _
+
+  def setEigenTrust(eigenTrust: EigenTrust[IO]): Unit = {
+    this.eigenTrust = eigenTrust
+  }
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -24,6 +33,7 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
     clusterStorage.getPeers.flatMap { peers =>
       if (peers.size > 2) {
         for {
+
           reputation <- getStoredReputation
           _ <- logger.info(s"Begin handleTrustScoreUpdate for peerTrustScores: ${peerTrustScores.toString()}")
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
@@ -46,14 +56,39 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
           trustNodes = TrustManager.calculateTrustNodes(trustNodesInternal.distinct, nodeId, scoringMap)
           //          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
 
-          idMappedScores: Map[Id, Double] = SelfAvoidingWalk
-            .runWalkFeedbackUpdateSingleNode(
-              selfNodeId,
-              trustNodes
-            )
-            .edges
-            .map(e => idxMap(e.dst) -> e.trust) //.flatMap(e => idxMap.get(e.dst).map(i => i -> e.trust) )//todo bug here
-            .toMap
+          sawAttempt = Try {
+            SelfAvoidingWalk
+              .runWalkFeedbackUpdateSingleNode(
+                selfNodeId,
+                trustNodes
+              )
+              .edges
+              .map(e => idxMap(e.dst) -> e.trust) //.flatMap(e => idxMap.get(e.dst).map(i => i -> e.trust) )//todo bug here
+              .toMap
+          }
+
+          // Temporary fallback
+          idMappedScores: Map[Id, Double] = sawAttempt match {
+            case Success(x) => x
+            case Failure(e) =>
+              logger.error(s"SAW Failure: $e")
+              val selfScores = scores.filter{x => x.id == nodeId}.head.view
+              val selfM = collection.mutable.HashMap[Id, Double]()
+              selfScores.foreach{case (k, v) => selfM(k) = v}
+              val addressToId = selfScores.keys.map{k => k.address -> k }.toMap
+              if (this.eigenTrust != null) {
+                val addressMap = this.eigenTrust.getTrustForAddresses.unsafeRunSync()
+                addressMap.foreach{case (a, t) =>
+                  addressToId.get(a).foreach{ id =>
+                    selfM(id) = t
+                  }
+                }
+                selfM.toMap
+              } else {
+                logger.error(s"EigenTrust initialized improperly in fallback failure")
+                selfScores
+              }
+          }
 
           _ <- logger.info(s"TrustManager.idMappedScores: ${idMappedScores.toString()}")
           _ <- storedReputation.modify(_ => (idMappedScores, ()))

@@ -219,6 +219,7 @@ class DAO(
   val addressService: AddressService[IO] = new AddressService[IO]()
   val messageValidator: MessageValidator = MessageValidator(id)
   val eigenTrust: EigenTrust[IO] = new EigenTrust[IO](id)
+  trustManager.setEigenTrust(eigenTrust)
 
   val transactionGossiping: TransactionGossiping[IO] =
     new TransactionGossiping[IO](transactionService, clusterStorage, processingConfig.txGossipingFanout, id)

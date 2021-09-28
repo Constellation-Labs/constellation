@@ -15,6 +15,8 @@ Created and switched to workspace "abcd"!
 
 Now, you can either use `autostart` or manually run commands step by step, depending on the use case.
 
+Make sure to add your public key to `./ssh_keys.sh` for accessing nodes!
+
 ### Autostart
  
 Use `autostart` which assembles the project and starts a cluster automatically. You have to provide a number of instances.
