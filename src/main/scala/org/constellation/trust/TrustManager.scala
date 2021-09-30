@@ -17,9 +17,8 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
 
   private var eigenTrust: EigenTrust[IO] = _
 
-  def setEigenTrust(eigenTrust: EigenTrust[IO]): Unit = {
+  def setEigenTrust(eigenTrust: EigenTrust[IO]): Unit =
     this.eigenTrust = eigenTrust
-  }
 
   private val logger = Slf4jLogger.getLogger[F]
 
@@ -39,12 +38,12 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
           scores = peerTrustScores :+ TrustDataInternal(nodeId, reputation)
           (scoringMap, idxMap) = TrustManager.calculateIdxMaps(scores)
           //          _ <- logger.debug(s"Begin handleTrustScoreUpdate for scores: ${scores.toString()}")
-//          _ <- logger.info(
-//            s"Begin handleTrustScoreUpdate for distinct allNodeIds: ${scores.flatMap(_.view.keySet).distinct}"
-//          )
-//          _ <- logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
-//          _ <- logger.debug(s"TrustManager.calculateIdxMaps for idxMap: ${idxMap.toString()}")
-//          _ <- logger.debug(s"TrustManager.scoringMap for scoringMap: ${scoringMap.toString()}")
+          //          _ <- logger.info(
+          //            s"Begin handleTrustScoreUpdate for distinct allNodeIds: ${scores.flatMap(_.view.keySet).distinct}"
+          //          )
+          //          _ <- logger.debug(s"Begin handleTrustScoreUpdate for peers: ${peers.map(_._1.address)}")
+          //          _ <- logger.debug(s"TrustManager.calculateIdxMaps for idxMap: ${idxMap.toString()}")
+          //          _ <- logger.debug(s"TrustManager.scoringMap for scoringMap: ${scoringMap.toString()}")
           selfNodeId = scoringMap(nodeId)
 
           missingNodes = scoringMap.keySet.toList.diff(scores.map(_.id))
@@ -55,8 +54,7 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
           trustNodesInternal = scores ++ simulatedTrustDataForMissingNodes
           trustNodes = TrustManager.calculateTrustNodes(trustNodesInternal.distinct, nodeId, scoringMap)
           //          _ <- logger.debug(s"TrustManager.calculateTrustNodes for trustNodes: ${trustNodes.toString()}")
-
-          sawAttempt = Try {
+          sawAttempt <- F.delay {
             SelfAvoidingWalk
               .runWalkFeedbackUpdateSingleNode(
                 selfNodeId,
@@ -65,31 +63,35 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
               .edges
               .map(e => idxMap(e.dst) -> e.trust) //.flatMap(e => idxMap.get(e.dst).map(i => i -> e.trust) )//todo bug here
               .toMap
-          }
-
-          // Temporary fallback
-          idMappedScores: Map[Id, Double] = sawAttempt match {
-            case Success(x) => x
-            case Failure(e) =>
+          }.attempt // Either[Throwable, Map[Id, Double]
+          idMappedScores <- sawAttempt match {
+            case Right(x) => F.pure(x)
+            case Left(e) =>
               logger.error(s"SAW Failure: $e")
-              val selfScores = scores.filter{x => x.id == nodeId}.head.view
+              val selfScores = scores.filter { x =>
+                x.id == nodeId
+              }.head.view
               val selfM = collection.mutable.HashMap[Id, Double]()
-              selfScores.foreach{case (k, v) => selfM(k) = v}
-              val addressToId = selfScores.keys.map{k => k.address -> k }.toMap
+              selfScores.foreach { case (k, v) => selfM(k) = v }
+              val addressToId = selfScores.keys.map { k =>
+                k.address -> k
+              }.toMap
               if (this.eigenTrust != null) {
-                val addressMap = this.eigenTrust.getTrustForAddresses.unsafeRunSync()
-                addressMap.foreach{case (a, t) =>
-                  addressToId.get(a).foreach{ id =>
-                    selfM(id) = t
+                val ioResult = this.eigenTrust.getTrustForAddresses.map { addressMap =>
+                  addressMap.foreach {
+                    case (a, t) =>
+                      addressToId.get(a).foreach { id =>
+                        selfM(id) = t
+                      }
                   }
+                  selfM.toMap
                 }
-                selfM.toMap
+                F.liftIO(ioResult)
               } else {
                 logger.error(s"EigenTrust initialized improperly in fallback failure")
-                selfScores
+                F.pure(selfScores)
               }
           }
-
           _ <- logger.info(s"TrustManager.idMappedScores: ${idMappedScores.toString()}")
           _ <- storedReputation.modify(_ => (idMappedScores, ()))
           _ <- predictedReputation.modify(_ => (idMappedScores, ()))
@@ -122,11 +124,11 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
     }
   }
 
-//  private def calculateReputation(snapshots: List[StoredSnapshot]): Map[Id, Double] =
-//    snapshots
-//      .flatMap(_.checkpointCache.flatMap(_.checkpointBlock.flatMap(_.observations.toList)))
-//      .groupBy(_.signedObservationData.data.id)
-//      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
+  //  private def calculateReputation(snapshots: List[StoredSnapshot]): Map[Id, Double] =
+  //    snapshots
+  //      .flatMap(_.checkpointCache.flatMap(_.checkpointBlock.flatMap(_.observations.toList)))
+  //      .groupBy(_.signedObservationData.data.id)
+  //      .mapValues(_.size.toDouble) // TODO: wkoszycki add conversion List[Observation] -> Score
 }
 
 object TrustManager {
