@@ -28,5 +28,6 @@ case class NodeConfig(
   dataPollingManagerOn: Boolean = false,
   allocAccountBalances: Seq[AccountBalance] = Seq.empty,
   whitelisting: Map[Id, Option[String]] = Map.empty,
-  minRequiredSpace: Int = 5
+  minRequiredSpace: Int = 5,
+  peerLabels: Map[Id, Double] = Map.empty,
 )

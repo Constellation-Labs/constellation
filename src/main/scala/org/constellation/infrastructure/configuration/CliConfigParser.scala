@@ -41,6 +41,9 @@ object CliConfigParser {
         .action((x, c) => c.copy(whitelisting = x))
         .text("path to file with whitelisting")
         .required(),
+      opt[String]('s', "scores")
+        .action((x, c) => c.copy(peerLabels = x))
+        .text("path to file with peer label trust scores"),
       opt[Unit]('d', "debug")
         .action((x, c) => c.copy(debug = true))
         .text("run the node in debug mode"),

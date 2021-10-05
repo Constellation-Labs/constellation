@@ -20,5 +20,6 @@ case class CliConfig(
   rollbackHeight: Long = 0L,
   rollbackHash: String = null,
   testMode: Boolean = false,
-  cloud: String = null
+  cloud: String = null,
+  peerLabels: String = null
 )

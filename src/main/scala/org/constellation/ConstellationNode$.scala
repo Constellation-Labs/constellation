@@ -319,7 +319,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       rateLimiting = new RateLimiting[IO]
       transactionChainService = TransactionChainService[IO]
       transactionService = TransactionService[IO](transactionChainService, rateLimiting, metrics)
-      trustManager = TrustManager[IO](id, clusterStorage)
+      trustManager = TrustManager[IO](id, clusterStorage, nodeConfig.peerLabels, nodeConfig.whitelisting.keySet)
       observationService = new ObservationService[IO](trustManager, metrics)
 
       dataResolver = DataResolver[IO](
@@ -484,6 +484,22 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
       }
     } yield mappedValues
 
+  private def getPeerLabels[F[_]: Sync](cliConfig: CliConfig): F[Map[Id, Double]] =
+    for {
+      source <- Sync[F].delay {
+        Source.fromFile(cliConfig.peerLabels)
+      }
+      lines = source.getLines().filter(_.nonEmpty).toList
+      values = lines.map(_.split(",").map(_.trim).toList)
+      mappedValues = values.map {
+        case id :: score :: Nil => Map(Id(id) -> score.toDouble)
+        case _                  => Map.empty[Id, Double]
+      }.fold(Map.empty[Id, Double])(_ ++ _)
+      _ <- Sync[F].delay {
+        source.close()
+      }
+    } yield mappedValues
+
   private def getPort[F[_]: Sync](config: Config, fromArg: Option[Int], env: String, configPath: String): F[Int] =
     Sync[F].delay {
       fromArg.getOrElse(Option(System.getenv(env)).map(_.toInt).getOrElse(config.getInt(configPath)))
@@ -526,6 +542,7 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
         processingConfig = ProcessingConfig(maxWidth = constellationConfig.getInt("max-width"))
 
         whitelisting <- getWhitelisting(cliConfig)
+        peerLabels <- getPeerLabels(cliConfig)
 
         nodeConfig = NodeConfig(
           seeds = Seq.empty[HostPort],
@@ -548,7 +565,8 @@ object ConstellationNode$ extends IOApp with IOApp.WithContext {
           dataPollingManagerOn = config.getBoolean("constellation.dataPollingManagerOn"),
           allocAccountBalances = allocAccountBalances,
           whitelisting = whitelisting,
-          minRequiredSpace = constellationConfig.getInt("min-required-space")
+          minRequiredSpace = constellationConfig.getInt("min-required-space"),
+          peerLabels = peerLabels
         )
       } yield nodeConfig
     }

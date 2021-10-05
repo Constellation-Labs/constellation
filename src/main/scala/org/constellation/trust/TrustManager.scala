@@ -6,17 +6,35 @@ import cats.syntax.all._
 import io.chrisdavenport.log4cats.slf4j.Slf4jLogger
 import org.constellation.domain.cluster.ClusterStorageAlgebra
 import org.constellation.domain.trust.TrustDataInternal
-import org.constellation.p2p.{Cluster, PeerData}
+import org.constellation.p2p.PeerData
 import org.constellation.schema.observation._
 import org.constellation.schema.{Id, NodeState}
 
-class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(implicit F: Concurrent[F]) {
+import scala.collection.mutable
+
+class TrustManager[F[_]](
+  nodeId: Id,
+  clusterStorage: ClusterStorageAlgebra[F],
+  peerLabels: Map[Id, Double],
+  whitelist: Set[Id]
+)(implicit F: Concurrent[F]) {
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  private val storedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
+  private val storedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(mergeInitialTrustScores())
+
+  private val observationReputationAdjustment: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
 
   private val predictedReputation: Ref[F, Map[Id, Double]] = Ref.unsafe(Map.empty)
+
+  private final val WHITELIST_INITIALIZATION_BIAS = 0.7
+
+  def mergeInitialTrustScores(): Map[Id, Double] = {
+    val map = mutable.HashMap[Id, Double]()
+    whitelist.foreach(w => map(w) = WHITELIST_INITIALIZATION_BIAS)
+    peerLabels.foreach { case (k, v) => map(k) = v }
+    map.toMap
+  }
 
   def getTrustDataInternalSelf: F[TrustDataInternal] = getStoredReputation.map(TrustDataInternal(nodeId, _))
 
@@ -56,8 +74,13 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
             .toMap
 
           _ <- logger.info(s"TrustManager.idMappedScores: ${idMappedScores.toString()}")
-          _ <- storedReputation.modify(_ => (idMappedScores, ()))
-          _ <- predictedReputation.modify(_ => (idMappedScores, ()))
+          // TODO: Verify any dependencies on this update function which need to be changed
+          // storedReputation should never be updated by a model as it represents raw scoring information.
+//          _ <- storedReputation.modify(_ => (idMappedScores, ()))
+          // It's necessary to override the predicted labels here with the raw scores
+          // These can later be adjusted but no prediction should override a raw label ever.
+          rawStoredReputation <- storedReputation.get
+          _ <- predictedReputation.modify(_ => (idMappedScores ++ rawStoredReputation, ()))
         } yield ()
       } else logger.debug("Skipping trust score update")
     }
@@ -71,18 +94,19 @@ class TrustManager[F[_]](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F])(i
 
     clusterStorage.getPeers.flatMap { peers =>
       storedReputation.get.map(
-        reputation => peers.mapValues(_ => 1d) + (nodeId -> 1d) ++ reputation.filterKeys(filterFn(peers))
+        reputation =>
+          peers.mapValues(_ => WHITELIST_INITIALIZATION_BIAS) + (nodeId -> 1d) ++ reputation.filterKeys(filterFn(peers))
       )
     }
   }
 
-  def updateStoredReputation(o: Observation): F[Unit] = {
+  def updateObservationReputation(o: Observation): F[Unit] = {
     val score = TrustManager.observationScoring(o.signedObservationData.data.event)
     val id = o.signedObservationData.data.id
 
-    storedReputation.modify { reputation =>
-      //    val updated = Math.max(reputation.getOrElse(id, 1d) + score, -1d)
-      val updated = 1d
+    observationReputationAdjustment.modify { reputation =>
+      val updated = Math.max(reputation.getOrElse(id, 0d) + score, -1d)
+//      val updated = 1d
       (reputation + (id -> updated), ())
     }
   }
@@ -136,6 +160,11 @@ object TrustManager {
         )
     }
 
-  def apply[F[_]: Concurrent](nodeId: Id, clusterStorage: ClusterStorageAlgebra[F]): TrustManager[F] =
-    new TrustManager[F](nodeId, clusterStorage)
+  def apply[F[_]: Concurrent](
+    nodeId: Id,
+    clusterStorage: ClusterStorageAlgebra[F],
+    peerLabels: Map[Id, Double],
+    whitelist: Set[Id]
+  ): TrustManager[F] =
+    new TrustManager[F](nodeId, clusterStorage, peerLabels, whitelist)
 }

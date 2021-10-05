@@ -21,7 +21,7 @@ class ObservationService[F[_]: Concurrent](trustManager: TrustManager[F], metric
   override def accept(o: Observation, cpc: Option[CheckpointCache] = None): F[Unit] =
     super
       .accept(o)
-      .flatTap(_ => trustManager.updateStoredReputation(o))
+      .flatTap(_ => trustManager.updateObservationReputation(o))
       .flatTap(_ => metrics.incrementMetricAsync[F]("observationAccepted"))
 
   def applyAfterRedownload(o: Observation, cpc: Option[CheckpointCache]): F[Unit] =
