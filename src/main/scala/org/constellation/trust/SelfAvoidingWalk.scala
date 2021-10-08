@@ -25,71 +25,60 @@ object SelfAvoidingWalk extends StrictLogging {
     sys.error(f"this should never happen") // needed so it will compile
   }
 
-  // TODO: Make this iterative (simpler, avoid stack depth issue) and memoize visited up to N (small)
-  // use breeze ^
-  @scala.annotation.tailrec
-  def walk(
+  def walk_iterative(
     selfId: Int,
-    currentId: Int,
-    nodeMap: Map[Int, TrustNode],
-    totalPathLength: Int,
-    currentPathLength: Int,
-    visited: Set[Int],
-    currentTrust: Double
-  ): (Int, Double) =
-    if (totalPathLength == currentPathLength) {
-      currentId -> currentTrust
-    } else {
+    nodeMap: Map[Int, TrustNode]
+  ): (Int, Double) = {
 
+    val maxPathLength: Int = nodeMap.size - 1
+    val desiredPathLength = Random.nextInt(maxPathLength - 1) + 1
+
+    // Ignore paths that distrust self (maybe consider ignoring paths that distrust immediate
+    // neighbors as well? This is where Jaccard distance is important
+    // We need to discard walks where large distance exists from previous
+    // (i.e. discard information from distant nodes if they distrust nearby nodes that you trust in general)
+
+    // This doesn't need to be recalculated
+    val ignoredNodes = nodeMap
+      .filter{case (_, trustNode) =>
+        trustNode.edges.exists(edge => edge.trust < 0 && edge.dst == selfId)
+      }.keySet
+
+
+    var currentId: Int = selfId
+    var currentPathLength: Int = 0
+    var visited: Set[Int] = Set()
+    var currentTrust: Double = 1d
+    var done = false
+
+    // TODO: Visited should have a 'direction' associated to bias the walk not just in terms of trust
+    // but also trust derivatives in order to move 'outward' as effectively as possible (to discourage loop formation)
+    // otherwise the path length may not matter as the walks will get trapped in the same neighborhood
+    // Essentially need topo information from something else processing total edge map
+    // Formulate this in terms of DATT expansion.
+
+    while (currentPathLength <= desiredPathLength && !done) {
+      currentPathLength += 1
       val n1: TrustNode = nodeMap(currentId)
-
-      // TODO: Visited should have a 'direction' associated to bias the walk not just in terms of trust
-      // but also trust derivatives in order to move 'outward' as effectively as possible (to discourage loop formation)
-      // otherwise the path length may not matter as the walks will get trapped in the same neighborhood
-      // Essentially need topo information from something else processing total edge map
-
       val visitedNext = visited + currentId
-
       val normalEdges = n1.normalizedPositiveEdges(visitedNext)
-//      logger.debug(s"walk for normalEdges: ${normalEdges.toString()}")
-
       if (normalEdges.isEmpty) {
-        currentId -> currentTrust
+        done = true
       } else {
-
         val transitionDst = sample(normalEdges)
-
-        // Ignore paths that distrust self (maybe consider ignoring paths that distrust immediate
-        // neighbors as well? This is where Jaccard distance is important
-        // We need to discard walks where large distance exists from previous
-        // (i.e. discard information from distant nodes if they distrust nearby nodes that you trust in general)
-        val useInLocalCalculation = nodeMap
-          .get(transitionDst)
-          .exists(trustNode => trustNode.edges.exists(edge => edge.trust < 0 && edge.dst == selfId))
-//        logger.debug(s"walk for useInLocalCalculation: ${useInLocalCalculation.toString()}")
-
-        if (useInLocalCalculation) {
-          currentId -> currentTrust
+        if (ignoredNodes.contains(transitionDst)) {
+          done = true
         } else {
-
           val transitionTrust = normalEdges(transitionDst)
-//          logger.debug(s"walk for transitionTrust: ${transitionTrust.toString()}")
-
           val productTrust = currentTrust * transitionTrust
-//          logger.debug(s"walk for productTrust: ${productTrust.toString()}")
-
-          walk(
-            selfId,
-            transitionDst,
-            nodeMap,
-            totalPathLength,
-            currentPathLength + 1,
-            visitedNext,
-            productTrust
-          )
+          visited = visitedNext
+          currentId = transitionDst
+          currentTrust = productTrust
         }
       }
     }
+    currentId -> currentTrust
+  }
 
   def runWalkRaw(selfId: Int, nodes: Seq[TrustNode], numIterations: Int = 100): Array[Double] = {
 
@@ -104,8 +93,7 @@ object SelfAvoidingWalk extends StrictLogging {
     val maxPathLength = nodes.size - 1
 
     def walkFromOrigin() = {
-      val totalPathLength = Random.nextInt(maxPathLength) + 1 //note, need min of 3 nodes
-      walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1d)
+      walk_iterative(selfId, nodeMap)
     }
     val numNodes = nodes.maxBy(_.id).id
     val walkScores = Array.fill(numNodes + 1)(0d)
@@ -382,7 +370,7 @@ object SelfAvoidingWalk extends StrictLogging {
 
     def walkFromOrigin() = {
       val totalPathLength = Random.nextInt(maxPathLength - 1) + 1
-      walk(n1.id, n1.id, nodeMap, totalPathLength, 0, Set(n1.id), 1d)
+      walk_iterative(selfId, nodeMap)
     }
 
     val walkScores = Array.fill(nodes.size)(0d)
