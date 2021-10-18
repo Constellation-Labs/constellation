@@ -1,3 +1,10 @@
+
+## THE REPOSITORY HAS BEEN MOVED
+
+The project has been moved to the [Tessellation repository](https://github.com/Constellation-Labs/tessellation).
+
+---------------------------
+
 ## Constellation
 This repository is the reference implementation of our **Decentralized Application Integration Platform** using the 
 [Scala](https://www.scala-lang.org/)
