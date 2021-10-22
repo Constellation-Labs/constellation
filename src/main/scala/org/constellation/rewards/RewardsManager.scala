@@ -10,6 +10,7 @@ import org.constellation.checkpoint.CheckpointService
 import org.constellation.domain.checkpointBlock.CheckpointStorageAlgebra
 import org.constellation.domain.cluster.{ClusterStorageAlgebra, NodeStorageAlgebra}
 import org.constellation.p2p.{Cluster, MajorityHeight}
+import org.constellation.schema.address.Address
 import org.constellation.schema.checkpoint.CheckpointEdge
 import org.constellation.schema.observation.Observation
 import org.constellation.schema.snapshot.Snapshot
@@ -93,7 +94,10 @@ class RewardsManager[F[_]: Concurrent](
         case (_, majorityHeight) => MajorityHeight.isHeightBetween(rewardSnapshot.height)(majorityHeight)
       }.keySet.map(_.address)
 
-      weightContributions = weightByTrust(trustMap) _ >>> weightByEpoch(rewardSnapshot.height) >>> weightByStardust
+      weightContributions = weightByTrust(trustMap) _ >>>
+        weightByEpoch(rewardSnapshot.height) >>>
+        weightBySoftStaking(rewardSnapshot) >>>
+        weightByStardust
       contributions = calculateContributions(nodesWithProposalsOnly)
       distribution = weightContributions(contributions)
       normalizedDistribution = normalize(distribution)
@@ -143,6 +147,13 @@ class RewardsManager[F[_]: Concurrent](
 
   def weightByStardust: Map[String, Double] => Map[String, Double] =
     StardustCollective.weightByStardust
+
+  def weightBySoftStaking(rewardSnapshot: RewardSnapshot): Map[String, Double] => Map[String, Double] =
+    rewardSnapshot.height match {
+//      Uncomment for mainnet rewards. Set snapshot height and soft staking nodes count
+//      case height if height >= 10 => SoftStaking.weightBySoftStaking(softStakingNodes = 1000)
+      case _ => identity
+    }
 
   private def weightByEpoch(snapshotHeight: Long)(contributions: Map[String, Double]): Map[String, Double] =
     contributions.mapValues(_ * RewardsManager.totalRewardPerSnapshot(snapshotHeight))
