@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 - SoftStaking nodes rewards
 
+### Changed
+- Whitelisting updated
+
 ## [v2.28.2] 2021-09-22
 ### Changed
 - Whitelisting updated
