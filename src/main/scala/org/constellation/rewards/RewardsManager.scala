@@ -150,9 +150,8 @@ class RewardsManager[F[_]: Concurrent](
 
   def weightBySoftStaking(rewardSnapshot: RewardSnapshot): Map[String, Double] => Map[String, Double] =
     rewardSnapshot.height match {
-//      Uncomment for mainnet rewards. Set snapshot height and soft staking nodes count
-//      case height if height >= 10 => SoftStaking.weightBySoftStaking(softStakingNodes = 1000)
-      case _ => identity
+      case height if height >= 3076775 => SoftStaking.weightBySoftStaking(softStakingNodes = 3570)
+      case _                           => identity
     }
 
   private def weightByEpoch(snapshotHeight: Long)(contributions: Map[String, Double]): Map[String, Double] =
