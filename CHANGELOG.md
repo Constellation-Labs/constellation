@@ -3,11 +3,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [v2.29.1]
+## [v2.29.2] 2021-11-12
 ### Changed
 - Whitelisting updated
 
-## [v2.29.0]
+## [v2.29.1] 2021-11-10
+### Changed
+- Whitelisting updated
+
+## [v2.29.0] 2021-11-05
 ### Added
 - SoftStaking nodes rewards
 
