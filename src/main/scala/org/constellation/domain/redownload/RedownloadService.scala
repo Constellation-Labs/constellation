@@ -71,7 +71,6 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
       _ <- rewardsManager.clearLastRewardedHeight()
     } yield ()
 
-  // TODO?
   def fetchAndUpdatePeersProposals(): F[Unit] =
     for {
       _ <- logger.debug("Fetching and updating peer proposals")
@@ -388,12 +387,12 @@ class RedownloadService[F[_]: NonEmptyParallel: Applicative](
         }
       } else logger.debug("No redownload needed - snapshots have been already aligned with majority state.")
 
-      _ <- logger.debug("Sending majority snapshots to cloud.")
-      _ <- if (meaningfulMajority.nonEmpty) sendMajoritySnapshotsToCloud()
+      _ <- if (meaningfulMajority.nonEmpty)
+        logger.debug("Sending majority snapshots to cloud.") >> sendMajoritySnapshotsToCloud()
       else logger.debug("No majority - skipping sending to cloud")
 
-      _ <- logger.debug("Rewarding majority snapshots.")
-      _ <- if (meaningfulMajority.nonEmpty) rewardMajoritySnapshots().value.flatMap(F.fromEither)
+      _ <- if (meaningfulMajority.nonEmpty)
+        logger.debug("Rewarding majority snapshots.") >> rewardMajoritySnapshots().value.flatMap(F.fromEither)
       else logger.debug("No majority - skipping rewarding")
 
       _ <- logger.debug("Removing unaccepted snapshots from disk.")

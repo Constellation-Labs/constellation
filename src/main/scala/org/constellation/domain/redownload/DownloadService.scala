@@ -70,16 +70,6 @@ class DownloadService[F[_]](
       clients = readyPeers.map(_.peerMetadata.toPeerClientMetadata).toSet
       _ <- redownloadService.useRandomClient(clients) { client =>
         for {
-//          accepted <- redownloadService.fetchAcceptedSnapshots(client)
-//          acceptedSnapshots <- accepted.values.toList
-//            .traverse(hash => redownloadService.fetchSnapshot(hash)(client))
-//            .flatMap { snapshotsSerialized =>
-//              snapshotsSerialized.traverse { snapshot =>
-//                C.evalOn(boundedExecutionContext)(F.delay {
-//                  KryoSerializer.deserializeCast[StoredSnapshot](snapshot)
-//                })
-//              }
-//            }
           snapshotInfoFromMemPool <- redownloadService
             .fetchSnapshotInfo(client)
             .flatMap { snapshotInfo =>
@@ -89,19 +79,6 @@ class DownloadService[F[_]](
             }
 
           _ <- snapshotService.setSnapshot(snapshotInfoFromMemPool)
-
-//          acceptedBlocksFromSnapshotInfo = snapshotInfoFromMemPool.acceptedCBSinceSnapshotCache
-//          awaitingBlocksFromSnapshotInfo <- snapshotInfoFromMemPool.awaitingCheckpoints.toList.traverse {
-//            checkpointStorage.getCheckpoint
-//          }.map(_.flatten)
-
-//          blocksToAccept <- (blocksFromSnapshots ++ acceptedBlocksFromSnapshotInfo ++ awaitingBlocksFromSnapshotInfo)
-//            .distinct
-//            .filterA { c =>
-//                checkpointStorage.isCheckpointAccepted(c.checkpointBlock.soeHash).map(!_)
-//              }
-
-//          _ <- blocksToAccept.traverse { checkpointService.addToAcceptance }
         } yield ()
       }
     } yield ()
