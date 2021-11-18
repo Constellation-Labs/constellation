@@ -10,6 +10,7 @@ import io.circe.syntax._
 import org.constellation.testutils.HttpUtil.evalRequestForHosts
 import org.constellation.keytool.KeyStoreUtils
 import org.constellation.schema.address.AddressCacheData
+import org.constellation.schema.serialization.Kryo
 import org.constellation.schema.transaction.{LastTransactionRef, Transaction}
 import org.constellation.testutils.CustomMatchers
 import org.constellation.wallet.{TransactionExt, Wallet}
@@ -19,7 +20,7 @@ import org.http4s.client.dsl.io._
 import org.http4s.dsl.io._
 import org.http4s.{EntityDecoder, Request, Uri}
 import org.mockito.IdiomaticMockito
-import org.scalatest.GivenWhenThen
+import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -36,6 +37,7 @@ class TransactionsProcessingSpec
     with TestConfig
     with TerraformOutput
     with Eventually
+    with BeforeAndAfterAll
     with IdiomaticMockito {
 
   implicit val cs: ContextShift[IO] = IO.contextShift(global)
@@ -47,6 +49,9 @@ class TransactionsProcessingSpec
       interval = scaled(5 seconds)
     )
 
+  override protected def beforeAll(): Unit =
+    Kryo.init[IO]().unsafeRunSync()
+
   "sending transactions from single src address" in {
     // given
     val kp = getKeyPair
@@ -57,7 +62,9 @@ class TransactionsProcessingSpec
 
     val dstBalances = getBalances(dst)
     dstBalances should containTheSameElements
-    logger.info(s"Initial balances: src address = $src, src balance = ${srcBalances.head}; dst address = $dst, dst balance = ${dstBalances.head}")
+    logger.info(
+      s"Initial balances: src address = $src, src balance = ${srcBalances.head}; dst address = $dst, dst balance = ${dstBalances.head}"
+    )
 
     val lastTxRefs = getLasTxRefs(src)
     lastTxRefs should containTheSameElements
@@ -99,7 +106,16 @@ class TransactionsProcessingSpec
     val src = Wallet.getAddress(kp)
 
     def generateTxs(prevTx: Transaction): Stream[IO, Transaction] = {
-      val tx = TransactionExt.createTransaction(prevTx.some, src, config.txGen.dst, config.txGen.amount, kp, (config.txGen.fee.toDouble * 1e-8).some)
+      val tx = TransactionExt.createTransaction(
+        prevTx.some,
+        ltr,
+        forcePrevTx = true,
+        src,
+        config.txGen.dst,
+        config.txGen.amount,
+        kp,
+        (config.txGen.fee.toDouble * 1e-8).some.filter(_ > 0)
+      )
       Stream(tx) ++ generateTxs(tx)
     }
 
@@ -119,9 +135,7 @@ class TransactionsProcessingSpec
 
   private def getLasTxRefs(address: String) =
     evalRequestForHosts[LastTransactionRef](terraform.instanceIps.value) {
-    _.map(host => GET(Uri.unsafeFromString(s"http://$host:9000/transaction/last-ref/$address")))
-  }
-
-
+      _.map(host => GET(Uri.unsafeFromString(s"http://$host:9000/transaction/last-ref/$address")))
+    }
 
 }
