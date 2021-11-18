@@ -71,7 +71,7 @@ jobs:
       - name: Download keys
         run: |
           mkdir -p keys
-          aws s3 cp s3://constellationlabs-dag/keys/key-10.p12 keys/key.p12
+          aws s3 cp s3://constellationlabs-dag/keys/key-598.p12 keys/key.p12
 
       - name: Run tests
         run: |
