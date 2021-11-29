@@ -2,8 +2,12 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.29.5] 2021-11-29
 ### Changed
 - Whitelisting updated
+### Fixed
+- Integration tests
 
 ## [v2.29.4] 2021-11-17
 ### Changed
