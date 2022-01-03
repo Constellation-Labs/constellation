@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.29.10] 2022-01-03
+### Changed
+- Soft staking nodes for January
+
 ## [v2.29.9] 2021-12-30
 ### Changed
 - Whitelisting updated
