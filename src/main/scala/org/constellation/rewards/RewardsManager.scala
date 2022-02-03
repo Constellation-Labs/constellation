@@ -150,6 +150,7 @@ class RewardsManager[F[_]: Concurrent](
 
   def weightBySoftStaking(rewardSnapshot: RewardSnapshot): Map[String, Double] => Map[String, Double] =
     rewardSnapshot.height match {
+      case height if height >= 3319758 => SoftStaking.weightBySoftStaking(softStakingNodes = 5552) // February
       case height if height >= 3232768 => SoftStaking.weightBySoftStaking(softStakingNodes = 4119) // January
       case height if height >= 3146548 => SoftStaking.weightBySoftStaking(softStakingNodes = 3778) // December
       case height if height >= 3076775 => SoftStaking.weightBySoftStaking(softStakingNodes = 3570) // November
