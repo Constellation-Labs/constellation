@@ -9,7 +9,7 @@ class BlacklistedAddresses[F[_]: Concurrent] {
 
   private val logger = Slf4jLogger.getLogger[F]
 
-  private val blacklistedAddresses: Ref[F, Set[String]] = Ref.unsafe(Set.empty[String])
+  private val blacklistedAddresses: Ref[F, Set[String]] = Ref.unsafe(Set("DAG2bhZv7fsmXrYbx9wNiT9wP4tuannXcZkjtKeM"))
 
   def get: F[Set[String]] =
     blacklistedAddresses.get
