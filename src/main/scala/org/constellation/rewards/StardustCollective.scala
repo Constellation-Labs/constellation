@@ -4,7 +4,7 @@ import scala.util.Random
 
 trait StardustCollective {
   def getAddress(): String
-  def weightByStardust(distribution: Map[String, Double]): Map[String, Double]
+  def weightByStardust(ignore: Set[String])(distribution: Map[String, Double]): Map[String, Double]
 }
 
 object StardustCollective extends StardustCollective {
@@ -22,11 +22,14 @@ object StardustCollective extends StardustCollective {
 
   def getAddress(): String = address
 
-  def weightByStardust(distribution: Map[String, Double]): Map[String, Double] = {
-    val stardustWeights = distribution
+  def weightByStardust(ignore: Set[String])(distribution: Map[String, Double]): Map[String, Double] = {
+    val stardustWeights = (distribution -- ignore)
       .mapValues(_ * (percentage.toDouble / 100.0))
 
-    val weighted = distribution.transform { case (id, reward) => reward - stardustWeights(id) }
+    val weighted = distribution.transform {
+      case (address, reward) if ignore.contains(address) => reward
+      case (address, reward)                             => reward - stardustWeights(address)
+    }
 
     val totalStardustReward = stardustWeights.values.sum
 

@@ -96,6 +96,7 @@ class RewardsManager[F[_]: Concurrent](
 
       weightContributions = weightByTrust(trustMap) _ >>>
         weightByEpoch(rewardSnapshot.height) >>>
+        weightByDTM >>>
         weightBySoftStaking(rewardSnapshot) >>>
         weightByStardust
       contributions = calculateContributions(nodesWithProposalsOnly)
@@ -146,17 +147,22 @@ class RewardsManager[F[_]: Concurrent](
       .mapValues(_.toLong)
 
   def weightByStardust: Map[String, Double] => Map[String, Double] =
-    StardustCollective.weightByStardust
+    StardustCollective.weightByStardust(Set(DTM.getAddress))
 
-  def weightBySoftStaking(rewardSnapshot: RewardSnapshot): Map[String, Double] => Map[String, Double] =
+  def weightByDTM: Map[String, Double] => Map[String, Double] =
+    DTM.weightByDTM
+
+  def weightBySoftStaking(rewardSnapshot: RewardSnapshot): Map[String, Double] => Map[String, Double] = {
+    val ignore = Set(DTM.getAddress)
     rewardSnapshot.height match {
-      case height if height >= 3398732 => SoftStaking.weightBySoftStaking(softStakingNodes = 5424) // March
-      case height if height >= 3319758 => SoftStaking.weightBySoftStaking(softStakingNodes = 5552) // February
-      case height if height >= 3232768 => SoftStaking.weightBySoftStaking(softStakingNodes = 4119) // January
-      case height if height >= 3146548 => SoftStaking.weightBySoftStaking(softStakingNodes = 3778) // December
-      case height if height >= 3076775 => SoftStaking.weightBySoftStaking(softStakingNodes = 3570) // November
+      case height if height >= 3398732 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 5424) // March
+      case height if height >= 3319758 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 5552) // February
+      case height if height >= 3232768 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 4119) // January
+      case height if height >= 3146548 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 3778) // December
+      case height if height >= 3076775 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 3570) // November
       case _                           => identity
     }
+  }
 
   private def weightByEpoch(snapshotHeight: Long)(contributions: Map[String, Double]): Map[String, Double] =
     contributions.mapValues(_ * RewardsManager.totalRewardPerSnapshot(snapshotHeight))
