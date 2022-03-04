@@ -8,13 +8,16 @@ import scala.util.Random
 
 class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
 
+  val ignored = Set("ignore")
+
   "should include SoftStaking address in distribution" in {
     val distribution = Map(
       "foo" -> 123.5,
-      "bar" -> 321.5
+      "bar" -> 321.5,
+      "ignore" -> 20.5
     )
 
-    val weighted = SoftStaking.weightBySoftStaking(10)(distribution)
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(10)(distribution)
 
     weighted.contains(SoftStaking.getAddress) shouldBe true
   }
@@ -25,9 +28,11 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
       "bar" -> 321.5
     )
 
-    val softStakingNodes = 50
+    val distributionWithIgnored = distribution + ("ignore" -> 30.5)
 
-    val weighted = SoftStaking.weightBySoftStaking(softStakingNodes)(distribution)
+    val softStakingNodes = 0
+
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(softStakingNodes)(distributionWithIgnored)
     val address = SoftStaking.getAddress
 
     val ratio = 0.4
@@ -47,7 +52,7 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
 
     val softStakingNodes = 50
 
-    val weighted = SoftStaking.weightBySoftStaking(softStakingNodes)(distribution)
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(softStakingNodes)(distribution)
     val address = SoftStaking.getAddress
 
     val ratio = 0.4
@@ -60,19 +65,32 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
 
   "should keep same total reward after weighting" in {
     val total = 999
+    val ignoredReward = 100d
 
     val randomFooReward = Random.nextInt(total).toDouble
     val randomBarReward = total - randomFooReward
 
     val distribution = Map(
       "foo" -> randomFooReward,
-      "boo" -> randomBarReward
+      "boo" -> randomBarReward,
+      "ignore" -> ignoredReward
     )
 
-    val weighted = SoftStaking.weightBySoftStaking(100)(distribution)
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(100)(distribution)
 
-    distribution.values.sum.round shouldBe total
-    weighted.values.sum.round shouldBe total
+    distribution.values.sum.round shouldBe total + ignoredReward
+    weighted.values.sum.round shouldBe total + ignoredReward
+  }
+
+  "should keep rewards for ignored addresses" in {
+    val distribution = Map(
+      "foo" -> 20.5,
+      "ignore" -> 30.5
+    )
+
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(100)(distribution)
+
+    weighted("ignore") shouldBe 30.5
   }
 
 }

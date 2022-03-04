@@ -2,7 +2,10 @@ package org.constellation.rewards
 
 trait SoftStaking {
   def getAddress: String
-  def weightBySoftStaking(softStakingNodes: Int)(distribution: Map[String, Double]): Map[String, Double]
+
+  def weightBySoftStaking(ignore: Set[String])(softStakingNodes: Int)(
+    distribution: Map[String, Double]
+  ): Map[String, Double]
 }
 
 object SoftStaking extends SoftStaking {
@@ -12,20 +15,23 @@ object SoftStaking extends SoftStaking {
 
   def getAddress: String = address
 
-  def weightBySoftStaking(softStakingNodes: Int)(distribution: Map[String, Double]): Map[String, Double] = {
-    val fullNodes = distribution.size
+  def weightBySoftStaking(
+    ignore: Set[String]
+  )(softStakingNodes: Int)(distribution: Map[String, Double]): Map[String, Double] = {
+    val withoutIgnored = distribution -- ignore
+    val ignored = distribution -- withoutIgnored.keySet
+
+    val fullNodes = withoutIgnored.size
 
     val weightedSum = softNodesRatio * softStakingNodes + fullNodesRatio * fullNodes
-    val rewards = distribution.values.sum
+    val rewards = withoutIgnored.values.sum
 
     val perSoftNode = (softNodesRatio / weightedSum) * rewards
     val perFullNode = (fullNodesRatio / weightedSum) * rewards
 
     val totalSoftStakingReward = perSoftNode * softStakingNodes
 
-    val weighted = distribution.transform {
-      case (_, _) => perFullNode
-    }
+    val weighted = withoutIgnored.mapValues(_ => perFullNode) ++ ignored
 
     weighted + (address -> totalSoftStakingReward)
   }
