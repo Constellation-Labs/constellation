@@ -42,7 +42,7 @@ class BlacklistedAddressesTest extends AnyFreeSpec with BeforeAndAfter with Matc
 
       blacklistAddresses.add(address).unsafeRunSync()
 
-      blacklistAddresses.get.unsafeRunSync().head shouldBe address
+      blacklistAddresses.get.unsafeRunSync().contains(address) shouldBe true
     }
   }
 
@@ -50,15 +50,18 @@ class BlacklistedAddressesTest extends AnyFreeSpec with BeforeAndAfter with Matc
     "should add all addresses to blacklist" in {
       val addresses = List("abcd1234", "efgh5678")
 
+      val initial = blacklistAddresses.get.unsafeRunSync().size
+
       blacklistAddresses.addAll(addresses).unsafeRunSync()
 
-      blacklistAddresses.get.unsafeRunSync().size shouldBe 2
+      blacklistAddresses.get.unsafeRunSync().size shouldBe 2 + initial
     }
   }
 
   "clear" - {
     "should remove all addresses from blacklist" in {
       val addresses = List("abcd1234", "efgh5678")
+
       blacklistAddresses.addAll(addresses).unsafeRunSync()
 
       blacklistAddresses.clear.unsafeRunSync()
