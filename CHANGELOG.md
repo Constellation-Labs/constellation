@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.30.0] 2022-03-07
+### Changed
+- DTM rewards
+
 ## [v2.29.15] 2022-03-03
 ### Changed
 - Soft staking nodes for March
