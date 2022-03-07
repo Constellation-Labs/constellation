@@ -6,7 +6,7 @@ trait DTM {
 }
 
 object DTM extends DTM {
-  private final val address: String = "DAG4j2r35SDa15iKbjmujcmWbscmjjmqpwAjmz6m"
+  private final val address: String = "DAG0Njmo6JZ3FhkLsipJSppepUHPuTXcSifARfvK"
   private final val avgSnapshotsPerMonth = 43110
   private final val monthly: Double = 500000d
 

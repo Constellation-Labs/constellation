@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.30.2] 2022-03-07
+### Fixed
+- DTM rewards
+
 ## [v2.30.1] 2022-03-07
 ### Fixed
 - DTM rewards
