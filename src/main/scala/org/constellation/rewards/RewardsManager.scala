@@ -155,6 +155,7 @@ class RewardsManager[F[_]: Concurrent](
   def weightBySoftStaking(rewardSnapshot: RewardSnapshot): Map[String, Double] => Map[String, Double] = {
     val ignore = Set(DTM.getAddress)
     rewardSnapshot.height match {
+      case height if height >= 3484394 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 5451) // April
       case height if height >= 3398732 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 5424) // March
       case height if height >= 3319758 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 5552) // February
       case height if height >= 3232768 => SoftStaking.weightBySoftStaking(ignore)(softStakingNodes = 4119) // January
