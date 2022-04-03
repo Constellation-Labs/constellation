@@ -2,7 +2,7 @@ import sbt.Keys.mainClass
 
 // -----------------
 
-lazy val _version = "2.31.0"
+lazy val _version = "2.31.1"
 
 lazy val commonSettings = Seq(
   version := _version,
@@ -55,7 +55,7 @@ lazy val coreSettings = Seq(
   resolvers += "Typesafe Releases".at("https://repo.typesafe.com/typesafe/maven-releases/"),
   resolvers += "jitpack".at("https://jitpack.io"),
   resolvers += Resolver.sonatypeRepo("releases"),
-  resolvers += "Artifactory".at("https://abankowski.jfrog.io/artifactory/scala/")
+  resolvers += Resolver.githubPackages("abankowski", "http-request-signer")
 )
 
 // -----------------

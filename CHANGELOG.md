@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.31.1] 2022-04-03
+### Fixed
+- Deprecated dependencies repository
+
 ## [v2.31.0] 2022-04-03
 ### Changed
 - DTM Rewards
