@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 class DTMTest extends AnyFreeSpec with MockitoSugar with Matchers {
 
   val avgSnapshotsPerMonth = 43110
-  val monthlyReward = 100000000000000d
+  val monthlyReward = 1000000d
 
   val perSnapshot = monthlyReward / avgSnapshotsPerMonth
 
@@ -28,7 +28,7 @@ class DTMTest extends AnyFreeSpec with MockitoSugar with Matchers {
   }
 
   "should reduce existing rewards by DTM reward" in {
-    val distribution = Map("foo" -> 10000000000000d, "bar" -> 100000000000000d)
+    val distribution = Map("foo" -> 100000d, "bar" -> 1000000d)
     val weighted = DTM.weightByDTM(distribution)
 
     val toDistribute = distribution.values.sum - perSnapshot
@@ -38,7 +38,7 @@ class DTMTest extends AnyFreeSpec with MockitoSugar with Matchers {
   }
 
   "should reduce rewards to 0 if not enough rewards in the pool" in {
-    val distribution = Map("foo" -> 123.5, "bar" -> 123.5)
+    val distribution = Map("foo" -> 1.235, "bar" -> 1.235)
 
     val weighted = DTM.weightByDTM(distribution)
 
