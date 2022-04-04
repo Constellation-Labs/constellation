@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.32.0] 2022-04-04
+### Changed
+- Whitelisting updated
+
 ## [v2.31.1] 2022-04-03
 ### Fixed
 - Deprecated dependencies repository
