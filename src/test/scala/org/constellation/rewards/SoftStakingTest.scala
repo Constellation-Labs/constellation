@@ -36,7 +36,7 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
     val address = SoftStaking.getAddress
 
     val ratio = 0.4
-    val weight = ratio * softStakingNodes + (1 - ratio) * distribution.size
+    val weight = ratio * (softStakingNodes + SoftStaking.testnetNodes) + (1 - ratio) * distribution.size
 
     val expected = ((1 - ratio) / weight) * distribution.values.sum
 
@@ -56,7 +56,7 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
     val address = SoftStaking.getAddress
 
     val ratio = 0.4
-    val weight = ratio * softStakingNodes + (1 - ratio) * distribution.size
+    val weight = ratio * (softStakingNodes + SoftStaking.testnetNodes) + (1 - ratio) * distribution.size
 
     val expected = (ratio / weight) * distribution.values.sum * softStakingNodes
 
@@ -91,6 +91,38 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
     val weighted = SoftStaking.weightBySoftStaking(ignored)(100)(distribution)
 
     weighted("ignore") shouldBe 30.5
+  }
+
+  "should include SoftStaking testnet address in distribution" in {
+    val distribution = Map(
+      "foo" -> 123.5,
+      "bar" -> 321.5,
+      "ignore" -> 20.5
+    )
+
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(10)(distribution)
+
+    weighted.contains(SoftStaking.testnetAddress) shouldBe true
+  }
+
+  "should reward testnet nodes" in {
+    val distribution = Map (
+      "foo" -> 123.5,
+      "bar" -> 123.5
+    )
+
+    val softStakingNodes = 50
+
+    val weighted = SoftStaking.weightBySoftStaking(ignored)(softStakingNodes)(distribution)
+    val address = SoftStaking.testnetAddress
+
+    val ratio = 0.4
+    val weight = ratio * (softStakingNodes + SoftStaking.testnetNodes) + (1 - ratio) * distribution.size
+
+    val expected = (ratio / weight) * distribution.values.sum * SoftStaking.testnetNodes
+
+    weighted(address) shouldBe expected
+    
   }
 
 }
