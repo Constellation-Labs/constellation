@@ -8,7 +8,7 @@ trait DTM {
 object DTM extends DTM {
   private final val address: String = "DAG0Njmo6JZ3FhkLsipJSppepUHPuTXcSifARfvK"
   private final val avgSnapshotsPerMonth = 43110
-  private final val monthly: Double = 1000000d
+  private final val monthly: Double = 1500000d
 
   private final val perSnapshot = monthly / avgSnapshotsPerMonth
 
