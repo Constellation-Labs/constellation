@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.33.0] 2022-05-03
+### Added
+- Testnet rewards
+### Changed
+- Soft staking nodes for May
+- Whitelisting update
+
 ## [v2.32.0] 2022-04-04
 ### Changed
 - Whitelisting updated
