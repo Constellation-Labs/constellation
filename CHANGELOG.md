@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.34.0] 2022-06-03
+### Changed
+- Whitelisting update
+
 ## [v2.33.0] 2022-05-03
 ### Added
 - Testnet rewards
