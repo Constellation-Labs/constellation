@@ -106,7 +106,7 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
   }
 
   "should reward testnet nodes" in {
-    val distribution = Map (
+    val distribution = Map(
       "foo" -> 123.5,
       "bar" -> 123.5
     )
@@ -122,7 +122,7 @@ class SoftStakingTest extends AnyFreeSpec with MockitoSugar with Matchers {
     val expected = (ratio / weight) * distribution.values.sum * SoftStaking.testnetNodes
 
     weighted(address) shouldBe expected
-    
+
   }
 
 }
