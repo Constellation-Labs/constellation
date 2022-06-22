@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v2.35.0] 2022-06-22
+### Changed
+- Add endpoint for total wallets
+
 ## [v2.34.1] 2022-06-15
 ### Changed
 - Whitelisting update
