@@ -26,7 +26,8 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
     getNodeState(nodeStorage, nodeType) <+>
       getAddressBalance(addressService) <+>
       getNodePeers(clusterStorage) <+>
-      getPeersMajorityHeights(clusterStorage)
+      getPeersMajorityHeights(clusterStorage) <+>
+      getTotalWallets(addressService)
 
   def peerEndpoints(
     nodeStorage: NodeStorageAlgebra[F],
@@ -60,6 +61,11 @@ class NodeMetadataEndpoints[F[_]](implicit F: Concurrent[F]) extends Http4sDsl[F
         )
         .map(_.asJson)
         .flatMap(Ok(_))
+  }
+
+  private def getTotalWallets(addressService: AddressService[F]): HttpRoutes[F] = HttpRoutes.of[F] {
+    case GET -> Root / "total-wallets" =>
+      addressService.size.map(_.asJson).flatMap(Ok(_))
   }
 
   import Id._
