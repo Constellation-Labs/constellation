@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.36.0] 2022-07-03
 ### Changed
 - Soft staking nodes for July
 - DTM rewards
