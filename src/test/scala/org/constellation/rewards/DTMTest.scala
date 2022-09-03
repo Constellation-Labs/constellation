@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 class DTMTest extends AnyFreeSpec with MockitoSugar with Matchers {
 
   val avgSnapshotsPerMonth = 43110
-  val monthlyReward = 3000000d
+  val monthlyReward = 3500000d
 
   val perSnapshot = monthlyReward / avgSnapshotsPerMonth
 
