@@ -2,6 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [v2.38.0] 2022-09-03
 ### Changed
 - Whitelisting update
 - DTM rewards update
