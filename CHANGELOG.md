@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 ### Changed
 - Whitelisting update
+- DTM rewards update
 
 ## [v2.37.0] 2022-08-03
 ### Changed
