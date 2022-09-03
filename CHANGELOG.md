@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Whitelisting update
 - DTM rewards update
+- Soft staking nodes for September
 
 ## [v2.37.0] 2022-08-03
 ### Changed
